@@ -21,6 +21,11 @@ tools/_*
 tools/_cdptmp*/
 tools/_jscheck/
 
+# ---------- 本地评审 / 内部文档（不入库）----------
+REVIEW-*
+icon-preview/
+demo-*.html
+
 # ---------- 系统杂项 ----------
 Thumbs.db
 desktop.ini
