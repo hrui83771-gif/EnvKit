@@ -41,7 +41,7 @@
 
 右下角的桌宠助手「小画师」：表情随检测 / 出错 / 启停联动，连点还有彩蛋。
 
-<p align="center"><img src="docs/mascot.png" width="220" alt="小画师" /></p>
+<p align="center"><img src="docs/mascot.jpg" width="220" alt="小画师" /></p>
 
 ## 快速开始
 
