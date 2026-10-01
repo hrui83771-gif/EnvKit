@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnvKit 桌宠 v2 · 完全体演示</title>
+<style>
+:root{
+  --bg:#14161c; --panel:#1c1f27; --card:#20242e; --line:#2e3340;
+  --ink:#e8eaf0; --muted:#8b93a5; --accent:#ff5d7e; --gold:#e8b23c; --think:#7dd3fc;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  background:
+    radial-gradient(1200px 500px at 70% -10%, #232838 0%, transparent 60%),
+    var(--bg);
+  color:var(--ink); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  min-height:100vh; padding:36px 24px 80px;
+}
+.wrap{max-width:1060px; margin:0 auto}
+h1{font-size:24px; margin-bottom:6px} h1 em{font-style:normal; color:var(--accent)}
+.sub{color:var(--muted); font-size:14px; margin-bottom:28px; line-height:1.8}
+.sub b{color:var(--ink)}
+h2{font-size:17px; margin:34px 0 14px; display:flex; align-items:center; gap:8px}
+h2::before{content:""; width:4px; height:16px; border-radius:2px; background:var(--accent)}
+.stage{
+  background:linear-gradient(180deg,#1e2230 0%, #171a22 100%);
+  border:1px solid var(--line); border-radius:16px;
+  padding:34px 24px 26px; display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start;
+  min-height:320px; position:relative; overflow:hidden;
+}
+.stage::before{content:""; position:absolute; inset:0;
+  background:radial-gradient(500px 200px at 20% 100%, #232a3d 0%, transparent 70%); pointer-events:none}
+.petcol{display:flex; flex-direction:column; align-items:center; gap:6px; z-index:2}
+.petcol .cap{font-size:12.5px; color:var(--muted); text-align:center; line-height:1.8}
+.ctrls{flex:1; min-width:320px; z-index:2}
+.ctrls p{font-size:13.5px; color:var(--muted); line-height:1.8; margin-bottom:12px}
+.ctrls p b{color:var(--ink)}
+.btnrow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px}
+.btn{border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:9px; padding:7px 14px; font-size:13px; cursor:pointer; transition:.15s}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.warm{border-color:#4a3d28; background:#2a2419; color:var(--gold)}
+.btn.warm:hover{border-color:var(--gold); color:var(--gold)}
+.newlist{font-size:13px; color:var(--muted); line-height:2.0; padding-left:4px}
+.newlist b{color:var(--ink)}
+.newlist .tag{display:inline-block; background:#232a3d; color:var(--think); border-radius:5px;
+  padding:0 7px; font-size:11.5px; margin-right:6px}
+.kbd{background:var(--card); border:1px solid var(--line); border-radius:5px; padding:1px 7px; font-size:12px}
+
+/* ================= 桌宠本体 ================= */
+.pet{
+  position:relative; width:140px; height:150px; cursor:grab; user-select:none;
+  -webkit-tap-highlight-color:transparent; touch-action:none; transition:filter .3s;
+}
+.pet:active{cursor:grabbing}
+.pet.sleep{cursor:pointer}
+#petSvg{overflow:visible}
+/* 待机浮动（含轻微整体摇摆） */
+@keyframes petFloat{
+  0%,100%{transform:translateY(0) rotate(0deg)}
+  25%{transform:translateY(-8px) rotate(-2deg)}
+  75%{transform:translateY(-3px) rotate(2deg)}
+}
+#petFloat{animation:petFloat 3.4s ease-in-out infinite; transform-origin:50% 92%}
+.pet.thinking #petFloat{animation-duration:2.3s}
+.pet.busy #petFloat{animation:petWorkSway 1s ease-in-out infinite}
+.pet.confirm #petFloat{animation:petNudge .8s ease-in-out infinite}
+.pet.success #petFloat{animation:petJump .65s cubic-bezier(.3,1.6,.5,1) 2}
+.pet.error #petFloat{animation:petShake .4s ease-in-out 4}
+.pet.sleep #petFloat{animation:petSleep 5s ease-in-out infinite}
+@keyframes petWorkSway{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(-3px) rotate(-3deg)}70%{transform:translateY(-5px) rotate(3deg)}}
+@keyframes petShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px) rotate(-5deg)}60%{transform:translateX(7px) rotate(5deg)}}
+@keyframes petNudge{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-9px) rotate(-5deg)}70%{transform:translateY(-2px) rotate(4deg)}}
+@keyframes petJump{0%,100%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-20px) scale(.93,1.09)}60%{transform:translateY(0) scale(1.1,.88)}}
+@keyframes petSleep{0%,100%{transform:translateY(0) rotate(0) scale(1)}50%{transform:translateY(-2px) rotate(0) scale(1.02,.97)}}
+/* 拖拽时肢体跟随（JS 直接控制 #petSvg 的 rotate，浮空动画照常叠加） */
+#petSvg{transition:transform .18s ease-out}
+
+/* 影子 */
+@keyframes shadowPulse{0%,100%{transform:scaleX(1); opacity:.32}50%{transform:scaleX(.8); opacity:.18}}
+.pshadow{width:66px; height:11px; margin:-6px auto 0; border-radius:50%;
+  background:radial-gradient(closest-side,#000 0%,transparent 100%); opacity:.3;
+  animation:shadowPulse 3.4s ease-in-out infinite}
+.pet.sleep .pshadow{opacity:.16; animation:none}
+
+/* 说话泡泡 */
+.bubble{
+  position:absolute; top:-14px; left:50%; transform:translateX(-50%) scale(0);
+  background:#fff; color:#333; border-radius:12px; padding:5px 11px; font-size:11.5px;
+  white-space:nowrap; transition:transform .25s cubic-bezier(.3,1.5,.5,1); z-index:5;
+  box-shadow:0 4px 14px rgba(0,0,0,.35);
+}
+.bubble::after{content:""; position:absolute; bottom:-5px; left:50%; transform:translateX(-50%);
+  border:6px solid transparent; border-top-color:#fff; border-bottom:none}
+.pet.show-bubble .bubble{transform:translateX(-50%) scale(1)}
+@keyframes dotJump{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.bubble .d{display:inline-block; animation:dotJump 1s infinite; color:var(--think); font-weight:700}
+.bubble .d:nth-child(2){animation-delay:.15s}
+.bubble .d:nth-child(3){animation-delay:.3s}
+
+/* 徽标 */
+.badge{position:absolute; top:2px; right:8px; width:24px; height:24px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff;
+  transform:scale(0); transition:transform .25s cubic-bezier(.3,1.7,.5,1); z-index:6;
+  box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.badge.red{background:#ef4444}.badge.blue{background:#3b82f6}.badge.green{background:#22c55e}
+.pet.show-badge .badge{transform:scale(1)}
+@keyframes badgePop{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+.pet.show-badge .badge{animation:badgePop 1.4s ease-in-out infinite}
+
+/* 画笔挥动（busy） */
+@keyframes brushWave{0%,100%{transform:rotate(14deg)}50%{transform:rotate(-42deg)}}
+.pet.busy #gBrush{animation:brushWave .8s ease-in-out infinite}
+#gBrush{transform-origin:112px 104px; transition:transform .4s}
+/* 奖章摆动（拖拽/跳跃时摆得更欢） */
+#gMedal{transform-origin:46px 20px; animation:medalSway 3.4s ease-in-out infinite}
+@keyframes medalSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(4deg)}}
+.pet.success #gMedal,.pet.confirm #gMedal{animation:medalFlap .5s ease-in-out infinite}
+@keyframes medalFlap{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+
+/* 粒子层 */
+.fx{position:absolute; inset:0; pointer-events:none; z-index:8; overflow:visible}
+@keyframes fxUp{0%{transform:translateY(0) scale(.6); opacity:0}15%{opacity:1}100%{transform:translateY(-46px) scale(1.15); opacity:0}}
+@keyframes fxZzz{0%{transform:translate(0,0) scale(.5); opacity:0}20%{opacity:.9}100%{transform:translate(16px,-40px) scale(1.3); opacity:0}}
+@keyframes fxDrop{0%{transform:translateY(0) scaleY(1); opacity:0}15%{opacity:.95}100%{transform:translateY(34px) scaleY(1.25); opacity:0}}
+@keyframes fxConfetti{0%{transform:translate(0,0) rotate(0); opacity:1}100%{transform:translate(var(--cx),110px) rotate(var(--cr)); opacity:0}}
+@keyframes fxPaint{0%{transform:translate(0,0) scale(1); opacity:1}100%{transform:translate(var(--px),var(--py)) scale(.2); opacity:0}}
+.fx span{position:absolute; left:50%; top:40%; font-size:15px; will-change:transform,opacity}
+.fx span.up{animation:fxUp 1.5s ease-out forwards}
+.fx span.zzz{animation:fxZzz 2.4s ease-out forwards; color:#9db4d8; font-weight:700}
+.fx span.drop{width:8px; height:11px; background:#7cc4f8; border-radius:50% 50% 50% 50%/60% 60% 40% 40%; animation:fxDrop 1s ease-in forwards}
+.fx span.conf{width:7px; height:10px; border-radius:2px; animation:fxConfetti 1.4s ease-in forwards}
+.fx span.paint{width:6px; height:6px; border-radius:50%; animation:fxPaint .9s ease-out forwards}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EnvKit 桌宠 v2 · <em>完全体演示</em></h1>
+  <div class="sub">在 v1「能看」的基础上补齐 v2「活着」的部分：<b>眼神+头部双层追踪</b>、<b>随机小动作</b>、<b>摸头反馈</b>、<b>闲置打瞌睡</b>、<b>拖拽肢体摆动</b>、<b>粒子特效</b>。放着不动 20 秒它会睡着，动动鼠标吵醒它。</div>
+
+  <h2>现场演示</h2>
+  <div class="stage">
+    <div class="petcol">
+      <div class="pet" id="pet" title="拖动 / 摸头 / 连点试试">
+        <div class="bubble" id="bubble"></div>
+        <div class="badge" id="badge">!</div>
+        <svg id="petSvg" width="140" height="150" viewBox="0 0 140 150">
+          <defs>
+            <radialGradient id="faceG" cx="50%" cy="40%" r="68%">
+              <stop offset="0%" stop-color="#fff8ee"/><stop offset="100%" stop-color="#f2e0c9"/>
+            </radialGradient>
+            <linearGradient id="hairG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ff7d95"/><stop offset="100%" stop-color="#ef456c"/>
+            </linearGradient>
+            <radialGradient id="medalG" cx="35%" cy="30%" r="85%">
+              <stop offset="0%" stop-color="#ffe28a"/><stop offset="65%" stop-color="#e8b23c"/><stop offset="100%" stop-color="#c08817"/>
+            </radialGradient>
+            <linearGradient id="apronG" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e2dccd"/><stop offset="100%" stop-color="#c9c2b0"/>
+            </linearGradient>
+          </defs>
+
+          <g id="petFloat">
+            <!-- ===== 身体（不随头转） ===== -->
+            <g id="gBody">
+              <!-- 脖子（上端被头盖住、下端被衣领盖住，头怎么转都不露缝） -->
+              <path d="M61 80 L61 104 Q70 108 79 104 L79 80 Z" fill="#eed9bf"/>
+              <!-- 左臂 -->
+              <path d="M50 112 Q38 120 40 133" stroke="#262a33" stroke-width="9" fill="none" stroke-linecap="round"/>
+              <!-- 躯干 -->
+              <path d="M50 106 Q70 97 90 106 L93 140 Q70 149 47 140 Z" fill="#262a33"/>
+              <!-- 围裙 -->
+              <path d="M58 111 L84 111 L88 141 Q70 148 53 141 Z" fill="url(#apronG)"/>
+              <path d="M58 111 L61 105 M84 111 L81 105" stroke="#b7ae99" stroke-width="2.4" fill="none"/>
+              <circle cx="63" cy="124" r="2.6" fill="#ef456c"/>
+              <circle cx="74" cy="133" r="2.2" fill="#5aa8d8"/>
+              <circle cx="80" cy="121" r="2" fill="#e8b23c"/>
+              <!-- 领口 -->
+              <path d="M66 106 L70 113 L74 106 Z" fill="#f2e0c9"/>
+              <!-- 右臂（持笔） -->
+              <path d="M90 110 Q104 114 110 105" stroke="#262a33" stroke-width="9" fill="none" stroke-linecap="round"/>
+              <circle cx="112" cy="104" r="5" fill="#f2e0c9"/>
+              <!-- 画笔 -->
+              <g id="gBrush">
+                <line x1="112" y1="104" x2="128" y2="86" stroke="#8a5a2b" stroke-width="4.6" stroke-linecap="round"/>
+                <path d="M128 86 L134 78 Q137 74 133 73 Q129 72 127 77 Z" fill="#5c4429"/>
+                <circle cx="131.5" cy="77.5" r="2.6" fill="#ef456c"/>
+              </g>
+            </g>
+
+            <!-- ===== 头组（后发在组内，随头一起转；下摆加长盖住肩颈） ===== -->
+            <g id="gHead">
+              <path d="M40 62 Q26 26 58 15 Q94 5 110 36 Q118 54 108 72 Q115 88 100 99 L46 99 Q33 99 30 80 Q28 66 40 62Z" fill="#d13a5e"/>
+              <!-- 脸 -->
+              <ellipse cx="70" cy="62" rx="31" ry="28" fill="url(#faceG)"/>
+              <!-- 耳朵发卷 -->
+              <circle cx="36" cy="68" r="11" fill="url(#hairG)"/>
+              <circle cx="31" cy="77" r="7.5" fill="#ef456c"/>
+              <circle cx="105" cy="68" r="9" fill="url(#hairG)"/>
+              <!-- 刘海 -->
+              <path d="M41 52 Q40 24 68 20 Q97 18 103 44 Q104 52 99 55 Q96 43 87 40 Q89 48 84 52 Q80 41 69 39 Q71 47 65 51 Q59 42 50 43 Q52 50 46 54 Q43 55 41 52Z" fill="url(#hairG)"/>
+              <!-- 挑染 -->
+              <path d="M86 22 Q97 28 100 43 Q101 50 98 54 Q95 43 86 37 Q88 29 86 22Z" fill="#9fd8cb" opacity=".95"/>
+              <path d="M50 25 Q42 30 40 40 Q42 36 50 33 Q49 29 50 25Z" fill="#9fd8cb" opacity=".55"/>
+              <!-- 奖章 -->
+              <g id="gMedal">
+                <path d="M48 22 L54 34 L48 38 L42 34Z" fill="#4a7c59"/>
+                <path d="M58 20 L62 34 L56 37 L51 32Z" fill="#6b9c7b"/>
+                <circle cx="50" cy="20" r="10" fill="url(#medalG)" stroke="#a87b18" stroke-width="1.4"/>
+                <circle cx="50" cy="20" r="6" fill="none" stroke="#fff3cf" stroke-width="1.2" opacity=".8"/>
+              </g>
+              <!-- 眉毛（error 时皱） -->
+              <path id="browL" d="M50 50 Q56 47 62 50" stroke="#c96a80" stroke-width="2" fill="none" stroke-linecap="round" opacity="0"/>
+              <path id="browR" d="M78 50 Q84 47 90 50" stroke="#c96a80" stroke-width="2" fill="none" stroke-linecap="round" opacity="0"/>
+              <!-- 眼睛 -->
+              <g id="eyes">
+                <g id="eyeL">
+                  <ellipse cx="57" cy="63" rx="6.6" ry="8.4" fill="#241d18"/>
+                  <circle class="iris" cx="57" cy="63" r="3.5" fill="#e8a13c"/>
+                  <circle class="hili" cx="58.7" cy="60.4" r="1.8" fill="#fff"/>
+                </g>
+                <g id="eyeR">
+                  <ellipse cx="84" cy="63" rx="6.6" ry="8.4" fill="#241d18"/>
+                  <circle class="iris" cx="84" cy="63" r="3.5" fill="#e8a13c"/>
+                  <circle class="hili" cx="85.7" cy="60.4" r="1.8" fill="#fff"/>
+                </g>
+              </g>
+              <g id="eyesHappy" style="display:none">
+                <path d="M50 64 Q57 55 64 64" stroke="#241d18" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+                <path d="M77 64 Q84 55 91 64" stroke="#241d18" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+              </g>
+              <g id="eyesClosed" style="display:none">
+                <path d="M50 63 Q57 69 64 63" stroke="#241d18" stroke-width="3" fill="none" stroke-linecap="round"/>
+                <path d="M77 63 Q84 69 91 63" stroke="#241d18" stroke-width="3" fill="none" stroke-linecap="round"/>
+              </g>
+              <g id="eyesDizzy" style="display:none">
+                <path d="M51 58 L63 69 M63 58 L51 69" stroke="#241d18" stroke-width="2.9" stroke-linecap="round"/>
+                <path d="M78 58 L90 69 M90 58 L78 69" stroke="#241d18" stroke-width="2.9" stroke-linecap="round"/>
+              </g>
+              <!-- 腮红 / 鼻 / 嘴 -->
+              <ellipse id="blushL" cx="48" cy="74" rx="5.4" ry="3.2" fill="#f7a6b4" opacity=".7"/>
+              <ellipse id="blushR" cx="93" cy="74" rx="5.4" ry="3.2" fill="#f7a6b4" opacity=".7"/>
+              <path id="mouth" d="M65 78 Q70 82 75 78" stroke="#241d18" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+            </g>
+          </g>
+        </svg>
+        <div class="fx" id="fx"></div>
+        <div class="pshadow"></div>
+      </div>
+      <div class="cap"><b>方案 A 完全体 ·「小画师」</b><br>双层追踪（头转+瞳孔）· 随机小动作 · 摸头 · 打瞌睡<br>拖拽摆动 · 6 状态 × 粒子特效 · 仍约 12KB 内联</div>
+    </div>
+
+    <div class="ctrls">
+      <p><b>状态切换</b>（对应 AI 真实运行态）：</p>
+      <div class="btnrow">
+        <button class="btn on" data-st="idle">待机</button>
+        <button class="btn" data-st="thinking">思考中</button>
+        <button class="btn" data-st="busy">工具执行</button>
+        <button class="btn" data-st="confirm">等确认</button>
+        <button class="btn" data-st="success">成功</button>
+        <button class="btn" data-st="error">出错</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn warm" id="btn-auto">▶ 自动演示全流程</button>
+        <button class="btn" id="btn-wake">戳醒（假装睡觉时）</button>
+      </div>
+      <p class="newlist" style="margin-top:10px">
+        <span class="tag">v2 新增</span><b>双层追踪</b>：头部 8° 内轻转 + 瞳孔独立追随（带缓动，不是瞬移）<br>
+        <span class="tag">v2 新增</span><b>随机小动作</b>：待机时每 6~12 秒自己 左顾右盼 / 哼歌（♪飘出）/ 扭一扭<br>
+        <span class="tag">v2 新增</span><b>摸头</b>：鼠标在她头顶停留 → 眯眼 + 脸红加深 + 冒音符<br>
+        <span class="tag">v2 新增</span><b>打瞌睡</b>：无操作 20 秒 → 闭眼冒 Zzz，任意操作唤醒<br>
+        <span class="tag">v2 新增</span><b>拖拽摆动</b>：拖着跑她会朝移动方向倾倒，松手回弹<br>
+        <span class="tag">v2 新增</span><b>粒子</b>：busy 挥笔画出颜料点 · success 撒花 · error 掉汗滴 · 确认时跳着指气泡<br>
+        <span class="tag">v2 新增</span><b>物理小细节</b>：奖章随动作摆动，跳跃时甩得更欢；拖拽位置 localStorage 记忆
+      </p>
+    </div>
+  </div>
+
+  <h2>接入说明（与 v1 相同，复杂度不改变接入成本）</h2>
+  <div class="sub" style="margin-bottom:0">
+    替换点仍是 <span class="kbd">index.html</span> 的 <span class="kbd">#ai-ball</span>；状态全部由现有前端事件驱动
+    （SSE delta→thinking、tool_call→busy、tool_result→success、confirm_request→confirm、error→error、页面无操作→sleep），
+    <b>后端零改动</b>；exe 体积 <b>+10~15KB</b>（全部内联，embed 结构不动）；respect <span class="kbd">prefers-reduced-motion</span> 时退化为静态头像 + 状态色描边。
+    拖拽贴边与位置记忆、双击归位、点击开合抽屉逻辑均保留。
+  </div>
+</div>
+
+<script>
+(function(){
+  const pet = document.getElementById('pet');
+  const svg = document.getElementById('petSvg');
+  const fx = document.getElementById('fx');
+  const bubble = document.getElementById('bubble');
+  const badge = document.getElementById('badge');
+  const mouth = document.getElementById('mouth');
+  const eyes = document.getElementById('eyes');
+  const eyesHappy = document.getElementById('eyesHappy');
+  const eyesClosed = document.getElementById('eyesClosed');
+  const eyesDizzy = document.getElementById('eyesDizzy');
+  const gHead = document.getElementById('gHead');
+  const iris = eyes.querySelectorAll('.iris'), hili = eyes.querySelectorAll('.hili');
+  const blushL = document.getElementById('blushL'), blushR = document.getElementById('blushR');
+  const browL = document.getElementById('browL'), browR = document.getElementById('browR');
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let state = 'idle', bubbleTimer = null, idleTimer = null, sleepTimer = null, autoTimer = null;
+
+  /* ---------- 双层追踪：头轻转 + 瞳孔缓动追随 ---------- */
+  const look = {tx:0, ty:0, cx:0, cy:0, htx:0, hcx:0};
+  document.addEventListener('mousemove', e=>{
+    if(state==='error'||state==='success'||state==='sleep') return;
+    const r = svg.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height*0.42;
+    const dx = e.clientX-cx, dy = e.clientY-cy, d = Math.hypot(dx,dy)||1;
+    const k = Math.min(d/150,1);
+    look.tx = dx/d*k*3.6; look.ty = dy/d*k*2.6;          // 瞳孔最大 3.6px
+    look.htx = Math.max(-7, Math.min(7, dx/d*k*9));      // 头最大 7°（轴心在颈部，避免与身体脱节）
+    wake();
+  });
+  (function loop(){
+    look.cx += (look.tx-look.cx)*0.12; look.cy += (look.ty-look.cy)*0.12;
+    look.hcx += (look.htx-look.hcx)*0.08;
+    iris.forEach(c=>c.setAttribute('transform',`translate(${look.cx},${look.cy})`));
+    hili.forEach(c=>c.setAttribute('transform',`translate(${look.cx*.5},${look.cy*.5})`));
+    gHead.setAttribute('transform',`rotate(${look.hcx.toFixed(2)} 70 90)`);
+    requestAnimationFrame(loop);
+  })();
+
+  /* ---------- 眨眼 ---------- */
+  const lids = eyes.querySelectorAll('ellipse');
+  setInterval(()=>{
+    if(state!=='idle'&&state!=='confirm') return;
+    lids.forEach(el=>el.setAttribute('ry','0.6'));
+    setTimeout(()=>lids.forEach(el=>el.setAttribute('ry','8.4')), 130);
+  }, 3400+Math.random()*1800);
+
+  /* ---------- 泡泡 ---------- */
+  function say(html, sticky){
+    clearTimeout(bubbleTimer);
+    bubble.innerHTML = html;
+    pet.classList.add('show-bubble');
+    if(!sticky) bubbleTimer = setTimeout(()=>pet.classList.remove('show-bubble'), 2400);
+  }
+  function hideBubble(){ clearTimeout(bubbleTimer); pet.classList.remove('show-bubble'); }
+
+  /* ---------- 粒子 ---------- */
+  function spawn(html, cls, style, life){
+    const s = document.createElement('span');
+    s.className = cls; s.innerHTML = html;
+    Object.assign(s.style, style||{});
+    fx.appendChild(s);
+    setTimeout(()=>s.remove(), life||1600);
+  }
+  function notes(n){ for(let i=0;i<(n||2);i++) spawn(['♪','♫','♬'][i%3],'up',
+    {left:(38+Math.random()*30)+'%', top:'26%', animationDelay:(i*.2)+'s', color:'#9fd8cb'}, 1700); }
+  function sparkles(){ for(let i=0;i<3;i++) spawn('✦','up',
+    {left:(30+Math.random()*45)+'%', top:(20+Math.random()*25)+'%', animationDelay:(i*.25)+'s', color:'#e8b23c', fontSize:'11px'}, 1600); }
+  function sweat(){ for(let i=0;i<2;i++) spawn('','drop',
+    {left:(56+i*14)+'%', top:'34%', animationDelay:(i*.3)+'s'}, 1300); }
+  function confetti(){
+    const cols = ['#ff5d7e','#e8b23c','#5aa8d8','#9fd8cb','#b78af7'];
+    for(let i=0;i<16;i++){
+      spawn('','conf',{ left:(20+Math.random()*60)+'%', top:'30%',
+        background:cols[i%5], '--cx':((Math.random()*160)-80)+'px', '--cr':(Math.random()*720-360)+'deg',
+        animationDuration:(1.1+Math.random()*.7)+'s', animationDelay:(Math.random()*.25)+'s'}, 2000);
+    }
+  }
+  function paintDrops(){
+    const cols = ['#ef456c','#e8b23c','#5aa8d8'];
+    spawn('','paint',{ left:'78%', top:'52%', background:cols[Math.floor(Math.random()*3)],
+      '--px':((Math.random()*60)-30)+'px','--py':(10+Math.random()*40)+'px'}, 950);
+  }
+
+  /* ---------- 状态机 ---------- */
+  const mouths = {
+    idle:'M65 78 Q70 82 75 78', thinking:'M65 79 Q70 75 75 79', busy:'M66 79 L74 79',
+    confirm:'M64 78 Q70 84 76 78', success:'M63 77 Q70 86 77 77', error:'M65 80 Q70 76 75 80', sleep:'M66 79 Q70 81 74 79'
+  };
+  const idleLines = ['在呢~','随时待命','画笔已就绪','环境很健康','有话直说~'];
+  function setState(st){
+    state = st;
+    pet.classList.remove('thinking','busy','error','success','confirm','sleep','show-badge','show-bubble');
+    eyes.style.display=''; eyesHappy.style.display='none'; eyesDizzy.style.display='none'; eyesClosed.style.display='none';
+    browL.style.opacity = browR.style.opacity = 0;
+    blushL.style.opacity = blushR.style.opacity = .7;
+    mouth.setAttribute('d', mouths[st]||mouths.idle);
+    badge.className = 'badge'; badge.textContent = '!';
+    clearTimeout(sleepTimer); armSleepTimer();
+    if(st==='thinking'){ pet.classList.add('thinking'); say('思考中 <span class="d">·</span><span class="d">·</span><span class="d">·</span>', true); look.tx=2.6; look.ty=-2.2; }
+    if(st==='busy'){ pet.classList.add('busy'); say('干活中…', true); paintTimer(); }
+    if(st==='confirm'){ pet.classList.add('confirm','show-badge'); badge.classList.add('blue'); say('点我确认！', true); }
+    if(st==='success'){ pet.classList.add('success','show-badge'); badge.classList.add('green'); badge.textContent='✓';
+      eyesHappy.style.display=''; hideBubble(); if(!REDUCED) confetti(); setTimeout(()=>{ if(state==='success') setState('idle'); }, 2400); }
+    if(st==='error'){ pet.classList.add('error','show-badge'); badge.classList.add('red'); eyesDizzy.style.display='';
+      browL.style.opacity = browR.style.opacity = 1; say('出错了…', false); if(!REDUCED) sweat(); }
+    if(st==='idle'){ look.tx=0; look.ty=0; }
+  }
+  let paintT = null;
+  function paintTimer(){ clearInterval(paintT); if(REDUCED) return;
+    paintT = setInterval(()=>{ if(state==='busy') paintDrops(); else clearInterval(paintT); }, 300); }
+
+  document.querySelectorAll('.btn[data-st]').forEach(b=>{
+    b.onclick = ()=>{ stopAuto();
+      document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); setState(b.dataset.st);
+    };
+  });
+
+  /* ---------- 自动演示 ---------- */
+  const seq = ['idle','thinking','busy','confirm','success','error'];
+  let seqI = 0;
+  const btnAuto = document.getElementById('btn-auto');
+  function stopAuto(){ clearInterval(autoTimer); autoTimer=null; btnAuto.textContent='▶ 自动演示全流程'; }
+  btnAuto.onclick = ()=>{
+    if(autoTimer){ stopAuto(); return; }
+    btnAuto.textContent='■ 停止演示'; seqI = 0;
+    const sync = ()=>{
+      document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+      document.querySelector(`.btn[data-st="${seq[seqI]}"]`).classList.add('on');
+      setState(seq[seqI]); seqI = (seqI+1)%seq.length;
+    };
+    sync(); autoTimer = setInterval(sync, 2600);
+  };
+  document.getElementById('btn-wake').onclick = ()=>{ wake(true); };
+
+  /* ---------- 随机小动作（idle） ---------- */
+  function idleBehavior(){
+    if(state!=='idle') return;
+    const pick = Math.random();
+    if(pick < .38){                                     // 左顾右盼
+      const dir = Math.random()<.5 ? -3.2 : 3.2;
+      look.tx = dir; setTimeout(()=>{ if(state==='idle') look.tx=0; }, 900);
+      setTimeout(()=>{ if(state==='idle'){ look.tx=-dir; } }, 1500);
+      setTimeout(()=>{ if(state==='idle') look.tx=0; }, 2400);
+    } else if(pick < .7){ notes(2); say(idleLines[Math.floor(Math.random()*idleLines.length)]); }
+    else { pet.style.setProperty('--noop','1');         // 扭一扭：借奖章摆动节奏跳一次小晃
+      svg.style.transform='rotate(-5deg)';
+      setTimeout(()=>svg.style.transform='rotate(4deg)',160);
+      setTimeout(()=>svg.style.transform='',340);
+    }
+  }
+  (function idleLoop(){ idleTimer = setTimeout(()=>{ idleBehavior(); idleLoop(); }, 6000+Math.random()*6000); })();
+
+  /* ---------- 打瞌睡 ---------- */
+  let zzzT = null;
+  function armSleepTimer(){
+    clearTimeout(sleepTimer); clearInterval(zzzT);
+    if(REDUCED) return;
+    sleepTimer = setTimeout(()=>{
+      if(state!=='idle') return;
+      state = 'sleep';
+      pet.classList.add('sleep'); pet.classList.remove('show-bubble');
+      eyes.style.display='none'; eyesClosed.style.display='';
+      mouth.setAttribute('d', mouths.sleep); look.tx=0; look.ty=0;
+      zzzT = setInterval(()=>{
+        const z = document.createElement('span'); z.className='zzz'; z.textContent='z';
+        z.style.left = (55+Math.random()*14)+'%'; z.style.top = '18%';
+        z.style.fontSize = (11+Math.random()*7)+'px';
+        fx.appendChild(z); setTimeout(()=>z.remove(), 2500);
+      }, 1800);
+    }, 20000);
+  }
+  function wake(force){
+    if(state==='sleep' || force){
+      if(state==='sleep'){
+        state='idle'; pet.classList.remove('sleep');
+        eyesClosed.style.display='none'; eyes.style.display='';
+        mouth.setAttribute('d', mouths.idle); clearInterval(zzzT);
+        notes(1); say('唔…醒了');
+      }
+    }
+    armSleepTimer();
+  }
+  armSleepTimer();
+
+  /* ---------- 摸头 ---------- */
+  let petCount = 0, petTimer = null;
+  pet.addEventListener('pointermove', e=>{
+    if(state!=='idle'||REDUCED) return;
+    const r = pet.getBoundingClientRect();
+    if(e.clientY - r.top < r.height*0.42){
+      clearTimeout(petTimer);
+      blushL.style.opacity = blushR.style.opacity = .95;
+      eyesHappy.style.display=''; eyes.style.display='none';
+      mouth.setAttribute('d', mouths.success);
+      petTimer = setTimeout(()=>{
+        if(state==='idle'){ blushL.style.opacity = blushR.style.opacity = .7;
+          eyesHappy.style.display='none'; eyes.style.display=''; mouth.setAttribute('d', mouths.idle); }
+      }, 900);
+    }
+  });
+
+  /* ---------- 单击 / 连点 ---------- */
+  let clickStreak = 0, streakT = null;
+  pet.addEventListener('click', e=>{
+    if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
+    if(state==='sleep'){ wake(true); return; }
+    if(state!=='idle') return;
+    clickStreak++; clearTimeout(streakT);
+    streakT = setTimeout(()=>clickStreak=0, 900);
+    eyesHappy.style.display=''; eyes.style.display='none';
+    mouth.setAttribute('d', mouths.success);
+    if(clickStreak>=3){ notes(3); say('别戳啦，好痒~'); clickStreak=0; }
+    else say(idleLines[Math.floor(Math.random()*idleLines.length)]);
+    setTimeout(()=>{ if(state==='idle'){ eyesHappy.style.display='none'; eyes.style.display=''; mouth.setAttribute('d', mouths.idle);} }, 800);
+  });
+
+  /* ---------- 拖拽：速度倾倒 + 位置记忆 ---------- */
+  let drag=null, lastX=0, lastT=0;
+  pet.addEventListener('pointerdown', e=>{
+    wake();
+    drag = {x:e.clientX, y:e.clientY, ox:pet.offsetLeft, oy:pet.offsetTop, moved:false};
+    lastX = e.clientX; lastT = performance.now();
+    pet.setPointerCapture(e.pointerId);
+  });
+  pet.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.hypot(dx,dy)>4) drag.moved=true;
+    if(drag.moved){
+      pet.style.position='fixed';
+      pet.style.left=(drag.ox+dx)+'px'; pet.style.top=(drag.oy+dy)+'px'; pet.style.zIndex=9999;
+      const now = performance.now(), vx = (e.clientX-lastX)/Math.max(now-lastT,1);
+      lastX = e.clientX; lastT = now;
+      svg.style.transition='none';
+      svg.style.transform = `rotate(${Math.max(-16, Math.min(16, vx*36))}deg)`;
+      pet.classList.add('show-bubble');
+    }
+  });
+  pet.addEventListener('pointerup', ()=>{
+    if(drag && drag.moved){
+      pet.dataset.dragged='1';
+      svg.style.transition=''; svg.style.transform='';
+      setTimeout(()=>{ if(state!=='sleep'&&state!=='thinking'&&state!=='busy') pet.classList.remove('show-bubble'); }, 200);
+      try{ localStorage.setItem('ek-pet-pos', JSON.stringify({x:pet.style.left, y:pet.style.top})); }catch(_){}
+    }
+    drag=null;
+  });
+  try{ const pos = JSON.parse(localStorage.getItem('ek-pet-pos')||'null');
+    if(pos && pos.x && pos.y){ pet.style.position='fixed'; pet.style.left=pos.x; pet.style.top=pos.y; pet.style.zIndex=9999; }
+  }catch(_){}
+  pet.addEventListener('dblclick', ()=>{
+    pet.style.position=''; pet.style.left=''; pet.style.top='';
+    try{ localStorage.removeItem('ek-pet-pos'); }catch(_){}
+    svg.style.transform='rotate(-8deg)';
+    setTimeout(()=>svg.style.transform='rotate(6deg)',140);
+    setTimeout(()=>svg.style.transform='',300);
+    say('已归位 ✨');
+  });
+})();
+</script>
+</body>
+</html>

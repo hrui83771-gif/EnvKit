@@ -1,0 +1,21 @@
+@echo off
+chcp 936 >nul
+setlocal
+set "DEST=%LOCALAPPDATA%\EnvKit"
+echo == 卸载 EnvKit ==
+taskkill /IM EnvKit.exe /F >nul 2>&1
+timeout /t 1 /nobreak >nul
+if exist "%DEST%\EnvKit.exe" del /q "%DEST%\EnvKit.exe"
+if exist "%DEST%\使用说明.md" del /q "%DEST%\使用说明.md"
+if exist "%DEST%\config.json" del /q "%DEST%\config.json"
+powershell -NoProfile -Command "$lnk = [Environment]::GetFolderPath('Desktop') + '\EnvKit.lnk'; if (Test-Path $lnk) { Remove-Item $lnk -Force }" >nul 2>&1
+echo 已删除程序本体与桌面快捷方式。
+echo.
+echo 注意：以下内容不会被自动删除，如需清理请手动处理：
+echo   1. 组件目录（默认 C:\EnvKit\tools，内含 Go / Node / MySQL）
+echo   2. 已注册的 MySQL 服务与数据库数据
+echo   3. 环境变量（PATH 中的组件目录）
+echo   4. 你项目里的 backups 备份目录
+echo.
+echo 完成后本窗口可关闭。
+exit /b 0

@@ -1,0 +1,27 @@
+# ---------- 本机实配（含密码/真实 IP），仓库只保留 config.dist.json 干净模板 ----------
+config.json
+config.json.bak*
+
+# ---------- 运行期产物 ----------
+backups/
+logs/
+*.log
+audit*.json
+audit*.jsonl
+sql_history.json
+state.json
+*.marker
+dist/
+
+# ---------- 构建产物（发布走 GitHub Releases，不进 git）----------
+*.exe
+
+# ---------- 测试临时产物（tools/ 下的正式脚本保留）----------
+tools/_*
+tools/_cdptmp*/
+tools/_jscheck/
+
+# ---------- 系统杂项 ----------
+Thumbs.db
+desktop.ini
+.DS_Store

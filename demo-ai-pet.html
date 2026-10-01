@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnvKit 桌宠方案 · 可行性演示</title>
+<style>
+:root{
+  --bg:#14161c; --panel:#1c1f27; --card:#20242e; --line:#2e3340;
+  --ink:#e8eaf0; --muted:#8b93a5; --accent:#ff5d7e; --gold:#e8b23c;
+  --ok:#4ade80; --err:#f87171; --think:#7dd3fc;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  background:
+    radial-gradient(1200px 500px at 70% -10%, #232838 0%, transparent 60%),
+    var(--bg);
+  color:var(--ink);
+  font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  min-height:100vh; padding:36px 24px 80px;
+}
+.wrap{max-width:1060px; margin:0 auto}
+h1{font-size:24px; margin-bottom:6px}
+h1 em{font-style:normal; color:var(--accent)}
+.sub{color:var(--muted); font-size:14px; margin-bottom:28px}
+h2{font-size:17px; margin:34px 0 14px; display:flex; align-items:center; gap:8px}
+h2::before{content:""; width:4px; height:16px; border-radius:2px; background:var(--accent)}
+.stage{
+  background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  padding:28px 24px; display:flex; gap:36px; flex-wrap:wrap; align-items:flex-start;
+}
+.petcol{display:flex; flex-direction:column; align-items:center; gap:14px}
+.petcol .cap{font-size:13px; color:var(--muted); text-align:center; line-height:1.7}
+.petcol .cap b{color:var(--ink); font-size:14px}
+.ctrls{flex:1; min-width:300px}
+.ctrls p{font-size:13.5px; color:var(--muted); line-height:1.8; margin-bottom:14px}
+.btnrow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px}
+.btn{
+  border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:9px; padding:7px 14px; font-size:13px; cursor:pointer; transition:.15s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.tip{font-size:12.5px; color:var(--muted); border-left:3px solid var(--line); padding:6px 12px; line-height:1.8}
+table{width:100%; border-collapse:collapse; font-size:13.5px; background:var(--panel);
+  border:1px solid var(--line); border-radius:12px; overflow:hidden}
+th,td{padding:11px 14px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.7}
+th{background:#242936; font-size:13px; color:var(--muted); font-weight:600; white-space:nowrap}
+td b.good{color:var(--ok)} td b.bad{color:var(--err)} td b.mid{color:var(--gold)}
+tr:last-child td{border-bottom:none}
+.kbd{background:var(--card); border:1px solid var(--line); border-radius:5px; padding:1px 7px; font-size:12px}
+
+/* ============ 桌宠本体 ============ */
+/* 容器：可拖拽、悬停放大 */
+.pet{
+  position:relative; width:96px; height:110px; cursor:grab; user-select:none;
+  -webkit-tap-highlight-color:transparent; touch-action:none;
+}
+.pet:active{cursor:grabbing}
+/* 待机浮动 */
+@keyframes petFloat{
+  0%,100%{transform:translateY(0) rotate(0deg)}
+  25%{transform:translateY(-7px) rotate(-2.4deg)}
+  75%{transform:translateY(-3px) rotate(2.4deg)}
+}
+.pet .body{animation:petFloat 3.2s ease-in-out infinite; transform-origin:50% 90%}
+.pet.thinking .body{animation:petFloat 2.2s ease-in-out infinite}
+.pet.busy .body{animation:petWork .7s ease-in-out infinite}
+.pet.error .body{animation:petShake .38s ease-in-out 3}
+.pet.success .body{animation:petJump .6s cubic-bezier(.3,1.6,.5,1) 2}
+.pet.confirm .body{animation:petNudge .8s ease-in-out infinite}
+@keyframes petWork{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-4px) rotate(-5deg)}}
+@keyframes petShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px) rotate(-4deg)}75%{transform:translateX(6px) rotate(4deg)}}
+@keyframes petJump{0%,100%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-16px) scale(.94,1.08)}60%{transform:translateY(0) scale(1.08,.9)}}
+@keyframes petNudge{0%,100%{transform:rotate(0)}30%{transform:rotate(-6deg) translateY(-3px)}70%{transform:rotate(5deg)}}
+
+/* 地面影子 */
+@keyframes shadowPulse{0%,100%{transform:scaleX(1); opacity:.32}50%{transform:scaleX(.82); opacity:.2}}
+.pshadow{width:56px; height:10px; margin:-4px auto 0; border-radius:50%;
+  background:radial-gradient(closest-side, #000 0%, transparent 100%); opacity:.3;
+  animation:shadowPulse 3.2s ease-in-out infinite}
+
+/* 思考泡泡 */
+.bubble{
+  position:absolute; top:-26px; left:50%; transform:translateX(-50%) scale(0);
+  background:#fff; color:#333; border-radius:12px; padding:5px 10px; font-size:11.5px;
+  white-space:nowrap; transition:transform .25s cubic-bezier(.3,1.5,.5,1); z-index:5;
+  box-shadow:0 4px 14px rgba(0,0,0,.35);
+}
+.bubble::after{content:""; position:absolute; bottom:-5px; left:50%; transform:translateX(-50%);
+  border:6px solid transparent; border-top-color:#fff; border-bottom:none}
+.pet.show-bubble .bubble{transform:translateX(-50%) scale(1)}
+@keyframes dotJump{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.bubble .d{display:inline-block; animation:dotJump 1s infinite; color:var(--think); font-weight:700}
+.bubble .d:nth-child(2){animation-delay:.15s}
+.bubble .d:nth-child(3){animation-delay:.3s}
+
+/* 状态徽标（确认/出错） */
+.badge{
+  position:absolute; top:-8px; right:-8px; width:24px; height:24px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff;
+  transform:scale(0); transition:transform .25s cubic-bezier(.3,1.7,.5,1); z-index:6;
+  box-shadow:0 2px 8px rgba(0,0,0,.4);
+}
+.badge.red{background:#ef4444} .badge.blue{background:#3b82f6} .badge.green{background:#22c55e}
+.pet.show-badge .badge{transform:scale(1)}
+@keyframes badgePop{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.pet.show-badge .badge{animation:badgePop 1.4s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EnvKit 桌宠方案 · <em>可行性演示</em></h1>
+  <div class="sub">替代右下角 AI 圆框的可交互原型 —— 移动鼠标看眼神追踪，点它试试，切换状态看动画</div>
+
+  <h2>现场演示（真实交互）</h2>
+  <div class="stage">
+    <div class="petcol">
+      <!-- ============ SVG 桌宠：小画师 ============ -->
+      <div class="pet" id="pet" title="拖动我 / 双击打开">
+        <div class="bubble" id="bubble">思考中 <span class="d">·</span><span class="d">·</span><span class="d">·</span></div>
+        <div class="badge" id="badge">!</div>
+        <svg class="body" id="petSvg" width="96" height="96" viewBox="0 0 120 120">
+          <defs>
+            <radialGradient id="faceG" cx="50%" cy="42%" r="65%">
+              <stop offset="0%" stop-color="#fff7ec"/><stop offset="100%" stop-color="#f3e2cd"/>
+            </radialGradient>
+            <linearGradient id="hairG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ff7d95"/><stop offset="100%" stop-color="#f0476e"/>
+            </linearGradient>
+            <radialGradient id="medalG" cx="35%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#ffe28a"/><stop offset="70%" stop-color="#e8b23c"/><stop offset="100%" stop-color="#c68f1e"/>
+            </radialGradient>
+          </defs>
+          <!-- 身体/衣领 -->
+          <path d="M38 96 Q60 86 82 96 L82 112 Q60 120 38 112 Z" fill="#262a33"/>
+          <path d="M56 94 L60 102 L64 94 Z" fill="#f3e2cd"/>
+          <!-- 后发 -->
+          <path d="M26 52 Q20 24 44 14 Q66 4 88 20 Q102 30 98 52 Q104 60 96 68 Q88 76 78 70 L42 70 Q30 74 24 64 Q20 58 26 52Z" fill="#d13a5e"/>
+          <!-- 脸 -->
+          <ellipse cx="60" cy="56" rx="30" ry="27" fill="url(#faceG)"/>
+          <!-- 前发（刘海） -->
+          <path d="M32 46 Q34 22 58 18 Q84 15 90 40 Q91 47 86 50 Q84 40 76 37 Q78 44 74 48 Q70 38 60 36 Q62 43 57 47 Q52 39 44 40 Q46 46 42 50 Q36 50 32 46Z" fill="url(#hairG)"/>
+          <!-- 挑染 -->
+          <path d="M70 20 Q80 24 84 36 Q86 42 84 47 Q82 38 74 33 Q75 27 70 20Z" fill="#9fd8cb" opacity=".9"/>
+          <!-- 发卷 -->
+          <circle cx="24" cy="62" r="10" fill="url(#hairG)"/>
+          <circle cx="20" cy="70" r="7" fill="#f0476e"/>
+          <!-- 奖章 -->
+          <g id="medal">
+            <path d="M30 30 L36 42 L30 46 L24 42 Z" fill="#4a7c59"/>
+            <path d="M40 28 L44 42 L38 45 L33 40 Z" fill="#6b9c7b"/>
+            <circle cx="33" cy="27" r="10" fill="url(#medalG)" stroke="#a87b18" stroke-width="1.4"/>
+            <circle cx="33" cy="27" r="6" fill="none" stroke="#fff3cf" stroke-width="1.2" opacity=".8"/>
+          </g>
+          <!-- 眼睛组（JS 控制瞳孔追踪 / 眨眼 / 状态） -->
+          <g id="eyes">
+            <g id="eyeL">
+              <ellipse cx="47" cy="58" rx="6.4" ry="8" fill="#241d18"/>
+              <circle class="iris" cx="47" cy="58" r="3.4" fill="#e8a13c"/>
+              <circle class="hili" cx="48.6" cy="55.6" r="1.7" fill="#fff"/>
+            </g>
+            <g id="eyeR">
+              <ellipse cx="73" cy="58" rx="6.4" ry="8" fill="#241d18"/>
+              <circle class="iris" cx="73" cy="58" r="3.4" fill="#e8a13c"/>
+              <circle class="hili" cx="74.6" cy="55.6" r="1.7" fill="#fff"/>
+            </g>
+          </g>
+          <g id="eyesHappy" style="display:none">
+            <path d="M41 59 Q47 51 53 59" stroke="#241d18" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+            <path d="M67 59 Q73 51 79 59" stroke="#241d18" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+          </g>
+          <g id="eyesDizzy" style="display:none">
+            <path d="M42 53 L52 63 M52 53 L42 63" stroke="#241d18" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M68 53 L78 63 M78 53 L68 63" stroke="#241d18" stroke-width="2.8" stroke-linecap="round"/>
+          </g>
+          <!-- 腮红 / 嘴 -->
+          <ellipse cx="40" cy="68" rx="5" ry="3" fill="#f7a6b4" opacity=".75"/>
+          <ellipse cx="80" cy="68" rx="5" ry="3" fill="#f7a6b4" opacity=".75"/>
+          <path id="mouth" d="M56 72 Q60 75 64 72" stroke="#241d18" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="pshadow"></div>
+      </div>
+      <div class="cap"><b>方案 A · SVG 手绘桌宠「小画师」</b><br>角色化用 exe 图标形象（粉发+挑染+金奖章）<br>眼神追踪鼠标 · 眨眼 · 6 种状态动画 · 约 4KB</div>
+    </div>
+
+    <div class="petcol">
+      <div class="pet" id="pet2" style="width:96px">
+        <div class="body" id="pet2Body" style="animation:petFloat 3.2s ease-in-out infinite">
+          <img id="pet2Img" src="../cici.png" alt="icon"
+            style="width:96px;height:96px;border-radius:26px;object-fit:cover;object-position:62% 28%;
+                   box-shadow:0 8px 24px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.08)">
+        </div>
+        <div class="pshadow"></div>
+      </div>
+      <div class="cap"><b>方案 B · 图标原图直接用</b><br>app.ico / cici.png 裁头 + CSS 浮动倾斜<br>零绘制成本 · 但眼睛不会动 · 约 20KB(PNG)</div>
+    </div>
+
+    <div class="ctrls">
+      <p><b style="color:var(--ink)">状态切换</b>（对应 AI 助手真实运行态）：</p>
+      <div class="btnrow">
+        <button class="btn on" data-st="idle">待机</button>
+        <button class="btn" data-st="thinking">思考中</button>
+        <button class="btn" data-st="busy">工具执行</button>
+        <button class="btn" data-st="confirm">等确认</button>
+        <button class="btn" data-st="success">成功</button>
+        <button class="btn" data-st="error">出错</button>
+      </div>
+      <p style="margin-top:6px">试着<b style="color:var(--ink)">移动鼠标</b>（眼神追踪）、<b style="color:var(--ink)">单击</b>（开心反馈）、<b style="color:var(--ink)">拖拽</b>（换位置）、<b style="color:var(--ink)">双击</b>（打开抽屉的入口）。</p>
+      <div class="tip">真实接入时状态由现有代码驱动：<span class="kbd">aiBusy</span> → busy、<span class="kbd">confirm_request</span> 事件 → confirm、<span class="kbd">tool_result</span> → success（1.5s 后回 idle）、<span class="kbd">error</span> 事件 → error、SSE 流式接收中 → thinking。零后端改动。</div>
+    </div>
+  </div>
+
+  <h2>三个方案对比</h2>
+  <table>
+    <tr><th>方案</th><th>体积成本</th><th>生动度</th><th>与品牌关联</th><th>工作量</th><th>结论</th></tr>
+    <tr>
+      <td><b>A · SVG 手绘桌宠</b>（本页演示）</td>
+      <td><b class="good">≈4KB</b> 纯内联，零新文件</td>
+      <td><b class="good">最高</b>：眼神追踪/眨眼/说话泡泡/6 态动画</td>
+      <td><b class="good">强</b>：复刻图标角色元素（粉发·挑染·金奖章）</td>
+      <td>1 次性绘制 + ~120 行 JS/CSS</td>
+      <td><b class="good">推荐</b></td>
+    </tr>
+    <tr>
+      <td><b>B · 图标原图裁剪</b></td>
+      <td><b class="mid">20~40KB</b>（PNG data-URI 或加一条 embed）</td>
+      <td><b class="mid">中</b>：浮动/倾斜/挤压可做，<b>眼睛不能动</b></td>
+      <td><b class="good">最强</b>：就是原图</td>
+      <td>裁图 + ~40 行 CSS</td>
+      <td>最快上线，可作过渡</td>
+    </tr>
+    <tr>
+      <td><b>C · Three.js 真 3D 模型</b></td>
+      <td><b class="bad">+0.7~2MB</b>（three.js + glTF 模型）</td>
+      <td><b class="good">高</b>：真 3D 旋转/光照</td>
+      <td>需先建模（角色 3D 化成本高）</td>
+      <td>数天 + 模型资产</td>
+      <td><b class="bad">不值</b>：违背单 exe 小体积理念，56px 球体看不出 3D 细节</td>
+    </tr>
+  </table>
+
+  <h2>接入方式（如果采纳）</h2>
+  <table>
+    <tr><th>项</th><th>说明</th></tr>
+    <tr><td>替换点</td><td><span class="kbd">index.html</span> 的 <span class="kbd">#ai-ball</span>（现在的 "AI" 圆框）→ 桌宠节点，点击开合抽屉逻辑不变</td></tr>
+    <tr><td>状态驱动</td><td>现有事件全部可挂：SSE delta→thinking、tool_call→busy、tool_result→success、confirm_request→confirm+气泡"点我确认"、error→error。纯前端，后端零改动</td></tr>
+    <tr><td>新增交互</td><td>拖拽贴边记忆位置（localStorage）、双击归位、悬停气泡显示"有任务完成"摘要（不打扰原则：默认只有状态色呼吸，不出声音）</td></tr>
+    <tr><td>体积影响</td><td>exe <b>+4~5KB</b>（方案 A 内联进 index.html，embed 结构不动）</td></tr>
+    <tr><td>降级</td><td>低配/低动效：respect <span class="kbd">prefers-reduced-motion</span>，退化为静态头像+状态色描边</td></tr>
+  </table>
+
+  <h2>能达到的效果总结</h2>
+  <table>
+    <tr><th>能力</th><th>现状（圆框）</th><th>桌宠后</th></tr>
+    <tr><td>任务状态可感知</td><td>无（只有开合）</td><td>绿呼吸=空闲 · 思考泡泡=生成中 · 转头忙碌=工具执行 · 弹"!"=等确认 · 抖动变红=出错</td></tr>
+    <tr><td>确认卡片不遗漏</td><td>抽屉关着就看不见</td><td>宠物弹跳 + "!" 徽标，隔屏也能注意到</td></tr>
+    <tr><td>陪伴感 / 评审印象</td><td>普通按钮</td><td>眼神跟着鼠标走、被点会开心——演示时的小记忆点</td></tr>
+    <tr><td>成本</td><td>—</td><td>exe +4KB，后端零改动，半天内可落地</td></tr>
+  </table>
+</div>
+
+<script>
+(function(){
+  const pet = document.getElementById('pet');
+  const svg = document.getElementById('petSvg');
+  const bubble = document.getElementById('bubble');
+  const badge = document.getElementById('badge');
+  const mouth = document.getElementById('mouth');
+  const eyes = document.getElementById('eyes');
+  const eyesHappy = document.getElementById('eyesHappy');
+  const eyesDizzy = document.getElementById('eyesDizzy');
+  let state = 'idle';
+
+  /* ---- 眼神追踪 ---- */
+  const irisL = eyes.querySelectorAll('.iris'), hiliL = eyes.querySelectorAll('.hili');
+  document.addEventListener('mousemove', e=>{
+    if(state==='error' || state==='success') return;
+    const r = svg.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height*0.48;
+    const dx = e.clientX - cx, dy = e.clientY - cy;
+    const d = Math.hypot(dx,dy) || 1;
+    const k = Math.min(d/140, 1) * 3.4;          // 最大偏移 3.4px
+    const ox = dx/d*k, oy = dy/d*k*0.7;
+    irisL.forEach(c=>{ c.setAttribute('transform', `translate(${ox},${oy})`); });
+    hiliL.forEach(c=>{ c.setAttribute('transform', `translate(${ox*0.5},${oy*0.5})`); });
+  });
+
+  /* ---- 眨眼 ---- */
+  const lids = eyes.querySelectorAll('ellipse');
+  setInterval(()=>{
+    if(state!=='idle' && state!=='confirm') return;
+    lids.forEach(el=>{ el.setAttribute('ry','0.6'); });
+    setTimeout(()=>lids.forEach(el=>el.setAttribute('ry','8')), 130);
+  }, 3200 + Math.random()*1800);
+
+  /* ---- 状态机 ---- */
+  const mouths = {
+    idle:    'M56 72 Q60 75 64 72',
+    thinking:'M56 73 Q60 70 64 73',
+    busy:    'M57 73 L63 73',
+    confirm: 'M55 72 Q60 78 65 72',
+    success: 'M54 71 Q60 79 66 71',
+    error:   'M56 74 Q60 71 64 74'
+  };
+  function setState(st){
+    state = st;
+    pet.className = 'pet show-' + '';  // reset
+    pet.classList.remove('thinking','busy','error','success','confirm','show-bubble','show-badge');
+    eyes.style.display=''; eyesHappy.style.display='none'; eyesDizzy.style.display='none';
+    mouth.setAttribute('d', mouths[st] || mouths.idle);
+    bubble.innerHTML = '思考中 <span class="d">·</span><span class="d">·</span><span class="d">·</span>';
+    badge.textContent = '!'; badge.className = 'badge';
+    if(st==='thinking'){ pet.classList.add('thinking','show-bubble'); }
+    if(st==='busy'){ pet.classList.add('busy'); bubble.textContent='干活中…'; pet.classList.add('show-bubble'); }
+    if(st==='confirm'){ pet.classList.add('confirm','show-badge'); badge.classList.add('blue'); }
+    if(st==='success'){ pet.classList.add('success'); eyesHappy.style.display=''; badge.textContent='✓'; pet.classList.add('show-badge'); badge.classList.add('green'); setTimeout(()=>{ if(state==='success') setState('idle'); }, 2200); }
+    if(st==='error'){ pet.classList.add('error'); eyesDizzy.style.display=''; badge.classList.add('red'); pet.classList.add('show-badge'); }
+  }
+  document.querySelectorAll('.btn[data-st]').forEach(b=>{
+    b.onclick = ()=>{
+      document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      setState(b.dataset.st);
+    };
+  });
+
+  /* ---- 单击：开心反馈 ---- */
+  pet.addEventListener('click', e=>{
+    if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
+    if(state==='idle'){
+      eyesHappy.style.display=''; eyes.style.display='none';
+      mouth.setAttribute('d', mouths.success);
+      setTimeout(()=>{ if(state==='idle'){ eyesHappy.style.display='none'; eyes.style.display=''; mouth.setAttribute('d', mouths.idle);} }, 900);
+    }
+  });
+
+  /* ---- 拖拽 ---- */
+  let drag=null;
+  pet.addEventListener('pointerdown', e=>{
+    drag = {x:e.clientX, y:e.clientY, ox:pet.offsetLeft, oy:pet.offsetTop, moved:false};
+    pet.setPointerCapture(e.pointerId);
+  });
+  pet.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.hypot(dx,dy)>4) drag.moved=true;
+    if(drag.moved){
+      pet.style.position='fixed';
+      pet.style.left=(drag.ox+dx)+'px'; pet.style.top=(drag.oy+dy)+'px';
+      pet.style.zIndex=9999;
+    }
+  });
+  pet.addEventListener('pointerup', ()=>{
+    if(drag && drag.moved) pet.dataset.dragged='1';
+    drag=null;
+  });
+  pet.addEventListener('dblclick', ()=>{
+    pet.style.position=''; pet.style.left=''; pet.style.top='';
+    bubble.textContent='已归位 ✨'; pet.classList.add('show-bubble');
+    setTimeout(()=>{ if(state==='idle') pet.classList.remove('show-bubble'); else if(state!=='thinking'&&state!=='busy') pet.classList.remove('show-bubble'); }, 1200);
+  });
+
+  /* 方案B 同款浮动 */
+  setInterval(()=>{}, 1e9);
+})();
+</script>
+</body>
+</html>

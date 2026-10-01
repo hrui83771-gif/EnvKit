@@ -1,0 +1,15 @@
+@echo off
+chcp 936 >nul
+setlocal
+set "DEST=%LOCALAPPDATA%\EnvKit"
+echo == 安装 EnvKit 到 %DEST% ==
+if not exist "%DEST%" mkdir "%DEST%"
+copy /Y "%~dp0EnvKit.exe" "%DEST%\EnvKit.exe" >nul || goto :err
+if exist "%~dp0使用说明.md" copy /Y "%~dp0使用说明.md" "%DEST%\" >nul
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\EnvKit.lnk'); $s.TargetPath = '%DEST%\EnvKit.exe'; $s.WorkingDirectory = '%DEST%'; $s.Save()" >nul 2>&1
+echo == 完成。桌面已创建快捷方式，EnvKit 正在启动... ==
+start "" "%DEST%\EnvKit.exe"
+exit /b 0
+:err
+echo 安装失败：请确认本文件与 EnvKit.exe 在同一目录，且未被杀毒软件拦截。
+exit /b 1

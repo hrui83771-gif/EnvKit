@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnvKit 桌宠 v3 · 交互完全体（含拟新增项）</title>
+<style>
+:root{
+  --bg:#14161c; --panel:#1c1f27; --card:#20242e; --line:#2e3340;
+  --ink:#e8eaf0; --muted:#8b93a5; --accent:#ff5d7e; --gold:#e8b23c; --think:#7dd3fc; --blue:#378ADD;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  background:radial-gradient(1200px 500px at 70% -10%, #232838 0%, transparent 60%), var(--bg);
+  color:var(--ink); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  min-height:100vh; padding:36px 24px 80px;
+}
+.wrap{max-width:1060px; margin:0 auto}
+h1{font-size:24px; margin-bottom:6px} h1 em{font-style:normal; color:var(--accent)}
+.sub{color:var(--muted); font-size:14px; margin-bottom:24px; line-height:1.8}
+.sub b{color:var(--ink)}
+h2{font-size:17px; margin:30px 0 12px; display:flex; align-items:center; gap:8px}
+h2::before{content:""; width:4px; height:16px; border-radius:2px; background:var(--accent)}
+.stage{
+  background:linear-gradient(180deg,#1e2230 0%, #171a22 100%);
+  border:1px solid var(--line); border-radius:16px;
+  padding:30px 24px 24px; display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start;
+  min-height:330px; position:relative;
+}
+.petcol{display:flex; flex-direction:column; align-items:center; gap:6px; z-index:2}
+.petcol .cap{font-size:12.5px; color:var(--muted); text-align:center; line-height:1.8}
+.ctrls{flex:1; min-width:320px; z-index:2}
+.ctrls p{font-size:13.5px; color:var(--muted); line-height:1.8; margin-bottom:12px}
+.ctrls p b{color:var(--ink)}
+.btnrow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px}
+.btn{border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:9px; padding:7px 14px; font-size:13px; cursor:pointer; transition:.15s}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.warm{border-color:#4a3d28; background:#2a2419; color:var(--gold)}
+.btn.warm:hover{border-color:var(--gold); color:var(--gold)}
+.newlist{font-size:13px; color:var(--muted); line-height:2.0}
+.newlist b{color:var(--ink)}
+.newlist .tag{display:inline-block; background:#2a3142; color:var(--think); border-radius:5px;
+  padding:0 7px; font-size:11.5px; margin-right:6px}
+.kbd{background:var(--card); border:1px solid var(--line); border-radius:5px; padding:1px 7px; font-size:12px}
+
+/* ================= 桌宠本体 ================= */
+.pet{position:relative; width:140px; height:150px; cursor:grab; user-select:none;
+  -webkit-tap-highlight-color:transparent; touch-action:none; transition:transform .35s, opacity .35s, filter .3s}
+.pet:active{cursor:grabbing}
+.pet.sleep{cursor:pointer}
+.pet.drop-hint{filter:brightness(1.25) drop-shadow(0 0 6px rgba(255,255,255,.25))}
+.pet.min{transform:scale(.16) translateY(260px); opacity:.55}
+.pet.min:hover{transform:scale(.55) translateY(60px); opacity:1}
+#petSvg{overflow:visible; transition:transform .18s ease-out}
+@keyframes petFloat{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(-2deg)}75%{transform:translateY(-3px) rotate(2deg)}}
+#petFloat{animation:petFloat 3.4s ease-in-out infinite; transform-origin:50% 92%}
+.pet.thinking #petFloat{animation-duration:2.3s}
+.pet.busy #petFloat{animation:petWorkSway 1s ease-in-out infinite}
+.pet.confirm #petFloat{animation:petNudge .8s ease-in-out infinite}
+.pet.success #petFloat{animation:petJump .65s cubic-bezier(.3,1.6,.5,1) 2}
+.pet.error #petFloat{animation:petShake .4s ease-in-out 4}
+.pet.sleep #petFloat{animation:petSleep 5s ease-in-out infinite}
+@keyframes petWorkSway{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(-3px) rotate(-3deg)}70%{transform:translateY(-5px) rotate(3deg)}}
+@keyframes petShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px) rotate(-5deg)}60%{transform:translateX(7px) rotate(5deg)}}
+@keyframes petNudge{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-9px) rotate(-5deg)}70%{transform:translateY(-2px) rotate(4deg)}}
+@keyframes petJump{0%,100%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-20px) scale(.93,1.09)}60%{transform:translateY(0) scale(1.1,.88)}}
+@keyframes petSleep{0%,100%{transform:translateY(0) rotate(0) scale(1)}50%{transform:translateY(-2px) rotate(0) scale(1.02,.97)}}
+@keyframes shadowPulse{0%,100%{transform:scaleX(1); opacity:.32}50%{transform:scaleX(.8); opacity:.18}}
+.pshadow{width:66px; height:11px; margin:-6px auto 0; border-radius:50%;
+  background:radial-gradient(closest-side,#000 0%,transparent 100%); opacity:.3;
+  animation:shadowPulse 3.4s ease-in-out infinite}
+.pet.sleep .pshadow{opacity:.16; animation:none}
+.bubble{position:absolute; top:-14px; left:50%; transform:translateX(-50%) scale(0);
+  background:#fff; color:#333; border-radius:12px; padding:5px 11px; font-size:11.5px;
+  white-space:nowrap; transition:transform .25s cubic-bezier(.3,1.5,.5,1); z-index:5;
+  box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.bubble::after{content:""; position:absolute; bottom:-5px; left:50%; transform:translateX(-50%);
+  border:6px solid transparent; border-top-color:#fff; border-bottom:none}
+.pet.show-bubble .bubble{transform:translateX(-50%) scale(1)}
+@keyframes dotJump{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.bubble .d{display:inline-block; animation:dotJump 1s infinite; color:var(--think); font-weight:700}
+.bubble .d:nth-child(2){animation-delay:.15s}
+.bubble .d:nth-child(3){animation-delay:.3s}
+.badge{position:absolute; top:2px; right:8px; width:24px; height:24px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff;
+  transform:scale(0); transition:transform .25s cubic-bezier(.3,1.7,.5,1); z-index:6;
+  box-shadow:0 2px 8px rgba(0,0,0,.4); border:none; cursor:pointer}
+.badge.red{background:#ef4444}.badge.blue{background:#3b82f6}.badge.green{background:#22c55e}
+.pet.show-badge .badge{transform:scale(1)}
+@keyframes badgePop{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+.pet.show-badge .badge{animation:badgePop 1.4s ease-in-out infinite}
+@keyframes brushWave{0%,100%{transform:rotate(14deg)}50%{transform:rotate(-42deg)}}
+.pet.busy #gBrush{animation:brushWave .8s ease-in-out infinite}
+#gBrush{transform-origin:112px 104px; transition:transform .4s}
+#gMedal{transform-origin:46px 20px; animation:medalSway 3.4s ease-in-out infinite}
+@keyframes medalSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(4deg)}}
+.pet.success #gMedal,.pet.confirm #gMedal{animation:medalFlap .5s ease-in-out infinite}
+@keyframes medalFlap{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+.fx{position:absolute; inset:0; pointer-events:none; z-index:8; overflow:visible}
+@keyframes fxUp{0%{transform:translateY(0) scale(.6); opacity:0}15%{opacity:1}100%{transform:translateY(-46px) scale(1.15); opacity:0}}
+@keyframes fxZzz{0%{transform:translate(0,0) scale(.5); opacity:0}20%{opacity:.9}100%{transform:translate(16px,-40px) scale(1.3); opacity:0}}
+@keyframes fxDrop{0%{transform:translateY(0) scaleY(1); opacity:0}15%{opacity:.95}100%{transform:translateY(34px) scaleY(1.25); opacity:0}}
+@keyframes fxConfetti{0%{transform:translate(0,0) rotate(0); opacity:1}100%{transform:translate(var(--cx),110px) rotate(var(--cr)); opacity:0}}
+@keyframes fxPaint{0%{transform:translate(0,0) scale(1); opacity:1}100%{transform:translate(var(--px),var(--py)) scale(.2); opacity:0}}
+.fx span{position:absolute; left:50%; top:40%; font-size:15px; will-change:transform,opacity}
+.fx span.up{animation:fxUp 1.5s ease-out forwards}
+.fx span.zzz{animation:fxZzz 2.4s ease-out forwards; color:#9db4d8; font-weight:700}
+.fx span.drop{width:8px; height:11px; background:#7cc4f8; border-radius:50% 50% 50% 50%/60% 60% 40% 40%; animation:fxDrop 1s ease-in forwards}
+.fx span.conf{width:7px; height:10px; border-radius:2px; animation:fxConfetti 1.4s ease-in forwards}
+.fx span.paint{width:6px; height:6px; border-radius:50%; animation:fxPaint .9s ease-out forwards}
+
+/* ===== v3 新增 ===== */
+/* 进度环 */
+.ring{position:absolute; left:-22px; top:-22px; pointer-events:none; z-index:4; opacity:0; transition:opacity .3s}
+.pet.show-ring .ring{opacity:1}
+.ring circle{fill:none; stroke-width:4; stroke-linecap:round}
+.ring .bgc{stroke:#2e3340}
+.ring .fgc{stroke:var(--blue); transform:rotate(-90deg); transform-origin:90px 90px; transition:stroke-dashoffset .4s linear}
+/* 任务 tooltip */
+.tiptool{position:absolute; left:110%; top:38%; width:210px; background:#242936; border:1px solid var(--line);
+  border-radius:10px; padding:10px 12px; font-size:12px; line-height:1.7; color:var(--muted); z-index:9;
+  opacity:0; transform:translateX(-6px); transition:.2s; pointer-events:none}
+.pet.show-tip .tiptool{opacity:1; transform:translateX(0)}
+.tiptool b{color:var(--ink); font-size:12.5px}
+.tiptool .last{color:var(--think); font-size:11.5px; word-break:break-all}
+/* 迷你确认卡 */
+.minicard{position:absolute; left:105%; top:26%; width:216px; background:#242936; border:1px solid var(--line);
+  border-radius:12px; padding:12px 14px; z-index:10; display:none;
+  box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.minicard.show{display:block; animation:cardIn .22s cubic-bezier(.3,1.4,.5,1)}
+@keyframes cardIn{0%{opacity:0; transform:translateY(8px) scale(.94)}100%{opacity:1; transform:none}}
+.minicard .ttl{font-size:12.5px; color:var(--ink); font-weight:600; margin-bottom:4px}
+.minicard .txt{font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:10px}
+.minicard .btns{display:flex; gap:8px}
+.minicard button{flex:1; border:none; border-radius:8px; padding:7px 0; font-size:12.5px; cursor:pointer}
+.minicard .yes{background:var(--accent); color:#fff}
+.minicard .no{background:var(--card); color:var(--muted); border:1px solid var(--line)}
+/* 右键菜单 */
+.ctxmenu{position:fixed; z-index:999; background:#242936; border:1px solid var(--line); border-radius:10px;
+  padding:6px; display:none; min-width:150px; box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.ctxmenu.show{display:block}
+.ctxmenu button{display:block; width:100%; text-align:left; background:none; border:none; color:var(--ink);
+  font-size:13px; padding:8px 12px; border-radius:7px; cursor:pointer}
+.ctxmenu button:hover{background:#2e3546}
+.ctxmenu .sep{height:1px; background:var(--line); margin:4px 6px}
+/* 日志窗格（演示错误深链） */
+.logbox{background:#12141a; border:1px solid var(--line); border-radius:12px; padding:14px 16px;
+  font-family:Consolas,monospace; font-size:12.5px; line-height:1.9; color:#9aa3b5; max-height:170px; overflow:auto}
+.logbox .ln{padding:0 6px; border-radius:4px}
+.logbox .err{color:#f87171}
+.logbox .flash{background:#4a3d10; outline:1px solid var(--gold)}
+.logbox .ok{color:#4ade80}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EnvKit 桌宠 v3 · <em>交互完全体</em></h1>
+  <div class="sub">v2 的全部活体行为保留，叠加 6 个「拟新增」交互的<b>可玩模拟</b>：
+    <b>点徽标直达确认卡</b>、<b>悬停进度环+任务摘要</b>、<b>错误深链跳日志</b>、<b>拖 .sql 上桌宠</b>、<b>右键迷你菜单</b>、<b>隐藏一小时</b>。
+    全部按真实接入后的行为模拟，后端零改动的部分（状态、日志流）用假数据代替。</div>
+
+  <h2>现场演示</h2>
+  <div class="stage">
+    <div class="petcol">
+      <div class="pet" id="pet" title="拖动 / 摸头 / 右键 / 拖文件进来">
+        <svg class="ring" width="184" height="184" viewBox="0 0 184 184">
+          <circle class="bgc" cx="92" cy="92" r="78"/>
+          <circle class="fgc" id="ringFg" cx="92" cy="92" r="78" stroke-dasharray="490" stroke-dashoffset="490"/>
+        </svg>
+        <div class="tiptool" id="tiptool">
+          <b id="tipName">—</b><br>
+          <span id="tipElapsed">—</span><br>
+          <span class="last" id="tipLast">—</span>
+        </div>
+        <div class="minicard" id="minicard">
+          <div class="ttl" id="mcTtl">AI 请求执行</div>
+          <div class="txt" id="mcTxt">—</div>
+          <div class="btns">
+            <button class="yes" id="mcYes">确认执行</button>
+            <button class="no" id="mcNo">拒绝</button>
+          </div>
+        </div>
+        <div class="bubble" id="bubble"></div>
+        <button class="badge" id="badge">!</button>
+        <svg id="petSvg" width="140" height="150" viewBox="0 0 140 150">
+          <defs>
+            <radialGradient id="faceG" cx="50%" cy="40%" r="68%">
+              <stop offset="0%" stop-color="#fff8ee"/><stop offset="100%" stop-color="#f2e0c9"/>
+            </radialGradient>
+            <linearGradient id="hairG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ff7d95"/><stop offset="100%" stop-color="#ef456c"/>
+            </linearGradient>
+            <radialGradient id="medalG" cx="35%" cy="30%" r="85%">
+              <stop offset="0%" stop-color="#ffe28a"/><stop offset="65%" stop-color="#e8b23c"/><stop offset="100%" stop-color="#c08817"/>
+            </radialGradient>
+          </defs>
+          <g id="petFloat">
+            <g id="gBody">
+              <path d="M61 80 L61 104 Q70 108 79 104 L79 80 Z" fill="#eed9bf"/>
+              <path d="M50 112 Q38 120 40 133" stroke="#262a33" stroke-width="9" fill="none" stroke-linecap="round"/>
+              <path d="M50 106 Q70 97 90 106 L93 140 Q70 149 47 140 Z" fill="#262a33"/>
+              <path id="apronP" d="M58 111 L84 111 L88 141 Q70 148 53 141 Z" fill="#d9d2c4"/>
+              <path d="M58 111 L61 105 M84 111 L81 105" stroke="#b7ae99" stroke-width="2.4" fill="none"/>
+              <circle id="dot1" cx="63" cy="124" r="2.6" fill="#ef456c"/>
+              <circle id="dot2" cx="74" cy="133" r="2.2" fill="#5aa8d8"/>
+              <circle id="dot3" cx="80" cy="121" r="2" fill="#e8b23c"/>
+              <path d="M66 106 L70 113 L74 106 Z" fill="#f2e0c9"/>
+              <path d="M90 110 Q104 114 110 105" stroke="#262a33" stroke-width="9" fill="none" stroke-linecap="round"/>
+              <circle cx="112" cy="104" r="5" fill="#f2e0c9"/>
+              <g id="gBrush">
+                <line x1="112" y1="104" x2="128" y2="86" stroke="#8a5a2b" stroke-width="4.6" stroke-linecap="round"/>
+                <path d="M128 86 L134 78 Q137 74 133 73 Q129 72 127 77 Z" fill="#5c4429"/>
+                <circle cx="131.5" cy="77.5" r="2.6" fill="#ef456c"/>
+              </g>
+            </g>
+            <g id="gHead">
+              <path d="M40 62 Q26 26 58 15 Q94 5 110 36 Q118 54 108 72 Q115 88 100 99 L46 99 Q33 99 30 80 Q28 66 40 62Z" fill="#d13a5e"/>
+              <ellipse cx="70" cy="62" rx="31" ry="28" fill="url(#faceG)"/>
+              <circle cx="36" cy="68" r="11" fill="url(#hairG)"/>
+              <circle cx="31" cy="77" r="7.5" fill="#ef456c"/>
+              <circle cx="105" cy="68" r="9" fill="url(#hairG)"/>
+              <path d="M41 52 Q40 24 68 20 Q97 18 103 44 Q104 52 99 55 Q96 43 87 40 Q89 48 84 52 Q80 41 69 39 Q71 47 65 51 Q59 42 50 43 Q52 50 46 54 Q43 55 41 52Z" fill="url(#hairG)"/>
+              <path d="M86 22 Q97 28 100 43 Q101 50 98 54 Q95 43 86 37 Q88 29 86 22Z" fill="#9fd8cb" opacity=".95"/>
+              <path d="M50 25 Q42 30 40 40 Q42 36 50 33 Q49 29 50 25Z" fill="#9fd8cb" opacity=".55"/>
+              <g id="gMedal">
+                <path d="M48 22 L54 34 L48 38 L42 34Z" fill="#4a7c59"/>
+                <path d="M58 20 L62 34 L56 37 L51 32Z" fill="#6b9c7b"/>
+                <circle cx="50" cy="20" r="10" fill="url(#medalG)" stroke="#a87b18" stroke-width="1.4"/>
+                <circle cx="50" cy="20" r="6" fill="none" stroke="#fff3cf" stroke-width="1.2" opacity=".8"/>
+              </g>
+              <path id="browL" d="M50 50 Q56 47 62 50" stroke="#c96a80" stroke-width="2" fill="none" stroke-linecap="round" opacity="0"/>
+              <path id="browR" d="M78 50 Q84 47 90 50" stroke="#c96a80" stroke-width="2" fill="none" stroke-linecap="round" opacity="0"/>
+              <g id="eyes">
+                <g id="eyeL">
+                  <ellipse cx="57" cy="63" rx="6.6" ry="8.4" fill="#241d18"/>
+                  <circle class="iris" cx="57" cy="63" r="3.5" fill="#e8a13c"/>
+                  <circle class="hili" cx="58.7" cy="60.4" r="1.8" fill="#fff"/>
+                </g>
+                <g id="eyeR">
+                  <ellipse cx="84" cy="63" rx="6.6" ry="8.4" fill="#241d18"/>
+                  <circle class="iris" cx="84" cy="63" r="3.5" fill="#e8a13c"/>
+                  <circle class="hili" cx="85.7" cy="60.4" r="1.8" fill="#fff"/>
+                </g>
+              </g>
+              <g id="eyesHappy" style="display:none">
+                <path d="M50 64 Q57 55 64 64" stroke="#241d18" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+                <path d="M77 64 Q84 55 91 64" stroke="#241d18" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+              </g>
+              <g id="eyesClosed" style="display:none">
+                <path d="M50 63 Q57 69 64 63" stroke="#241d18" stroke-width="3" fill="none" stroke-linecap="round"/>
+                <path d="M77 63 Q84 69 91 63" stroke="#241d18" stroke-width="3" fill="none" stroke-linecap="round"/>
+              </g>
+              <g id="eyesDizzy" style="display:none">
+                <path d="M51 58 L63 69 M63 58 L51 69" stroke="#241d18" stroke-width="2.9" stroke-linecap="round"/>
+                <path d="M78 58 L90 69 M90 58 L78 69" stroke="#241d18" stroke-width="2.9" stroke-linecap="round"/>
+              </g>
+              <ellipse id="blushL" cx="48" cy="74" rx="5.4" ry="3.2" fill="#f7a6b4" opacity=".7"/>
+              <ellipse id="blushR" cx="93" cy="74" rx="5.4" ry="3.2" fill="#f7a6b4" opacity=".7"/>
+              <path id="mouth" d="M65 78 Q70 82 75 78" stroke="#241d18" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+            </g>
+          </g>
+        </svg>
+        <div class="fx" id="fx"></div>
+        <div class="pshadow"></div>
+      </div>
+      <div class="cap"><b>v3 · 小画师（交互完全体）</b><br>试试：右键 / 拖个文件进来 / 点徽标 / 悬停看进度</div>
+    </div>
+
+    <div class="ctrls">
+      <p><b>状态与场景模拟</b>：</p>
+      <div class="btnrow">
+        <button class="btn on" data-st="idle">待机</button>
+        <button class="btn" data-st="thinking">思考中</button>
+        <button class="btn" data-st="confirm">等确认</button>
+        <button class="btn" data-st="error">出错</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn warm" id="btn-task">▶ 模拟长任务（npm install）</button>
+        <button class="btn warm" id="btn-ready">🎉 模拟首装完成</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn warm" id="btn-auto">▶ 自动演示全流程</button>
+      </div>
+      <p class="newlist" style="margin-top:8px">
+        <span class="tag">v3-1</span><b>等确认</b>状态下<b>点蓝色徽标</b> → 旁边弹迷你确认卡，不开抽屉就能批<br>
+        <span class="tag">v3-2</span><b>长任务</b>时宠物外圈出现<b>进度环</b>，鼠标悬停看任务名/耗时/最近日志<br>
+        <span class="tag">v3-3</span><b>出错</b>后<b>点红色徽标</b> → 页面滚到底部日志并高亮错误行（深链）<br>
+        <span class="tag">v3-4</span>从资源管理器<b>拖任意文件到宠物上</b> → .sql 走"生效到 farm 库"确认流，其他文件礼貌拒收<br>
+        <span class="tag">v3-5</span><b>右键宠物</b> → 迷你菜单（归位 / 隐藏一小时 / 打开抽屉 / 立即诊断）<br>
+        <span class="tag">v3-6</span>菜单里选<b>"隐藏一小时"</b> → 缩成小圆点不碍事，悬停展开、点击恢复<br>
+        <span class="tag">附赠</span>连点 10 次 → 换围裙颜色；闲时偶尔冒一条小贴士
+      </p>
+    </div>
+  </div>
+
+  <h2>日志窗格（模拟「错误深链」的落点）</h2>
+  <div class="logbox" id="logbox">
+    <div class="ln">[start] 09:14:02 前端依赖安装中：npm install（进度 41%）</div>
+    <div class="ln">[start] 09:14:38 resolve 成功 1284 个包</div>
+    <div class="ln">[chain] 09:15:10 链端心跳正常：块高 1105 / 交易 1355</div>
+    <div class="ln err" id="errline">[start] 09:15:47 ✗ 前端启动失败：EADDRINUSE ::8080 端口被占用</div>
+    <div class="ln">[sys] 09:15:47 建议：stop_service(web) 后重试，或换 PORT</div>
+    <div class="ln ok">[install] 09:16:02 Go 1.25.0 检测通过</div>
+  </div>
+
+  <h2>接入备注</h2>
+  <div class="sub" style="margin-bottom:0">
+    v3-1/3-2/3-5/3-6 为纯前端（数据源：<span class="kbd">/api/program/state</span>、SSE 日志流、confirm_request 事件）；
+    v3-4 需要一个 <span class="kbd>/api/program/apply-upload</span> 式新接口接收文件内容（走现有 428 确认流）；v3-3 纯前端。
+    总增量估 <b>约 250 行 JS + 80 行 CSS</b>，仍内联单文件。
+  </div>
+</div>
+
+<div class="ctxmenu" id="ctxmenu">
+  <button data-act="home">归位</button>
+  <button data-act="hide">隐藏一小时</button>
+  <div class="sep"></div>
+  <button data-act="drawer">打开 AI 抽屉</button>
+  <button data-act="diag">立即诊断</button>
+</div>
+
+<script>
+(function(){
+  const pet = document.getElementById('pet');
+  const svg = document.getElementById('petSvg');
+  const fx = document.getElementById('fx');
+  const bubble = document.getElementById('bubble');
+  const badge = document.getElementById('badge');
+  const mouth = document.getElementById('mouth');
+  const eyes = document.getElementById('eyes');
+  const eyesHappy = document.getElementById('eyesHappy');
+  const eyesClosed = document.getElementById('eyesClosed');
+  const eyesDizzy = document.getElementById('eyesDizzy');
+  const gHead = document.getElementById('gHead');
+  const iris = eyes.querySelectorAll('.iris'), hili = eyes.querySelectorAll('.hili');
+  const blushL = document.getElementById('blushL'), blushR = document.getElementById('blushR');
+  const browL = document.getElementById('browL'), browR = document.getElementById('browR');
+  const ring = document.querySelector('.ring'), ringFg = document.getElementById('ringFg');
+  const tiptool = document.getElementById('tiptool');
+  const minicard = document.getElementById('minicard');
+  const ctxmenu = document.getElementById('ctxmenu');
+  const logbox = document.getElementById('logbox');
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let state = 'idle', bubbleTimer = null, sleepTimer = null, zzzT = null, autoTimer = null, paintT = null;
+  let task = null;   // {name, t0, dur, last}
+
+  /* ---------- 双层追踪 ---------- */
+  const look = {tx:0, ty:0, cx:0, cy:0, htx:0, hcx:0};
+  document.addEventListener('mousemove', e=>{
+    if(state==='error'||state==='success'||state==='sleep') return;
+    const r = svg.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height*0.42;
+    const dx = e.clientX-cx, dy = e.clientY-cy, d = Math.hypot(dx,dy)||1;
+    const k = Math.min(d/150,1);
+    look.tx = dx/d*k*3.6; look.ty = dy/d*k*2.6;
+    look.htx = Math.max(-7, Math.min(7, dx/d*k*9));
+    wake();
+  });
+  (function loop(){
+    look.cx += (look.tx-look.cx)*0.12; look.cy += (look.ty-look.cy)*0.12;
+    look.hcx += (look.htx-look.hcx)*0.08;
+    iris.forEach(c=>c.setAttribute('transform',`translate(${look.cx},${look.cy})`));
+    hili.forEach(c=>c.setAttribute('transform',`translate(${look.cx*.5},${look.cy*.5})`));
+    gHead.setAttribute('transform',`rotate(${look.hcx.toFixed(2)} 70 90)`);
+    requestAnimationFrame(loop);
+  })();
+
+  /* ---------- 眨眼 ---------- */
+  const lids = eyes.querySelectorAll('ellipse');
+  setInterval(()=>{
+    if(state!=='idle'&&state!=='confirm') return;
+    lids.forEach(el=>el.setAttribute('ry','0.6'));
+    setTimeout(()=>lids.forEach(el=>el.setAttribute('ry','8.4')), 130);
+  }, 3400+Math.random()*1800);
+
+  /* ---------- 泡泡 ---------- */
+  function say(html, sticky){
+    clearTimeout(bubbleTimer);
+    bubble.innerHTML = html;
+    pet.classList.add('show-bubble');
+    if(!sticky) bubbleTimer = setTimeout(()=>{ if(state!=='confirm'&&state!=='thinking'&&state!=='busy') pet.classList.remove('show-bubble'); }, 2400);
+  }
+  function hideBubble(){ clearTimeout(bubbleTimer); pet.classList.remove('show-bubble'); }
+
+  /* ---------- 粒子 ---------- */
+  function spawn(cls, style, life, html){
+    const s = document.createElement('span');
+    s.className = cls; if(html) s.innerHTML = html;
+    Object.assign(s.style, style||{});
+    fx.appendChild(s); setTimeout(()=>s.remove(), life||1600);
+  }
+  function notes(n){ for(let i=0;i<(n||2);i++) spawn('up',{left:(38+Math.random()*30)+'%',top:'26%',animationDelay:(i*.2)+'s',color:'#9fd8cb'},1700,['♪','♫','♬'][i%3]); }
+  function sweat(){ for(let i=0;i<2;i++) spawn('drop',{left:(56+i*14)+'%',top:'34%',animationDelay:(i*.3)+'s'},1300); }
+  function confetti(n){
+    const cols = ['#ff5d7e','#e8b23c','#5aa8d8','#9fd8cb','#b78af7'];
+    for(let i=0;i<(n||16);i++) spawn('conf',{ left:(15+Math.random()*70)+'%',top:'28%',
+      background:cols[i%5], '--cx':((Math.random()*180)-90)+'px','--cr':(Math.random()*720-360)+'deg',
+      animationDuration:(1.1+Math.random()*.7)+'s', animationDelay:(Math.random()*.3)+'s'},2100);
+  }
+  function paintDrops(){
+    const cols = ['#ef456c','#e8b23c','#5aa8d8'];
+    spawn('paint',{left:'78%',top:'52%',background:cols[Math.floor(Math.random()*3)],
+      '--px':((Math.random()*60)-30)+'px','--py':(10+Math.random()*40)+'px'},950);
+  }
+
+  /* ---------- 状态机 ---------- */
+  const mouths = {
+    idle:'M65 78 Q70 82 75 78', thinking:'M65 79 Q70 75 75 79', busy:'M66 79 L74 79',
+    confirm:'M64 78 Q70 84 76 78', success:'M63 77 Q70 86 77 77', error:'M65 80 Q70 76 75 80', sleep:'M66 79 Q70 81 74 79'
+  };
+  function resetFace(){
+    eyes.style.display=''; eyesHappy.style.display='none'; eyesDizzy.style.display='none'; eyesClosed.style.display='none';
+    browL.style.opacity = browR.style.opacity = 0;
+    blushL.style.opacity = blushR.style.opacity = .7;
+  }
+  function setState(st){
+    if(state==='sleep' && st!=='idle') pet.classList.remove('sleep');
+    state = st;
+    pet.classList.remove('thinking','busy','error','success','confirm','sleep','show-badge','show-bubble','show-ring','show-tip');
+    resetFace();
+    mouth.setAttribute('d', mouths[st]||mouths.idle);
+    badge.className = 'badge'; badge.textContent = '!';
+    clearTimeout(sleepTimer); armSleepTimer();
+    minicard.classList.remove('show');
+    if(st==='thinking'){ pet.classList.add('thinking'); say('思考中 <span class="d">·</span><span class="d">·</span><span class="d">·</span>', true); look.tx=2.6; look.ty=-2.2; }
+    if(st==='busy'){ pet.classList.add('busy'); paintTimer(); }
+    if(st==='confirm'){ pet.classList.add('confirm','show-badge'); badge.classList.add('blue'); say('点我确认！', true); }
+    if(st==='success'){ pet.classList.add('success','show-badge'); badge.classList.add('green'); badge.textContent='✓';
+      eyesHappy.style.display=''; hideBubble(); if(!REDUCED) confetti(); setTimeout(()=>{ if(state==='success') setState('idle'); }, 2400); }
+    if(st==='error'){ pet.classList.add('error','show-badge'); badge.classList.add('red'); eyesDizzy.style.display='';
+      browL.style.opacity = browR.style.opacity = 1; say('出错了…点我看日志', false); if(!REDUCED) sweat(); }
+    if(st==='idle'){ look.tx=0; look.ty=0; hideBubble(); }
+  }
+  function paintTimer(){ clearInterval(paintT); if(REDUCED) return;
+    paintT = setInterval(()=>{ if(state==='busy') paintDrops(); else clearInterval(paintT); }, 300); }
+
+  document.querySelectorAll('.btn[data-st]').forEach(b=>{
+    b.onclick = ()=>{ stopAuto();
+      document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); setState(b.dataset.st);
+    };
+  });
+
+  /* ---------- v3-1 点徽标 → 迷你确认卡 ---------- */
+  const mcTtl = document.getElementById('mcTtl'), mcTxt = document.getElementById('mcTxt');
+  const mcYes = document.getElementById('mcYes'), mcNo = document.getElementById('mcNo');
+  badge.addEventListener('click', e=>{
+    e.stopPropagation();
+    if(badge.classList.contains('blue')){ showMiniCard(); }
+    else if(badge.classList.contains('red')){ deepLinkLog(); }
+  });
+  function showMiniCard(){
+    mcTtl.textContent = 'AI 请求执行：启动前后端服务';
+    mcTxt.textContent = '先后端（go run main.go）、再前端（npm run serve）。确认后真实执行。';
+    minicard.classList.add('show');
+  }
+  mcYes.onclick = e=>{
+    e.stopPropagation();
+    minicard.classList.remove('show');
+    document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+    setState('busy'); say('收到，开始启动…', true);
+    setTimeout(()=>{ if(state==='busy') setState('success'); }, 2200);
+  };
+  mcNo.onclick = e=>{
+    e.stopPropagation();
+    minicard.classList.remove('show');
+    setState('idle'); say('好的，先不动服务');
+  };
+
+  /* ---------- v3-3 错误深链 ---------- */
+  function deepLinkLog(){
+    logbox.scrollIntoView({behavior:'smooth', block:'center'});
+    const el = document.getElementById('errline');
+    el.classList.add('flash');
+    setTimeout(()=>el.classList.remove('flash'), 2600);
+    say('帮你在日志里标出来了', false);
+  }
+
+  /* ---------- v3-2 长任务进度环 ---------- */
+  const RING_C = 490;
+  const tipName = document.getElementById('tipName'), tipElapsed = document.getElementById('tipElapsed'), tipLast = document.getElementById('tipLast');
+  document.getElementById('btn-task').onclick = function(){
+    if(task){   // 二次点击 = 停止任务
+      clearInterval(task.iv); task = null;
+      pet.classList.remove('show-ring','show-tip');
+      this.textContent = '▶ 模拟长任务（npm install）';
+      setState('idle'); return;
+    }
+    stopAuto();
+    this.textContent = '■ 停止任务';
+    startTask('前端依赖安装中：npm install', 12000, 'resolve 成功 1284 个包');
+  };
+  function startTask(name, dur, lastLine){
+    task = {name, t0:Date.now(), dur, last:lastLine, iv:null};
+    pet.classList.add('show-ring');
+    if(state!=='sleep'){ setState('busy'); say('干活中…', true); }
+    tickTask();
+    task.iv = setInterval(tickTask, 400);
+  }
+  function tickTask(){
+    if(!task) return;
+    const el = Date.now()-task.t0;
+    const p = Math.min(el/task.dur, 1);
+    ringFg.style.strokeDashoffset = RING_C*(1-p);
+    task.last = '已解析 ' + Math.floor(1284*p) + ' / 1284 个包';
+    if(p>=1){
+      clearInterval(task.iv);
+      setTimeout(()=>{
+        pet.classList.remove('show-ring','show-tip');
+        task = null;
+        setState('success');
+        const b = document.getElementById('btn-task');
+        if(b) b.textContent = '▶ 模拟长任务（npm install）';
+      }, 300);
+    }
+  }
+  pet.addEventListener('mouseenter', ()=>{
+    if(!task) return;
+    tipName.textContent = task.name;
+    const s = Math.floor((Date.now()-task.t0)/1000);
+    tipElapsed.textContent = '已进行 ' + Math.floor(s/60) + ' 分 ' + (s%60) + ' 秒 · ' + Math.min(100,Math.round((Date.now()-task.t0)/task.dur*100)) + '%';
+    tipLast.textContent = '» ' + task.last;
+    pet.classList.add('show-tip');
+  });
+  pet.addEventListener('mouseleave', ()=>pet.classList.remove('show-tip'));
+
+  /* ---------- v3-5/6 右键菜单 + 隐藏 ---------- */
+  document.addEventListener('click', ()=>ctxmenu.classList.remove('show'));
+  pet.addEventListener('contextmenu', e=>{
+    e.preventDefault(); e.stopPropagation();
+    ctxmenu.style.left = Math.min(e.clientX, innerWidth-170) + 'px';
+    ctxmenu.style.top = Math.min(e.clientY, innerHeight-190) + 'px';
+    ctxmenu.classList.add('show');
+  });
+  ctxmenu.addEventListener('click', e=>{
+    const act = e.target.dataset && e.target.dataset.act;
+    if(!act) return;
+    ctxmenu.classList.remove('show');
+    if(act==='home'){ pet.style.position=''; pet.style.left=''; pet.style.top='';
+      try{ localStorage.removeItem('ek-pet-pos'); }catch(_){}
+      pet.classList.remove('min'); say('已归位 ✨');
+    }
+    if(act==='hide'){ pet.classList.add('min'); setTimeout(()=>say('一个小时内不打扰你，悬停找我'), 420); }
+    if(act==='drawer'){ say('（真实环境：这里会展开 AI 抽屉）'); }
+    if(act==='diag'){ say('正在打包诊断…', true); setState('busy'); setTimeout(()=>{ if(state==='busy') setState('success'); }, 1800); }
+  });
+  pet.addEventListener('click', ()=>{
+    if(pet.classList.contains('min')){ pet.classList.remove('min'); say('我回来啦'); }
+  }, true);
+
+  /* ---------- v3-4 拖文件 ---------- */
+  pet.addEventListener('dragover', e=>{ e.preventDefault(); pet.classList.add('drop-hint'); say('松手交给我~', true); });
+  pet.addEventListener('dragleave', ()=>{ pet.classList.remove('drop-hint'); if(state==='idle') hideBubble(); });
+  pet.addEventListener('drop', e=>{
+    e.preventDefault(); pet.classList.remove('drop-hint');
+    wake();
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f){ say('没接到文件呢'); return; }
+    if(/\.sql$/i.test(f.name)){
+      mcTtl.textContent = '生效 SQL 到数据库';
+      mcTxt.textContent = '将「' + f.name + '」生效到 farm 库？执行前会自动备份，高危语句需二次确认。';
+      minicard.classList.add('show');
+      mcYes.onclick = e2=>{ e2.stopPropagation(); minicard.classList.remove('show');
+        startTask('生效 SQL：' + f.name, 6000, '已通过风险扫描（DROP/TRUNCATE 白名单）');
+        setState('busy'); say('先备份，再生效…', true); };
+      mcNo.onclick = e2=>{ e2.stopPropagation(); minicard.classList.remove('show'); setState('idle'); say('已取消，文件未生效'); };
+    } else {
+      say('「' + f.name + '」收到了，但演示里只有 .sql 会走生效流程');
+      notes(1);
+    }
+  });
+
+  /* ---------- 首装庆祝 ---------- */
+  document.getElementById('btn-ready').onclick = ()=>{
+    stopAuto();
+    confetti(30); notes(3);
+    setState('success'); say('环境就绪！Go / Node / MySQL 全部就位');
+  };
+
+  /* ---------- 自动演示 ---------- */
+  const seq = ['idle','thinking','confirm','busy','success','error'];
+  let seqI = 0;
+  const btnAuto = document.getElementById('btn-auto');
+  function stopAuto(){ clearInterval(autoTimer); autoTimer=null; btnAuto.textContent='▶ 自动演示全流程'; }
+  btnAuto.onclick = ()=>{
+    if(autoTimer){ stopAuto(); return; }
+    btnAuto.textContent='■ 停止演示'; seqI = 0;
+    const sync = ()=>{
+      document.querySelectorAll('.btn[data-st]').forEach(x=>x.classList.remove('on'));
+      document.querySelector(`.btn[data-st="${seq[seqI]}"]`).classList.add('on');
+      setState(seq[seqI]); seqI = (seqI+1)%seq.length;
+    };
+    sync(); autoTimer = setInterval(sync, 2600);
+  };
+
+  /* ---------- 随机小动作 / 贴士 ---------- */
+  const tips = ['备份默认保留 10 份','恢复演练不会碰业务库','拖个 .sql 给我试试','右键可以让我藏起来','高危 SQL 要二次确认'];
+  const idleLines = ['在呢~','随时待命','画笔已就绪','环境很健康','有话直说~'];
+  function idleBehavior(){
+    if(state!=='idle') return;
+    const pick = Math.random();
+    if(pick < .34){
+      const dir = Math.random()<.5 ? -3.2 : 3.2;
+      look.tx = dir; setTimeout(()=>{ if(state==='idle') look.tx=0; }, 900);
+      setTimeout(()=>{ if(state==='idle'){ look.tx=-dir; } }, 1500);
+      setTimeout(()=>{ if(state==='idle') look.tx=0; }, 2400);
+    } else if(pick < .66){
+      notes(2);
+      say(Math.random()<.4 ? tips[Math.floor(Math.random()*tips.length)] : idleLines[Math.floor(Math.random()*idleLines.length)]);
+    } else {
+      svg.style.transform='rotate(-5deg)';
+      setTimeout(()=>svg.style.transform='rotate(4deg)',160);
+      setTimeout(()=>svg.style.transform='',340);
+    }
+  }
+  (function idleLoop(){ setTimeout(()=>{ idleBehavior(); idleLoop(); }, 6000+Math.random()*6000); })();
+
+  /* ---------- 打瞌睡 ---------- */
+  function armSleepTimer(){
+    clearTimeout(sleepTimer); clearInterval(zzzT);
+    if(REDUCED) return;
+    sleepTimer = setTimeout(()=>{
+      if(state!=='idle' || task) return;
+      state = 'sleep';
+      pet.classList.add('sleep'); pet.classList.remove('show-bubble');
+      eyes.style.display='none'; eyesClosed.style.display='';
+      mouth.setAttribute('d', mouths.sleep); look.tx=0; look.ty=0;
+      zzzT = setInterval(()=>{
+        const z = document.createElement('span'); z.className='zzz'; z.textContent='z';
+        z.style.left = (55+Math.random()*14)+'%'; z.style.top = '18%';
+        z.style.fontSize = (11+Math.random()*7)+'px';
+        fx.appendChild(z); setTimeout(()=>z.remove(), 2500);
+      }, 1800);
+    }, 20000);
+  }
+  function wake(force){
+    if(state==='sleep' || force){
+      if(state==='sleep'){
+        state='idle'; pet.classList.remove('sleep');
+        eyesClosed.style.display='none'; eyes.style.display='';
+        mouth.setAttribute('d', mouths.idle); clearInterval(zzzT);
+        notes(1); say('唔…醒了');
+      }
+    }
+    armSleepTimer();
+  }
+  armSleepTimer();
+
+  /* ---------- 摸头 / 连点 / 换装 ---------- */
+  const apronColors = ['#d9d2c4','#b7d8c9','#d8c2e2','#f2d3a0','#c9d8f2'];
+  let apronI = 0, petCount = 0, petTimer = null, clickStreak = 0, streakT = null;
+  pet.addEventListener('pointermove', e=>{
+    if(state!=='idle'||REDUCED) return;
+    const r = pet.getBoundingClientRect();
+    if(e.clientY - r.top < r.height*0.42){
+      clearTimeout(petTimer);
+      blushL.style.opacity = blushR.style.opacity = .95;
+      eyesHappy.style.display=''; eyes.style.display='none';
+      mouth.setAttribute('d', mouths.success);
+      petTimer = setTimeout(()=>{
+        if(state==='idle'){ blushL.style.opacity = blushR.style.opacity = .7;
+          eyesHappy.style.display='none'; eyes.style.display=''; mouth.setAttribute('d', mouths.idle); }
+      }, 900);
+    }
+  });
+  pet.addEventListener('click', e=>{
+    if(pet.classList.contains('min')) return;
+    if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
+    if(state==='sleep'){ wake(true); return; }
+    if(state!=='idle') return;
+    clickStreak++; clearTimeout(streakT);
+    streakT = setTimeout(()=>clickStreak=0, 1200);
+    eyesHappy.style.display=''; eyes.style.display='none';
+    mouth.setAttribute('d', mouths.success);
+    if(clickStreak>=10){
+      clickStreak=0;
+      apronI = (apronI+1)%apronColors.length;
+      document.getElementById('apronP').setAttribute('fill', apronColors[apronI]);
+      confetti(8); say('换新围裙！');
+    } else if(clickStreak>=3){ notes(3); say('别戳啦，好痒~'); }
+    else say(idleLines[Math.floor(Math.random()*idleLines.length)]);
+    setTimeout(()=>{ if(state==='idle'){ eyesHappy.style.display='none'; eyes.style.display=''; mouth.setAttribute('d', mouths.idle);} }, 800);
+  });
+
+  /* ---------- 拖拽 ---------- */
+  let drag=null, lastX=0, lastT=0;
+  pet.addEventListener('pointerdown', e=>{
+    if(pet.classList.contains('min')) return;
+    wake();
+    drag = {x:e.clientX, y:e.clientY, ox:pet.offsetLeft, oy:pet.offsetTop, moved:false};
+    lastX = e.clientX; lastT = performance.now();
+    pet.setPointerCapture(e.pointerId);
+  });
+  pet.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.hypot(dx,dy)>4) drag.moved=true;
+    if(drag.moved){
+      pet.style.position='fixed';
+      pet.style.left=(drag.ox+dx)+'px'; pet.style.top=(drag.oy+dy)+'px'; pet.style.zIndex=9999;
+      const now = performance.now(), vx = (e.clientX-lastX)/Math.max(now-lastT,1);
+      lastX = e.clientX; lastT = now;
+      svg.style.transition='none';
+      svg.style.transform = `rotate(${Math.max(-16, Math.min(16, vx*36))}deg)`;
+    }
+  });
+  pet.addEventListener('pointerup', ()=>{
+    if(drag && drag.moved){
+      pet.dataset.dragged='1';
+      svg.style.transition=''; svg.style.transform='';
+      try{ localStorage.setItem('ek-pet-pos', JSON.stringify({x:pet.style.left, y:pet.style.top})); }catch(_){}
+    }
+    drag=null;
+  });
+  try{ const pos = JSON.parse(localStorage.getItem('ek-pet-pos')||'null');
+    if(pos && pos.x && pos.y){ pet.style.position='fixed'; pet.style.left=pos.x; pet.style.top=pos.y; pet.style.zIndex=9999; }
+  }catch(_){}
+  pet.addEventListener('dblclick', ()=>{
+    pet.style.position=''; pet.style.left=''; pet.style.top='';
+    try{ localStorage.removeItem('ek-pet-pos'); }catch(_){}
+    svg.style.transform='rotate(-8deg)';
+    setTimeout(()=>svg.style.transform='rotate(6deg)',140);
+    setTimeout(()=>svg.style.transform='',300);
+    say('已归位 ✨');
+  });
+
+  /* ---------- 开场问候 ---------- */
+  setTimeout(()=>{
+    if(state!=='idle') return;
+    const h = new Date().getHours();
+    const g = h<5?'夜深了，注意休息':h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好';
+    say(g + '，环境很健康');
+  }, 900);
+})();
+</script>
+</body>
+</html>
