@@ -36,6 +36,18 @@ SENSITIVE_FIELDS = [
 ]
 
 
+def load_assets():
+    """加载 distassets/ 单一来源资产（说明与 bat 模板）。"""
+    global README_MD, INSTALL_BAT, UNINSTALL_BAT
+    a = os.path.join(ROOT, "distassets")
+    with open(os.path.join(a, "README.md"), encoding="utf-8") as f:
+        README_MD = f.read()
+    with open(os.path.join(a, "install.bat.tmpl"), encoding="utf-8") as f:
+        INSTALL_BAT = f.read()
+    with open(os.path.join(a, "uninstall.bat.tmpl"), encoding="utf-8") as f:
+        UNINSTALL_BAT = f.read()
+
+
 def read_version():
     src = open(os.path.join(ROOT, "main.go"), encoding="utf-8").read()
     m = re.search(r'appVersion\s*=\s*"([\d.]+)"', src)

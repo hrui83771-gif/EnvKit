@@ -25,6 +25,8 @@ tools/_jscheck/
 REVIEW-*
 icon-preview/
 demo-*.html
+docs/mascot.jpg
+docs/screenshot-launch.png
 
 # ---------- 系统杂项 ----------
 Thumbs.db
