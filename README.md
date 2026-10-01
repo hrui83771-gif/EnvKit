@@ -6,8 +6,7 @@
 
 **单文件 · 零依赖 · 带 AI 运维助手的 Windows 开发环境助手**
 
-帮你在一台全新的 Windows 机器上，一条龙完成 **Go / Node.js / MySQL 环境安装 → 项目配置 → FISCO-BCOS 链端校验 → 前后端应用启动**，
-全程浏览器向导操作，并内置一个带安全闸门的 **AI 运维副驾**。
+帮你在一台全新的 Windows 机器上，一条龙完成 **Go / Node.js / MySQL 环境安装 → 项目配置 → FISCO-BCOS 链端校验 → 前后端应用启动**，全程浏览器向导操作。
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://github.com/hrui83771-gif/EnvKit)
@@ -37,17 +36,13 @@
 
 ## 界面预览
 
-![启动页](docs/screenshot-launch.png)
-
-右下角的桌宠助手「小画师」：表情随检测 / 出错 / 启停联动，连点还有彩蛋。
-
-<p align="center"><img src="docs/mascot.jpg" width="220" alt="小画师" /></p>
+![主界面](docs/screenshot-home.png)
 
 ## 快速开始
 
 ### 方式一：下载可执行文件（推荐）
 
-从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载 `EnvKit.exe`，双击运行，浏览器自动打开向导（`http://127.0.0.1:18765`，端口冲突自动避让）。
+从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载最新版（当前 [v1.10.3](https://github.com/hrui83771-gif/EnvKit/releases/tag/v1.10.3)），解压后双击 `EnvKit.exe` 或运行 `安装.bat`，浏览器自动打开向导（`http://127.0.0.1:18765`，端口冲突自动避让）。
 
 ### 方式二：从源码构建
 
