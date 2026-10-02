@@ -44,6 +44,10 @@ type ChainConfig struct {
 	// 空 = 尚未建立信任，首次连接按 TOFU 记录并在日志里明示；
 	// 非空但与实际不符 = 可能遭遇中间人，直接拒绝连接。
 	SSHHostKey string `json:"ssh_host_key"`
+
+	// NodeCount 预期节点进程数（0=不校验具体数量，只要求至少一个 fisco-bcos 进程）。
+	// 复验时用它判断"4 节点链是不是只活了 1 个"——端口只反映被探的那个节点。
+	NodeCount int `json:"node_count"`
 }
 
 type ChainInfo struct {
@@ -542,8 +546,19 @@ func doChainCheckWithRecover(allowRecover bool) {
 			// 节点宕机时 WeBASE 连接必断，一并干净重启（WeBASE 依赖节点）
 			warn(scChain, "自动恢复", "节点已重启，WeBASE-Front 连接已断，一并重启：cd %s && %s", c.WebaseDir, c.WebaseStart)
 			runChainStart("webase")
+			// 复验：重启脚本跑完不等于链恢复了，块高是否在涨才是硬证据
+			vr := verifyChain(verifyChainGrowth)
+			auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
+			switch {
+			case vr.Ok && vr.Verified:
+				ok(scChain, "自动恢复", "链端已恢复并通过复验：%s", vr.String())
+			case vr.Ok:
+				warn(scChain, "自动恢复", "链端已拉起但复验未完成：%s", vr.String())
+			default:
+				fail(scChain, "自动恢复", "链端恢复失败：%s", vr.String())
+			}
 			if c.ChainNotify {
-				alertDispatch("链端自动恢复已执行", "重启脚本已提交，可点「一键检测」确认结果")
+				alertDispatch("链端自动恢复已执行", "复验结论："+vr.String())
 			}
 			doChainCheckWithRecover(false)
 			return
@@ -552,6 +567,13 @@ func doChainCheckWithRecover(allowRecover bool) {
 			warn(scChain, "自动恢复", "WeBASE-Front 不可达，按配置自动重启：cd %s && %s", c.WebaseDir, c.WebaseStart)
 			recordRecover()
 			runChainStart("webase")
+			vr := verifyChain(verifyChainGrowth)
+			auditVerify(actGuard, "webase_autorecover", c.SSHHost, vr)
+			if vr.Ok && vr.Verified {
+				ok(scChain, "自动恢复", "WeBASE 已重启并通过复验：%s", vr.String())
+			} else {
+				warn(scChain, "自动恢复", "WeBASE 已重启但复验未完成：%s", vr.String())
+			}
 			doChainCheckWithRecover(false)
 			return
 		}
@@ -793,16 +815,24 @@ func startGuardLoop() {
 				}
 				runChainStart("chain")
 				runChainStart("webase")
-				up2, _ := sshLocalPortOpen(c.ChainPort)
-				if up2 {
-					ok(scChain, "守护", "链端已自动恢复")
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resOK, "自动恢复成功")
+				// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 块高递增）。
+				// 守护是无人值守的，复验结论就是"这次自动恢复到底成没成"的唯一凭据。
+				vr := verifyChain(verifyChainGrowth)
+				auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
+				if vr.Ok && vr.Verified {
+					ok(scChain, "守护", "链端已自动恢复并通过复验：%s", vr.String())
 					if c.ChainNotify {
-						notify("链端已恢复", "节点自动重启成功，WeBASE 已一并拉起")
+						notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
+					}
+				} else if vr.Ok {
+					warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
+					if c.ChainNotify {
+						notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
 					}
 				} else {
-					fail(scChain, "守护", "链端自动恢复失败，请人工检查")
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败")
+					fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
 					if c.ChainNotify {
 						notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
 					}

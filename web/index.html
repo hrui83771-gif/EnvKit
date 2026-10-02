@@ -1211,6 +1211,7 @@ const I18N_EN = {
   "在呢~": "Here~",
   "备份数据库": "back up database",
   "复制": "Copy",
+  "复验环境状态": "Verify environment state",
   "夜深了，注意休息": "It's late — get some rest",
   "失败": "Failed",
   "失败：": "Failed: ",
@@ -3625,7 +3626,7 @@ const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日�
   run_detection:'重新检测组件', db_backup:'备份数据库', start_service:'启动服务', stop_service:'停止服务',
   restart_service:'重启服务', apply_whitelist:'加入 Defender 白名单', db_check:'检测数据库连接',
   cleanup_processes:'清理后台进程', get_project_brief:'读取项目画像', list_project:'查看项目目录',
-  search_files:'搜索项目文件', read_file:'读取项目文件'};
+  search_files:'搜索项目文件', read_file:'读取项目文件', verify_environment:'复验环境状态'};
 function aiToolName(name){ return t(AI_TOOL_CN[name] || name) + '（' + name + '）'; }
 
 let aiCtrl = null;      // AbortController：手动"停止生成"用

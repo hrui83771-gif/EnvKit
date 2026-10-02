@@ -526,5 +526,6 @@
   "读取项目画像": "Read project profile",
   "查看项目目录": "List project directory",
   "搜索项目文件": "Search project files",
-  "读取项目文件": "Read project file"
+  "读取项目文件": "Read project file",
+  "复验环境状态": "Verify environment state"
 }

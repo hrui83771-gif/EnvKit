@@ -29,6 +29,7 @@ type AuditEntry struct {
 	Result string `json:"result"`           // ok | fail | denied | started
 	Detail string `json:"detail,omitempty"` // 结果补充（已脱敏）
 	DurMs  int64  `json:"dur_ms,omitempty"` // 耗时
+	Verify string `json:"verify,omitempty"` // 复验结论（v2.0 P2：执行之后有没有真的验过、验出什么）
 }
 
 // 动作主体

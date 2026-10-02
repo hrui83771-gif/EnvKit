@@ -145,11 +145,27 @@ func dbBackupTask(actor string) OpResult {
 			h.SetResult(res)
 			return
 		}
-		ev := []string{"file=" + bp, fmt.Sprintf("size=%.1f KB", float64(mustFileSize(bp))/1024)}
-		if sum := readStoredSum(bp); sum != "" {
-			ev = append(ev, "sha256="+firstLines(sum, 16)+"…")
+		// v2.0 P2：产物生成 ≠ 备份可用。就地复验（sha256 复算 + 内容完整性 + 结尾完整），
+		// 让"备份成功"这句话有证据支撑，而不是只看到 mysqldump 退出了。
+		vr := verifyBackup(bp)
+		res = OpResult{
+			Ok:       vr.Ok,
+			Action:   "db_backup",
+			Target:   target,
+			Msg:      vr.Msg,
+			Evidence: vr.Evidence,
+			ErrKind:  vr.ErrKind,
+			Verified: vr.Verified,
+			Artifact: bp,
 		}
-		res = opOK("db_backup", target, "备份完成且产物非空（已生成 .sha256 校验和文件）", ev...)
+		if !res.Ok {
+			fail(scConfig, "备份", "备份复验未通过：%s", vr.String())
+		} else if !res.Verified {
+			warn(scConfig, "备份", "备份已生成但复验未完全通过：%s", vr.String())
+		} else {
+			ok(scConfig, "备份", "备份复验通过：%s", vr.String())
+		}
+		auditVerify(actor, "db_backup", target, res)
 		h.SetResult(res)
 	}()
 	<-done
