@@ -546,7 +546,7 @@ func doChainCheckWithRecover(allowRecover bool) {
 			// 节点宕机时 WeBASE 连接必断，一并干净重启（WeBASE 依赖节点）
 			warn(scChain, "自动恢复", "节点已重启，WeBASE-Front 连接已断，一并重启：cd %s && %s", c.WebaseDir, c.WebaseStart)
 			runChainStart("webase")
-			// 复验：重启脚本跑完不等于链恢复了，块高是否在涨才是硬证据
+			// 复验：重启脚本跑完不等于链恢复了，共识是否重新转起来才是硬证据
 			vr := verifyChain(verifyChainGrowth)
 			auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
 			switch {
@@ -815,7 +815,7 @@ func startGuardLoop() {
 				}
 				runChainStart("chain")
 				runChainStart("webase")
-				// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 块高递增）。
+				// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 共识推进）。
 				// 守护是无人值守的，复验结论就是"这次自动恢复到底成没成"的唯一凭据。
 				vr := verifyChain(verifyChainGrowth)
 				auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)

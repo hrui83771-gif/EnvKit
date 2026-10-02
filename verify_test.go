@@ -305,6 +305,293 @@ func TestVerifyChainUnconfigured(t *testing.T) {
 	}
 }
 
+// ---------- 链端活性判据 ----------
+//
+// 旧判据是"块高在窗口内增长"。实测一条空闲链：6 秒内块高 +0，共识视图 +7——
+// FISCO-BCOS 的 PBFT 无交易时只共识空块、不落盘（omitEmptyBlock=true），
+// 块高静止是**正常态**。旧判据于是把健康链永久判成"未复验"，
+// AI 永远只能说"已执行、还没确认成功"。下面这组用例把这个回归钉死。
+
+// setupChainListening 让端口探测这一步通过：起一个本地监听并把链配置指过去。
+// SSHHost 刻意留空——否则会去走真实 SSH，单测里不可接受。
+func setupChainListening(t *testing.T) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("起本地监听失败：%v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	old := cfg.Chain
+	cfg.Chain = ChainConfig{
+		ChainHost: "127.0.0.1",
+		ChainPort: ln.Addr().(*net.TCPAddr).Port,
+		GroupID:   1,
+	}
+	t.Cleanup(func() { cfg.Chain = old })
+}
+
+func withChainFetch(t *testing.T, f func(path string) (string, error)) {
+	t.Helper()
+	old := webaseFetch
+	webaseFetch = f
+	t.Cleanup(func() { webaseFetch = old })
+}
+
+type csOpts struct {
+	view, block, connected, nodeNum int64
+	cfgErr, leaderFailed            bool
+	omitView                        bool
+}
+
+// csJSON 伪造 consensusStatus 响应，字段一律用字符串——WeBASE 就是这么返回的。
+func csJSON(o csOpts) string {
+	m := map[string]any{
+		"currentView":            strconv.FormatInt(o.view, 10),
+		"connectedNodes":         strconv.FormatInt(o.connected, 10),
+		"nodeNum":                strconv.FormatInt(o.nodeNum, 10),
+		"highestblockNumber":     strconv.FormatInt(o.block, 10),
+		"consensusedBlockNumber": strconv.FormatInt(o.block+1, 10),
+		"cfgErr":                 strconv.FormatBool(o.cfgErr),
+		"leaderFailed":           strconv.FormatBool(o.leaderFailed),
+		"omitEmptyBlock":         "true",
+	}
+	if o.omitView {
+		delete(m, "currentView")
+	}
+	b, _ := json.Marshal(map[string]any{"baseConsensusInfo": m})
+	return string(b)
+}
+
+func syncJSON(block, known int64, syncing bool) string {
+	b, _ := json.Marshal(map[string]any{
+		"isSyncing":          strconv.FormatBool(syncing),
+		"blockNumber":        strconv.FormatInt(block, 10),
+		"knownHighestNumber": strconv.FormatInt(known, 10),
+		"txPoolSize":         "0",
+	})
+	return string(b)
+}
+
+// TestVerifyChainIdleChainIsHealthy 核心回归：空闲链（块高纹丝不动）必须判为已恢复。
+// 这是旧判据踩的坑——它只看块高，于是永远给出"未复验"。
+func TestVerifyChainIdleChainIsHealthy(t *testing.T) {
+	setupChainListening(t)
+	call := 0
+	withChainFetch(t, func(p string) (string, error) {
+		switch {
+		case strings.Contains(p, "consensusStatus"):
+			call++
+			v := int64(869110)
+			if call > 1 {
+				v = 869117 // 视图推进 7
+			}
+			return csJSON(csOpts{view: v, block: 1105, connected: 3, nodeNum: 4}), nil // 块高恒 1105
+		case strings.Contains(p, "syncStatus"):
+			return syncJSON(1105, 1105, false), nil
+		}
+		return "1105", nil
+	})
+
+	r := verifyChain(200 * time.Millisecond)
+	if !r.Ok || !r.Verified {
+		t.Fatalf("块高静止但共识在推进，必须判「已复验通过」，实际：%s", r.String())
+	}
+	if !strings.Contains(r.String(), "共识在推进") {
+		t.Fatalf("结论要说清判据是共识而非块高，实际：%s", r.String())
+	}
+	// 证据里必须主动解释块高静止，否则看的人又会怀疑链卡死了
+	if ev := strings.Join(r.Evidence, " "); !strings.Contains(ev, "静止属正常") {
+		t.Fatalf("证据里必须写明块高静止属正常，实际：%v", r.Evidence)
+	}
+}
+
+// TestVerifyChainConsensusStalled 共识真卡死：视图不动，必须判失败（不是"未复验"）。
+// 节点活着、端口通、但共识不转，对业务而言就是死链。
+func TestVerifyChainConsensusStalled(t *testing.T) {
+	setupChainListening(t)
+	withChainFetch(t, func(p string) (string, error) {
+		switch {
+		case strings.Contains(p, "consensusStatus"):
+			return csJSON(csOpts{view: 500, block: 1105, connected: 3, nodeNum: 4}), nil
+		case strings.Contains(p, "syncStatus"):
+			return syncJSON(1105, 1105, false), nil
+		}
+		return "1105", nil
+	})
+
+	r := verifyChain(150 * time.Millisecond)
+	if r.Ok || r.ErrKind != errKindVerifyFail {
+		t.Fatalf("共识停滞应判 verify_fail，实际：%s", r.String())
+	}
+	if !strings.Contains(r.Msg, "未推进") {
+		t.Fatalf("失败原因要指明是共识没推进，实际：%s", r.Msg)
+	}
+}
+
+// TestVerifyChainUnreadableIsNotVerified 共识状态读不到时只能算"没验到"，
+// 不能像旧版那样直接判 Verified——那是拿"没验到"冒充"验过了"。
+func TestVerifyChainUnreadableIsNotVerified(t *testing.T) {
+	setupChainListening(t)
+	withChainFetch(t, func(p string) (string, error) {
+		return "", fmt.Errorf("HTTP 502")
+	})
+
+	r := verifyChain(150 * time.Millisecond)
+	if !r.Ok {
+		t.Fatalf("端口与进程都正常，不该判失败，实际：%s", r.String())
+	}
+	if r.Verified {
+		t.Fatalf("没验到活性就不许带验证标记，实际：%s", r.String())
+	}
+}
+
+// TestVerifyChainCfgErr 节点自报配置错误：硬故障，直接失败。
+func TestVerifyChainCfgErr(t *testing.T) {
+	setupChainListening(t)
+	withChainFetch(t, func(p string) (string, error) {
+		if strings.Contains(p, "consensusStatus") {
+			return csJSON(csOpts{view: 1, block: 1, connected: 3, nodeNum: 4, cfgErr: true}), nil
+		}
+		return "1", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if r.Ok || !strings.Contains(r.Msg, "cfgErr") {
+		t.Fatalf("cfgErr=true 应判失败并点名原因，实际：%s", r.String())
+	}
+}
+
+// TestVerifyChainNodesDisconnected 端口只反映被探的那一个节点，
+// 其他共识节点掉线必须靠 connectedNodes 发现。
+func TestVerifyChainNodesDisconnected(t *testing.T) {
+	setupChainListening(t)
+	withChainFetch(t, func(p string) (string, error) {
+		if strings.Contains(p, "consensusStatus") {
+			// 4 节点只连上 1 个：1+自己=2 < 4
+			return csJSON(csOpts{view: 1, block: 1, connected: 1, nodeNum: 4}), nil
+		}
+		return "1", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if r.Ok || !strings.Contains(r.Msg, "未全部互联") {
+		t.Fatalf("节点未互联应判失败，实际：%s", r.String())
+	}
+}
+
+// TestVerifyChainLaggingBehind 视图推进只证明"本节点在自转"。
+// 刚拉起的节点一边追块一边转共识，此时不能算完全恢复。
+func TestVerifyChainLaggingBehind(t *testing.T) {
+	setupChainListening(t)
+	call := 0
+	withChainFetch(t, func(p string) (string, error) {
+		switch {
+		case strings.Contains(p, "consensusStatus"):
+			call++
+			v := int64(100)
+			if call > 1 {
+				v = 108
+			}
+			return csJSON(csOpts{view: v, block: 900, connected: 3, nodeNum: 4}), nil
+		case strings.Contains(p, "syncStatus"):
+			return syncJSON(900, 1105, true), nil // 落后 205 个块
+		}
+		return "900", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if !r.Ok {
+		t.Fatalf("落后不该判失败（它在恢复中），实际：%s", r.String())
+	}
+	if r.Verified {
+		t.Fatalf("落后于网络时不许判已恢复，实际：%s", r.String())
+	}
+	if !strings.Contains(r.Msg, "落后") {
+		t.Fatalf("要说清是落后于网络，实际：%s", r.Msg)
+	}
+}
+
+// TestVerifyChainArrayShape 兼容另一种响应形状（数组），别把老版本 WeBASE 判成读不到。
+func TestVerifyChainArrayShape(t *testing.T) {
+	setupChainListening(t)
+	call := 0
+	withChainFetch(t, func(p string) (string, error) {
+		switch {
+		case strings.Contains(p, "consensusStatus"):
+			call++
+			v := int64(10)
+			if call > 1 {
+				v = 16
+			}
+			one := map[string]any{
+				"currentView": strconv.FormatInt(v, 10), "connectedNodes": "3", "nodeNum": "4",
+				"highestblockNumber": "77", "cfgErr": "false", "leaderFailed": "false",
+			}
+			b, _ := json.Marshal([]map[string]any{one})
+			return string(b), nil
+		case strings.Contains(p, "syncStatus"):
+			return syncJSON(77, 77, false), nil
+		}
+		return "77", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if !r.Ok || !r.Verified {
+		t.Fatalf("数组格式也应正常解析并判通过，实际：%s", r.String())
+	}
+}
+
+// TestVerifyChainFallbackBlockStalled 降级路径：拿不到视图时块高静止，
+// 既可能是空闲也可能是卡死——此时不许判失败（那会冤枉每条空闲的链），只能判未复验。
+func TestVerifyChainFallbackBlockStalled(t *testing.T) {
+	setupChainListening(t)
+	withChainFetch(t, func(p string) (string, error) {
+		if strings.Contains(p, "consensusStatus") {
+			return csJSON(csOpts{block: 1105, connected: 3, nodeNum: 4, omitView: true}), nil
+		}
+		return "1105", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if !r.Ok {
+		t.Fatalf("降级且块高静止时不能判失败，实际：%s", r.String())
+	}
+	if r.Verified {
+		t.Fatalf("证据不足时不许带验证标记，实际：%s", r.String())
+	}
+	if !strings.Contains(r.Msg, "无法区分") {
+		t.Fatalf("降级结论必须说清分不清，实际：%s", r.Msg)
+	}
+}
+
+// TestVerifyChainFallbackBlockGrows 降级路径里块高确实涨了，那也是硬证据。
+func TestVerifyChainFallbackBlockGrows(t *testing.T) {
+	setupChainListening(t)
+	call := 0
+	withChainFetch(t, func(p string) (string, error) {
+		if strings.Contains(p, "consensusStatus") {
+			return csJSON(csOpts{block: 1105, connected: 3, nodeNum: 4, omitView: true}), nil
+		}
+		call++
+		if call > 1 {
+			return "1107", nil
+		}
+		return "1105", nil
+	})
+	r := verifyChain(150 * time.Millisecond)
+	if !r.Ok || !r.Verified {
+		t.Fatalf("降级路径下块高增长应判通过，实际：%s", r.String())
+	}
+}
+
+// TestAnyIntWeBASEShapes WeBASE 的字段有时是字符串有时是数字，两种都得认。
+func TestAnyIntWeBASEShapes(t *testing.T) {
+	if n, ok := anyInt("869078"); !ok || n != 869078 {
+		t.Fatalf("字符串数字应解析，实际 %d %v", n, ok)
+	}
+	if n, ok := anyInt(float64(42)); !ok || n != 42 {
+		t.Fatalf("JSON 数字应解析，实际 %d %v", n, ok)
+	}
+	if _, ok := anyInt(nil); ok {
+		t.Fatal("字段缺失必须返回 ok=false，让调用方降级，而不是当成 0")
+	}
+}
+
 // ---------- 结果契约 ----------
 
 func TestOpResultVerifiedSemantics(t *testing.T) {

@@ -7,7 +7,7 @@ package main
 // **用客观证据回答"现实环境真的恢复了吗"**，而不是回答"我执行过了"。
 //
 // 三条设计约束：
-//  1. 只读：验证器不改任何东西，只采集证据（端口、进程、HTTP 码、sha256、块高）。
+//  1. 只读：验证器不改任何东西，只采集证据（端口、进程、HTTP 码、sha256、共识状态）。
 //  2. 不撒谎也不冤枉：证据不足时不判成功，判"未复验"（Verified=false）——
 //     假阴性（明明起来了却说没有）和假阳性（没起来却说好了）同样会毁掉信任。
 //  3. 证据可复核：Evidence 里每一项都应是用户能自己再验一遍的客观值。
@@ -35,8 +35,18 @@ const (
 	verifyWaitBackend = 25 * time.Second // 后端：go build 已在启动阶段完成，run 起来很快
 	verifyPollEvery   = 2 * time.Second
 	verifyDialTimeout = 700 * time.Millisecond
-	verifyChainGrowth = 6 * time.Second // 块高采样窗口：FISCO-BCOS 正常会持续出块
+	// verifyChainGrowth 共识活性采样窗口。
+	// 不是"等出块"——空闲链可能几分钟都不出一个块；而是等共识视图推进，
+	// PBFT 无交易时每轮空块共识都会切换视图，view 大约每秒 +1，6 秒窗口足够。
+	verifyChainGrowth = 6 * time.Second
+	// verifyChainMinViewDelta 窗口内视图至少要推进这么多才算共识在跑。
+	// 取 1 而非更大值：窗口内只要 view 动过，就说明共识循环没卡死。
+	verifyChainMinViewDelta = 1
 )
+
+// webaseFetch 链端只读查询的唯一出入口。抽成变量是为了让单测能在不碰真实链的前提下
+// 复现"共识停滞 / 配置错误 / 接口不可达"这些现实分支——链端故障没法在 CI 里制造。
+var webaseFetch = func(p string) (string, error) { return webaseText(p) }
 
 // ================= ① 服务启动复验 =================
 
@@ -404,8 +414,9 @@ func shortSum(s string) string {
 
 // ================= ③ 链端恢复复验 =================
 
-// verifyChain 复验链端：节点端口 + 节点进程数 + 块高在窗口内递增。
-// 前两项证明"活着"，第三项证明"在出块"——只活不出块同样是不可用的链。
+// verifyChain 复验链端：节点端口 + 节点进程数 + 共识是否还在推进。
+// 前两项证明"活着"，第三项证明"共识在转"——只活不共识的链，对业务而言和死链没区别。
+// 块高刻意不作为判据：无交易时空块只共识不落盘，块高静止是正常的（详见 chainConsensus）。
 func verifyChain(growth time.Duration) OpResult {
 	action := "verify_chain"
 	c := chainCfg()
@@ -463,38 +474,215 @@ func verifyChain(growth time.Duration) OpResult {
 		ev = append(ev, "node_procs="+strconv.Itoa(procs))
 	}
 
-	// 3) 块高递增
-	b1, err1 := chainBlockNumber()
+	// 3) 共识活性（主判据，理由见 chainConsensus 上方的说明）
+	cs1, err1 := chainConsensus()
 	if err1 != nil {
-		// WeBASE 不可达时读不到块高：降级——端口+进程已通过即认定恢复，但要说清没验到什么
-		return opVerified(action, c.SSHHost, "链端已恢复（端口监听、节点进程存活）；WeBASE 不可达，未做块高复验",
-			append(ev, "block=不可读（"+firstLines(err1.Error(), 60)+"）")...)
+		// 共识接口读不到：端口和进程都过了，但活性没验到，只能算"未复验"。
+		// 旧版在这里直接判 opVerified——那是拿"没验到"冒充"验过了"，是另一种假阳性。
+		return opOK(action, c.SSHHost, "端口监听、节点进程存活；但共识状态读不到，未做活性复验",
+			append(ev, "consensus=不可读（"+firstLines(err1.Error(), 60)+"）")...)
+	}
+	if cs1.CfgErr {
+		return opFail(action, c.SSHHost, errKindVerifyFail, "节点自报配置错误（cfgErr=true），链端未恢复",
+			append(ev, "cfgErr=true")...)
+	}
+	// 节点互联：端口只反映被探的那一个节点，其他共识节点掉线只能在这里看出来
+	if cs1.NodeNum > 0 && cs1.ConnectedNodes+1 < cs1.NodeNum {
+		return opFail(action, c.SSHHost, errKindVerifyFail,
+			fmt.Sprintf("共识节点未全部互联：应有 %d 个，实连 %d 个", cs1.NodeNum, cs1.ConnectedNodes+1),
+			append(ev, fmt.Sprintf("connected=%d/%d", cs1.ConnectedNodes+1, cs1.NodeNum))...)
+	}
+	if !cs1.ViewKnown {
+		// 老版本 WeBASE 或 raft 共识没有视图字段：降级到块高，并把结论强度如实说弱
+		return verifyChainByBlock(action, c.SSHHost, ev, growth)
 	}
 	time.Sleep(growth)
-	b2, err2 := chainBlockNumber()
+	cs2, err2 := chainConsensus()
 	if err2 != nil {
-		return opOK(action, c.SSHHost, "端口与进程正常，但第二次读取块高失败，无法确认链在出块",
-			append(ev, "block1="+b1, "err="+firstLines(err2.Error(), 60))...)
+		return opOK(action, c.SSHHost, "共识视图首次可读，第二次采样失败，无法确认共识在推进",
+			append(ev, "view1="+strconv.FormatInt(cs1.View, 10), "err="+firstLines(err2.Error(), 60))...)
 	}
-	n1, e1 := strconv.ParseInt(strings.TrimSpace(b1), 10, 64)
-	n2, e2 := strconv.ParseInt(strings.TrimSpace(b2), 10, 64)
-	if e1 != nil || e2 != nil {
-		return opOK(action, c.SSHHost, "块高读数异常，无法判定是否在出块", append(ev, "block="+b1+"→"+b2)...)
+	ev = append(ev, fmt.Sprintf("view=%d→%d", cs1.View, cs2.View), chainBlockNote(cs1, cs2))
+	if cs1.LeaderFailed || cs2.LeaderFailed {
+		ev = append(ev, "leaderFailed=true")
+	}
+	// 视图推进只证明"这个节点在自转"，证明不了"它跟上了网络"。
+	// 刚重启的节点经常一边追块一边转共识，此时对外提供服务会读到旧数据。
+	if sy, serr := chainSyncStatus(); serr == nil && sy.Known {
+		ev = append(ev, fmt.Sprintf("sync=%d/%d", sy.BlockNumber, sy.KnownHighest))
+		if sy.IsSyncing || sy.BlockNumber < sy.KnownHighest {
+			return opOK(action, c.SSHHost,
+				fmt.Sprintf("共识在推进，但本节点落后于网络（%d < %d），正在追赶，暂不能算完全恢复",
+					sy.BlockNumber, sy.KnownHighest), ev...)
+		}
+	} else if serr != nil {
+		ev = append(ev, "sync=不可读")
+	}
+	if cs2.View-cs1.View >= int64(verifyChainMinViewDelta) {
+		return opVerified(action, c.SSHHost,
+			fmt.Sprintf("链端已恢复且共识在推进：视图 %d → %d（%v 内 +%d）", cs1.View, cs2.View, growth, cs2.View-cs1.View),
+			ev...)
+	}
+	return opFail(action, c.SSHHost, errKindVerifyFail,
+		fmt.Sprintf("共识在 %v 内未推进（视图停在 %d），节点活着但链已卡死", growth, cs1.View), ev...)
+}
+
+// verifyChainByBlock 拿不到共识视图时的降级判据。
+// 强度更弱：块高不涨既可能是"空闲"，也可能是"卡死"，两者在这里无法区分，
+// 所以结论只能是"未复验"，绝不能判失败（那会冤枉每一条空闲的链）。
+func verifyChainByBlock(action, target string, ev []string, growth time.Duration) OpResult {
+	b1, e1 := chainBlockNumber()
+	if e1 != nil {
+		return opOK(action, target, "端口与进程正常，但块高不可读，未做活性复验",
+			append(ev, "block=不可读（"+firstLines(e1.Error(), 60)+"）")...)
+	}
+	time.Sleep(growth)
+	b2, e2 := chainBlockNumber()
+	if e2 != nil {
+		return opOK(action, target, "端口与进程正常，但块高二次读取失败，未做活性复验",
+			append(ev, "block1="+b1)...)
+	}
+	n1, p1 := strconv.ParseInt(strings.TrimSpace(b1), 10, 64)
+	n2, p2 := strconv.ParseInt(strings.TrimSpace(b2), 10, 64)
+	if p1 != nil || p2 != nil {
+		return opOK(action, target, "块高读数异常，无法判定活性", append(ev, "block="+b1+"→"+b2)...)
 	}
 	if n2 > n1 {
-		return opVerified(action, c.SSHHost,
-			fmt.Sprintf("链端已恢复且在出块：块高 %d → %d（%v 内 +%d）", n1, n2, growth, n2-n1),
-			append(ev, "block="+b1+"→"+b2)...)
+		return opVerified(action, target, fmt.Sprintf("链端已恢复且在出块：块高 %d → %d", n1, n2),
+			append(ev, "block="+b1+"→"+b2, "判据=块高（未取到共识视图，降级）")...)
 	}
-	return opOK(action, c.SSHHost,
-		fmt.Sprintf("端口与进程正常，但块高 %d 在 %v 内未增长（链可能卡死或未出块）", n1, growth),
-		append(ev, "block="+b1+"→"+b2)...)
+	return opOK(action, target,
+		fmt.Sprintf("端口与进程正常，但拿不到共识视图，块高 %d 在 %v 内未增长——无法区分「空闲」与「卡死」", n1, growth),
+		append(ev, "block="+b1+"→"+b2, "hint=确认群组为 PBFT 且 WeBASE 版本支持 consensusStatus")...)
+}
+
+// chainBlockNote 把块高变化翻译成人话。
+// 块高静止本身不是故障，但它太容易被误读成"链卡死了"，所以必须主动解释。
+func chainBlockNote(a, b chainConsensusSnap) string {
+	switch {
+	case b.HighestBlock > a.HighestBlock:
+		return fmt.Sprintf("block=%d→%d（有交易在出块）", a.HighestBlock, b.HighestBlock)
+	case b.HighestBlock == a.HighestBlock:
+		return fmt.Sprintf("block=%d（静止属正常：无交易时空块不落盘）", a.HighestBlock)
+	default:
+		return fmt.Sprintf("block=%d→%d（块高回退，可能回滚过或换了个节点在答）", a.HighestBlock, b.HighestBlock)
+	}
+}
+
+// chainConsensus 共识状态快照：来自 WeBASE 的 /{groupId}/web3/consensusStatus。
+//
+// 为什么活性判据是"视图推进"而不是"块高增长"：
+// FISCO-BCOS 2.x 的 PBFT 在无交易时进入心跳状态——空块只参与共识、不落盘
+// （consensusStatus 里 omitEmptyBlock=true）。实测一条空闲链：6 秒内块高 +0，
+// 而 currentView +7。也就是说"块高不涨"是空闲链的**正常态**，拿它当故障判据
+// 会把健康链永久判成"未复验"，AI 于是永远说"已执行、还没确认成功"。
+// 反过来，一旦共识真卡死（节点掉线、leader 故障、配置错误），view 就会停住。
+// WeBASE-Node-Manager 官方判断节点健康读的也是这个字段。
+type chainConsensusSnap struct {
+	View           int64 // currentView：每轮共识（含空块）都会推进，是"共识在转"的只读证据
+	ConnectedNodes int   // 已互联的其他节点数（不含自己）
+	NodeNum        int   // 群组内共识节点总数
+	HighestBlock   int64 // 最高块高
+	LeaderFailed   bool
+	CfgErr         bool
+	OmitEmptyBlock bool // true=空块不落盘，即块高静止的制度性原因
+	ViewKnown      bool // 是否解析出视图；false 时调用方应降级
+}
+
+func chainConsensus() (chainConsensusSnap, error) {
+	var cs chainConsensusSnap
+	g := chainCfg().GroupID
+	if g <= 0 {
+		g = 1
+	}
+	raw, err := webaseFetch("/" + strconv.Itoa(g) + "/web3/consensusStatus")
+	if err != nil {
+		return cs, err
+	}
+	// 实测 WeBASE-Front 返回 {baseConsensusInfo:{...},viewInfos:[...]}；
+	// 文档示例与部分版本是数组 [{...}]，两种都兼容。
+	base := map[string]any{}
+	var obj struct {
+		Base map[string]any `json:"baseConsensusInfo"`
+	}
+	if json.Unmarshal([]byte(raw), &obj) == nil && len(obj.Base) > 0 {
+		base = obj.Base
+	} else {
+		var arr []map[string]any
+		if json.Unmarshal([]byte(raw), &arr) == nil && len(arr) > 0 {
+			base = arr[0]
+		}
+	}
+	if len(base) == 0 {
+		return cs, fmt.Errorf("共识状态为空或格式无法识别")
+	}
+	cs.View, cs.ViewKnown = anyInt(base["currentView"])
+	cs.ConnectedNodes, _ = intFromAny(base["connectedNodes"])
+	cs.NodeNum, _ = intFromAny(base["nodeNum"])
+	cs.HighestBlock, _ = anyInt(base["highestblockNumber"])
+	cs.LeaderFailed = base["leaderFailed"] == true || base["leaderFailed"] == "true"
+	cs.CfgErr = base["cfgErr"] == true || base["cfgErr"] == "true"
+	cs.OmitEmptyBlock = base["omitEmptyBlock"] == true || base["omitEmptyBlock"] == "true"
+	return cs, nil
+}
+
+// anyInt 从 WeBASE 的值里取整数：字段可能是字符串（"869078"）也可能是数字（869078）。
+// 返回 ok=false 表示压根没有这个字段——调用方据此降级，而不是当成 0。
+func anyInt(v any) (int64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return int64(x), true
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		return n, err == nil
+	case json.Number:
+		n, err := x.Int64()
+		return n, err == nil
+	}
+	return 0, false
+}
+
+func intFromAny(v any) (int, bool) {
+	n, ok := anyInt(v)
+	return int(n), ok
+}
+
+// chainSyncStatus 同步状态：用来识破"节点在自转但没跟上网络"这种伪健康。
+// 刚拉起的节点常常一边追块一边转共识，此时 view 照样涨，但对外读到的是旧数据。
+type chainSync struct {
+	IsSyncing    bool
+	BlockNumber  int64
+	KnownHighest int64
+	TxPool       int64
+	Known        bool
+}
+
+func chainSyncStatus() (chainSync, error) {
+	var sy chainSync
+	g := chainCfg().GroupID
+	if g <= 0 {
+		g = 1
+	}
+	raw, err := webaseFetch("/" + strconv.Itoa(g) + "/web3/syncStatus")
+	if err != nil {
+		return sy, err
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(raw), &m) != nil || len(m) == 0 {
+		return sy, fmt.Errorf("同步状态格式无法识别")
+	}
+	sy.BlockNumber, _ = anyInt(m["blockNumber"])
+	sy.KnownHighest, _ = anyInt(m["knownHighestNumber"])
+	sy.TxPool, _ = anyInt(m["txPoolSize"])
+	sy.IsSyncing = m["isSyncing"] == true || m["isSyncing"] == "true"
+	sy.Known = true
+	return sy, nil
 }
 
 // chainBlockNumber 经 WeBASE 读当前块高（能读到即证明链通）。
 func chainBlockNumber() (string, error) {
 	c := chainCfg()
-	v, err := webaseText("/" + strconv.Itoa(c.GroupID) + "/web3/blockNumber")
+	v, err := webaseFetch("/" + strconv.Itoa(c.GroupID) + "/web3/blockNumber")
 	if err != nil {
 		return "", err
 	}
@@ -529,10 +717,10 @@ func auditVerify(actor, action, target string, r OpResult) {
 
 func init() {
 	aiToolRegistry["verify_environment"] = aiTool{
-		Desc: "复验环境是否真的恢复了：web/backend=服务端口与 HTTP 握手，db=最近一份备份的 sha256 与内容完整性，chain=节点端口+进程数+块高递增。执行过启动/备份/恢复之后用它确认结果，不要凭调用成功就下结论",
+		Desc: "复验环境是否真的恢复了：web/backend=服务端口与 HTTP 握手，db=最近一份备份的 sha256 与内容完整性，chain=节点端口+进程数+共识是否还在推进。执行过启动/备份/恢复之后用它确认结果，不要凭调用成功就下结论。链端判据不是块高：无交易时空块只共识不落盘、块高静止属正常，不要把「块高没涨」当成链卡死",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"target":    map[string]any{"type": "string", "description": "web / backend / db / chain", "enum": []string{"web", "backend", "db", "chain"}},
-			"wait_secs": map[string]any{"type": "integer", "description": "服务复验最长等待秒数（1-180，默认前端45s/后端25s）"},
+			"wait_secs": map[string]any{"type": "integer", "description": "复验等待秒数（1-180）：web/backend 为最长等待时间，chain 为共识视图采样窗口（默认6s）"},
 		}, "required": []string{"target"}},
 		Execute: func(args map[string]any) (string, error) {
 			target, _ := args["target"].(string)
@@ -547,7 +735,11 @@ func init() {
 				auditVerify(actAI, "verify_backup", cfg.Projects.DBName, r)
 				return aiVerifyText(r), nil
 			case "chain":
-				r := verifyChain(verifyChainGrowth)
+				growth := verifyChainGrowth
+				if s := aiArgInt(args, "wait_secs", 0, 0, 180); s > 0 {
+					growth = time.Duration(s) * time.Second
+				}
+				r := verifyChain(growth)
 				auditVerify(actAI, "verify_chain", cfg.Chain.SSHHost, r)
 				return aiVerifyText(r), nil
 			}
