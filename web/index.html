@@ -780,6 +780,31 @@
       </div>
     </section>
 
+    <section class="panel" id="panel-audit">
+      <div class="phead"><h2>操作审计 <span class="stepno">谁 · 何时 · 做了什么 · 结果如何</span></h2></div>
+      <div class="row" style="margin:0 0 10px;gap:6px">
+        <button class="mini on" id="audit-f-all">全部</button>
+        <button class="mini" id="audit-f-user">用户</button>
+        <button class="mini" id="audit-f-ai">AI</button>
+        <button class="mini" id="audit-f-guard">守护</button>
+        <button class="mini" id="audit-f-system">系统</button>
+        <span style="flex:1"></span>
+        <select id="audit-day" style="font-size:12px;border:1px solid var(--line);border-radius:8px;padding:3px 6px;background:var(--card);color:var(--text)"></select>
+        <button class="mini" id="audit-refresh">刷新</button>
+        <span class="hint" id="h-audit"></span>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:520px;min-height:120px">
+        <table class="vtab" id="audit-grid">
+          <thead><tr>
+            <th style="width:128px">时间</th><th style="width:52px">主体</th><th style="width:132px">动作</th>
+            <th style="width:118px">目标</th><th style="width:52px">结果</th><th>详情 / 复验结论</th>
+          </tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:8px">审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 <code>audit-YYYYMMDD.jsonl</code>）；密码与 API Key 在入库前已脱敏。</div>
+    </section>
+
   </main>
 
   <aside class="sidebar">
@@ -789,6 +814,7 @@
       <div class="nav" data-panel="chain"><span class="dot" id="nd-chain"></span>链端校验<span class="lbl" id="nl-chain"></span></div>
       <div class="nav" data-panel="start"><span class="dot" id="nd-start"></span>程序启动<span class="lbl" id="nl-start"></span></div>
       <div class="nav" data-panel="ai"><span class="dot" id="nd-ai"></span>AI 助手<span class="lbl" id="nl-ai"></span></div>
+      <div class="nav" data-panel="audit"><span class="dot" id="nd-audit"></span>操作审计<span class="lbl" id="nl-audit"></span></div>
     </div>
     <div class="svc">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1080,6 +1106,7 @@ const I18N_EN = {
   "{0} 升级中，进度见下方安装日志，完成后点「检查更新」刷新。": "{0} is upgrading — watch the install log below, then click “Check for updates” to refresh.",
   "{0} 失败了，点红标看日志": "{0} failed — click the red badge for the log",
   "{0} 已启动": "{0} started",
+  "{0} 条": "{0} entries",
   "{0} 行": "{0} rows",
   "{0}，环境很健康": "{0}, environment looks healthy",
   "‹ 上一页": "‹ Prev",
@@ -1105,6 +1132,7 @@ const I18N_EN = {
   "不通": "Unreachable",
   "与 EnvKit 的连接已断开（可能已重启），点击确定刷新页面。": "Connection to EnvKit was lost (it may have restarted). Click OK to refresh.",
   "中午好": "Good noon",
+  "主体": "Actor",
   "主机": "Host",
   "交易数量": "Transactions",
   "亮色": "Light",
@@ -1141,8 +1169,10 @@ const I18N_EN = {
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "免责声明": "Disclaimer",
   "全屏": "Full screen",
+  "全部": "All",
   "全部启动": "Start all",
   "全部就绪，请重开终端使环境变量生效": "All ready — reopen your terminal so the environment variables take effect",
+  "全部日期": "All dates",
   "全部空闲": "All free",
   "共 {0} 次 · 最近 {1}": "{0} time(s) total · latest {1}",
   "共 {0} 行 · 第 {1}/{2} 页": "{0} rows · page {1}/{2}",
@@ -1171,6 +1201,7 @@ const I18N_EN = {
   "加入 Defender 白名单": "add Defender exclusion",
   "加入杀软白名单": "Add to AV whitelist",
   "加载中…": "Loading…",
+  "动作": "Action",
   "助手已回来啦": "The assistant is back!",
   "助手已彻底隐藏，可随时在这里恢复": "Assistant fully hidden — restore it here anytime",
   "助手正在忙，稍后再试": "Assistant is busy — try again shortly",
@@ -1212,11 +1243,13 @@ const I18N_EN = {
   "备份数据库": "back up database",
   "复制": "Copy",
   "复验环境状态": "Verify environment state",
+  "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
   "失败": "Failed",
   "失败：": "Failed: ",
   "好舒服~": "So comfy~",
   "如：ls -l /opt/fisco": "e.g. ls -l /opt/fisco",
+  "守护": "Guard",
   "守护间隔": "Guardian interval",
   "安全与可靠": "Security & reliability",
   "安全边界": "Safety boundary",
@@ -1224,6 +1257,7 @@ const I18N_EN = {
   "安装中": "Installing…",
   "安装目录": "Install directory",
   "宕机 / 恢复时弹 Windows 桌面通知": "Windows toast on outage / recovery",
+  "审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 audit-YYYYMMDD.jsonl）；密码与 API Key 在入库前已脱敏。": "Audit entries are append-only and never modified or rolled back; they are kept per day for 30 days (audit-YYYYMMDD.jsonl next to the exe). Passwords and API keys are redacted before being written.",
   "客户端版本": "Client version",
   "密码": "Password",
   "对比「已安装 / 配置目标 / 官方最新」，可一键升级到最新版": "Compares installed / configured / latest upstream, and upgrades in one click",
@@ -1320,6 +1354,7 @@ const I18N_EN = {
   "换上{0}围裙！": "New {0} apron!",
   "搜索项目文件": "Search project files",
   "操作失败：": "Operation failed: ",
+  "操作审计": "Audit log",
   "收藏": "Save",
   "收起": "Collapse",
   "收起一会儿": "Tuck away for a while",
@@ -1341,10 +1376,12 @@ const I18N_EN = {
   "日志": "Logs",
   "日志里暂时没有错误行": "No error lines in the log yet",
   "早上好": "Good morning",
+  "时间": "Time",
   "显示": "Show",
   "晕了晕了…别晃了~": "So dizzy… stop shaking~",
   "晕着呢…让我缓一缓": "Dizzy… give me a second",
   "晚上好": "Good evening",
+  "暂无审计记录": "No audit records yet",
   "暗色": "Dark",
   "更改": "Change",
   "最近有任务失败": "A recent task failed",
@@ -1433,6 +1470,7 @@ const I18N_EN = {
   "留空=同 SSH 主机": "Empty = same as SSH host",
   "留空则用私钥": "Empty = use private key",
   "目录 · 数据库 · 依赖": "Directories · Database · Deps",
+  "目标": "Target",
   "目标主机与 SSH": "Target host & SSH",
   "目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Target: PUA:Win32/Softcnapp family (WROberlay*.dll injecting adware).\nIt injects a DLL into newly started processes, making go / npm / mysqldump randomly exit with zero output.\n\nWill do:\n· Ask Defender to remove detected threats\n· Delete every WROberlay* file under C:\\Windows (renamed to .quarantine if locked)\n· Clean the related CLSID and icon-overlay registry entries\n· Restart Explorer to unload the injected DLL\n\nRunning EnvKit as administrator is recommended to avoid the UAC prompt. Reboot once afterwards.",
   "眼睛跟随：关": "Eye tracking: off",
@@ -1462,6 +1500,7 @@ const I18N_EN = {
   "结束失败：{0}": "Kill failed: {0}",
   "结束进程": "Kill process",
   "结束项目目录下遗留的 node/webpack、go run 等后台进程": "Kill leftover node/webpack, go run processes under the project dirs",
+  "结果": "Result",
   "统一开发环境助手": "All-in-one Dev Environment Helper",
   "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
   "缓存命中 {0}%": "cache hit {0}%",
@@ -1474,6 +1513,7 @@ const I18N_EN = {
   "缺少：数据库名": "Missing: database name",
   "网络错误：": "Network error: ",
   "群组": "Group",
+  "耗时 {0}ms": "took {0}ms",
   "能做什么": "What it can do",
   "脚本名含非法字符": "Script name has invalid characters",
   "自动保存": "Auto-save",
@@ -1495,6 +1535,7 @@ const I18N_EN = {
   "诊断报告 AI 解读": "AI analysis of diagnostic report",
   "该模型不支持工具调用（已降级为纯问答）": "model does not support tool calls (degraded to plain Q&A)",
   "该端口已在列表中": "Port already in the list",
+  "详情 / 复验结论": "Detail / verification",
   "请先在左侧选择一张表": "Select a table on the left first",
   "请先选择 SQL 文件": "Choose a SQL file first",
   "请先选择备份 .sql 文件": "Choose a backup .sql file first",
@@ -1502,11 +1543,13 @@ const I18N_EN = {
   "请求失败：": "Request failed: ",
   "请输入要执行的命令": "Type a command to run",
   "读取中…": "Reading…",
+  "读取失败": "Failed to load",
   "读取文件失败：": "Failed to read file: ",
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
+  "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
   "输入模型名，如 deepseek-chat": "Enter a model name, e.g. deepseek-chat",
   "输入端口号，如 3306": "Enter a port number, e.g. 3306",
   "运行": "Run",
@@ -1765,6 +1808,7 @@ document.addEventListener('click', ev=>{
 function goto(panel){
   document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active', x.dataset.panel===panel));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('show', p.id==='panel-'+panel));
+  if(panel==='audit') loadAudit();   // 切进来才拉，避免每次启动都读一遍文件
 }
 document.querySelectorAll('.nav').forEach(n=>n.addEventListener('click',()=>goto(n.dataset.panel)));
 document.querySelectorAll('[data-goto]').forEach(c=>c.addEventListener('click',()=>goto(c.dataset.goto)));
@@ -2309,6 +2353,76 @@ $('#btn-reinstall').onclick = async ()=>{ if(await askConfirm('重新安装','�
 
 /* ---------- 健康状态 ---------- */
 function chip(id, cls, text){ const el=$('#'+id); el.className='chip '+cls; el.textContent=text; }
+/* ---------- 操作审计：把审计流从"只有文件"变成页面上能看 ---------- */
+const AUDIT_ACTOR = {user:'用户', ai:'AI', guard:'守护', system:'系统'};
+let auditActor = '';
+let auditDays = [];
+
+function auditFillDays(days){
+  if(!days || !days.length) return;
+  const same = days.length === auditDays.length && days.every((d,i)=>d===auditDays[i]);
+  auditDays = days;
+  const sel = $('#audit-day'); if(!sel) return;
+  if(same && sel.options.length) return;               // 没变化就别重建，否则会丢当前选择
+  const cur = sel.value;
+  sel.innerHTML = '';
+  const o0 = document.createElement('option'); o0.value='all'; o0.textContent=t('全部日期'); sel.appendChild(o0);
+  for(const d of days){
+    const o = document.createElement('option'); o.value=d;
+    o.textContent = d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8);
+    sel.appendChild(o);
+  }
+  sel.value = (cur && (cur==='all' || days.indexOf(cur)>=0)) ? cur : 'all';
+}
+
+async function loadAudit(){
+  const tb = $('#audit-body'); if(!tb) return;
+  const day = ($('#audit-day') && $('#audit-day').value) || 'all';
+  let q = '/api/audit?n=500&day=' + encodeURIComponent(day) + (auditActor ? ('&actor='+auditActor) : '');
+  let d = null;
+  try{ d = await (await fetch(q)).json(); }
+  catch(e){ tb.innerHTML = '<tr><td colspan="6" class="muted" style="padding:14px;text-align:center">'+esc(t('读取失败'))+'</td></tr>'; return; }
+  auditFillDays(d && d.days);
+  const rows = (d && d.entries) || [];
+  tb.innerHTML = '';
+  const h = $('#h-audit'); if(h) h.textContent = t('{0} 条', rows.length);
+  if(!rows.length){
+    tb.innerHTML = '<tr><td colspan="6" class="muted" style="padding:14px;text-align:center">'+esc(t('暂无审计记录'))+'</td></tr>';
+    return;
+  }
+  for(const e of rows){
+    const tr = document.createElement('tr');
+    const rk = (e.result==='ok') ? 'ok' : ((e.result==='fail'||e.result==='denied') ? 'err' : 'warn');
+    const col = rk==='ok' ? 'var(--ok)' : (rk==='err' ? 'var(--err)' : 'var(--warn)');
+    let extra = '';
+    if(e.dur_ms) extra += t('耗时 {0}ms', e.dur_ms);
+    if(e.verify) extra += (extra ? '　' : '') + t('复验：{0}', e.verify);
+    tr.innerHTML =
+      '<td class="mini">'+esc(e.ts||'')+'</td>'+
+      '<td>'+esc(AUDIT_ACTOR[e.actor] || e.actor || '')+'</td>'+
+      '<td>'+esc(e.action||'')+'</td>'+
+      '<td>'+esc(e.target||'')+'</td>'+
+      '<td style="color:'+col+';font-weight:600">'+esc(e.result||'')+'</td>'+
+      '<td>'+esc(((e.detail||'') + (extra ? ('　'+extra) : '')).trim())+'</td>';
+    tb.appendChild(tr);
+  }
+}
+
+function auditBind(){
+  const map = {'audit-f-all':'', 'audit-f-user':'user', 'audit-f-ai':'ai', 'audit-f-guard':'guard', 'audit-f-system':'system'};
+  for(const id in map){
+    const b = $('#'+id); if(!b) continue;
+    b.onclick = ()=>{
+      auditActor = map[id];
+      document.querySelectorAll('#panel-audit .mini').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      loadAudit();
+    };
+  }
+  const sel = $('#audit-day'); if(sel) sel.onchange = loadAudit;
+  const rf = $('#audit-refresh'); if(rf) rf.onclick = loadAudit;
+}
+
 function navState(id, dotCls, label){ const d=$('#'+id); if(d) d.className='dot '+dotCls; }
 async function pollHealth(){
   let h; try{ h = await (await fetch('/api/health')).json(); }catch(e){ return; }
@@ -2769,6 +2883,7 @@ async function pollProg(){ try{ renderProg(await (await fetch('/api/program/stat
 /* ---------- 启动 ---------- */
 (async function init(){
   await loadConfig();
+  auditBind();
   fetch('/api/check',{method:'POST'});
   pollHealth(); pollState(); pollProg();
   setInterval(()=>{

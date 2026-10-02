@@ -33,6 +33,8 @@ func handleDiag(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(buf)
 
 	addZipFile(zw, "report.md", buildDiagReport())
+	// 操作流水摘要：诊断包里原本只有原始 jsonl，看的人得自己解析——这里给一份可读的单行摘要
+	addZipFile(zw, "audit-recent.txt", strings.Join(auditSummary(300), "\n")+"\n")
 
 	// 脱敏配置：密码/API Key 一律清空（诊断包是给"别人"看的）。
 	// 必须深拷贝 AI：浅拷贝会把全局内存里的 API Key 一起清掉（AI 助手当场失联）。

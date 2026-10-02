@@ -527,5 +527,22 @@
   "查看项目目录": "List project directory",
   "搜索项目文件": "Search project files",
   "读取项目文件": "Read project file",
-  "复验环境状态": "Verify environment state"
+  "复验环境状态": "Verify environment state",
+  "操作审计": "Audit log",
+  "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
+  "全部": "All",
+  "守护": "Guard",
+  "时间": "Time",
+  "主体": "Actor",
+  "动作": "Action",
+  "目标": "Target",
+  "结果": "Result",
+  "详情 / 复验结论": "Detail / verification",
+  "暂无审计记录": "No audit records yet",
+  "读取失败": "Failed to load",
+  "全部日期": "All dates",
+  "{0} 条": "{0} entries",
+  "耗时 {0}ms": "took {0}ms",
+  "复验：{0}": "verify: {0}",
+  "审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 audit-YYYYMMDD.jsonl）；密码与 API Key 在入库前已脱敏。": "Audit entries are append-only and never modified or rolled back; they are kept per day for 30 days (audit-YYYYMMDD.jsonl next to the exe). Passwords and API keys are redacted before being written."
 }
