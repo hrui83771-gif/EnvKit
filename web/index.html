@@ -1317,6 +1317,7 @@ const I18N_EN = {
   "拖个 .sql 给我试试": "Try dragging a .sql file to me",
   "按已配置的目录直接跑": "Uses your configured directories",
   "换上{0}围裙！": "New {0} apron!",
+  "搜索项目文件": "Search project files",
   "操作失败：": "Operation failed: ",
   "收藏": "Save",
   "收起": "Collapse",
@@ -1377,6 +1378,7 @@ const I18N_EN = {
   "构建并启动": "Build & start",
   "查看日志": "View logs",
   "查看结果": "view result",
+  "查看项目目录": "List project directory",
   "查询中（探测官方最新版本，约几秒）...": "Checking the upstream latest version (a few seconds)…",
   "查询失败：{0}": "Query failed: {0}",
   "查询完成。升级完成后点「检查更新」刷新状态。": "Done. Click “Check for updates” after upgrading to refresh.",
@@ -1388,6 +1390,7 @@ const I18N_EN = {
   "检测中": "Checking…",
   "检测于 {0}": "Checked at {0}",
   "检测到流氓软件残留时才显示": "Shown only when PUA leftovers are detected",
+  "检测数据库连接": "Check database connection",
   "模型": "Model",
   "模型名": "Model name",
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
@@ -1501,6 +1504,8 @@ const I18N_EN = {
   "读取文件失败：": "Failed to read file: ",
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
+  "读取项目文件": "Read project file",
+  "读取项目画像": "Read project profile",
   "输入模型名，如 deepseek-chat": "Enter a model name, e.g. deepseek-chat",
   "输入端口号，如 3306": "Enter a port number, e.g. 3306",
   "运行": "Run",
@@ -3618,7 +3623,9 @@ $ai('btn-ai-test').onclick = async ()=>{
 /* 对话消费：读取 SSE 流 */
 const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日志', get_diag_report:'生成诊断报告',
   run_detection:'重新检测组件', db_backup:'备份数据库', start_service:'启动服务', stop_service:'停止服务',
-  restart_service:'重启服务', apply_whitelist:'加入 Defender 白名单'};
+  restart_service:'重启服务', apply_whitelist:'加入 Defender 白名单', db_check:'检测数据库连接',
+  cleanup_processes:'清理后台进程', get_project_brief:'读取项目画像', list_project:'查看项目目录',
+  search_files:'搜索项目文件', read_file:'读取项目文件'};
 function aiToolName(name){ return t(AI_TOOL_CN[name] || name) + '（' + name + '）'; }
 
 let aiCtrl = null;      // AbortController：手动"停止生成"用

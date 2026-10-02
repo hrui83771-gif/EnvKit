@@ -84,9 +84,9 @@ func handleDBBackup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	if err := dbBackupTask(actUser); err != nil {
-		auditNow(actUser, "db_backup", cfg.Projects.DBName, "", resDenied, err.Error())
-		http.Error(w, err.Error(), 409)
+	if r := dbBackupTask(actUser); !r.Ok {
+		auditNow(actUser, "db_backup", cfg.Projects.DBName, "", resDenied, r.String())
+		http.Error(w, r.String(), 409)
 		return
 	}
 	_, _ = w.Write([]byte(`{"started":true}`))
@@ -120,22 +120,53 @@ func mustJSON(v any) string {
 
 // dbBackupTask 备份数据库（供按钮与 AI 工具共用）；同步等待完成。
 // actor 区分操作主体（user / ai），写入审计流。
-func dbBackupTask(actor string) error {
+//
+// 返回 OpResult：老实现无论成败一律 return nil，AI 因而无法判断备份到底成没成。
+// 现在以"产物是否存在且非空"作为最低限度的成功判据（更强的 sha256 复验见 v2.0 P2）。
+func dbBackupTask(actor string) OpResult {
 	if actor == "" {
 		actor = actUser
 	}
+	target := cfg.Projects.DBName
 	h, granted := beginTaskH("MySQL 备份", true)
 	if !granted {
-		return fmt.Errorf("有任务正在执行，请稍候")
+		return opFail("db_backup", target, errKindBusy, "有任务正在执行，请稍候")
 	}
 	done := make(chan struct{})
+	var res OpResult
 	go func() {
 		defer h.Done()
 		defer close(done)
-		doBackup(actor, h)
+		bp := doBackup(actor, h)
+		if bp == "" {
+			res = opFail("db_backup", target, errKindEmptyOutput,
+				"备份未完成：未产出有效备份文件（详情见「程序配置」日志）",
+				"hint=常见原因是 mysqldump 缺失、账号无权限或子进程被杀软拦截")
+			h.SetResult(res)
+			return
+		}
+		ev := []string{"file=" + bp, fmt.Sprintf("size=%.1f KB", float64(mustFileSize(bp))/1024)}
+		if sum := readStoredSum(bp); sum != "" {
+			ev = append(ev, "sha256="+firstLines(sum, 16)+"…")
+		}
+		res = opOK("db_backup", target, "备份完成且产物非空（已生成 .sha256 校验和文件）", ev...)
+		h.SetResult(res)
 	}()
 	<-done
-	return nil
+	return res
+}
+
+// readStoredSum 读取伴随的 .sha256 文件内容首字段（用于给 AI 提供可复核证据）。
+func readStoredSum(backupPath string) string {
+	b, err := os.ReadFile(backupPath + ".sha256")
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(strings.TrimSpace(string(b)))
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // doBackup 备份执行体（不含任务锁，供 apply-sql 这类已持锁的调用方复用）。

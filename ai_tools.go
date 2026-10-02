@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -68,6 +69,23 @@ func aiLangDirective(lang string) string {
 			"file paths and log excerpts as-is."
 	}
 	return ""
+}
+
+// ---------- OpResult → AI 可读文本 ----------
+// 写工具的结果一律走这两个函数：成功给结论 + 证据，失败给归类 + 证据。
+// 目的是让 AI 能如实告诉用户"失败在哪、下一步做什么"，而不是笼统地说"已执行"。
+
+// aiOpEvidence 证据链拼接；没有证据时明确说"无"，避免 AI 脑补。
+func aiOpEvidence(r OpResult) string {
+	if len(r.Evidence) == 0 {
+		return "无"
+	}
+	return strings.Join(r.Evidence, "；")
+}
+
+// aiOpErr 把失败结果转成工具错误；错误文本会回传给模型，所以它本身就是给 AI 的提示。
+func aiOpErr(what string, r OpResult) error {
+	return fmt.Errorf("%s失败[%s]：%s\n证据：%s", what, r.ErrKind, r.Msg, aiOpEvidence(r))
 }
 
 // ---------- 工具注册表（写工具必须经用户 UI 确认后才会真正执行） ----------
@@ -144,7 +162,11 @@ var aiToolRegistry = map[string]aiTool{
 		Schema: map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}},
 		Write:  true,
 		Execute: func(map[string]any) (string, error) {
-			return "备份任务已执行，结果见日志", dbBackupTask(actAI)
+			r := dbBackupTask(actAI)
+			if !r.Ok {
+				return "", aiOpErr("备份", r)
+			}
+			return "备份成功：" + r.Msg + "\n证据：" + aiOpEvidence(r), nil
 		},
 	},
 	"start_service": {
@@ -155,28 +177,36 @@ var aiToolRegistry = map[string]aiTool{
 		Write: true,
 		Execute: func(args map[string]any) (string, error) {
 			svc, _ := args["service"].(string)
-			if svc == "all" {
-				if err := backendStartTask("", actAI); err != nil {
-					return "", fmt.Errorf("后端启动失败：%v", err)
+			switch svc {
+			case "all":
+				rb := backendStartTask("", actAI)
+				if !rb.Ok {
+					return "", aiOpErr("后端启动", rb)
 				}
-				if err := webStartTask("", "serve", actAI); err != nil {
-					return "", fmt.Errorf("后端已启动，前端启动失败：%v", err)
+				rw := webStartTask("", "serve", actAI)
+				if !rw.Ok {
+					// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
+					return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
+						rw.ErrKind, rw.Msg, aiOpEvidence(rw))
 				}
-				return "后端已启动（go build + go run main.go）、前端已启动（npm run serve），访问地址见启动日志", nil
+				return "后端：" + rb.String() + "\n前端：" + rw.String() +
+					"\n注意：以上仅表明进程已派生且构建通过，尚未做端口/HTTP 可用性复验。", nil
+			case "web":
+				rw := webStartTask("", "serve", actAI)
+				if !rw.Ok {
+					return "", aiOpErr("前端启动", rw)
+				}
+				return "前端：" + rw.String() +
+					"\n注意：仅表明进程已派生，尚未做端口/HTTP 可用性复验，不要向用户说「已经启动好了」。", nil
+			case "backend":
+				rb := backendStartTask("", actAI)
+				if !rb.Ok {
+					return "", aiOpErr("后端启动", rb)
+				}
+				return "后端：" + rb.String() +
+					"\n注意：仅表明构建通过且进程已派生，尚未做端口/HTTP 可用性复验，不要向用户说「已经启动好了」。", nil
 			}
-			if svc == "web" {
-				if err := webStartTask("", "serve", actAI); err != nil {
-					return "", err
-				}
-				return "前端已提交启动（npm run serve），访问地址见启动日志", nil
-			}
-			if svc == "backend" {
-				if err := backendStartTask("", actAI); err != nil {
-					return "", err
-				}
-				return "后端已提交启动（go build + go run main.go），访问地址见启动日志", nil
-			}
-			return "", fmt.Errorf("service 必须是 web 或 backend")
+			return "", fmt.Errorf("service 必须是 web / backend / all")
 		},
 	},
 	"stop_service": {
@@ -213,28 +243,33 @@ var aiToolRegistry = map[string]aiTool{
 			case "web":
 				stopByKey(scStart, "web", "web-start")
 				time.Sleep(2 * time.Second) // 等旧进程释放端口，避免新进程起在半死状态
-				if err := webStartTask("", "serve", actAI); err != nil {
-					return "", err
+				if rw := webStartTask("", "serve", actAI); !rw.Ok {
+					return "", aiOpErr("前端重启", rw)
+				} else {
+					return "前端已重启：" + rw.String(), nil
 				}
-				return "前端已重启（停止旧进程 → npm run serve），访问地址见启动日志", nil
 			case "backend":
 				stopByKey(scStart, "backend", "backend-start")
 				time.Sleep(2 * time.Second)
-				if err := backendStartTask("", actAI); err != nil {
-					return "", err
+				if rb := backendStartTask("", actAI); !rb.Ok {
+					return "", aiOpErr("后端重启", rb)
+				} else {
+					return "后端已重启：" + rb.String(), nil
 				}
-				return "后端已重启（停止旧进程 → go build + go run main.go），访问地址见启动日志", nil
 			case "all":
 				stopByKey(scStart, "web", "web-start")
 				stopByKey(scStart, "backend", "backend-start")
 				time.Sleep(2 * time.Second)
-				if err := backendStartTask("", actAI); err != nil {
-					return "", fmt.Errorf("后端启动失败：%v", err)
+				rb := backendStartTask("", actAI)
+				if !rb.Ok {
+					return "", aiOpErr("后端重启", rb)
 				}
-				if err := webStartTask("", "serve", actAI); err != nil {
-					return "", fmt.Errorf("后端已启动，前端启动失败：%v", err)
+				rw := webStartTask("", "serve", actAI)
+				if !rw.Ok {
+					return "", fmt.Errorf("后端已重启，但前端重启失败[%s]：%s\n证据：%s",
+						rw.ErrKind, rw.Msg, aiOpEvidence(rw))
 				}
-				return "前后端已整套重启（先停后起，先后端再前端），访问地址见启动日志", nil
+				return "前后端已整套重启（先停后起，先后端再前端）：\n后端：" + rb.String() + "\n前端：" + rw.String(), nil
 			}
 			return "", fmt.Errorf("service 必须是 web/backend/all")
 		},
@@ -315,6 +350,14 @@ func aiHealthSnapshot() string {
 	if errs := aiRecentErrors(3); len(errs) > 0 {
 		snap["recent_errors"] = errs
 	}
+	// 项目画像：让模型不用调工具也知道"这是个什么项目、有哪些可用脚本"（带 2 分钟缓存）。
+	// 同样拼在末尾：变化只打断尾部前缀，不破坏 system + 历史的缓存命中。
+	if brief := aiProjectBriefJSON(); brief != "" {
+		var pm map[string]any
+		if json.Unmarshal([]byte(brief), &pm) == nil {
+			snap["project"] = pm
+		}
+	}
 	b, _ := json.Marshal(snap)
 	return string(b)
 }
@@ -382,7 +425,13 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - MySQL 组件下载地址为动态解析（官方 CDN 只保留每个系列的最新版）。
    - 数据库连不上优先排查：MySQL 服务是否运行 → root 密码 → 3306 端口。
 7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist。
-8. 涉及删除数据、还原数据库的请求：不执行，说明风险并给出手动步骤。`
+8. 涉及删除数据、还原数据库的请求：不执行，说明风险并给出手动步骤。
+9. 探索优先（不知道就自己查，不要反问用户）：
+   - 快照里的 project 字段已经是项目画像（语言、框架、可用脚本、入口、端口线索），先用它。
+   - 需要更细的信息时，按"先看目录、再搜文件、最后精读"的顺序用 list_project → search_files → read_file。
+   - 涉及"怎么跑起来/报什么错/配置在哪/入口在哪"的问题，必须先探索再回答，**严禁凭猜测描述项目结构或命令**。
+   - 探索工具只能在已配置的项目目录内工作：越界或被安全策略拒绝时，如实告诉用户"看不了 + 为什么"，不要反复重试。
+   - 工具返回成功只代表"命令已发出/进程已派生"，不等于服务已经可用；未做可用性验证时不要把话说满。`
 
 // ---------- LLM 调用 ----------
 
@@ -396,8 +445,16 @@ type aiUpstreamTool struct {
 }
 
 func aiToolDefs() []aiUpstreamTool {
-	defs := make([]aiUpstreamTool, 0, len(aiToolRegistry))
-	for name, t := range aiToolRegistry {
+	// 工具清单顺序必须稳定：Go map 遍历是随机的，若每次请求 tools 数组顺序不同，
+	// 请求体前缀就变了，会打碎上游的前缀缓存（DeepSeek 按前缀计费/加速）。这里固定按名字排序。
+	names := make([]string, 0, len(aiToolRegistry))
+	for name := range aiToolRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	defs := make([]aiUpstreamTool, 0, len(names))
+	for _, name := range names {
+		t := aiToolRegistry[name]
 		var d aiUpstreamTool
 		d.Type = "function"
 		d.Function.Name = name

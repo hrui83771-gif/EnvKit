@@ -648,6 +648,14 @@ func aiToolCnName(tool string, args map[string]any) string {
 		return "清理后台进程"
 	case "get_system_state":
 		return "读取环境状态"
+	case "get_project_brief":
+		return "读取项目画像"
+	case "list_project":
+		return "查看项目目录"
+	case "search_files":
+		return "在项目内搜索文件"
+	case "read_file":
+		return "读取项目文件"
 	}
 	return tool
 }
