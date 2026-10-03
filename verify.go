@@ -83,7 +83,7 @@ func verifyServiceInner(target string, wait time.Duration) OpResult {
 			wait = verifyWaitWeb
 		}
 	}
-	ports := svcPortCandidates(target)
+	ports := svcPortsFn(target)
 	if len(ports) == 0 {
 		return opOK(action, target, "没有可用端口线索，跳过复验（可在「程序配置」的 scan_ports 里补上服务端口）")
 	}
@@ -173,6 +173,12 @@ func svcExcludedNote(excluded map[int]string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// svcPortsFn 候选端口的可替换点。抽出来是为了让单测能完全隔离环境——
+// 候选表来自 scan_ports / 项目画像 / 内置默认 {8080,8888}，而开发机上
+// 8080/8888 常常真有个 node 在跑（自己的前端/后端）。不隔离的话
+// TestVerifyServiceListening 会随开发机状态随机假失败或假通过。
+var svcPortsFn = func(target string) []int { return svcPortCandidates(target) }
 
 // svcPortCandidates 候选端口，按可信度排序后去重：
 // 子进程日志里解析出的 URL > 用户配置的 scan_ports > 项目画像的端口线索 > 内置默认。
@@ -813,7 +819,10 @@ func auditVerify(actor, action, target string, r OpResult) {
 func init() {
 	registerLessonTools()
 	aiToolRegistry["verify_environment"] = aiTool{
-		Desc: "复验环境是否真的恢复了：web/backend=服务端口与 HTTP 握手，db=最近一份备份的 sha256 与内容完整性，chain=节点端口+进程数+共识是否还在推进。执行过启动/备份/恢复之后用它确认结果，不要凭调用成功就下结论。链端判据不是块高：无交易时空块只共识不落盘、块高静止属正常，不要把「块高没涨」当成链卡死",
+		Desc: "复验环境是否真的恢复了：web/backend=服务端口与 HTTP 握手，db=最近一份备份的 sha256 与内容完整性，chain=节点端口+进程数+共识是否还在推进。执行过启动/备份/恢复之后用它确认结果，不要凭调用成功就下结论。链端判据不是块高：无交易时空块只共识不落盘、块高静止属正常，不要把「块高没涨」当成链卡死。" +
+			"db 的边界要分清：它验的是「文件没坏 + 关键对象齐全（表/触发器/视图/存储过程/字符集）」，" +
+			"**不等于「能还原」**——后者要真建临时库导入才知道，耗时几十秒。" +
+			"用户问「这个备份真能用吗」时你要说明这个边界，并建议他点「程序配置 → 恢复演练」实测",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"target":    map[string]any{"type": "string", "description": "web / backend / db / chain", "enum": []string{"web", "backend", "db", "chain"}},
 			"wait_secs": map[string]any{"type": "integer", "description": "复验等待秒数（1-180）：web/backend 为最长等待时间，chain 为共识视图采样窗口（默认6s）"},
@@ -827,7 +836,12 @@ func init() {
 				auditVerify(actAI, "verify_service", target, r)
 				return aiVerifyText(r), nil
 			case "db":
-				r := verifyBackup("")
+				// v2.3 N3：静态检查（毫秒级）。它能把"文件完整但内容缺损"
+				// 这类现有三项判据查不出的问题报出来。
+				// **不自动做真实还原演练**：那要建库导数据、花几十秒，
+				// 不能因为"验证一次备份"就偷偷占用。用户要实测请走
+				// 「程序配置 → 恢复演练」，它会给出完整四步与结论。
+				r := verifyBackupStatic("")
 				auditVerify(actAI, "verify_backup", cfg.Projects.DBName, r)
 				return aiVerifyText(r), nil
 			case "chain":

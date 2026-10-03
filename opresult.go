@@ -23,7 +23,12 @@ const (
 	errKindSpawnFail   = "spawn_fail"   // 进程派生失败（含被杀软拦截的零输出秒退）
 	errKindEmptyOutput = "empty_output" // 命令成功但产物为空/残缺
 	errKindVerifyFail  = "verify_fail"  // 事后复验未通过
-	errKindTimeout     = "timeout"      // 被看门狗超时终止
+	// errKindRestoreFail 备份无法真正还原（v2.3 N3）。
+	// 与 verify_fail 分开：文件可能完全没坏、校验和也一致，
+	// 但导进去才发现用不了——"文件是好的"和"能还原"是两件事，
+	// 混在一类里用户会以为是文件损坏，而真正原因是缺了触发器之类。
+	errKindRestoreFail = "restore_fail"
+	errKindTimeout     = "timeout" // 被看门狗超时终止
 	errKindUnknown     = "unknown"
 )
 

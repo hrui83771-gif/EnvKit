@@ -181,7 +181,7 @@ func dbBackupTask(actor string) OpResult {
 		}
 		// v2.0 P2：产物生成 ≠ 备份可用。就地复验（sha256 复算 + 内容完整性 + 结尾完整），
 		// 让"备份成功"这句话有证据支撑，而不是只看到 mysqldump 退出了。
-		vr := verifyBackup(bp)
+		vr := verifyBackupStatic(bp)
 		res = OpResult{
 			Ok:       vr.Ok,
 			Action:   "db_backup",
