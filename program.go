@@ -810,16 +810,20 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	case "web":
 		stopByKey(scStart, "web", "web-start")
 		svcForgetPort("web")
+		svcForgetVerify("web")
 		auditNow(actUser, "stop_service", "web", "", resOK, "")
 	case "backend":
 		stopByKey(scStart, "backend", "backend-start")
 		svcForgetPort("backend")
+		svcForgetVerify("backend")
 		auditNow(actUser, "stop_service", "backend", "", resOK, "")
 	default:
 		stopByKey(scStart, "web", "web-start")
 		stopByKey(scStart, "backend", "backend-start")
 		svcForgetPort("web")
 		svcForgetPort("backend")
+		svcForgetVerify("web")
+		svcForgetVerify("backend")
 		auditNow(actUser, "stop_service", "all", "", resOK, "")
 	}
 	_, _ = w.Write([]byte(`{"ok":true}`))

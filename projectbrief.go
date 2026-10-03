@@ -43,6 +43,7 @@ var (
 	briefAt    time.Time
 )
 
+// aiProjectBriefJSON 画像 JSON（2 分钟缓存）。
 func aiProjectBriefJSON() string {
 	roots := projectRoots()
 	key := strings.Join(roots, "|")
@@ -54,6 +55,14 @@ func aiProjectBriefJSON() string {
 	b, _ := json.Marshal(buildProjectBrief(roots))
 	briefCache, briefKey, briefAt = string(b), key, time.Now()
 	return briefCache
+}
+
+// projectBriefInvalidate 清画像缓存。配置里的项目目录变了必须调用，
+// 否则用户换项目后 2 分钟内看到的是上一个项目的画像。
+func projectBriefInvalidate() {
+	briefMu.Lock()
+	briefCache, briefKey, briefAt = "", "", time.Time{}
+	briefMu.Unlock()
 }
 
 // ---------- 画像生成 ----------

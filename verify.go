@@ -50,9 +50,24 @@ var webaseFetch = func(p string) (string, error) { return webaseText(p) }
 
 // ================= ① 服务启动复验 =================
 
-// verifyService 复验前端/后端是否真的起来了：进程存活 + 端口监听 + HTTP 握手。
+// verifyService 复验前端/后端是否真的起来了：进程存活 + 端口监听 + HTTP 握手 + 存活观察。
 // wait<=0 时按服务类型取默认窗口；超时不算"失败"，而算"未复验"（可能仍在编译）。
+//
+// v2.2 M11：所有出口都把结论写回服务状态（svcRecordVerify），
+// 这样 Runtime 状态源才能区分"进程在跑"与"服务验过可用"——
+// 前者只是 running，后者才是 running + verified。
 func verifyService(target string, wait time.Duration) OpResult {
+	r := verifyServiceInner(target, wait)
+	ok := r.Ok && r.Verified
+	kind := r.ErrKind
+	if ok {
+		kind = ""
+	}
+	svcRecordVerify(target, firstLines(r.Msg, 160), kind, ok)
+	return r
+}
+
+func verifyServiceInner(target string, wait time.Duration) OpResult {
 	action := "verify_service"
 	if target != "web" && target != "backend" {
 		return opFail(action, target, errKindBadConfig, "target 只能是 web 或 backend")

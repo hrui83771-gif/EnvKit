@@ -125,6 +125,11 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 		cfg = c
 		cfgMu.Unlock()
 		saveExternalConfig(c)
+		// 配置变了，所有基于配置派生的事实都得重算：启动方式、依赖状态、
+		// 状态源的慢变部分。不清的话用户改完配置，状态中心还显示旧结论——
+		// 这类"改了不生效"最难查。
+		projectBriefInvalidate()
+		runtimeInvalidateCache()
 		auditNow(actUser, "config_save", "config.json", "", resOK, fmt.Sprintf("schema v%d", c.SchemaVersion))
 		_, _ = w.Write([]byte(`{"ok":true}`))
 		return
@@ -240,44 +245,39 @@ func setProg(key string, running, ok2 bool, msg string) {
 }
 
 // ---------- 全局健康 / 权限 ----------
+// handleHealth 保留给既有前端与测试；**计算逻辑已收敛到 currentRuntimeState**。
+// v2.2 M11 之前这里自己算一遍 env/db/chain/services/deps，
+// 而前端还有 pollHealth / pollState / pollProg 三套轮询各算各的——
+// 同一件事算三遍，且"哪里有问题"没有统一答案。
+// 现在改为从唯一状态源取数，响应格式与字段名保持不变（CDP 测试不必改）。
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	resultsMu.Lock()
-	n := len(results)
-	allOK := n > 0
-	for _, v := range results {
-		if !v.Installed {
-			allOK = false
-		}
-	}
-	resultsMu.Unlock()
-
-	dbMu.Lock()
-	dbh := dbHealth
-	dbMu.Unlock()
-
-	svcMu.Lock()
-	web := *svcState["web"]
-	be := *svcState["backend"]
-	svcMu.Unlock()
-
-	chainMu.Lock()
-	ch := chainInfo
-	chainMu.Unlock()
-	ch.WebaseURL = webaseBaseURL()
-
+	st := currentRuntimeState()
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"admin": isAdminFlag,
-		"busy":  currentTask(),
-		"chain": ch,
-		"env":   map[string]interface{}{"hasResults": n > 0, "ready": allOK},
-		"db":    dbh,
-		"deps": map[string]bool{
-			"frontend": dirHasNodeModules(cfg.Projects.FrontendDir),
-			"backend":  progOk("backend-tidy"),
-		},
-		"services": map[string]SvcInfo{"web": web, "backend": be},
+		"admin": st.Admin,
+		"busy":  st.Busy,
+		"chain": st.Chain,
+		"env":   map[string]interface{}{"hasResults": st.Env.HasResults, "ready": st.Env.Ready},
+		"db":    st.DB,
+		"deps":  st.Deps,
+		// 旧形状：只保留 running/url/pid/since，Phase/Verified 等新字段走 /api/runtime/state
+		"services": healthServicesCompat(st.Services),
+		// 新增：不破坏既有字段，前端可渐进迁移到 issues
+		"issues": st.Issues,
 	})
+}
+
+// healthServicesCompat 把 ServiceState 转回旧的 SvcInfo 形状。
+func healthServicesCompat(m map[string]ServiceState) map[string]SvcInfo {
+	out := map[string]SvcInfo{}
+	for k, s := range m {
+		info := SvcInfo{Running: s.Running, PID: s.PID, Since: s.Since}
+		if s.Port > 0 {
+			info.URL = fmt.Sprintf("http://127.0.0.1:%d", s.Port)
+		}
+		out[k] = info
+	}
+	return out
 }
 
 func handleElevate(w http.ResponseWriter, r *http.Request) {
