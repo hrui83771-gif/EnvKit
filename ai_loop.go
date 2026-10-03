@@ -1168,12 +1168,16 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			// 而不是发出去被执行层拒绝——那样它会以为"再换个参数试试"，
 			// 白花 token 且可能反复试探。
 			verdict := PolicyGate(a.Name, policyTargetOf(a.Name, args), actAI)
+			// v2.3 N1：裁决与选型进轨迹。plan 记"为什么选这个动作"，
+			// policy 记"被判成什么档位、依据哪条规则"——归因到 rule 才谈得上改。
+			tracePlanFromTool(a.Name, args)
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": toolMsg.Content})
 			case verdict.Level == PolicyForbidden:
 				policyRecord(verdict, "denied")
+				tracePolicyDenied(verdict)
 				msg := policyAIView(verdict)
 				warn(scSys, "AI", "策略拒绝 %s：%s", a.Name, verdict.Reason)
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": msg})
@@ -1197,6 +1201,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				continue
 			case def.Write:
 				// 写工具：转确认流程，本轮结束，等用户在 UI 确认后带 confirm 重新提交
+				// v2.3 N1：confirm 档也进轨迹。与 forbidden 不同，它不是"拒绝"，
+				// 而是"用户有机会点头"——两者的区别在归因时很关键：
+				// forbidden 说明规则太严，confirm 说明档位合适但用户没批。
+				tracePolicy(verdict, "pending")
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
 					"text": aiToolCnName(a.Name, args)})
 				// 把未完成的 assistant 消息保留在本地 msgs（供确认后续接），并结束本次 SSE

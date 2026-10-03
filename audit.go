@@ -114,6 +114,13 @@ func auditNow(actor, action, target, params, result, detail string) {
 		Result: result,
 		Detail: auditSanitize(detail),
 	})
+	// v2.3 N1：用户主动操作且成功 → 可能是"接手 AI 搞不定的动作"。
+	// 挂在 auditWrite 上是唯一的入口级做法——现有几十个调用点一个都不用改，
+	// 漏网的风险从"靠每个调用点自觉"降为"不可能漏"。
+	// 真正的判定在 humanFix 里（还要过 trace 上下文、动作同类、AI 失败过三关）。
+	if actor == actUser {
+		humanFix(policyActionKey(action, target), target, result)
+	}
 }
 
 // confirmReason 按界面语言返回二次确认文案（英文界面不能弹中文）。

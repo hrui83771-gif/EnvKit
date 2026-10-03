@@ -218,22 +218,31 @@ func policyRecord(v PolicyVerdict, decision string) {
 // 只有含 script 参数时才用 "script=<名>" 形式——PolicyGate 据此做危险脚本检查。
 // 其余动作原样返回描述性 target（库名 / 服务名），不参与脚本判定。
 func policyTargetOf(tool string, args map[string]any) string {
+	// 服务名与脚本参数都要带上：缺一个都会让"AI 试过什么"与"人做了什么"对不上号。
+	// 第一版只返回先命中的那个（script=xxx 会把 service=web 直接吞掉），
+	// 结果 AI 侧归一得到 start_service、用户侧得到 start_service:web，
+	// Human Trace 永远匹配不上——而且两边都"看起来正常"，极难发现。
+	script := ""
 	if s, _ := args["script"].(string); strings.TrimSpace(s) != "" {
-		return "script=" + strings.TrimSpace(s)
+		script = strings.TrimSpace(s)
+	} else if s, _ := args["web_script"].(string); strings.TrimSpace(s) != "" {
+		script = strings.TrimSpace(s)
 	}
-	if s, _ := args["web_script"].(string); strings.TrimSpace(s) != "" {
-		return "script=" + strings.TrimSpace(s)
-	}
+	obj := ""
 	switch tool {
 	case "start_service", "restart_service", "stop_service":
-		if svc, _ := args["service"].(string); svc != "" {
-			return svc
-		}
-		return ""
+		obj, _ = args["service"].(string)
 	case "db_backup", "db_restore", "apply_sql", "db_create":
-		return cfg.Projects.DBName
-	case "kill_process", "cleanup_processes":
-		return ""
+		obj = cfg.Projects.DBName
+	}
+	obj = strings.TrimSpace(obj)
+	switch {
+	case obj != "" && script != "":
+		return obj + " script=" + script
+	case obj != "":
+		return obj
+	case script != "":
+		return "script=" + script
 	}
 	return ""
 }
