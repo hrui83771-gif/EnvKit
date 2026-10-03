@@ -54,6 +54,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	decErr := json.NewDecoder(r.Body).Decode(&body)
 	msgs := body.Messages
 
+	// v2.2 M9：一次 AI 对话 = 一条任务轨迹。此后本次会话内的所有审计记录
+	// 自动带上 trace_id，"AI 是不是在瞎试"才成为可统计的问题。
+	// 收尾统一挂在 handleAIChat 上，outcome 由 aiRunLoop 内部按情况写。
+	traceID := beginTrace(aiLastUserText(msgs), actAI)
+	traceOutcome := "aborted"
+	defer func() { endTrace(traceOutcome) }()
+	_ = traceID
+
 	// 实测：某些本机代理/预览容器会剥掉 POST body（服务端表现为 decode 出 0 条消息，
 	// 模型因此对着"空输入+环境状态"自说自话，用户以为 AI 不听话）。鉴权令牌走请求头
 	// 能完好穿过，所以前端把"最后一条用户消息 + 确认回执"也放进 X-EnvKit-Chat-Fallback
@@ -719,6 +727,22 @@ func aiUserAskedFor(tool string, msgs []aiMsg) bool {
 const aiTurnTimeout = 6 * time.Minute
 
 // aiSleepCtx 可被客户端断开打断的退避等待；返回 false 表示上下文已取消
+// aiLastUserText 取最后一条真实用户消息（跳过工具结果与系统注入），作为轨迹目标描述。
+func aiLastUserText(msgs []aiMsg) string {
+	for i := len(msgs) - 1; i >= 0 && i >= len(msgs)-6; i-- {
+		c := strings.TrimSpace(msgs[i].Content)
+		if c == "" || msgs[i].Role != "user" {
+			continue
+		}
+		if strings.HasPrefix(c, "[工具 ") || strings.HasPrefix(c, "（系统") || strings.HasPrefix(c, "（系统注入") {
+			continue
+		}
+		return c
+	}
+	return ""
+}
+
+// aiSleepCtx 休眠但可被客户端断开打断（避免退出时后台空转）
 func aiSleepCtx(ctx context.Context, d time.Duration) bool {
 	select {
 	case <-ctx.Done():
@@ -1188,8 +1212,14 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				sseDoneConfirm(w, fl, &usage)
 				return
 			default:
+				t0 := time.Now()
 				res, exErr := def.Execute(args)
+				toolDur := time.Since(t0).Milliseconds()
 				toolMsg.Content = res
+				// v2.2 M9：每次工具执行记一步轨迹。"无效操作次数"这个指标
+				// 就是从这里算的——同一 action 连续失败 ≥2 次、denied 后仍重试、
+				// 只读工具读了个与任务无关的东西，都能在轨迹里看出来。
+				traceToolStep(a.Name, args, res, exErr, toolDur)
 				if exErr != nil {
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}

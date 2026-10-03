@@ -24,15 +24,16 @@ import (
 
 // AuditEntry 一条审计记录。
 type AuditEntry struct {
-	Ts     string `json:"ts"`               // 2006-01-02 15:04:05.000
-	Actor  string `json:"actor"`            // user | ai | guard | system
-	Action string `json:"action"`           // 动作名，如 db_backup / apply_sql / config_save
-	Target string `json:"target"`           // 目标对象，如库名、服务名、文件路径
-	Params string `json:"params"`           // 入参摘要（已脱敏）
-	Result string `json:"result"`           // ok | fail | denied | started
-	Detail string `json:"detail,omitempty"` // 结果补充（已脱敏）
-	DurMs  int64  `json:"dur_ms,omitempty"` // 耗时
-	Verify string `json:"verify,omitempty"` // 复验结论（v2.0 P2：执行之后有没有真的验过、验出什么）
+	Ts      string `json:"ts"`                 // 2006-01-02 15:04:05.000
+	Actor   string `json:"actor"`              // user | ai | guard | system
+	Action  string `json:"action"`             // 动作名，如 db_backup / apply_sql / config_save
+	Target  string `json:"target"`             // 目标对象，如库名、服务名、文件路径
+	Params  string `json:"params"`             // 入参摘要（已脱敏）
+	Result  string `json:"result"`             // ok | fail | denied | started
+	Detail  string `json:"detail,omitempty"`   // 结果补充（已脱敏）
+	DurMs   int64  `json:"dur_ms,omitempty"`   // 耗时
+	Verify  string `json:"verify,omitempty"`   // 复验结论（v2.0 P2：执行之后有没有真的验过、验出什么）
+	TraceID string `json:"trace_id,omitempty"` // v2.2 M9：所属任务轨迹；无任务时为空
 }
 
 // 动作主体
@@ -52,37 +53,52 @@ const (
 )
 
 var (
-	auditMu   sync.Mutex
-	auditFile *os.File
-	auditDay  string
+	auditMu     sync.Mutex
+	auditFile   *os.File
+	auditDay    string
+	auditFileAt string // 已打开文件的路径，目录被替换（单测）时需重开
 )
 
-// auditPath 当前审计文件路径（exeDir 定义在 av.go）。
+// auditPath 当前审计文件路径。
+// v2.2 M9：用 auditDir() 而不是 exeDir()——写也必须走可替换目录。
+// 此前读走 auditDir、写走 exeDir，导致单测把审计写进用户真实目录，
+// 且单测之间互相污染（全量跑时 TestTraceIDInAudit 就因此失败）。
 func auditPath() string {
-	return filepath.Join(exeDir(), "audit-"+time.Now().Format("20060102")+".jsonl")
+	return filepath.Join(auditDir(), "audit-"+time.Now().Format("20060102")+".jsonl")
 }
 
 // auditWrite 追加一条记录（内部持锁）。
+// v2.2 M9：自动带上当前 trace_id，**现有所有调用点零改动**即可获得任务归属。
 func auditWrite(e AuditEntry) {
 	b, err := json.Marshal(e)
 	if err != nil {
 		return
 	}
+	if e.TraceID == "" {
+		e.TraceID = currentTraceID()
+		if e.TraceID != "" {
+			// 补写一次：上面已经 marshal 过一次，这里需要重新序列化才带上 id
+			if b2, err2 := json.Marshal(e); err2 == nil {
+				b = b2
+			}
+		}
+	}
 	auditMu.Lock()
 	defer auditMu.Unlock()
 	day := time.Now().Format("20060102")
-	if auditFile == nil || auditDay != day {
+	p := auditPath()
+	if auditFile == nil || auditDay != day || auditFileAt != p {
 		if auditFile != nil {
 			_ = auditFile.Close()
 			auditFile = nil
 		}
-		f, err := os.OpenFile(auditPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			// 目录只读等场景：放弃落盘但留一条业务日志，避免静默丢失可观测性
 			warn(scSys, "审计", "审计文件无法写入（%v），本次操作未留痕", err)
 			return
 		}
-		auditFile, auditDay = f, day
+		auditFile, auditDay, auditFileAt = f, day, p
 	}
 	_, _ = auditFile.WriteString(string(b) + "\n")
 }

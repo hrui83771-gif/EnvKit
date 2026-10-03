@@ -232,17 +232,12 @@ func TestPolicyOptInRoster(t *testing.T) {
 
 // 判定日志只记非 auto：只读操作每秒十几次，全记会冲垮审计文件
 func TestPolicyRecordSkipsAuto(t *testing.T) {
-	dir := t.TempDir()
-	oldAuditDir := auditDir
-	auditDir = func() string { return dir }
+	defer withAuditEnv(t)()
 	oldOff, oldMemFile := lessonOffFile, memoryFile
-	lessonOffFile = func() string { return dir + "/off.json" }
-	memoryFile = func() string { return dir + "/mem.json" }
-	auditFile = nil
+	lessonOffFile = func() string { return t.TempDir() + "/off.json" }
+	memoryFile = func() string { return t.TempDir() + "/mem.json" }
 	defer func() {
-		auditDir = oldAuditDir
 		lessonOffFile, memoryFile = oldOff, oldMemFile
-		auditFile = nil
 	}()
 
 	policyRecord(PolicyGate("get_logs", "", actAI), "auto-allowed")
@@ -266,11 +261,7 @@ func TestPolicyRecordSkipsAuto(t *testing.T) {
 
 // 审计 actor 沿用既有取值，指标按 user/ai 分开统计
 func TestPolicyRecordActor(t *testing.T) {
-	dir := t.TempDir()
-	oldAuditDir := auditDir
-	auditDir = func() string { return dir }
-	auditFile = nil
-	defer func() { auditDir = oldAuditDir; auditFile = nil }()
+	defer withAuditEnv(t)()
 
 	policyRecord(PolicyGate("db_restore", "farm", actAI), "denied")
 	b, _ := os.ReadFile(auditPath())
