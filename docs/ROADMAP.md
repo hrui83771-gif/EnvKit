@@ -612,15 +612,36 @@ ui/         index.html（内嵌）
 
 ### v2.3 下一步（顺序由 baseline-v2.2.md 第五节确定）
 
-- [ ] Trace 补齐 `plan` / `policy` / `human` 三个环节
-- [ ] Memory 第一批：`Scope` / `Evidence` / 成功失败计数 / `Stale` / `Confidence`
-- [ ] 备份可还原性深度验证（v2.2 唯一未动的 🔴 高优先项：文件没坏 ≠ 能还原）
+- [x] Trace 补齐 `plan` / `policy` / `human` 三个环节（`510adea`）
+- [x] Memory 第一批：`Scope` / `Evidence` / 成功失败计数 / `Stale` / `Confidence`（`f5b10aa`）
+- [x] 备份可还原性验证（`079fc2e`）：静态检查 + `restore_fail` 归类
+- [ ] 环境符合性检查（依赖 Memory 的项目作用域已就位，可做）
 - [ ] Plan + Re-plan（PolicyGate 已就位，前置齐了）
-- [ ] 环境符合性检查（依赖 Memory 的项目作用域）
 - [ ] `ai_loop.go` 拆分（与 Plan 改动同批）
 
 **v2.3 验收标准**：能出示「经验增益」的 A/B 对照数据——有经验组与无经验组
 在真实任务上的对比。做不到这一点，学习闭环无法证伪。
+
+### v2.3 已交付的补充说明
+
+**N1 Trace 三环节**：Human Trace 的判定刻意严格（同一 trace 上下文 +
+动作同类 + AI 失败过 + 人工成功，四条全过才记）。误判一次会生成一条
+持续影响后续所有任务的经验，**噪声代价远高于漏报**。明确不做跨任务关联。
+
+**N2 Memory 第一批**：置信度只影响"怎么用"（是否提示、排序、标注），
+**绝不影响"能不能做"**——PolicyGate 根本不读这些字段，已用
+`TestConfidenceNeverElevatesPolicy` 钉死（30 次成功的高置信度状态下，
+db_restore 仍 elevated、危险脚本仍 forbidden）。环境指纹刻意**不含 IP**：
+NAT 模式下虚拟机 IP 每次都变，算进去会让全部经验失效，Stale 就成了噪声源。
+
+第二批（Conflict / Correction / Retired）**刻意不做**：需要真实运行数据
+判断机制是否有效，在没验证"经验到底有没有用"之前上复杂机制是拿未验证的
+假设去构建。
+
+**N3 备份可还原性**：v1.x 已有完整演练（`dbDrillTask` 四步），本项**没有重写它**
+——补的是"静态检查"（每次备份后自动跑，能查出 --skip-triggers 导致触发器全丢
+这类"文件完整但内容缺损"）与**归类分开**（`restore_fail` vs `verify_fail`：
+前者要改备份命令，后者要重新备份，处置完全不同）。
 
 ---
 
