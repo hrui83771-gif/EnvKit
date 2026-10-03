@@ -164,6 +164,12 @@ type TaskHandle struct {
 	killMu sync.Mutex
 	kill   func()
 	done   bool
+
+	// 操作结果：任务无论成功失败都写入，超时/watchdog 终止时写入 timeout 结果。
+	// 用途一是审计溯源，二是让未来基于句柄读取结果的代码有唯一真源。
+	resMu  sync.Mutex
+	result OpResult
+	resSet bool
 }
 
 // SetKill 注册"超时即终止"回调（只对短命前台命令注册，长驻服务不注册）。
@@ -174,6 +180,26 @@ func (h *TaskHandle) SetKill(fn func()) {
 	h.killMu.Lock()
 	h.kill = fn
 	h.killMu.Unlock()
+}
+
+// SetResult 记录本次任务的最终结果（后写覆盖前写，取最后一次有效结论）。
+func (h *TaskHandle) SetResult(r OpResult) {
+	if h == nil {
+		return
+	}
+	h.resMu.Lock()
+	h.result, h.resSet = r, true
+	h.resMu.Unlock()
+}
+
+// Result 取任务结果；set 为 false 表示任务尚未写入任何结论。
+func (h *TaskHandle) Result() (r OpResult, set bool) {
+	if h == nil {
+		return OpResult{}, false
+	}
+	h.resMu.Lock()
+	defer h.resMu.Unlock()
+	return h.result, h.resSet
 }
 
 // Done 结束任务并释放锁；首次调用时记录任务耗时指标。
@@ -217,6 +243,9 @@ func (h *TaskHandle) terminate() {
 	}
 	auditNow(actSys, "task_timeout", h.Name, "", resFail,
 		fmt.Sprintf("运行超过 %v 被看门狗终止", h.Timeout))
+	// 超时也是一种"未完成"：写进句柄结果，避免调用方把被杀掉的任务当成成功。
+	h.SetResult(opFail("task", h.Name, errKindTimeout,
+		fmt.Sprintf("任务「%s」运行超过 %v 被看门狗终止", h.Name, h.Timeout)))
 	alertDispatch("EnvKit 任务超时",
 		fmt.Sprintf("任务「%s」运行超过 %v 被看门狗终止，请检查对应子进程。", h.Name, h.Timeout))
 	h.Done()

@@ -22,8 +22,16 @@ type AIConfig struct {
 	Model       string  `json:"model"`
 	Temperature float64 `json:"temperature"`
 	MaxTokens   int     `json:"max_tokens"`
+	// MemoryEnabled 记忆层总开关（v2.0）。默认关闭——新能力不该在升级后立刻改变
+	// 既有 Agent 行为，须由使用者显式确认才介入提示词。
+	MemoryEnabled bool `json:"memory_enabled"`
 	// Quirks 按模型记录上游参数怪癖（自动学习，避免每次请求都踩同一个坑）
 	Quirks map[string]AIQuirk `json:"quirks,omitempty"`
+}
+
+// aiMemoryOn 记忆层是否启用。未启用时：快照不注入、记忆类工具不注册、面板只读。
+func aiMemoryOn() bool {
+	return aiSnap().MemoryEnabled
 }
 
 // AIQuirk 某个模型的上游参数怪癖（全部可自动学习并持久化）
@@ -326,19 +334,7 @@ func (a AIConfig) keyPlain() string {
 func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if r.Method == http.MethodGet {
-		ac := aiSnap()
-		masked := ""
-		if k := ac.keyPlain(); len(k) > 8 {
-			masked = k[:4] + "****" + k[len(k)-4:]
-		} else if k != "" {
-			masked = "****"
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"enabled": ac.Enabled, "provider": ac.Provider, "base_url": ac.BaseURL,
-			"model": ac.Model, "key_set": ac.APIKey != "", "key_masked": masked,
-			"temperature": ac.Temperature, "max_tokens": ac.MaxTokens,
-			"quirk": ac.quirkRead(),
-		})
+		writeAIConfig(w)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -346,19 +342,38 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled     bool     `json:"enabled"`
+		// Enabled 用指针而不是 bool：其它字段都遵循"空值不覆盖"，
+		// 而 bool 的零值 false 没法区分"用户要关掉"和"这次没带这个字段"。
+		// 用 bool 的话，任何一次局部保存（脚本、将来的局部更新前端）
+		// 都会把 AI 助手静默关掉——本项目就被这样误关过一次。
+		Enabled     *bool    `json:"enabled"`
 		Provider    string   `json:"provider"`
 		BaseURL     string   `json:"base_url"`
 		APIKey      string   `json:"api_key"`
 		Model       string   `json:"model"`
 		Temperature *float64 `json:"temperature"`
+		// MemoryEnabled 同样用指针：记忆层开关被误关掉和 Enabled 是同一类事故
+		// （局部保存把总开关抹成 false），必须显式传才改。
+		MemoryEnabled *bool `json:"memory_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", 400)
 		return
 	}
+	if body.Provider == "" && body.BaseURL == "" && body.APIKey == "" &&
+		body.Model == "" && body.Temperature == nil && body.Enabled == nil &&
+		body.MemoryEnabled == nil {
+		// 空提交直接当读操作处理：绝不允许"什么都没传"覆盖掉已存配置。
+		writeAIConfig(w)
+		return
+	}
 	aiMutate(func(a *AIConfig) {
-		a.Enabled = body.Enabled
+		if body.Enabled != nil {
+			a.Enabled = *body.Enabled
+		}
+		if body.MemoryEnabled != nil {
+			a.MemoryEnabled = *body.MemoryEnabled
+		}
 		if strings.TrimSpace(body.Provider) != "" {
 			a.Provider = strings.TrimSpace(body.Provider)
 		}
@@ -381,6 +396,24 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		saveExternalConfig(cfg)
 	})
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// writeAIConfig 输出 AI 配置（key 只给掩码，绝不回传明文）。
+func writeAIConfig(w http.ResponseWriter) {
+	ac := aiSnap()
+	masked := ""
+	if k := ac.keyPlain(); len(k) > 8 {
+		masked = k[:4] + "****" + k[len(k)-4:]
+	} else if k != "" {
+		masked = "****"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"enabled": ac.Enabled, "provider": ac.Provider, "base_url": ac.BaseURL,
+		"model": ac.Model, "key_set": ac.APIKey != "", "key_masked": masked,
+		"temperature": ac.Temperature, "max_tokens": ac.MaxTokens,
+		"memory_enabled": ac.MemoryEnabled,
+		"quirk":          ac.quirkRead(),
+	})
 }
 
 func handleAITest(w http.ResponseWriter, r *http.Request) {

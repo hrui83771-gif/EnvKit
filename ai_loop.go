@@ -648,6 +648,14 @@ func aiToolCnName(tool string, args map[string]any) string {
 		return "清理后台进程"
 	case "get_system_state":
 		return "读取环境状态"
+	case "get_project_brief":
+		return "读取项目画像"
+	case "list_project":
+		return "查看项目目录"
+	case "search_files":
+		return "在项目内搜索文件"
+	case "read_file":
+		return "读取项目文件"
 	}
 	return tool
 }
@@ -802,7 +810,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		full := make([]aiMsg, 0, len(msgs)+2)
 		full = append(full, aiMsg{Role: "system", Content: aiSystemPrompt + aiLangDirective(lang)})
 		full = append(full, msgs...)
-		full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshot() + "</env_state>"})
+		// 任务提示在循环外算一次：msgs 会随工具结果增长，但用户的原始诉求不变，
+		// 每轮重算只会让记忆匹配抖动（同一问题匹配到不同记忆）。
+		taskHint := aiTaskHint(msgs)
+		full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshotFor(taskHint) + "</env_state>"})
 		payload := aiPayload(full, aiToolDefs(), acTurn.quirkRead(), -1, true)
 		b, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(), strings.NewReader(string(b)))

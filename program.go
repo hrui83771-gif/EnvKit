@@ -577,8 +577,8 @@ func handleWebStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "脚本名含非法字符（只允许字母、数字、- _ : . /）", 400)
 		return
 	}
-	if err := webStartTask(dir, script, actUser); err != nil {
-		http.Error(w, err.Error(), 409)
+	if r := webStartTask(dir, script, actUser); !r.Ok {
+		http.Error(w, r.String(), 409)
 		return
 	}
 	_, _ = w.Write([]byte(`{"started":true}`))
@@ -602,7 +602,10 @@ func validScriptName(s string) bool {
 
 // webStartTask 启动前端（供按钮与 AI 工具共用）；同步等待派生完成。
 // actor 用于审计区分操作主体（user / ai）。
-func webStartTask(dir, script, actor string) error {
+//
+// 返回 OpResult 而非 error：老实现里失败只写日志、外层一律 return nil，
+// 调用方（尤其 AI 工具）因此永远以为成功进而向用户谎报"已启动"。
+func webStartTask(dir, script, actor string) OpResult {
 	if actor == "" {
 		actor = actUser
 	}
@@ -611,39 +614,61 @@ func webStartTask(dir, script, actor string) error {
 	}
 	h, granted := beginTaskH("启动前端", true)
 	if !granted {
-		return fmt.Errorf("有任务正在执行，请稍候")
+		return opFail("start_service", "web", errKindBusy, "有任务正在执行，请稍候")
 	}
 	done := make(chan struct{})
+	var res OpResult
 	go func() {
 		defer h.Done()
 		defer close(done)
-		fin := auditStart(actor, "start_service", "web", script)
-		setProg("web-start", true, false, "启动中...")
-		if dir == "" {
-			setProg("web-start", false, false, "未指定前端目录")
-			failS(scStart, "web", "前端", "未指定前端目录")
-			fin(resFail, "未指定前端目录")
-			return
-		}
-		exe := findExe("npm.cmd", "npm")
-		if exe == "" {
-			setProg("web-start", false, false, "未找到 npm")
-			failS(scStart, "web", "前端", "未找到 npm")
-			fin(resFail, "未找到 npm")
-			return
-		}
-		infoS(scStart, "web", "前端", "npm run %s @ %s", script, dir)
-		if err := execBackground(scStart, "web", "web-start", "前端", dir, npmEnvExtra(), exe, "run", script); err != nil {
-			setProg("web-start", false, false, err.Error())
-			failS(scStart, "web", "前端", "启动失败：%v", err)
-			fin(resFail, err.Error())
-		} else {
-			okS(scStart, "web", "前端", "已启动（npm run %s）", script)
-			fin(resOK, script)
-		}
+		res = opStartWeb(dir, script, actor)
+		h.SetResult(res)
 	}()
 	<-done
-	return nil
+	return res
+}
+
+// opStartWeb 前端启动执行体（任务协程内运行），返回结构化结果。
+func opStartWeb(dir, script, actor string) OpResult {
+	fin := auditStart(actor, "start_service", "web", script)
+	setProg("web-start", true, false, "启动中...")
+	if dir == "" {
+		setProg("web-start", false, false, "未指定前端目录")
+		failS(scStart, "web", "前端", "未指定前端目录")
+		fin(resFail, "未指定前端目录")
+		return opFail("start_service", "web", errKindBadConfig,
+			"未指定前端目录：请先在「程序配置」里选择前端目录", "hint=config.frontend_dir")
+	}
+	// 目录存在是"能不能跑"的第一道事实：不存在时不要派进程，否则只会得到一句莫名的 npm 错误
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		setProg("web-start", false, false, "前端目录不可用")
+		failS(scStart, "web", "前端", "前端目录不可用：%s", dir)
+		fin(resFail, "前端目录不可用")
+		return opFail("start_service", "web", errKindBadConfig, "前端目录不可用："+dir, "dir="+dir)
+	}
+	exe := findExe("npm.cmd", "npm")
+	if exe == "" {
+		setProg("web-start", false, false, "未找到 npm")
+		failS(scStart, "web", "前端", "未找到 npm")
+		fin(resFail, "未找到 npm")
+		return opFail("start_service", "web", errKindMissingDep,
+			"未找到 npm：请先在「环境安装」安装 Node.js", "need=npm")
+	}
+	infoS(scStart, "web", "前端", "npm run %s @ %s", script, dir)
+	if err := execBackground(scStart, "web", "web-start", "前端", dir, npmEnvExtra(), exe, "run", script); err != nil {
+		setProg("web-start", false, false, err.Error())
+		failS(scStart, "web", "前端", "启动失败：%v", err)
+		fin(resFail, err.Error())
+		return opFail("start_service", "web", errKindSpawnFail,
+			"npm 进程派生失败："+firstLines(err.Error(), 200),
+			"dir="+dir, "script="+script,
+			"hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
+	}
+	okS(scStart, "web", "前端", "已启动（npm run %s）", script)
+	fin(resOK, script)
+	// 诚实措辞：此刻只证明"进程已派生且未立即退出"，尚未做端口/HTTP 可用性复验（见 v2.0 P2 验证层）
+	return opOK("start_service", "web", "npm run "+script+" 进程已派生（尚未做服务可用性复验）",
+		"dir="+dir, "script="+script)
 }
 
 func handleBackendStart(w http.ResponseWriter, r *http.Request) {
@@ -659,15 +684,16 @@ func handleBackendStart(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = cfg.Projects.BackendDir
 	}
-	if err := backendStartTask(dir, actUser); err != nil {
-		http.Error(w, err.Error(), 409)
+	if r := backendStartTask(dir, actUser); !r.Ok {
+		http.Error(w, r.String(), 409)
 		return
 	}
 	_, _ = w.Write([]byte(`{"started":true}`))
 }
 
 // backendStartTask 构建并启动后端（供按钮与 AI 工具共用）；同步等待完成（含 go build）。
-func backendStartTask(dir, actor string) error {
+// 返回 OpResult：go build 失败 / go run 派生失败都会显式返回失败，不再被吞掉。
+func backendStartTask(dir, actor string) OpResult {
 	if actor == "" {
 		actor = actUser
 	}
@@ -676,46 +702,67 @@ func backendStartTask(dir, actor string) error {
 	}
 	h, granted := beginTaskH("构建并启动后端", true)
 	if !granted {
-		return fmt.Errorf("有任务正在执行，请稍候")
+		return opFail("start_service", "backend", errKindBusy, "有任务正在执行，请稍候")
 	}
 	done := make(chan struct{})
+	var res OpResult
 	go func() {
 		defer h.Done()
 		defer close(done)
-		fin := auditStart(actor, "start_service", "backend", "go build + go run")
-		setProg("backend-start", true, false, "构建并启动中...")
-		if dir == "" {
-			setProg("backend-start", false, false, "未指定后端目录")
-			failS(scStart, "backend", "后端", "未指定后端目录")
-			fin(resFail, "未指定后端目录")
-			return
-		}
-		exe := findExe("go.exe", "go")
-		if exe == "" {
-			setProg("backend-start", false, false, "未找到 go")
-			failS(scStart, "backend", "后端", "未找到 go")
-			fin(resFail, "未找到 go")
-			return
-		}
-		infoS(scStart, "backend", "后端", "go build @ %s", dir)
-		if err := execStreamed(scStart, "backend", "后端", dir, goEnvExtra(), exe, "build", "./..."); err != nil {
-			setProg("backend-start", false, false, err.Error())
-			failS(scStart, "backend", "后端", "go build 失败：%v", err)
-			fin(resFail, err.Error())
-			return
-		}
-		infoS(scStart, "backend", "后端", "go run main.go")
-		if err := execBackground(scStart, "backend", "backend-start", "后端", dir, goEnvExtra(), exe, "run", "main.go"); err != nil {
-			setProg("backend-start", false, false, err.Error())
-			failS(scStart, "backend", "后端", "go run 失败：%v", err)
-			fin(resFail, err.Error())
-		} else {
-			okS(scStart, "backend", "后端", "已启动（go run main.go）")
-			fin(resOK, "backend")
-		}
+		res = opStartBackend(dir, actor)
+		h.SetResult(res)
 	}()
 	<-done
-	return nil
+	return res
+}
+
+// opStartBackend 后端构建 + 启动执行体（任务协程内运行）。
+func opStartBackend(dir, actor string) OpResult {
+	fin := auditStart(actor, "start_service", "backend", "go build + go run")
+	setProg("backend-start", true, false, "构建并启动中...")
+	if dir == "" {
+		setProg("backend-start", false, false, "未指定后端目录")
+		failS(scStart, "backend", "后端", "未指定后端目录")
+		fin(resFail, "未指定后端目录")
+		return opFail("start_service", "backend", errKindBadConfig,
+			"未指定后端目录：请先在「程序配置」里选择后端目录", "hint=config.backend_dir")
+	}
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		setProg("backend-start", false, false, "后端目录不可用")
+		failS(scStart, "backend", "后端", "后端目录不可用：%s", dir)
+		fin(resFail, "后端目录不可用")
+		return opFail("start_service", "backend", errKindBadConfig, "后端目录不可用："+dir, "dir="+dir)
+	}
+	exe := findExe("go.exe", "go")
+	if exe == "" {
+		setProg("backend-start", false, false, "未找到 go")
+		failS(scStart, "backend", "后端", "未找到 go")
+		fin(resFail, "未找到 go")
+		return opFail("start_service", "backend", errKindMissingDep,
+			"未找到 go：请先在「环境安装」安装 Go", "need=go")
+	}
+	infoS(scStart, "backend", "后端", "go build @ %s", dir)
+	if err := execStreamed(scStart, "backend", "后端", dir, goEnvExtra(), exe, "build", "./..."); err != nil {
+		setProg("backend-start", false, false, err.Error())
+		failS(scStart, "backend", "后端", "go build 失败：%v", err)
+		fin(resFail, err.Error())
+		return opFail("start_service", "backend", errKindBuildFail,
+			"go build 失败："+firstLines(err.Error(), 300),
+			"dir="+dir, "hint=查看「程序启动」日志中的编译错误")
+	}
+	infoS(scStart, "backend", "后端", "go run main.go")
+	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, goEnvExtra(), exe, "run", "main.go"); err != nil {
+		setProg("backend-start", false, false, err.Error())
+		failS(scStart, "backend", "后端", "go run 失败：%v", err)
+		fin(resFail, err.Error())
+		return opFail("start_service", "backend", errKindSpawnFail,
+			"go run 进程派生失败："+firstLines(err.Error(), 200),
+			"dir="+dir, "hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
+	}
+	okS(scStart, "backend", "后端", "已启动（go run main.go）")
+	fin(resOK, "backend")
+	// 与前端同理：此处只证明"构建通过且进程已派生"，端口/HTTP 可用性复验见 v2.0 P2
+	return opOK("start_service", "backend", "后端进程已派生（go build 通过，尚未做服务可用性复验）", "dir="+dir)
 }
 
 func handleStop(w http.ResponseWriter, r *http.Request) {

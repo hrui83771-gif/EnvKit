@@ -13,6 +13,11 @@ state.json
 *.marker
 dist/
 
+# ---------- 用户记忆（M1/M3）：本机数据，仓库只留空模板 ----------
+memories.json
+memories.json.bak
+lessons-off.json
+
 # ---------- 构建产物（发布走 GitHub Releases，不进 git）----------
 *.exe
 
@@ -29,6 +34,7 @@ docs/mascot.jpg
 docs/mascot.png
 docs/screenshot-launch.png
 distassets/README.md
+PLAN-*.md
 
 # ---------- 系统杂项 ----------
 Thumbs.db

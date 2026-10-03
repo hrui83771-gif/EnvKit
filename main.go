@@ -24,8 +24,8 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "1.10.3"
-	buildDate  = "2026-10-01"
+	appVersion = "2.0.0"
+	buildDate  = "2026-10-03"
 )
 
 //go:embed web/index.html
@@ -142,6 +142,11 @@ func main() {
 	http.HandleFunc("/api/report", handleReport)
 	http.HandleFunc("/api/metrics", handleMetrics)
 	http.HandleFunc("/api/diag", handleDiag)
+	http.HandleFunc("/api/audit", handleAudit)
+	http.HandleFunc("/api/lessons", handleLessons)
+	http.HandleFunc("/api/memory", handleMemory)
+	http.HandleFunc("/api/memory/import", handleMemoryImport)
+	http.HandleFunc("/api/lesson/toggle", handleLessonToggle)
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
 

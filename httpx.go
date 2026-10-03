@@ -38,6 +38,20 @@ var (
 	httpLong   = newHTTPClient(30 * time.Minute) // 大文件下载
 )
 
+// httpDirect 本机服务复验专用：强制直连、不读代理配置。
+// 用户配了 HTTP 代理时，共享 client 会把 127.0.0.1 的请求也发给代理，
+// 于是"服务明明起来了"却探测失败——复验必须绕过代理才能反映真实本机状态。
+// 仍与全局约定一致：client 与 Transport 都在此处集中定义，不在业务文件里新建。
+var httpDirect = &http.Client{
+	Timeout: 4 * time.Second,
+	Transport: &http.Transport{
+		Proxy:           nil, // 关键：不走代理
+		MaxIdleConns:    8,
+		IdleConnTimeout: 30 * time.Second,
+		TLSNextProto:    map[string]func(string, *tls.Conn) http.RoundTripper{},
+	},
+}
+
 // proxyFromConfig 每个请求实时读取当前代理配置（而非启动时快照），
 // 用户改完代理配置后立即对新请求生效。
 func proxyFromConfig(_ *http.Request) (*url.URL, error) {

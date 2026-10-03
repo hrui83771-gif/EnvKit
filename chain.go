@@ -44,6 +44,10 @@ type ChainConfig struct {
 	// 空 = 尚未建立信任，首次连接按 TOFU 记录并在日志里明示；
 	// 非空但与实际不符 = 可能遭遇中间人，直接拒绝连接。
 	SSHHostKey string `json:"ssh_host_key"`
+
+	// NodeCount 预期节点进程数（0=不校验具体数量，只要求至少一个 fisco-bcos 进程）。
+	// 复验时用它判断"4 节点链是不是只活了 1 个"——端口只反映被探的那个节点。
+	NodeCount int `json:"node_count"`
 }
 
 type ChainInfo struct {
@@ -68,6 +72,11 @@ type ChainInfo struct {
 	NodeProcs      int    `json:"nodeProcs"`   // 远程 fisco-bcos 进程数（-1=未知/未探测）
 	LastRecover    string `json:"lastRecover"` // 最近一次自动恢复时间
 	RecCount       int    `json:"recCount"`    // 自动恢复累计次数
+	// Reach 主机可达性三态：ok / auth / down（v2.0 P3）。
+	// down 时上面所有端口结论都不可信——「连不上」和「服务挂了」是两件事，
+	// 前者尤其常见于虚拟机场景（IP 变化、NAT 下填了内网 IP、虚拟机没开机）。
+	Reach    string `json:"reach"`
+	ReachMsg string `json:"reachMsg"` // 不可达时的人话解释与可操作建议
 }
 
 // 自动恢复统计（运行期内存态）
@@ -138,6 +147,81 @@ func tcpCheck(host string, port int) (bool, int64) {
 	}
 	_ = conn.Close()
 	return true, ms
+}
+
+// ---------- 链端可达性三态 ----------
+//
+// 「服务没跑」和「机器/地址联系不上」是两件事，混为一谈会让 EnvKit 对着一个
+// 根本送不到命令的地址反复重试。初学者在本地虚拟机上尤其常见：
+// 虚拟机 IP 由 DHCP 分配（快照还原、NAT 网段调整、重装系统都会变），
+// 而 NAT 模式下宿主机填虚拟机内网 IP 又根本连不通。
+//
+// 判定顺序刻意如此：先看 TCP 能不能连上（轻量、无副作用），再谈认证。
+
+type reachState int
+
+const (
+	reachOK   reachState = iota // SSH 端口通 → 机器在，探测结果可信
+	reachAuth                   // SSH 端口通但握手/认证/主机指纹被拒 → 机器在，是凭据或安全问题
+	reachDown                   // SSH 端口压根连不上 → 地址失效、虚拟机未启动或被拦
+)
+
+func (r reachState) String() string {
+	switch r {
+	case reachOK:
+		return "ok"
+	case reachAuth:
+		return "auth"
+	default:
+		return "down"
+	}
+}
+
+// chainReach 探测链端主机的可达性。只做连接与握手，不执行任何命令。
+func chainReach(c ChainConfig) reachState {
+	if strings.TrimSpace(c.SSHHost) == "" {
+		return reachAuth // 没配 SSH：不是"连不上"，上层按"未配置"提示
+	}
+	port := c.SSHPort
+	if port <= 0 {
+		port = 22
+	}
+	if up, _ := tcpCheck(c.SSHHost, port); !up {
+		return reachDown
+	}
+	if _, err := sshDial(); err != nil {
+		return reachAuth // 端口通但握手失败 → 凭据 / 主机密钥问题，机器本身是活的
+	}
+	return reachOK
+}
+
+// reachHint 给出「为什么连不上」的人话解释，并针对初学者最常见的两个坑给出路。
+// 虚拟机部署是本项目的主要使用场景之一，这里的话术直接影响用户能不能自查。
+func reachHint(c ChainConfig, st reachState) string {
+	host := strings.TrimSpace(c.SSHHost)
+	if host == "" {
+		return "未配置 SSH 主机，链端相关操作已跳过"
+	}
+	switch st {
+	case reachDown:
+		return fmt.Sprintf("连不上 %s:%d。常见原因：①虚拟机未启动；②虚拟机 IP 变了（快照还原、重装系统、NAT 网段调整都会变）；"+
+			"③链在 NAT 虚拟机里、这里却填了虚拟机内网 IP（192.168.x.x）——NAT 下宿主机路由不到它。"+
+			"解法：在虚拟机软件里把 %d 端口转发到宿主机，再把这里改成 127.0.0.1",
+			host, chainPortOr(c), c.WebasePort)
+	case reachAuth:
+		return fmt.Sprintf("能连上 %s 但 SSH 握手失败：凭据不对，或主机密钥与已记录的不一致。"+
+			"如果你刚重建过虚拟机（重装系统会重新生成主机密钥），这属于正常现象——"+
+			"清空 config.json 里的 chain.ssh_host_key 即可重新建立信任", host)
+	default:
+		return ""
+	}
+}
+
+func chainPortOr(c ChainConfig) int {
+	if c.ChainPort > 0 {
+		return c.ChainPort
+	}
+	return 20200
 }
 
 // 经 SSH 在远程主机的 127.0.0.1 上探测端口是否真正监听。
@@ -211,8 +295,15 @@ func sshHostKeyCallback() ssh.HostKeyCallback {
 		cfgMu.Unlock()
 		if !strings.EqualFold(known, fp) {
 			auditNow(actSys, "ssh_hostkey_mismatch", hostname, "", resDenied, fp)
-			return fmt.Errorf("主机密钥与已记录的不一致（已记录 %s，实际 %s），已拒绝连接以防中间人攻击。"+
-				"若你确实重装/更换了服务器，请在 config.json 中清空 ssh_host_key 后重连", known, fp)
+			// 措辞要照顾初学者最常见的真实场景：在 VirtualBox/VMware 里重装系统、
+			// 重新导入快照，都会重新生成主机密钥。这时报"中间人攻击"会让人以为是事故，
+			// 实际上只是换了一台机器。所以先说清"这是安全机制"，再给出可直接照做的重置步骤。
+			return fmt.Errorf("主机密钥与已记录的不一致，已拒绝连接（这是防中间人攻击的安全机制，两种可能："+
+				"①你换了服务器或中间经过了不可信网络——请核查；"+
+				"②你在虚拟机里重装了系统或重新导入了快照，机器被换掉了——属于正常，只需重置信任。\n"+
+				"重置方法：用记事本打开 EnvKit 同目录的 config.json，把 chain 里的 ssh_host_key 值改为空字符串"+
+				"（改完后这一行形如 \"ssh_host_key\": \"\", —— 注意保留英文逗号），保存后重启 EnvKit 即可。\n"+
+				"（已记录 %s，实际 %s）", known, fp)
 		}
 		return nil
 	}
@@ -433,16 +524,24 @@ func doChainCheckWithRecover(allowRecover bool) {
 	now := time.Now().Format("15:04:05")
 	info(scChain, "检测", "目标主机 %s", host)
 
+	// 0) 可达性先判定：地址失效时，后面所有端口结论都不可信（v2.0 P3）
+	// 这一步是"虚拟机 IP 变了"与"链挂了"的分水岭——两者在端口探测上表现完全一样，
+	// 但只有后者才值得自动重启。NAT 模式下填了虚拟机内网 IP 也归到这里。
+	reach := chainReach(c)
+
 	// 1) 区块链端口：公网可达性（从本机 TCP 探测 host:ChainPort）
 	extOK, extMS := tcpCheck(host, c.ChainPort)
 
 	// 2) 区块链端口：本地监听（经 SSH 在远程 127.0.0.1 探测，权威判断节点是否真在跑）
 	localOK := extOK
 	if c.SSHHost != "" {
-		if up, err := sshLocalPortOpen(c.ChainPort); err == nil {
+		up, err := sshLocalPortOpen(c.ChainPort)
+		if err != nil {
+			// v2.0 P3：不再静默吞掉。SSH 不可用时公网探测只能作参考，必须说清。
+			warn(scChain, "检测", "SSH 探测不可用（%s），链端口结论仅供参考：%s", reach, reachHint(c, reach))
+		} else {
 			localOK = up
 		}
-		// SSH 不可用时沿用公网探测结果，不报错
 	}
 
 	// 2.5) 节点进程数：统计远程 fisco-bcos 进程，任何一个节点挂了都能看见（不只 node0）
@@ -457,10 +556,15 @@ func doChainCheckWithRecover(allowRecover bool) {
 
 	// 3) 端口 5002（WebBASE-Front，公网 TCP）
 	ok2, ms2 := tcpCheck(host, c.WebasePort)
-	if ok2 {
+	switch {
+	case ok2:
 		ok(scChain, "检测", "WebBASE-Front 端口 %d 可达（%dms）", c.WebasePort, ms2)
-	} else {
-		fail(scChain, "检测", "WebBASE-Front 端口 %d 不通", c.WebasePort)
+	case reach != reachOK:
+		// 地址就联系不上，别把锅甩给 WeBASE——它只是"连不到"而已
+		warn(scChain, "检测", "WebBASE-Front 端口 %d 探测失败：链端主机不可达（%s），"+
+			"这通常是地址/虚拟机状态问题，不是 WeBASE 自身故障", c.WebasePort, reach)
+	default:
+		fail(scChain, "检测", "WebBASE-Front 端口 %d 不通（主机可达，故障在服务侧）", c.WebasePort)
 	}
 
 	// 4) 链信息（经 webase-front REST，能取到即证明链通、节点存活）
@@ -531,6 +635,24 @@ func doChainCheckWithRecover(allowRecover bool) {
 	}
 
 	// 自动恢复：检测发现宕机且用户开启 chain_autorecover，则自动拉起（仅一次，递归传 false 防死循环）
+	//
+	// v2.0 P3 前置条件：主机必须可达。恢复脚本要经 SSH 送到远端执行，
+	// 地址失效时这条命令根本送不到，重试多少次都没用——反而会刷屏、污染审计、
+	// 让用户以为链在反复崩溃。不可达时直接给出可操作提示，不做任何自动动作。
+	if allowRecover && c.ChainAutoRecover && reach != reachOK {
+		warn(scChain, "自动恢复", "链端主机不可达（%s），已跳过自动重启。%s", reach, reachHint(c, reach))
+		auditNow(actGuard, "chain_unreachable", c.SSHHost, host, resFail,
+			"自动恢复已跳过（主机不可达）："+reachHint(c, reach))
+		if c.ChainNotify {
+			notify("链端不可达，已跳过自动恢复", reachHint(c, reach))
+		}
+		setChain(func(ci *ChainInfo) {
+			ci.Checked = true
+			ci.At = now
+			ci.Reach = reach.String()
+		})
+		return
+	}
 	if allowRecover && c.ChainAutoRecover {
 		if !nodeAlive {
 			warn(scChain, "自动恢复", "节点未运行，按配置自动重启链端：cd %s && %s", c.ChainDir, c.ChainStart)
@@ -542,8 +664,19 @@ func doChainCheckWithRecover(allowRecover bool) {
 			// 节点宕机时 WeBASE 连接必断，一并干净重启（WeBASE 依赖节点）
 			warn(scChain, "自动恢复", "节点已重启，WeBASE-Front 连接已断，一并重启：cd %s && %s", c.WebaseDir, c.WebaseStart)
 			runChainStart("webase")
+			// 复验：重启脚本跑完不等于链恢复了，共识是否重新转起来才是硬证据
+			vr := verifyChain(verifyChainGrowth)
+			auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
+			switch {
+			case vr.Ok && vr.Verified:
+				ok(scChain, "自动恢复", "链端已恢复并通过复验：%s", vr.String())
+			case vr.Ok:
+				warn(scChain, "自动恢复", "链端已拉起但复验未完成：%s", vr.String())
+			default:
+				fail(scChain, "自动恢复", "链端恢复失败：%s", vr.String())
+			}
 			if c.ChainNotify {
-				alertDispatch("链端自动恢复已执行", "重启脚本已提交，可点「一键检测」确认结果")
+				alertDispatch("链端自动恢复已执行", "复验结论："+vr.String())
 			}
 			doChainCheckWithRecover(false)
 			return
@@ -552,6 +685,13 @@ func doChainCheckWithRecover(allowRecover bool) {
 			warn(scChain, "自动恢复", "WeBASE-Front 不可达，按配置自动重启：cd %s && %s", c.WebaseDir, c.WebaseStart)
 			recordRecover()
 			runChainStart("webase")
+			vr := verifyChain(verifyChainGrowth)
+			auditVerify(actGuard, "webase_autorecover", c.SSHHost, vr)
+			if vr.Ok && vr.Verified {
+				ok(scChain, "自动恢复", "WeBASE 已重启并通过复验：%s", vr.String())
+			} else {
+				warn(scChain, "自动恢复", "WeBASE 已重启但复验未完成：%s", vr.String())
+			}
 			doChainCheckWithRecover(false)
 			return
 		}
@@ -573,6 +713,8 @@ func doChainCheckWithRecover(allowRecover bool) {
 		ci.ClientVer = ver
 		ci.NodeProcs = nodeProcs
 		ci.LastRecover, ci.RecCount = recoverStats()
+		ci.Reach = reach.String()
+		ci.ReachMsg = reachHint(c, reach)
 	})
 }
 
@@ -758,6 +900,11 @@ func waitChainReady(target string, timeout time.Duration) {
 	warn(scChain, "启动", "等待 %s 就绪超时（%v），可稍后点「一键检测」确认", target, timeout)
 }
 
+// guardDownNotifyAt 连续不可达到多少次才升级提示一次。
+// 不可达通常是"用户还没开机/还没改 IP"这种会持续很久的状态，
+// 每轮都弹通知等于骚扰；但完全不提示又会让用户以为守护没在工作。
+const guardDownNotifyAt = 3
+
 // ---------- 后台守护：定时轻量探测 + 宕机自动拉起 ----------
 // 与「一键检测」的自动恢复互补：无需人工点按钮，适合挂机场景。
 // 只做轻探测（SSH 本地端口 + WeBASE 端口），全量检测仍由用户手动触发，避免日志刷屏。
@@ -767,6 +914,7 @@ func startGuardLoop() {
 	}
 	go func() {
 		first := true
+		guardDownCount := 0
 		for {
 			c := chainCfg()
 			interval := c.ChainGuardSecs
@@ -782,7 +930,34 @@ func startGuardLoop() {
 			if currentTask() != "" {
 				continue // 有手动任务在跑，本轮跳过
 			}
-			nodeUp, _ := sshLocalPortOpen(c.ChainPort)
+			// v2.0 P3：必须先分清「连不上」和「服务没跑」。
+			// 旧代码 `nodeUp, _ := sshLocalPortOpen(...)` 把 err 丢了，而连接失败时
+			// nodeUp 是零值 false —— 于是"虚拟机 IP 变了"被当成"节点宕机"，
+			// 每 30~300 秒重启一次 + 弹一次桌面通知，而 IP 不会自己变回来，无限循环。
+			// 恢复命令本身就靠 SSH 送达：连不上时重启毫无意义，必须直接跳过。
+			st := chainReach(c)
+			if st != reachOK {
+				guardDownCount++
+				first = true // 地址失效期间不做"首次恢复"
+				warn(scChain, "守护", "链端不可达（%s），本轮不执行自动重启：%s", st, reachHint(c, st))
+				// 持续不可达时才升级提示一次，避免每次守护都刷屏
+				if guardDownCount == guardDownNotifyAt {
+					auditNow(actGuard, "chain_unreachable", c.SSHHost,
+						fmt.Sprintf("port %d unreachable", c.ChainPort), resFail, reachHint(c, st))
+					if c.ChainNotify {
+						notify("链端不可达", "后台守护连续 "+strconv.Itoa(guardDownCount)+" 次连不上链端，请检查虚拟机是否启动、IP 是否变化")
+					}
+				}
+				continue
+			}
+			guardDownCount = 0
+
+			nodeUp, nodeErr := sshLocalPortOpen(c.ChainPort)
+			if nodeErr != nil {
+				// 主机可达但远程命令执行失败：不是"端口没监听"，不能判宕机
+				warn(scChain, "守护", "无法在链端执行探测命令（%v），本轮跳过自动重启", nodeErr)
+				continue
+			}
 			if !nodeUp {
 				warn(scChain, "守护", "定时检测发现节点未运行，自动重启链端与 WeBASE")
 				recordRecover()
@@ -793,16 +968,24 @@ func startGuardLoop() {
 				}
 				runChainStart("chain")
 				runChainStart("webase")
-				up2, _ := sshLocalPortOpen(c.ChainPort)
-				if up2 {
-					ok(scChain, "守护", "链端已自动恢复")
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resOK, "自动恢复成功")
+				// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 共识推进）。
+				// 守护是无人值守的，复验结论就是"这次自动恢复到底成没成"的唯一凭据。
+				vr := verifyChain(verifyChainGrowth)
+				auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
+				if vr.Ok && vr.Verified {
+					ok(scChain, "守护", "链端已自动恢复并通过复验：%s", vr.String())
 					if c.ChainNotify {
-						notify("链端已恢复", "节点自动重启成功，WeBASE 已一并拉起")
+						notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
+					}
+				} else if vr.Ok {
+					warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
+					if c.ChainNotify {
+						notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
 					}
 				} else {
-					fail(scChain, "守护", "链端自动恢复失败，请人工检查")
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败")
+					fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
 					if c.ChainNotify {
 						notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
 					}

@@ -12,8 +12,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +32,7 @@ type AuditEntry struct {
 	Result string `json:"result"`           // ok | fail | denied | started
 	Detail string `json:"detail,omitempty"` // 结果补充（已脱敏）
 	DurMs  int64  `json:"dur_ms,omitempty"` // 耗时
+	Verify string `json:"verify,omitempty"` // 复验结论（v2.0 P2：执行之后有没有真的验过、验出什么）
 }
 
 // 动作主体
@@ -150,21 +154,15 @@ func auditSanitize(s string) string {
 	return s
 }
 
-// auditTail 读取最近 n 条审计记录（供诊断报告与页面展示）。
-func auditTail(n int) []AuditEntry {
-	if n <= 0 {
-		n = 50
-	}
-	b, err := os.ReadFile(auditPath())
+// readAuditFile 读一份审计文件（每行一条 JSON）。坏行跳过——审计文件可能被人为编辑过，
+// 读不出来也不能让查看页整个打不开。
+func readAuditFile(p string) []AuditEntry {
+	b, err := os.ReadFile(p)
 	if err != nil {
 		return nil
 	}
-	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	out := make([]AuditEntry, 0, len(lines))
-	for _, ln := range lines {
+	out := make([]AuditEntry, 0)
+	for _, ln := range strings.Split(string(b), "\n") {
 		if strings.TrimSpace(ln) == "" {
 			continue
 		}
@@ -174,6 +172,100 @@ func auditTail(n int) []AuditEntry {
 		}
 	}
 	return out
+}
+
+// auditDir 审计目录的来源。抽成变量是为了让单测在临时目录里造数据，
+// 而不是往用户真实的审计文件里写测试记录。
+var auditDir = exeDir
+
+// auditDays 列出有审计记录的日期，倒序（新在前）。
+func auditDays() []string {
+	entries, err := os.ReadDir(auditDir())
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "audit-") || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		if d := strings.TrimSuffix(strings.TrimPrefix(name, "audit-"), ".jsonl"); len(d) == 8 {
+			out = append(out, d)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] > out[j] })
+	return out
+}
+
+// auditQuery 按天与主体查审计，返回最新的 n 条（新在前）。
+// day 为空或 "all" 时跨天合并——默认只读今天的话，刚启动的当天往往空空如也。
+func auditQuery(day, actor string, n int) []AuditEntry {
+	if n <= 0 {
+		n = 200
+	}
+	days := auditDays()
+	if day != "" && day != "all" {
+		days = []string{day}
+	}
+	// 先按日期正序（旧→新）拼接，这样"取尾部 n 条"才等于"取最新的 n 条"
+	for i, j := 0, len(days)-1; i < j; i, j = i+1, j-1 {
+		days[i], days[j] = days[j], days[i]
+	}
+	var all []AuditEntry
+	dir := auditDir()
+	for _, d := range days {
+		all = append(all, readAuditFile(filepath.Join(dir, "audit-"+d+".jsonl"))...)
+	}
+	if actor != "" {
+		kept := make([]AuditEntry, 0, len(all))
+		for _, e := range all {
+			if strings.EqualFold(e.Actor, actor) {
+				kept = append(kept, e)
+			}
+		}
+		all = kept
+	}
+	if len(all) > n {
+		all = all[len(all)-n:]
+	}
+	// 反转成新在前——页面从上往下看符合直觉
+	for i, j := 0, len(all)-1; i < j; i, j = i+1, j-1 {
+		all[i], all[j] = all[j], all[i]
+	}
+	if all == nil {
+		all = []AuditEntry{}
+	}
+	return all
+}
+
+// auditTail 读取最近 n 条审计记录（供诊断报告用）。
+func auditTail(n int) []AuditEntry {
+	if n <= 0 {
+		n = 50
+	}
+	all := readAuditFile(auditPath())
+	if len(all) > n {
+		all = all[len(all)-n:]
+	}
+	return all
+}
+
+// handleAudit 审计查看接口。只读，不落审计——否则"看一眼"也会把审计刷爆。
+func handleAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+	writeJSON(w, map[string]any{
+		"ok":      true,
+		"days":    auditDays(),
+		"entries": auditQuery(r.URL.Query().Get("day"), strings.TrimSpace(r.URL.Query().Get("actor")), n),
+	})
 }
 
 // cleanupOldAudits 清理超过 30 天的审计文件（与业务日志分开保留策略）。
