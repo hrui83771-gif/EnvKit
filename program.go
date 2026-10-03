@@ -804,16 +804,22 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 		Key string `json:"key"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	// 停服务时清掉全部运行时记录（端口漂移 / 复验结论 / 崩溃历史）：
+	// 服务停了就不再处于"崩溃中"，留着记录会让状态中心显示陈旧结论。
 	switch body.Key {
 	case "web":
 		stopByKey(scStart, "web", "web-start")
+		svcReset("web")
 		auditNow(actUser, "stop_service", "web", "", resOK, "")
 	case "backend":
 		stopByKey(scStart, "backend", "backend-start")
+		svcReset("backend")
 		auditNow(actUser, "stop_service", "backend", "", resOK, "")
 	default:
 		stopByKey(scStart, "web", "web-start")
 		stopByKey(scStart, "backend", "backend-start")
+		svcReset("web")
+		svcReset("backend")
 		auditNow(actUser, "stop_service", "all", "", resOK, "")
 	}
 	_, _ = w.Write([]byte(`{"ok":true}`))

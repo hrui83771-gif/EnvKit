@@ -8,6 +8,7 @@ logs/
 *.log
 audit*.json
 audit*.jsonl
+trace*.jsonl
 sql_history.json
 state.json
 *.marker

@@ -54,6 +54,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	decErr := json.NewDecoder(r.Body).Decode(&body)
 	msgs := body.Messages
 
+	// v2.2 M9：一次 AI 对话 = 一条任务轨迹。此后本次会话内的所有审计记录
+	// 自动带上 trace_id，"AI 是不是在瞎试"才成为可统计的问题。
+	// 收尾统一挂在 handleAIChat 上，outcome 由 aiRunLoop 内部按情况写。
+	traceID := beginTrace(aiLastUserText(msgs), actAI)
+	traceOutcome := "aborted"
+	defer func() { endTrace(traceOutcome) }()
+	_ = traceID
+
 	// 实测：某些本机代理/预览容器会剥掉 POST body（服务端表现为 decode 出 0 条消息，
 	// 模型因此对着"空输入+环境状态"自说自话，用户以为 AI 不听话）。鉴权令牌走请求头
 	// 能完好穿过，所以前端把"最后一条用户消息 + 确认回执"也放进 X-EnvKit-Chat-Fallback
@@ -675,15 +683,17 @@ func aiLooksLikeMenuPrefix(s string) bool {
 }
 
 // aiIsOptInTool 必须由用户明确要求才允许执行的工具（模型不得主动发起）。
+//
+// v2.2：改为直接查询 PolicyGate，**消除双源**。原先这里是硬编码的 switch，
+// 加上 PolicyGate 后两套名单开始漂移——单测抓到 manage_memories 只在
+// PolicyGate 里是 opt-in（记忆会长期影响后续所有对话，模型不该自作主张记住东西），
+// 而这里漏了。两处各写一份的代价就是这种不一致迟早发生。
+//
 // 注意 stop_service 不在此列（v1.9.7）：它是写工具，本来就要过确认卡片这道闸，
 // opt-in 拦截反而把用户"停一下前端"这类说法（关键词匹配不到）整轮挡死，
 // 模型还会每轮重试形成拦截刷屏——有确认卡片兜底就够了。
 func aiIsOptInTool(tool string) bool {
-	switch tool {
-	case "apply_whitelist", "db_backup":
-		return true
-	}
-	return false
+	return PolicyGate(tool, "", actAI).OptIn
 }
 
 // aiUserAskedFor 最近 3 条用户消息里是否明确提到该工具对应的事项
@@ -717,6 +727,22 @@ func aiUserAskedFor(tool string, msgs []aiMsg) bool {
 const aiTurnTimeout = 6 * time.Minute
 
 // aiSleepCtx 可被客户端断开打断的退避等待；返回 false 表示上下文已取消
+// aiLastUserText 取最后一条真实用户消息（跳过工具结果与系统注入），作为轨迹目标描述。
+func aiLastUserText(msgs []aiMsg) string {
+	for i := len(msgs) - 1; i >= 0 && i >= len(msgs)-6; i-- {
+		c := strings.TrimSpace(msgs[i].Content)
+		if c == "" || msgs[i].Role != "user" {
+			continue
+		}
+		if strings.HasPrefix(c, "[工具 ") || strings.HasPrefix(c, "（系统") || strings.HasPrefix(c, "（系统注入") {
+			continue
+		}
+		return c
+	}
+	return ""
+}
+
+// aiSleepCtx 休眠但可被客户端断开打断（避免退出时后台空转）
 func aiSleepCtx(ctx context.Context, d time.Duration) bool {
 	select {
 	case <-ctx.Done():
@@ -1138,11 +1164,22 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			}
 			def, known := aiToolRegistry[a.Name]
 			toolMsg := aiMsg{Role: "tool", ToolCallID: a.ID}
+			// v2.2 PolicyGate：先问策略再动手。forbidden 让模型当场放弃，
+			// 而不是发出去被执行层拒绝——那样它会以为"再换个参数试试"，
+			// 白花 token 且可能反复试探。
+			verdict := PolicyGate(a.Name, policyTargetOf(a.Name, args), actAI)
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": toolMsg.Content})
-			case def.Write && aiIsOptInTool(a.Name) && !aiUserAskedFor(a.Name, msgs):
+			case verdict.Level == PolicyForbidden:
+				policyRecord(verdict, "denied")
+				msg := policyAIView(verdict)
+				warn(scSys, "AI", "策略拒绝 %s：%s", a.Name, verdict.Reason)
+				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": msg})
+				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统）" + msg})
+				continue
+			case verdict.OptIn && !aiUserAskedFor(a.Name, msgs):
 				// "需用户明确要求"的工具（如加白名单）：模型不能自作主张发起，丢弃并要求直接回答。
 				// 同一轮拦截 ≥3 次说明模型在死循环重试，直接终止并给用户可见提示，避免日志刷屏。
 				optInBlocked++
@@ -1175,8 +1212,14 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				sseDoneConfirm(w, fl, &usage)
 				return
 			default:
+				t0 := time.Now()
 				res, exErr := def.Execute(args)
+				toolDur := time.Since(t0).Milliseconds()
 				toolMsg.Content = res
+				// v2.2 M9：每次工具执行记一步轨迹。"无效操作次数"这个指标
+				// 就是从这里算的——同一 action 连续失败 ≥2 次、denied 后仍重试、
+				// 只读工具读了个与任务无关的东西，都能在轨迹里看出来。
+				traceToolStep(a.Name, args, res, exErr, toolDur)
 				if exErr != nil {
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
