@@ -94,19 +94,53 @@ func handleDBBackup(w http.ResponseWriter, r *http.Request) {
 
 // needConfirm 返回需要二次确认的响应（428）：破坏性操作必须由前端先弹窗。
 // highrisk=true 时前端用红色警示样式（可选参数，缺省 false，避免确认疲劳：只有真高危才升级视觉烈度）。
+//
+// v2.2：档位改由 PolicyGate 裁决，本函数只负责把 verdict 翻译成 HTTP 响应，
+// 响应格式保持不变（前端与既有测试都不受影响）。
 func needConfirm(w http.ResponseWriter, action, target, reason string, highrisk ...bool) {
 	hr := false
 	if len(highrisk) > 0 {
 		hr = highrisk[0]
 	}
+	v := PolicyGate(action, target, actUser)
+	// 调用方显式指定了高危，或 PolicyGate 判为 elevated → 用高危样式
+	if hr || v.HighRisk() {
+		v.Level = PolicyElevated
+	}
+	policyRecord(v, "pending")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(428)
+	msg := reason
+	if msg == "" {
+		msg = v.Reason
+	}
 	_, _ = w.Write([]byte(mustJSON(map[string]any{
 		"needConfirm": true,
 		"action":      action,
 		"target":      target,
-		"reason":      reason,
-		"highrisk":    hr,
+		"reason":      msg,
+		"highrisk":    v.HighRisk(),
+		"level":       string(v.Level),
+		"rule":        v.Rule,
+	})))
+}
+
+// policyDeny 拒绝执行并返回 403。forbidden 档位专用。
+func policyDeny(w http.ResponseWriter, action, target, reason string) {
+	v := PolicyGate(action, target, actUser)
+	v.Level = PolicyForbidden
+	if reason == "" {
+		reason = v.Reason
+	}
+	policyRecord(v, "denied")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(403)
+	_, _ = w.Write([]byte(mustJSON(map[string]any{
+		"forbidden": true,
+		"action":    action,
+		"target":    target,
+		"reason":    reason,
+		"rule":      v.Rule,
 	})))
 }
 

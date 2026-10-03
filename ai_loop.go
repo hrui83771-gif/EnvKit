@@ -675,15 +675,17 @@ func aiLooksLikeMenuPrefix(s string) bool {
 }
 
 // aiIsOptInTool 必须由用户明确要求才允许执行的工具（模型不得主动发起）。
+//
+// v2.2：改为直接查询 PolicyGate，**消除双源**。原先这里是硬编码的 switch，
+// 加上 PolicyGate 后两套名单开始漂移——单测抓到 manage_memories 只在
+// PolicyGate 里是 opt-in（记忆会长期影响后续所有对话，模型不该自作主张记住东西），
+// 而这里漏了。两处各写一份的代价就是这种不一致迟早发生。
+//
 // 注意 stop_service 不在此列（v1.9.7）：它是写工具，本来就要过确认卡片这道闸，
 // opt-in 拦截反而把用户"停一下前端"这类说法（关键词匹配不到）整轮挡死，
 // 模型还会每轮重试形成拦截刷屏——有确认卡片兜底就够了。
 func aiIsOptInTool(tool string) bool {
-	switch tool {
-	case "apply_whitelist", "db_backup":
-		return true
-	}
-	return false
+	return PolicyGate(tool, "", actAI).OptIn
 }
 
 // aiUserAskedFor 最近 3 条用户消息里是否明确提到该工具对应的事项
@@ -1138,11 +1140,22 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			}
 			def, known := aiToolRegistry[a.Name]
 			toolMsg := aiMsg{Role: "tool", ToolCallID: a.ID}
+			// v2.2 PolicyGate：先问策略再动手。forbidden 让模型当场放弃，
+			// 而不是发出去被执行层拒绝——那样它会以为"再换个参数试试"，
+			// 白花 token 且可能反复试探。
+			verdict := PolicyGate(a.Name, policyTargetOf(a.Name, args), actAI)
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": toolMsg.Content})
-			case def.Write && aiIsOptInTool(a.Name) && !aiUserAskedFor(a.Name, msgs):
+			case verdict.Level == PolicyForbidden:
+				policyRecord(verdict, "denied")
+				msg := policyAIView(verdict)
+				warn(scSys, "AI", "策略拒绝 %s：%s", a.Name, verdict.Reason)
+				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": msg})
+				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统）" + msg})
+				continue
+			case verdict.OptIn && !aiUserAskedFor(a.Name, msgs):
 				// "需用户明确要求"的工具（如加白名单）：模型不能自作主张发起，丢弃并要求直接回答。
 				// 同一轮拦截 ≥3 次说明模型在死循环重试，直接终止并给用户可见提示，避免日志刷屏。
 				optInBlocked++
