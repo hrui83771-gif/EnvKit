@@ -804,16 +804,22 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 		Key string `json:"key"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	// 停服务时清掉端口记录：否则重启后会拿上次的端口做漂移比对，
+	// 把"正常重启后端口一致"误报成"没变化"或反向误报成"漂移"。
 	switch body.Key {
 	case "web":
 		stopByKey(scStart, "web", "web-start")
+		svcForgetPort("web")
 		auditNow(actUser, "stop_service", "web", "", resOK, "")
 	case "backend":
 		stopByKey(scStart, "backend", "backend-start")
+		svcForgetPort("backend")
 		auditNow(actUser, "stop_service", "backend", "", resOK, "")
 	default:
 		stopByKey(scStart, "web", "web-start")
 		stopByKey(scStart, "backend", "backend-start")
+		svcForgetPort("web")
+		svcForgetPort("backend")
 		auditNow(actUser, "stop_service", "all", "", resOK, "")
 	}
 	_, _ = w.Write([]byte(`{"ok":true}`))

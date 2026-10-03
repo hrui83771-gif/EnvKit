@@ -83,9 +83,13 @@ func verifyService(target string, wait time.Duration) OpResult {
 		alive, pid := svcAlive(target)
 		if !alive {
 			// 进程已经没了：这是"启动失败"的硬证据，不能降级成"已启动但没验到"
+			ev := []string{"pid=" + strconv.Itoa(pid)}
+			if tail := svcLogTail(target, 12); tail != "" {
+				ev = append(ev, "log_tail="+tail)
+			}
 			return opFail(action, target, errKindSpawnFail,
 				svcLabel(target)+"进程已退出，启动未成功（详见「程序启动」日志）",
-				"pid="+strconv.Itoa(pid), "hint=常见原因是端口被占用、依赖缺失或编译产物崩溃")
+				append(ev, "hint="+lifecycleHint(errKindSpawnFail))...)
 		}
 		if port := firstListeningPortExcept(ports, excluded); port > 0 {
 			owner := portOwner(port)
@@ -106,8 +110,10 @@ func verifyService(target string, wait time.Duration) OpResult {
 				continue
 			}
 			ev = append(ev, httpProbe(port))
-			return opVerified(action, target,
-				fmt.Sprintf("%s已就绪：进程存活且端口 %d 在监听", svcLabel(target), port), ev...)
+			// v2.2 M10：不立即返回。端口监听到进程活着还有一段路——
+			// "起来了又崩了"是最常见的故障，而"监听的那一刻"恰好看不到它。
+			// 进入存活观察窗，期间崩溃才算启动失败并附日志尾部。
+			return verifyObserve(action, target, port, pid, owner, ev)
 		}
 		lastWhy = "进程存活（PID " + strconv.Itoa(pid) + "），候选端口 " + intsToStr(ports) + " 均未监听"
 		if time.Now().After(deadline) {
