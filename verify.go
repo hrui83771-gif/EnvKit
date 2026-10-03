@@ -69,6 +69,15 @@ func verifyService(target string, wait time.Duration) OpResult {
 	}
 	expect := svcExpectProcs(target)
 	deadline := time.Now().Add(wait)
+	// excluded 记录"已排除的端口 → 占用者"。命中一个端口但占用者不是本服务时，
+	// 正确的反应是把这个端口剔除后继续等，而不是立刻下结论。
+	//
+	// 为什么必须这样：候选端口来自 scan_ports / 项目画像 / 内置默认表，是前后端共享的
+	// 一锅端（内置就是 {8080, 8888}）。整套启动（先后端再前端）时后端已经占着 8888，
+	// 前端复验的第一次轮询就会命中 8888，拿到 owner=main.exe 与预期的 node.exe 不匹配。
+	// 老代码在这里直接 return，等待窗口（45s）形同虚设，前端还在编译就被判"不能认定已就绪"。
+	// 剔除后继续等，前端编译完监听 8080 → owner=node.exe → 匹配 → 判通过。
+	excluded := map[int]string{}
 	var lastWhy string
 	for {
 		alive, pid := svcAlive(target)
@@ -78,18 +87,23 @@ func verifyService(target string, wait time.Duration) OpResult {
 				svcLabel(target)+"进程已退出，启动未成功（详见「程序启动」日志）",
 				"pid="+strconv.Itoa(pid), "hint=常见原因是端口被占用、依赖缺失或编译产物崩溃")
 		}
-		if port := firstListeningPort(ports); port > 0 {
+		if port := firstListeningPortExcept(ports, excluded); port > 0 {
 			owner := portOwner(port)
 			ev := []string{"pid=" + strconv.Itoa(pid), "port=" + strconv.Itoa(port) + " LISTENING"}
 			if owner != "" {
 				ev = append(ev, "owner="+owner)
 			}
-			// 端口被"别人的"进程占着时不能算我们的服务起来了——这正是假阳性的典型来源
+			// 端口被"别人的"进程占着不能算我们的服务起来了——这正是假阳性的典型来源。
+			// 但"不是我的"只否定了这个端口，否不掉整个服务：剔除它，继续等其他候选端口。
 			if !svcOwnerAcceptable(owner, expect) {
-				return opOK(action, target,
-					fmt.Sprintf("端口 %d 被 %s 占用，与预期进程（%s）不符，不能认定%s已就绪",
-						port, owner, strings.Join(expect, "/"), svcLabel(target)),
-					ev...)
+				excluded[port] = owner
+				lastWhy = fmt.Sprintf("端口 %d 被 %s 占用，不属于%s（已排除该端口继续等待）",
+					port, owner, svcLabel(target))
+				if time.Now().After(deadline) {
+					break
+				}
+				time.Sleep(verifyPollEvery)
+				continue
 			}
 			ev = append(ev, httpProbe(port))
 			return opVerified(action, target,
@@ -101,10 +115,37 @@ func verifyService(target string, wait time.Duration) OpResult {
 		}
 		time.Sleep(verifyPollEvery)
 	}
+	// 超时：结论必须说清"是没监听"还是"全被别的服务占了"，否则读的人无法判断该不该再等
+	if len(excluded) > 0 {
+		ev := []string{lastWhy, "waited=" + fmt.Sprintf("%.0fs", wait.Seconds()),
+			"excluded=" + svcExcludedNote(excluded), "hint=可能是本项目的另一个服务占着这些端口，本服务仍在启动"}
+		return opOK(action, target,
+			fmt.Sprintf("%s进程已派生，但 %.0f 秒内未观察到本服务端口监听（候选端口都被其它进程占着，可能仍在编译/启动中）",
+				svcLabel(target), wait.Seconds()),
+			ev...)
+	}
 	return opOK(action, target,
 		fmt.Sprintf("%s进程已派生，但 %.0f 秒内未观察到端口监听（可能仍在编译/启动中）", svcLabel(target), wait.Seconds()),
 		lastWhy, "waited="+fmt.Sprintf("%.0fs", wait.Seconds()),
 		"hint=可稍后用 verify_environment 再复查一次")
+}
+
+// svcExcludedNote 把排除集渲染成简短说明。
+func svcExcludedNote(excluded map[int]string) string {
+	ports := make([]int, 0, len(excluded))
+	for p := range excluded {
+		ports = append(ports, p)
+	}
+	sort.Ints(ports)
+	parts := make([]string, 0, len(ports))
+	for _, p := range ports {
+		owner := excluded[p]
+		if owner == "" {
+			owner = "未知进程"
+		}
+		parts = append(parts, strconv.Itoa(p)+"="+owner)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // svcPortCandidates 候选端口，按可信度排序后去重：
@@ -235,7 +276,17 @@ func pidAlive(pid int) bool {
 
 // firstListeningPort 返回第一个能连上的候选端口（本机环回，短超时快速失败）。
 func firstListeningPort(ports []int) int {
+	return firstListeningPortExcept(ports, nil)
+}
+
+// firstListeningPortExcept 返回第一个在监听且未被排除的端口。
+// excluded 非空时跳过这些端口——复验用它把"不属于本服务"的端口剔除后继续等待，
+// 而不是命中一次就下结论（候选端口表是前后端共享的，很容易撞上另一个服务的端口）。
+func firstListeningPortExcept(ports []int, excluded map[int]string) int {
 	for _, p := range ports {
+		if _, skip := excluded[p]; skip {
+			continue
+		}
 		if dialLocal(p) {
 			return p
 		}

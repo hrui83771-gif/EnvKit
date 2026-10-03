@@ -236,18 +236,22 @@ func TestVerifyServiceListening(t *testing.T) {
 
 	r := verifyService("web", 8*time.Second)
 	if !r.Ok {
-		t.Fatalf("端口在监听时不应判失败，实际：%s", r.String())
+		t.Fatalf("端口被非预期进程占着不该判动作失败（它只是没验到），实际：%s", r.String())
 	}
-	joined := strings.Join(r.Evidence, " ")
-	if !strings.Contains(joined, "LISTENING") || !strings.Contains(joined, strconv.Itoa(port)) {
-		t.Fatalf("证据里应有端口与 LISTENING，实际：%v", r.Evidence)
-	}
-	// 占用者是测试进程本身（不是 node.exe）：不许被认定成前端已就绪
+	// 占用者是测试进程本身（不是 node.exe）：永远不许被认定成前端已就绪。
+	// 这是防假阳性的底线——非预期进程占的端口会被直接排除，永远走不到"已就绪"分支。
 	if r.Verified {
 		t.Fatalf("端口被非预期进程占用时不应判定为已验证，实际：%s", r.String())
 	}
-	if !strings.Contains(r.Msg, "不能认定") {
-		t.Fatalf("应说明无法认定服务已就绪，实际：%s", r.Msg)
+	// 语义变化（v2.0 P3 修复）：旧实现命中别人的端口就立刻下结论"不能认定"，
+	// 等待窗口形同虚设——整套启动时后端占着 8888，前端还在编译就会被误判。
+	// 新实现把该端口排除后继续等，超时后如实报告"本服务端口仍未监听"并列出被排除的端口。
+	joined := strings.Join(r.Evidence, " ")
+	if !strings.Contains(r.Msg, "未观察到本服务端口监听") {
+		t.Fatalf("应如实报告本服务端口未监听，实际：%s", r.Msg)
+	}
+	if !strings.Contains(joined, "excluded=") || !strings.Contains(joined, strconv.Itoa(port)) {
+		t.Fatalf("证据里应列出被排除的端口 %d，实际：%v", port, r.Evidence)
 	}
 }
 
@@ -669,4 +673,78 @@ func TestVerifyToolRegistered(t *testing.T) {
 	if len(names) < 16 {
 		t.Fatalf("工具数量异常：%v", names)
 	}
+}
+
+// ---------- 候选端口归属：整套启动时的误判回归 ----------
+
+// 回归场景：start_service=all 时后端先起来占住 8888，随后前端编译。
+// 前端复验的候选端口表是前后端共享的（内置默认就是 {8080, 8888}），
+// 老代码第一次轮询就命中后端的 8888，发现 owner=main.exe 与预期的 node.exe 不符，
+// 于是立刻判定"不能认定前端已就绪"——45 秒等待窗口形同虚设。
+//
+// 正确行为：把 8888 排除掉，继续等前端自己的 8080。
+func TestFirstListeningPortSkipsExcluded(t *testing.T) {
+	lnA := listenLocal(t) // 模拟后端端口
+	defer lnA.Close()
+	lnB := listenLocal(t) // 模拟前端端口
+	defer lnB.Close()
+	pA, pB := portOf(lnA), portOf(lnB)
+
+	// 不排除时：两个都在监听，探测逻辑本身没问题
+	if got := firstListeningPortExcept([]int{pA, pB}, nil); got != pA && got != pB {
+		t.Fatalf("无排除集时应命中其中一个监听端口，实际 %d", got)
+	}
+
+	// 排除 A 之后必须落到 B——这正是"命中别人的端口后继续等"的核心语义
+	if got := firstListeningPortExcept([]int{pA, pB}, map[int]string{pA: "main.exe"}); got != pB {
+		t.Fatalf("排除 %d 后应命中 %d，实际 %d", pA, pB, got)
+	}
+
+	// 全部排除时必须返回 0，让调用方走"超时未复验"分支而不是误判
+	if got := firstListeningPortExcept([]int{pA, pB}, map[int]string{pA: "main.exe", pB: "python.exe"}); got != 0 {
+		t.Fatalf("全部排除时应返回 0，实际 %d", got)
+	}
+}
+
+// 旧实现 firstListeningPort 行为不能变（有测试与其它调用方依赖）
+func TestFirstListeningPortNoExclusion(t *testing.T) {
+	ln := listenLocal(t)
+	defer ln.Close()
+	p := portOf(ln)
+	if got := firstListeningPort([]int{p + 1, p}); got != p {
+		t.Fatalf("应跳过未监听端口命中 %d，实际 %d", p, got)
+	}
+	if got := firstListeningPort([]int{p + 1}); got != 0 {
+		t.Fatalf("无监听时应返回 0，实际 %d", got)
+	}
+}
+
+// 超时结论必须说清"是被别的服务占了"还是"根本没监听"，否则读的人无法判断该不该再等
+func TestSvcExcludedNote(t *testing.T) {
+	got := svcExcludedNote(map[int]string{8888: "main.exe", 8080: ""})
+	if !strings.Contains(got, "8080=未知进程") || !strings.Contains(got, "8888=main.exe") {
+		t.Fatalf("排除说明不完整：%q", got)
+	}
+	// 端口小的排前面，输出稳定可比对
+	if !strings.HasPrefix(got, "8080=") {
+		t.Fatalf("端口应升序渲染，实际 %q", got)
+	}
+	if svcExcludedNote(nil) != "" {
+		t.Fatal("空排除集应渲染为空串")
+	}
+}
+
+// listenLocal 起一个本机监听器，用完由调用方 Close。
+func listenLocal(t *testing.T) net.Listener {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("无法监听本机端口：%v", err)
+	}
+	return ln
+}
+
+// portOf 取监听器实际占用的端口。
+func portOf(ln net.Listener) int {
+	return ln.Addr().(*net.TCPAddr).Port
 }

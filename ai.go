@@ -326,19 +326,7 @@ func (a AIConfig) keyPlain() string {
 func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if r.Method == http.MethodGet {
-		ac := aiSnap()
-		masked := ""
-		if k := ac.keyPlain(); len(k) > 8 {
-			masked = k[:4] + "****" + k[len(k)-4:]
-		} else if k != "" {
-			masked = "****"
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"enabled": ac.Enabled, "provider": ac.Provider, "base_url": ac.BaseURL,
-			"model": ac.Model, "key_set": ac.APIKey != "", "key_masked": masked,
-			"temperature": ac.Temperature, "max_tokens": ac.MaxTokens,
-			"quirk": ac.quirkRead(),
-		})
+		writeAIConfig(w)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -346,7 +334,11 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled     bool     `json:"enabled"`
+		// Enabled 用指针而不是 bool：其它字段都遵循"空值不覆盖"，
+		// 而 bool 的零值 false 没法区分"用户要关掉"和"这次没带这个字段"。
+		// 用 bool 的话，任何一次局部保存（脚本、将来的局部更新前端）
+		// 都会把 AI 助手静默关掉——本项目就被这样误关过一次。
+		Enabled     *bool    `json:"enabled"`
 		Provider    string   `json:"provider"`
 		BaseURL     string   `json:"base_url"`
 		APIKey      string   `json:"api_key"`
@@ -357,8 +349,16 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "参数错误", 400)
 		return
 	}
+	if body.Provider == "" && body.BaseURL == "" && body.APIKey == "" &&
+		body.Model == "" && body.Temperature == nil && body.Enabled == nil {
+		// 空提交直接当读操作处理：绝不允许"什么都没传"覆盖掉已存配置。
+		writeAIConfig(w)
+		return
+	}
 	aiMutate(func(a *AIConfig) {
-		a.Enabled = body.Enabled
+		if body.Enabled != nil {
+			a.Enabled = *body.Enabled
+		}
 		if strings.TrimSpace(body.Provider) != "" {
 			a.Provider = strings.TrimSpace(body.Provider)
 		}
@@ -381,6 +381,23 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		saveExternalConfig(cfg)
 	})
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// writeAIConfig 输出 AI 配置（key 只给掩码，绝不回传明文）。
+func writeAIConfig(w http.ResponseWriter) {
+	ac := aiSnap()
+	masked := ""
+	if k := ac.keyPlain(); len(k) > 8 {
+		masked = k[:4] + "****" + k[len(k)-4:]
+	} else if k != "" {
+		masked = "****"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"enabled": ac.Enabled, "provider": ac.Provider, "base_url": ac.BaseURL,
+		"model": ac.Model, "key_set": ac.APIKey != "", "key_masked": masked,
+		"temperature": ac.Temperature, "max_tokens": ac.MaxTokens,
+		"quirk": ac.quirkRead(),
+	})
 }
 
 func handleAITest(w http.ResponseWriter, r *http.Request) {

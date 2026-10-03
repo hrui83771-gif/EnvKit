@@ -197,12 +197,18 @@ func rotateConfigBackup(path string) {
 //
 // 注意：内部保存路径（AI 学习参数、组件版本变更等）**不因校验失败而跳过写盘** ——
 // 那会丢掉用户数据；硬错误只记日志与审计，由界面的保存接口负责拦截。
-func saveExternalConfig(c Config) {
+// configFilePath 定位外部配置文件。抽成变量供单测替换——
+// 否则任何碰配置的测试都会写坏用户真实的 config.json。
+var configFilePath = func() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return
+		return "config.json"
 	}
-	path := filepath.Join(filepath.Dir(exe), "config.json")
+	return filepath.Join(filepath.Dir(exe), "config.json")
+}
+
+func saveExternalConfig(c Config) {
+	path := configFilePath()
 	normalizeConfig(&c)
 	c.SchemaVersion = configSchemaVersion
 	if n := reportConfigProblems(checkConfig(c)); n > 0 {
