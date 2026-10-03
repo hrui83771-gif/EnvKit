@@ -15,6 +15,17 @@ import (
 	"strings"
 )
 
+// handleLaunch GET：返回当前生效的启动方式推断（v2.1）。
+// 配置页与 AI 快照共用同一份计算结果，避免两处口径不一致——
+// 界面显示"serve"而 AI 实际跑了 dev，是最难查的一类问题。
+func handleLaunch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "plan": currentLaunchPlan()})
+}
+
 // handleLessons GET：返回自动经验（可禁用状态）+ 用户记忆全量。
 func handleLessons(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

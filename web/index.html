@@ -501,6 +501,24 @@
       </div>
 
       <div class="action">
+        <div class="head"><div class="title">启动方式</div><span class="muted">留空 = 由 EnvKit 按项目结构自动推断</span></div>
+        <div class="hint" id="launch-brief" style="margin:8px 0 10px;line-height:1.8"></div>
+        <div class="grid">
+          <div>
+            <label>前端启动脚本</label>
+            <input id="cfg_web_script" data-cfg placeholder="如 dev / serve / start（留空自动推断）" />
+            <div class="hint" style="margin-top:4px">必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝</div>
+          </div>
+          <div>
+            <label>后端入口</label>
+            <input id="cfg_backend_file" data-cfg placeholder="如 main.go 或 cmd/server/main.go（留空自动推断）" />
+            <div class="hint" style="margin-top:4px">相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断</div>
+          </div>
+        </div>
+        <div id="launch-cands" class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"></div>
+      </div>
+
+      <div class="action">
         <div class="head"><div class="title">数据库</div><span class="status idle" id="st-db-test">未检测</span></div>
         <div class="row" style="margin-top:8px"><button class="ghost" id="btn-db-test">测试连接</button>
           <span class="mono" id="db-test-msg"></span></div>
@@ -1911,7 +1929,11 @@ function projectsBody(){
     mysql_user:$('#mysql_user').value.trim(), mysql_password:$('#mysql_pass').value,
     db_name:$('#db_name').value.trim(), sql_file:$('#sql_path').value.trim(),
     scan_ports:(cfg.projects&&cfg.projects.scan_ports)||[],
-    web_scripts:(cfg.projects&&cfg.projects.web_scripts)||[]
+    web_scripts:(cfg.projects&&cfg.projects.web_scripts)||[],
+    // v2.1 启动方式覆盖项：留空 = 服务端按 package.json / 项目结构推断。
+    // 必须显式回传，漏了会被 mergeFormConfig 抹掉（表单提交是整体替换 Projects）。
+    web_script:($('#cfg_web_script')||{}).value ? $('#cfg_web_script').value.trim() : '',
+    backend_file:($('#cfg_backend_file')||{}).value ? $('#cfg_backend_file').value.trim() : ''
   };
 }
 function chainBody(){
@@ -1957,7 +1979,7 @@ async function saveNow(){
   const fail = (msg)=>{ ['save-state','save-state2','save-state3'].forEach(id=>{ const el=$('#'+id); el.textContent=msg; el.title=msg; }); };
   try{
     const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(r.ok){ cfg = body; dirty = false; $('#save-state').textContent=t('已保存'); $('#save-state2').textContent=t('已保存'); $('#save-state3').textContent=t('已保存'); syncStartDirs(); }
+    if(r.ok){ cfg = body; dirty = false; $('#save-state').textContent=t('已保存'); $('#save-state2').textContent=t('已保存'); $('#save-state3').textContent=t('已保存'); syncStartDirs(); loadLaunchPlan(); }
     else if(r.status===400){
       // 硬校验拒绝：把第一个问题亮在保存状态上，完整列表放悬浮提示
       let msg = t('保存失败');
@@ -1985,6 +2007,9 @@ async function loadConfig(){
   $('#mysql_service').value = cfg.mysql?.service_name||'';
   $('#fe_dir').value = cfg.projects?.frontend_dir||'';
   $('#be_dir').value = cfg.projects?.backend_dir||'';
+  // v2.1 启动方式覆盖项回填
+  if($('#cfg_web_script')) $('#cfg_web_script').value = cfg.projects?.web_script||'';
+  if($('#cfg_backend_file')) $('#cfg_backend_file').value = cfg.projects?.backend_file||'';
   $('#mysql_host').value = cfg.projects?.mysql_host||'';
   $('#mysql_port2').value = cfg.projects?.mysql_port||'';
   $('#mysql_user').value = cfg.projects?.mysql_user||'';
@@ -2006,7 +2031,10 @@ async function loadConfig(){
   $('#cp-5002').textContent = C.webase_port||5002;
   syncStartDirs();
   psRenderChips(); wlRender();
-  try{ $('#web_script').value = localStorage.getItem('ek-web-script') || 'serve'; }catch(_){ $('#web_script').value='serve'; }
+  // 启动页的脚本选择器：留空 = 由服务端按 package.json 推断（v2.1）。
+  // 旧版本在这里硬填 'serve'，导致"项目没有 serve 脚本"时必然失败，
+  // 而且这个值只存在 localStorage 里，AI 读不到。
+  try{ $('#web_script').value = localStorage.getItem('ek-web-script') || ''; }catch(_){ $('#web_script').value = ''; }
   const box = $('#comp-urls'); box.innerHTML='';
   (cfg.components||[]).forEach((c,i)=>{
     const h=document.createElement('div'); h.style.margin='6px 0';
@@ -2022,6 +2050,7 @@ async function loadConfig(){
   loaded = true;
   refreshGuards();
   detectSQL();
+  loadLaunchPlan();
 }
 
 /* ---------- 内置浏览器 ---------- */
@@ -2338,8 +2367,8 @@ $('#cfg-file').onchange = async e=>{
 function pickDir(inputId, projField){
   openBrowser('dir', (cfg.projects&&cfg.projects[projField])||'', '', 'dir', p=>{
     if(inputId) $('#'+inputId).value = p;
-    if(projField==='frontend_dir') $('#fe_dir').value = p;
-    if(projField==='backend_dir'){ $('#be_dir').value = p; detectSQL(); }
+    if(projField==='frontend_dir'){ $('#fe_dir').value = p; loadLaunchPlan(); }
+    if(projField==='backend_dir'){ $('#be_dir').value = p; detectSQL(); loadLaunchPlan(); }
     syncStartDirs(); markDirty(); refreshGuards();
   });
 }
@@ -2504,6 +2533,51 @@ function auditBind(){
   }
   const sel = $('#audit-day'); if(sel) sel.onchange = loadAudit;
   const rf = $('#audit-refresh'); if(rf) rf.onclick = loadAudit;
+}
+
+/* ---------- 启动方式推断展示（v2.1） ---------- */
+// 把服务端推断结果与合法候选显示出来，并提供"一键采用"。
+// 用户不填也能启动（走推断），填了就永久覆盖——这比让 AI 去猜可靠得多。
+async function loadLaunchPlan(){
+  const brief = $('#launch-brief'), cands = $('#launch-cands');
+  if(!brief || !cands) return;
+  let d = null;
+  try{ d = await (await fetch('/api/launch')).json(); }catch(e){ return; }
+  if(!d || d.ok === false) return;
+  const p = d.plan || {};
+  const L = [];
+  L.push(t('前端：{0}', p.web_script ? ('npm run ' + p.web_script + t('（{0}）', launchSrc(p.web_source)))
+                                     : t('未识别，不可自动启动')));
+  L.push(t('后端：{0}', p.backend_file ? ('go run ' + p.backend_file) : t('未识别，不可自动启动')));
+  if(p.note) L.push(p.note);
+  brief.textContent = L.join('\n');
+  brief.style.whiteSpace = 'pre-line';
+
+  // 合法候选：点一下就填进输入框，省得手打
+  cands.innerHTML = '';
+  const all = p.web_all || [];
+  if(all.length){
+    const lab = document.createElement('span');
+    lab.className = 'hint'; lab.textContent = t('合法候选：');
+    cands.appendChild(lab);
+    for(const s of all){
+      const b = document.createElement('button');
+      b.className = 'mini'; b.textContent = s;
+      b.onclick = ()=>{ const inp = $('#cfg_web_script'); if(inp){ inp.value = s; markDirty(); toast(t('已填入 {0}，记得保存配置', s), 'ok'); } };
+      cands.appendChild(b);
+    }
+  }
+  if((p.blocked||[]).length){
+    const w = document.createElement('span');
+    w.className = 'hint';
+    w.style.color = 'var(--warn)';
+    w.textContent = t('已按安全规则拒绝：{0}', p.blocked.join('、'));
+    cands.appendChild(w);
+  }
+}
+
+function launchSrc(s){
+  return s === 'config' ? t('你指定的') : (s === 'package.json' ? t('package.json 推断') : t('未识别'));
 }
 
 function navState(id, dotCls, label){ const d=$('#'+id); if(d) d.className='dot '+dotCls; }

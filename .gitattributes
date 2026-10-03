@@ -1,0 +1,32 @@
+# 行尾统一：避免"检出后 gofmt 认为全部文件待格式化"的反复摇摆
+#
+# 背景：仓库原本没有这个文件，Go 源码在 CRLF（本地）与 LF（gofmt/仓库）之间反复转换，
+# 每次 git checkout 之后 gofmt -l 都会把几十个文件全列出来。根因是行尾由各人本机
+# 的 core.autocrlf 决定，仓库无权约束。
+#
+# 规则：源码类一律 LF（gofmt / 现代工具链的事实标准），
+#      Windows 批处理必须 CRLF，否则 cmd.exe 解析会出问题。
+
+* text=auto
+
+*.go      text eol=lf
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.ts      text eol=lf
+*.json    text eol=lf
+*.py      text eol=lf
+*.md      text eol=lf
+*.html    text eol=lf
+*.css     text eol=lf
+*.sql     text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.syso    binary
+*.exe     binary
+*.ico     binary
+*.png     binary
+*.jpg     binary
+*.zip     binary
+
+# Windows 批处理必须 CRLF
+*.bat     text eol=crlf

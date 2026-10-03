@@ -46,6 +46,12 @@ type Projects struct {
 	BackupDir   string   `json:"backup_dir"`  // 备份目录；为空则用 exe 同级的 backups/
 	ScanPorts   []int    `json:"scan_ports"`  // 端口占用诊断的端口清单；空则用内置默认
 	WebScripts  []string `json:"web_scripts"` // 用户收藏的前端启动脚本（npm run <script>）
+	// WebScript 指定前端启动脚本（v2.1）。留空 = 由 package.json 自动推断。
+	// 即便填写也会过安全规则：deploy/migrate/reset 这类脚本名一律拒绝。
+	WebScript string `json:"web_script,omitempty"`
+	// BackendFile 指定后端入口（相对后端目录，如 main.go、cmd/server/main.go）。
+	// 留空 = 自动推断；推断不出时报错而不是盲跑一条必然失败的命令。
+	BackendFile string `json:"backend_file,omitempty"`
 }
 
 type Component struct {

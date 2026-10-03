@@ -205,20 +205,43 @@ var aiToolRegistry = map[string]aiTool{
 		},
 	},
 	"start_service": {
-		Desc: "启动前端(npm run serve)、后端(go build + go run)，或 all=先后端再前端（一次确认完成整套启动）",
+		Desc: "启动前端、后端，或 all=先后端再前端（一次确认完成整套启动）。" +
+			"前端脚本与后端入口由 EnvKit 从 package.json / 项目结构推断（推断依据见快照的 launch 字段），" +
+			"只有当快照里列出了多个候选而你无法判断时，才用 web_script 指定其中一个。" +
+			"禁止猜测快照里没有的脚本名——deploy / migrate / reset 这类脚本会被安全规则拒绝。",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"service": map[string]any{"type": "string", "enum": []string{"web", "backend", "all"}},
+			"web_script": map[string]any{"type": "string",
+				"description": "可选。仅当快照 launch.web_all 里有多个候选时才填，且必须是其中的一个；留空由 EnvKit 自行选择"},
 		}, "required": []string{"service"}},
 		Write: true,
 		Execute: func(args map[string]any) (string, error) {
 			svc, _ := args["service"].(string)
+			script, _ := args["web_script"].(string)
+			// 填了快照里没有的脚本名 → 立刻拒绝并说明，不去试。
+			// 试探本身就是风险：package.json 里可能有 deploy / migrate。
+			if s := strings.TrimSpace(script); s != "" {
+				if !launchScriptAllowed(s) {
+					return "", fmt.Errorf("脚本 %q 不在允许范围内：只允许 %s 这类启动脚本，"+
+						"deploy / migrate / reset / install 等有副作用的脚本一律拒绝。如需启动别的服务，"+
+						"请让用户在「程序配置」里指定。", s, "dev / serve / start / watch")
+				}
+				if !launchScriptInCandidates(s) {
+					cands := strings.Join(currentLaunchPlan().WebAll, "、")
+					if cands == "" {
+						cands = "（当前项目未识别出任何合法候选）"
+					}
+					return "", fmt.Errorf("脚本 %q 不在当前项目的合法候选里。合法候选：%s。"+
+						"不要猜脚本名——请按候选集选，或让用户在「程序配置」中指定。", s, cands)
+				}
+			}
 			switch svc {
 			case "all":
 				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
 				if !rb.Ok {
 					return "", aiOpErr("后端启动", rb)
 				}
-				rw := aiStartVerify("web", webStartTask("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
 				if !rw.Ok {
 					// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
 					return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
@@ -226,7 +249,7 @@ var aiToolRegistry = map[string]aiTool{
 				}
 				return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
 			case "web":
-				rw := aiStartVerify("web", webStartTask("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
 				if !rw.Ok {
 					return "", aiOpErr("前端启动", rw)
 				}
@@ -397,6 +420,14 @@ func aiHealthSnapshotFor(task string) string {
 			snap["project"] = pm
 		}
 	}
+	// 启动方式推断（v2.1）：把"会跑什么命令、依据是什么"直接告诉模型，
+	// 而不是让它猜。launch_plan 是人类可读的一句话，launch 是结构化明细。
+	if lp := currentLaunchPlan(); lp.WebScript != "" || lp.BackendFile != "" {
+		snap["launch"] = lp
+		snap["launch_plan"] = launchPlanBrief(lp) +
+			"\n（这是推断结果，不是用户指令。启动后必须用 verify_environment 复验，" +
+			"未复验不得向用户报告完成；推断可能出错，复验能发现。）"
+	}
 	// 记忆层（v2.0 M1/M3）：用户记忆是"必须遵守的规矩"，排最前；
 	// 自动经验是"从历史失败里提取的建议"，放在后面且标明可信度。
 	// 顺序有讲究：用户手写的记忆优先级高于系统自动推断的经验。
@@ -493,6 +524,10 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - MySQL 组件下载地址为动态解析（官方 CDN 只保留每个系列的最新版）。
    - 数据库连不上优先排查：MySQL 服务是否运行 → root 密码 → 3306 端口。
 7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist。
+8. 启动方式（v2.1）：**不要自己编造启动命令**。快照的 launch 字段已给出 EnvKit 的推断结果（前端 npm 脚本、后端 go run 入口）及其依据；多个候选时从 launch.web_all 里选一个填进 web_script。
+   - 快照里的 launch 是**推断**，不是用户指令；推断可能出错。
+   - **执行 start_service 之后，只要不是 stop_service，就必须用 verify_environment 复验**（web/backend 都要），否则不允许向用户报告"已启动"。工具返回「已复验通过」才算完成；「未复验」只能说"已执行、还没确认成功"。
+   - 识别不出启动方式时（launch 字段缺失或注明"未识别"），如实告诉用户"EnvKit 识别不出这个项目的启动方式"，并请他在「程序配置」里手动指定——**不要试一个你不确定的命令**。
 8. 涉及删除数据、还原数据库的请求：不执行，说明风险并给出手动步骤。
 9. 探索优先（不知道就自己查，不要反问用户）：
    - 快照里的 project 字段已经是项目画像（语言、框架、可用脚本、入口、端口线索），先用它。

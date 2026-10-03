@@ -569,11 +569,11 @@ func handleWebStart(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = cfg.Projects.FrontendDir
 	}
-	script := body.Script
-	if script == "" {
-		script = "serve"
-	}
-	if !validScriptName(script) {
+	script := strings.TrimSpace(body.Script) // 留空 = 服务端按 package.json 推断（v2.1）
+	// 注意：不在这里塞默认值 "serve"。旧版无条件回退到 serve，
+	// 导致"项目没有 serve 脚本"时得到一句莫名的 npm 报错。
+	// 兜底逻辑收敛到 launchWebScriptOrDefault 一处，且只在读不到 package.json 时才生效。
+	if script != "" && !validScriptName(script) {
 		http.Error(w, "脚本名含非法字符（只允许字母、数字、- _ : . /）", 400)
 		return
 	}
@@ -629,6 +629,7 @@ func webStartTask(dir, script, actor string) OpResult {
 }
 
 // opStartWeb 前端启动执行体（任务协程内运行），返回结构化结果。
+// script 传空表示"由服务端推断"（v2.1）——这是默认路径，也是 AI 与按钮共用的路径。
 func opStartWeb(dir, script, actor string) OpResult {
 	fin := auditStart(actor, "start_service", "web", script)
 	setProg("web-start", true, false, "启动中...")
@@ -646,6 +647,24 @@ func opStartWeb(dir, script, actor string) OpResult {
 		fin(resFail, "前端目录不可用")
 		return opFail("start_service", "web", errKindBadConfig, "前端目录不可用："+dir, "dir="+dir)
 	}
+	// 启动脚本：显式指定 > 用户配置 > package.json 推断。识别不出就明确失败，
+	// 绝不静默回退到 serve —— 那正是"换个项目就启动不了"的根源（v2.1）。
+	script, scriptSrc, ok := launchWebScriptOrDefault(dir, script)
+	if !ok {
+		setProg("web-start", false, false, "未识别启动脚本")
+		failS(scStart, "web", "前端", "未识别可用的前端启动脚本")
+		fin(resFail, "未识别可用的前端启动脚本")
+		plan := currentLaunchPlan()
+		msg := "未识别可用的前端启动脚本"
+		if len(plan.Blocked) > 0 {
+			msg += "：package.json 里的脚本（" + strings.Join(plan.Blocked, "、") + "）带副作用或破坏性语义，已按安全规则拒绝"
+		} else {
+			msg += "：未在 package.json 中找到 dev / serve / start 之类的脚本"
+		}
+		return opFail("start_service", "web", errKindBadConfig, msg,
+			"dir="+dir, "hint=在「程序配置」的前端启动脚本字段手动填写",
+			"candidates="+strings.Join(plan.WebAll, ","))
+	}
 	exe := findExe("npm.cmd", "npm")
 	if exe == "" {
 		setProg("web-start", false, false, "未找到 npm")
@@ -654,18 +673,18 @@ func opStartWeb(dir, script, actor string) OpResult {
 		return opFail("start_service", "web", errKindMissingDep,
 			"未找到 npm：请先在「环境安装」安装 Node.js", "need=npm")
 	}
-	infoS(scStart, "web", "前端", "npm run %s @ %s", script, dir)
+	infoS(scStart, "web", "前端", "npm run %s（%s） @ %s", script, scriptSrc, dir)
 	if err := execBackground(scStart, "web", "web-start", "前端", dir, npmEnvExtra(), exe, "run", script); err != nil {
 		setProg("web-start", false, false, err.Error())
 		failS(scStart, "web", "前端", "启动失败：%v", err)
 		fin(resFail, err.Error())
 		return opFail("start_service", "web", errKindSpawnFail,
 			"npm 进程派生失败："+firstLines(err.Error(), 200),
-			"dir="+dir, "script="+script,
+			"dir="+dir, "script="+script, "source="+scriptSrc,
 			"hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
 	}
 	okS(scStart, "web", "前端", "已启动（npm run %s）", script)
-	fin(resOK, script)
+	fin(resOK, script+"（"+scriptSrc+"）")
 	// 诚实措辞：此刻只证明"进程已派生且未立即退出"，尚未做端口/HTTP 可用性复验（见 v2.0 P2 验证层）
 	return opOK("start_service", "web", "npm run "+script+" 进程已派生（尚未做服务可用性复验）",
 		"dir="+dir, "script="+script)
@@ -750,14 +769,25 @@ func opStartBackend(dir, actor string) OpResult {
 			"go build 失败："+firstLines(err.Error(), 300),
 			"dir="+dir, "hint=查看「程序启动」日志中的编译错误")
 	}
-	infoS(scStart, "backend", "后端", "go run main.go")
-	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, goEnvExtra(), exe, "run", "main.go"); err != nil {
+	// 入口不再写死 main.go（v2.1）：cmd/ 布局的项目会因此直接失败。
+	// 推断不出时报错——盲跑 `go run main.go` 只会得到一句莫名的编译错误。
+	entry, why, ok := launchBackendFileOrDefault(dir)
+	if !ok {
+		setProg("backend-start", false, false, "未识别后端入口")
+		failS(scStart, "backend", "后端", "未识别后端入口：%s", why)
+		fin(resFail, "未识别后端入口")
+		return opFail("start_service", "backend", errKindBadConfig,
+			"未识别后端入口："+why,
+			"dir="+dir, "hint=在「程序配置」的后端入口字段手动填写（相对后端目录，如 main.go 或 cmd/server/main.go）")
+	}
+	infoS(scStart, "backend", "后端", "go run %s", entry)
+	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, goEnvExtra(), exe, "run", entry); err != nil {
 		setProg("backend-start", false, false, err.Error())
 		failS(scStart, "backend", "后端", "go run 失败：%v", err)
 		fin(resFail, err.Error())
 		return opFail("start_service", "backend", errKindSpawnFail,
 			"go run 进程派生失败："+firstLines(err.Error(), 200),
-			"dir="+dir, "hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
+			"dir="+dir, "entry="+entry, "hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
 	}
 	okS(scStart, "backend", "后端", "已启动（go run main.go）")
 	fin(resOK, "backend")

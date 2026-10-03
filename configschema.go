@@ -271,6 +271,28 @@ func checkConfig(c Config) []configProblem {
 	chkDir("后端目录", c.Projects.BackendDir)
 	chkDir("备份目录", c.Projects.BackupDir)
 	chkFile("SQL 文件", c.Projects.SQLFile)
+
+	// 启动方式覆盖项（v2.1）。留空 = 自动推断，所以只在填了的时候校验。
+	// 前端脚本名过 launchScriptAllowed：用户也可能手滑填了 migrate/reset 这类
+	// 带副作用的脚本名，配置是最高优先级的来源，反而更不能漏这道闸。
+	if s := strings.TrimSpace(c.Projects.WebScript); s != "" {
+		if !validScriptName(s) {
+			hard("前端启动脚本", "含非法字符（只允许字母、数字、- _ : . /），当前「%s」", s)
+		} else if !launchScriptAllowed(s) {
+			hard("前端启动脚本", "「%s」是构建/部署/迁移/测试类脚本，不允许作为启动脚本。"+
+				"请填 dev / serve / start 这类真正启动服务的脚本名；留空则由 EnvKit 自动推断", s)
+		}
+	}
+	if f := strings.TrimSpace(c.Projects.BackendFile); f != "" {
+		if !validScriptName(f) {
+			hard("后端入口", "含非法字符（只允许字母、数字、- _ : . /），当前「%s」", f)
+		} else if !launchEntryInDir(c.Projects.BackendDir, f) {
+			// 相对路径可能越出后端目录（../../ 之类），必须挡住
+			hard("后端入口", "在后端目录「%s」下找不到文件「%s」（相对后端目录填写，如 main.go 或 cmd/server/main.go）",
+				c.Projects.BackendDir, f)
+		}
+	}
+
 	if c.Projects.BackupDir != "" && c.Projects.SQLFile != "" &&
 		filepath.Dir(c.Projects.SQLFile) == c.Projects.BackupDir {
 		soft("备份目录", "与 SQL 文件目录相同，备份产物会落进源码目录（建议改到独立目录）")

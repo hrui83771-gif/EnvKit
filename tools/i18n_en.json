@@ -582,5 +582,21 @@
   "类型": "Kind",
   "结论": "Conclusion",
   "次数": "Hits",
-  "采用": "Used"
+  "采用": "Used",
+  "启动方式": "Launch method",
+  "留空 = 由 EnvKit 按项目结构自动推断": "Leave blank to auto-detect from the project structure",
+  "前端启动脚本": "Frontend start script",
+  "如 dev / serve / start（留空自动推断）": "e.g. dev / serve / start (blank = auto)",
+  "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
+  "后端入口": "Backend entry",
+  "如 main.go 或 cmd/server/main.go（留空自动推断）": "e.g. main.go or cmd/server/main.go (blank = auto)",
+  "相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
+  "前端：{0}": "Frontend: {0}",
+  "后端：{0}": "Backend: {0}",
+  "未识别，不可自动启动": "not detected, cannot auto-start",
+  "合法候选：": "Valid candidates:",
+  "已按安全规则拒绝：{0}": "Rejected by safety rules: {0}",
+  "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
+  "你指定的": "set by you",
+  "package.json 推断": "detected from package.json"
 }
