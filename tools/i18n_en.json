@@ -622,5 +622,6 @@
   "已按安全规则拒绝：{0}": "Rejected by safety rules: {0}",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "你指定的": "set by you",
-  "package.json 推断": "detected from package.json"
+  "package.json 推断": "detected from package.json",
+  "每一轮都有新信息，上限自动放宽到 {0} 轮": "every turn brought new information — limit raised to {0} turns"
 }
