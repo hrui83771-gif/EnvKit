@@ -10,7 +10,8 @@
 
 ## 零、现状盘点
 
-结论全部锚到源码，可复核。
+> 本节写于 v2.1 规划时。**v2.2 已交付五项，标注了哪些缺口被填上。**
+> 结论全部锚到源码，可复核。
 
 ### 0.1 主链路八环节的成熟度
 
@@ -19,27 +20,31 @@
 | Observe | 组件检测、端口扫描、进程统计（`detect.go` / `portscan.go`） | 只看"装没装"，不看"配得对不对"（无环境符合性判断） |
 | Understand | `projectBrief`（项目画像）+ `aiHealthSnapshot`（环境快照） | **两个独立事实源**，字段不互通；**观察与推断未分层** |
 | Plan | **不存在**。AI 直接调工具，无显式计划、无依赖序、无回滚 | 无法回答"你打算怎么做""失败怎么退" |
-| Policy | 确认闸门（428）+ AI 白名单 + 高危标记 | **三处分散**；"危险"没有单一判据 |
-| Execute | 任务函数返回 `OpResult` | 部分路径仍返回裸 `error`；执行输入不统一（`StartSpec` 尚未泛化） |
-| Verify | 三个验证器：service / backup / chain（`verify.go`） | 不覆盖进程生命周期；**备份未验可还原** |
-| Audit | 完整（JSONL，30 天，含 verify 字段） | **只是记录，不是轨迹**——一次任务的多步操作无法串联 |
+| Policy | ✅ v2.2：`PolicyGate` 四档单点裁决（`policy.go`） | ✅ 已解决；剩余是把 Plan 步骤纳入判定 |
+| Execute | 任务函数返回 `OpResult`；v2.1 已统一前端启动脚本与后端入口 | 部分路径仍返回裸 `error`；`StartSpec` 尚未泛化到备份/恢复 |
+| Verify | 三个验证器 + ✅ v2.2 存活观察 5s / 崩溃取证 / 端口漂移 | **备份未验可还原**（v2.3 最高优先 🔴） |
+| Audit | 完整（JSONL，30 天，含 verify 字段） | ✅ 已解决；`trace_id` 由 Trace 补齐 |
 | Learn | `lesson.go` + `memory.go` | 无 Scope / Confidence / 失效 / 纠正；**无 Human Trace 监督信号** |
 
 ### 0.2 规模与结构
 
 ```
-代码      14,259 行 Go / 47 文件 + 4,079 行单文件前端
-API       68 个路由      工具 17 个      界面 5 个面板
-测试      156 项单测 + 13 套 CDP + 14 项端到端 AI 验收
-状态计算  pollHealth / pollState / pollProg 三套轮询各算各的（重复）
+代码      14,259 行 Go（v2.1 盘点）
+          14,119 行 Go（v2.2 实测）+ 4,079 行单文件前端
+API       68 → 70+ 路由（新增 /api/runtime/state /api/launch /api/lessons /api/memory）
+          工具 17 个      界面 5 个面板
+测试      156 → 235 项单测 + 20 题冒烟集 + 13 套 CDP + 14 项端到端 AI 验收
+状态计算  ✅ 已统一：/api/runtime/state 是唯一源，/api/health 从它取数
 ```
 
 ### 0.3 四个结构性问题
 
-1. **事实源分裂**：`projectBrief` 说项目、`aiHealthSnapshot` 说环境、`chainInfo` 说链端，无一致性约束。
-2. **观察与推断不分**：`Source=config|package.json|probe|infer` 把"读到了什么"和"由此得出什么"混为一谈，**出错时无法定位是哪一层错了**。
-3. **执行语义分散**：按钮 / AI / 批量三条路径校验强度不同；备份与恢复没有走同一套 Policy→Verify。
-4. **状态各算各的**：前端三套轮询重复计算，UI 显示与 AI 看到的事实可能不同源。
+| # | 问题 | 状态 |
+|---|---|---|
+| 1 | **事实源分裂**：`projectBrief` / `aiHealthSnapshot` / `chainInfo` 无一致性约束 | 🟡 统一状态源已建立；五层事实结构待 v2.3 |
+| 2 | **观察与推断不分**：`Source=config\|package.json\|probe\|infer` 把"读到了什么"和"由此得出什么"混在一起，出错无法定位哪一层错了 | 🔴 待 v2.3（Observation/Fact/Inference/Decision/ActionSpec） |
+| 3 | **执行语义分散**：按钮 / AI / 批量三条路径校验强度不同 | 🟡 Policy 已统一；`ActionSpec` 泛化待 v2.3 |
+| 4 | **状态各算各的**：前端三套轮询重复计算 | ✅ **v2.2 已解决**（`runtime.go`） |
 
 ---
 
@@ -479,13 +484,27 @@ eval/
 
 | 版本 | Runtime | Agent | Learning | UI | 评测 |
 |---|---|---|---|---|---|
-| **v2.1** | 五层认知结构、启动推断、生命周期验证、`program.go` 拆 `sqlrisk.go` | — | Trace 最小版（单任务轨迹） | 状态字段就位 | **口径 + 基线 + 冒烟集 10 题** |
-| **v2.2** | ActionSpec 泛化、服务状态机、健康检查扩项、**备份可还原**、环境符合性、`/api/runtime/state`、ai_loop 拆分 | Plan + Re-plan + PolicyGate 四档 | Trace 补齐十二环节 | 状态源统一 | 冒烟集扩到 20 题 |
-| **v2.3** | 恢复向导、traceID 贯通 | — | Human Trace + Memory 第一批 | Trace 视图 | **经验增益 A/B** |
-| **v3.0** | 可观测性指标时序 | — | Memory 第二批（若需要） | **仪表盘化** | 全量集 40 题 |
+| **v2.1** ✅ | 五层认知结构、启动推断 | — | Trace 骨架 | 状态字段就位 | **口径 + 基线 + 冒烟集 10 题（10/10）** |
+| **v2.2** ✅ | 生命周期验证、服务状态机、`/api/runtime/state` | **PolicyGate 四档** | Trace + `trace_id` 贯通 | 状态源统一 | **冒烟集 20 题（20/20）+ 基线回填** |
+| **v2.3** | 备份可还原、环境符合性、ActionSpec 泛化、`ai_loop` 拆分 | Plan + Re-plan | **Trace 补齐 + Human Trace + Memory 第一批** | Trace 视图 | **经验增益 A/B** |
+| **v3.0** | 可观测性指标时序、恢复向导 | — | Memory 第二批（若需要） | **仪表盘化** | 全量集 40 题 + Harness |
 | **v3.1** | — | — | — | 手动驾驶权验收 | 自动化 Harness + 指标回退阻断发布 |
 
 每个版本独立可发布、独立可回滚。**任一版本未达标不进下一版。**
+
+> v2.1 计划里的「事实 Stale 机制」与「`program.go` 拆 `sqlrisk.go`」未做，
+> 顺延至 v2.3。前者被 Memory 的 `Scope/Stale` 覆盖（同一问题的更完整解法），
+> 后者优先级低于 v2.3 的两项 🔴。
+
+### 6.0 指标可测性演进（实测）
+
+| | 🟢 可测 | 🟡 数据源就位 | 🔴 缺前置 |
+|---|---|---|---|
+| v2.1 基线 | 0 | 0 | 8 |
+| **v2.2 基线** | **1** | **3** | **4** |
+
+仍然最关键的两项：**任务成功率**（需 v3.1 Harness）与**经验增益**（需 v2.3 Memory）。
+v3.0 发布时若仍无这两项数据，"比上一版更强"没有支撑。
 
 ### 6.1 明确不做
 
@@ -570,27 +589,38 @@ ui/         index.html（内嵌）
 
 ## 十、近期行动项
 
-### v2.1 剩余
+### 已完成
 
-**Runtime**
+**v2.1**
 
-- [ ] 五层认知结构（Observation/Fact/Inference/Decision/ActionSpec）落地，先只做启动链路
-- [ ] 事实 `Stale` 机制（package.json / go.mod mtime 变更检测）
-- [ ] `program.go` 拆出 `sqlrisk.go`
-- [ ] 生命周期验证：存活观察 + 崩溃检测 + 端口漂移
-- [ ] Trace 最小版（单任务轨迹，十二环节先记核心几个）
+- [x] 五层认知结构（Observation/Fact/Inference/Decision/ActionSpec）落地，先只做启动链路
+- [x] Trace 最小版（单任务轨迹，环节先记核心几个）
+- [x] 八项指标口径写入 `eval/metrics/`
+- [x] 冒烟集 10 题 → **实测 10/10**
+- [x] 跑基线，产出 `docs/eval/baseline-v2.1.md` → **🟢 0 项可测 / 🔴 8 项**
+- [x] 基线短板决定 v2.2 优先级（PolicyGate 与 Trace 提前）
 
-**评测基线**（与上面并行，不依赖新功能）
+**v2.2**（`edb318b` `0596e62` `3aefd93` `238ef30` `b83e892`）
 
-- [ ] 八项指标口径写入 `eval/metrics/`
-- [ ] 冒烟集 10 题：非 serve 前端、cmd 布局后端、全危险脚本项目、启动即崩、
-      越权读文件、危险脚本、链端不可达、备份损坏、记忆命中/未命中
-- [ ] **跑基线**，产出 `docs/eval/baseline-v2.1.md`
-- [ ] 基线暴露的最短板 → 直接决定 v2.2 优先级
+- [x] PolicyGate 四档统一 + 判定日志（旧 `aiIsOptInTool` 改为委托，消除双源）
+- [x] Trace + `trace_id` 零改动贯通审计（Trace 独立存储，不塞进 Audit）
+- [x] 生命周期验证：存活观察 5s + 崩溃取证 + 端口漂移
+- [x] `/api/runtime/state` 唯一状态源（含 `issues[]`，每条带可执行下一步）
+- [x] 服务状态机：五态 + 崩溃聚合 + 退避建议（**明确不做自动重启**）
+- [x] 冒烟集扩到 20 题 → **实测 20/20**，全量单测 235 项
+- [x] 基线回填 `docs/eval/baseline-v2.2.md` → **🟢 1 项可测 / 🟡 3 项数据源就位 / 🔴 4 项**
 
-### v2.2 启动条件
+### v2.3 下一步（顺序由 baseline-v2.2.md 第五节确定）
 
-v2.1 端到端验收全绿，五层结构在真实项目上被验证有效，基线数据已产出。
+- [ ] Trace 补齐 `plan` / `policy` / `human` 三个环节
+- [ ] Memory 第一批：`Scope` / `Evidence` / 成功失败计数 / `Stale` / `Confidence`
+- [ ] 备份可还原性深度验证（v2.2 唯一未动的 🔴 高优先项：文件没坏 ≠ 能还原）
+- [ ] Plan + Re-plan（PolicyGate 已就位，前置齐了）
+- [ ] 环境符合性检查（依赖 Memory 的项目作用域）
+- [ ] `ai_loop.go` 拆分（与 Plan 改动同批）
+
+**v2.3 验收标准**：能出示「经验增益」的 A/B 对照数据——有经验组与无经验组
+在真实任务上的对比。做不到这一点，学习闭环无法证伪。
 
 ---
 
