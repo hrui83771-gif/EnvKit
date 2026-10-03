@@ -810,7 +810,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		full := make([]aiMsg, 0, len(msgs)+2)
 		full = append(full, aiMsg{Role: "system", Content: aiSystemPrompt + aiLangDirective(lang)})
 		full = append(full, msgs...)
-		full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshot() + "</env_state>"})
+		// 任务提示在循环外算一次：msgs 会随工具结果增长，但用户的原始诉求不变，
+		// 每轮重算只会让记忆匹配抖动（同一问题匹配到不同记忆）。
+		taskHint := aiTaskHint(msgs)
+		full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshotFor(taskHint) + "</env_state>"})
 		payload := aiPayload(full, aiToolDefs(), acTurn.quirkRead(), -1, true)
 		b, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(), strings.NewReader(string(b)))

@@ -776,7 +776,45 @@
         <div class="row" style="margin-top:10px">
           <button class="ghost" id="btn-ai-explain2">AI 解读诊断报告</button>
           <button class="ghost" id="btn-ai-open-chat">打开对话面板</button>
+          <button class="ghost" id="btn-ai-memory">记忆与经验</button>
         </div>
+      </div>
+
+      <div class="card" id="ai-memory-box" style="margin-top:14px;display:none">
+        <h3>记忆与经验 <span class="stepno">让助手下次不再犯同样的错</span></h3>
+        <div class="muted" style="line-height:1.8;margin-bottom:10px">
+          <b>我的记忆</b>是你写给助手的规矩，它必须遵守；<b>自动经验</b>是系统从操作审计里统计出的失败模式，只是建议，你可以逐条否决。
+          优先级：<b>你当场的明确要求 &gt; 我的记忆 &gt; 自动经验</b>。
+        </div>
+
+        <div class="row" style="margin:0 0 8px;gap:6px">
+          <input id="mem-text" placeholder="写一条长期规矩，例如：备份前先停掉后端服务" style="flex:1;min-width:220px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+          <input id="mem-tags" placeholder="标签（可选，逗号分隔）" style="width:150px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+          <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="mem-always">每轮都注入</label>
+          <button class="mini" id="mem-add">添加</button>
+        </div>
+        <div class="row" style="margin:0 0 12px;gap:6px">
+          <button class="mini" id="mem-import-btn">批量导入</button>
+          <span class="hint">每行一条，支持 <code>- 内容 | 标签</code> 或 JSON 数组；重复内容自动更新而非新增</span>
+          <span style="flex:1"></span>
+          <button class="mini" id="mem-refresh">刷新</button>
+        </div>
+
+        <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:260px;min-height:60px;margin-bottom:14px">
+          <table class="vtab" id="mem-grid">
+            <thead><tr><th style="width:30px">常</th><th>记忆内容</th><th style="width:120px">标签</th><th style="width:110px">加入时间</th><th style="width:56px">操作</th></tr></thead>
+            <tbody id="mem-body"></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:4px">自动经验 <span class="stepno">从操作记录统计，不是你在下的命令</span></h3>
+        <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:300px;min-height:60px">
+          <table class="vtab" id="les-grid">
+            <thead><tr><th style="width:96px">类型</th><th>结论</th><th style="width:46px">次数</th><th style="width:64px">采用</th></tr></thead>
+            <tbody id="les-body"></tbody>
+          </table>
+        </div>
+        <div class="hint" style="margin-top:8px">自动经验是操作审计的统计视图，不单独存储——审计保留 30 天，过期的经验随之失效；你否决过的不会再注入。</div>
       </div>
     </section>
 
@@ -2424,6 +2462,113 @@ function auditBind(){
 }
 
 function navState(id, dotCls, label){ const d=$('#'+id); if(d) d.className='dot '+dotCls; }
+
+// ---------- 记忆与经验（M1 自动经验 / M3 用户记忆） ----------
+
+const LESSON_KIND = {
+  repeat_fail:'反复失败', user_fix:'你手动修好的', denied:'已被安全策略拒绝',
+  slow:'慢路径', verify_fail:'复验反复失败'
+};
+
+async function loadMemory(){
+  const mb = $('#mem-body'), lb = $('#les-body');
+  if(!mb || !lb) return;
+  let d = null;
+  try{ d = await (await fetch('/api/lessons')).json(); }
+  catch(e){
+    mb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;text-align:center">'+esc(t('读取失败'))+'</td></tr>';
+    return;
+  }
+  // 我的记忆
+  const ms = (d && d.memories) || [];
+  mb.innerHTML = '';
+  if(!ms.length){
+    mb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;text-align:center">'+esc(t('还没有记忆条目'))+'</td></tr>';
+  } else {
+    for(const m of ms){
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td style="text-align:center;color:var(--warn);font-weight:700">'+(m.always?'★':'')+'</td>'+
+        '<td>'+esc(m.text||'')+'</td>'+
+        '<td class="mini muted">'+esc(m.tags||'')+'</td>'+
+        '<td class="mini muted">'+esc((m.created||'').slice(5,16))+'</td>'+
+        '<td></td>';
+      const td = tr.lastElementChild;
+      const b1 = document.createElement('button');
+      b1.className = 'mini'; b1.textContent = m.always ? t('仅相关时') : t('每轮注入');
+      b1.onclick = async ()=>{ await memPost({op:'toggle', id:m.id}); loadMemory(); };
+      const b2 = document.createElement('button');
+      b2.className = 'mini'; b2.textContent = t('删除');
+      b2.onclick = async ()=>{ if(!confirm(t('确定删除这条记忆？'))) return; await memPost({op:'delete', id:m.id}); loadMemory(); };
+      td.appendChild(b1); td.appendChild(b2);
+      mb.appendChild(tr);
+    }
+  }
+  // 自动经验
+  const ls = (d && d.lessons) || [];
+  lb.innerHTML = '';
+  if(!ls.length){
+    lb.innerHTML = '<tr><td colspan="4" class="muted" style="padding:14px;text-align:center">'+esc(t('暂无经验，失败与被拒的记录累积到一定量后会自动出现'))+'</td></tr>';
+    return;
+  }
+  for(const l of ls){
+    const tr = document.createElement('tr');
+    const dim = l.enabled ? '' : ' style="opacity:.45"';
+    const ev = (l.evidence && l.evidence.length) ? '<div class="mini muted" style="margin-top:3px">'+esc(t('依据：{0}', l.evidence.join('　·　')))+'</div>' : '';
+    tr.innerHTML =
+      '<td class="mini">'+esc(LESSON_KIND[l.kind] || l.kind || '')+'</td>'+
+      '<td'+dim+'>'+esc(l.title||'')+ev+'</td>'+
+      '<td class="mini" style="text-align:center">'+esc(String(l.hits||0))+'</td>'+
+      '<td></td>';
+    const td = tr.lastElementChild;
+    const b = document.createElement('button');
+    b.className = 'mini' + (l.enabled ? ' on' : '');
+    b.textContent = l.enabled ? t('已采用') : t('已否决');
+    b.onclick = async ()=>{
+      const r = await memPost({op:'__lesson', id:l.id}, '/api/lesson/toggle');
+      if(r && r.ok) loadMemory();
+    };
+    td.appendChild(b);
+    lb.appendChild(tr);
+  }
+}
+
+async function memPost(body, url){
+  url = url || '/api/memory';
+  try{
+    const r = await (await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
+    if(r && r.ok === false && r.error) toast(r.error, 'err');
+    return r;
+  }catch(e){ toast(t('请求失败'), 'err'); return null; }
+}
+
+function memBind(){
+  const add = $('#mem-add');
+  if(add) add.onclick = async ()=>{
+    const inp = $('#mem-text'), tg = $('#mem-tags'), al = $('#mem-always');
+    const text = (inp.value||'').trim();
+    if(!text){ toast(t('请先填写记忆内容'), 'err'); return; }
+    const r = await memPost({op:'add', text: text, tags:(tg.value||'').trim(), always: !!(al && al.checked)});
+    if(r && r.ok){ inp.value=''; tg.value=''; if(al) al.checked=false; loadMemory(); }
+  };
+  const ib = $('#mem-import-btn');
+  if(ib) ib.onclick = async ()=>{
+    const text = prompt(t('粘贴要导入的记忆，每行一条：'));
+    if(!text) return;
+    const r = await memPost({text: text}, '/api/memory/import');
+    if(r && r.ok){ toast(r.msg, 'ok'); loadMemory(); }
+  };
+  const rf = $('#mem-refresh');
+  if(rf) rf.onclick = loadMemory;
+  const toggle = $('#btn-ai-memory');
+  if(toggle) toggle.onclick = ()=>{
+    const box = $('#ai-memory-box');
+    if(!box) return;
+    const show = box.style.display === 'none';
+    box.style.display = show ? '' : 'none';
+    if(show) loadMemory();
+  };
+}
 async function pollHealth(){
   let h; try{ h = await (await fetch('/api/health')).json(); }catch(e){ return; }
   /* 忙碌互斥 */
@@ -2884,6 +3029,7 @@ async function pollProg(){ try{ renderProg(await (await fetch('/api/program/stat
 (async function init(){
   await loadConfig();
   auditBind();
+  memBind();
   fetch('/api/check',{method:'POST'});
   pollHealth(); pollState(); pollProg();
   setInterval(()=>{

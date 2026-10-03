@@ -143,6 +143,10 @@ func main() {
 	http.HandleFunc("/api/metrics", handleMetrics)
 	http.HandleFunc("/api/diag", handleDiag)
 	http.HandleFunc("/api/audit", handleAudit)
+	http.HandleFunc("/api/lessons", handleLessons)
+	http.HandleFunc("/api/memory", handleMemory)
+	http.HandleFunc("/api/memory/import", handleMemoryImport)
+	http.HandleFunc("/api/lesson/toggle", handleLessonToggle)
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
 

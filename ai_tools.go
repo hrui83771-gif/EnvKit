@@ -334,6 +334,12 @@ var aiToolRegistry = map[string]aiTool{
 // ---------- 环境快照 ----------
 
 func aiHealthSnapshot() string {
+	return aiHealthSnapshotFor("")
+}
+
+// aiHealthSnapshotFor 生成环境快照。task 是用户当前的诉求，用于挑选相关记忆——
+// 空字符串表示"不按任务筛"（工具 get_system_state 走这条）。
+func aiHealthSnapshotFor(task string) string {
 	resultsMu.Lock()
 	comps := map[string]any{}
 	for k, v := range results {
@@ -391,8 +397,34 @@ func aiHealthSnapshot() string {
 			snap["project"] = pm
 		}
 	}
+	// 记忆层（v2.0 M1/M3）：用户记忆是"必须遵守的规矩"，排最前；
+	// 自动经验是"从历史失败里提取的建议"，放在后面且标明可信度。
+	// 顺序有讲究：用户手写的记忆优先级高于系统自动推断的经验。
+	if ms := memoriesBrief(memoriesFor(task, 12)); ms != "" {
+		snap["user_memories"] = ms
+	}
+	if ls := lessonBrief(lessonsForTask(task, 5)); ls != "" {
+		snap["lessons_learned"] = ls + "\n（以上是从历史操作记录中统计出的经验，仅供参考；" +
+			"若与用户当前的要求冲突，一律以用户的要求为准。可以用 recall_lessons 查看依据。）"
+	}
 	b, _ := json.Marshal(snap)
 	return string(b)
+}
+
+// aiTaskHint 从消息列表里提取用户当前的真实诉求（倒序找最后一条"人话"）。
+// 必须排除系统注入的环境快照与工具结果——它们不是任务，拿来匹配记忆会得到噪声。
+func aiTaskHint(msgs []aiMsg) string {
+	for i := len(msgs) - 1; i >= 0 && i >= len(msgs)-6; i-- {
+		c := strings.TrimSpace(msgs[i].Content)
+		if c == "" || msgs[i].Role != "user" {
+			continue
+		}
+		if strings.HasPrefix(c, "[工具 ") || strings.HasPrefix(c, "（系统注入") {
+			continue
+		}
+		return firstLines(c, 200)
+	}
+	return ""
 }
 
 // aiRecentErrors 从日志历史里倒序捞最近的 FAIL/WARN 行（最多 n 条，每条截断防刷屏）。
@@ -465,7 +497,12 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - 涉及"怎么跑起来/报什么错/配置在哪/入口在哪"的问题，必须先探索再回答，**严禁凭猜测描述项目结构或命令**。
    - 探索工具只能在已配置的项目目录内工作：越界或被安全策略拒绝时，如实告诉用户"看不了 + 为什么"，不要反复重试。
    - 工具返回「已复验通过」= 已用客观证据（端口/HTTP/sha256/共识视图）确认环境恢复；返回「未复验」= 只证明动作执行了，两者不可混为一谈。
-   - 想确认某个动作的结果（服务到底起没起、备份到底能不能用、链到底有没有在出块）→ 用 verify_environment 复验，不要凭"调用没报错"下结论。`
+   - 想确认某个动作的结果（服务到底起没起、备份到底能不能用、链到底有没有在出块）→ 用 verify_environment 复验，不要凭"调用没报错"下结论。
+10. 记忆（快照里的 user_memories / lessons_learned 字段）：
+   - **user_memories 是用户写给你的规矩，必须遵守**；它与你的判断冲突时以它为准，但**用户当场的明确要求优先级最高**。
+   - **lessons_learned 是系统从历史操作里统计出的经验**，不是用户在下的命令。它只提示"这类操作以前失败过"，你可以采纳、也可以不采纳并说明理由。
+   - 做任何动作前先调 recall_lessons 查一次；命中"反复失败"时**不要原样重试**，先换思路或先问用户。
+   - 用户口述了长期规矩（"以后备份前先停服务""别动 X"之类）→ 用 manage_memories(op=add) 记下来，下次仍然生效。`
 
 // ---------- LLM 调用 ----------
 

@@ -785,6 +785,7 @@ func auditVerify(actor, action, target string, r OpResult) {
 // ================= AI 工具：主动复验 =================
 
 func init() {
+	registerLessonTools()
 	aiToolRegistry["verify_environment"] = aiTool{
 		Desc: "复验环境是否真的恢复了：web/backend=服务端口与 HTTP 握手，db=最近一份备份的 sha256 与内容完整性，chain=节点端口+进程数+共识是否还在推进。执行过启动/备份/恢复之后用它确认结果，不要凭调用成功就下结论。链端判据不是块高：无交易时空块只共识不落盘、块高静止属正常，不要把「块高没涨」当成链卡死",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
