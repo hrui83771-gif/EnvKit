@@ -53,15 +53,20 @@ var webaseFetch = func(p string) (string, error) { return webaseText(p) }
 // verifyService 复验前端/后端是否真的起来了：进程存活 + 端口监听 + HTTP 握手 + 存活观察。
 // wait<=0 时按服务类型取默认窗口；超时不算"失败"，而算"未复验"（可能仍在编译）。
 //
-// v2.2 M11：所有出口都把结论写回服务状态（svcRecordVerify），
+// v2.2 M11：所有出口都把结论写回服务注册表（svcRecordVerify），
 // 这样 Runtime 状态源才能区分"进程在跑"与"服务验过可用"——
 // 前者只是 running，后者才是 running + verified。
+// v2.2 M12：复验失败还会累加连续失败次数并给出退避建议（但**不自动重启**）。
 func verifyService(target string, wait time.Duration) OpResult {
 	r := verifyServiceInner(target, wait)
 	ok := r.Ok && r.Verified
 	kind := r.ErrKind
 	if ok {
 		kind = ""
+	} else if r.ErrKind == errKindCrash {
+		// 崩溃与"没起来"要分开记：前者是运行中挂掉（可能是内存/依赖/配置），
+		// 后者是环境问题。混在一起会让退避建议给错方向。
+		svcRecordCrash(target, errKindCrash, firstLines(r.Msg, 120), 0)
 	}
 	svcRecordVerify(target, firstLines(r.Msg, 160), kind, ok)
 	return r

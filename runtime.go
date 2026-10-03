@@ -62,12 +62,15 @@ type ServiceState struct {
 	Port        int          `json:"port,omitempty"`
 	Since       string       `json:"since,omitempty"`
 	UptimeSec   int64        `json:"uptime_sec,omitempty"`
-	Restarts    int          `json:"restarts,omitempty"`
-	LastErr     string       `json:"last_err,omitempty"`
+	Restarts    int          `json:"restarts,omitempty"` // 连续失败次数
+	Backoff     string       `json:"backoff,omitempty"`  // 建议退避与原因
+	LastErr     string       `json:"last_err,omitempty"` // 最近一次失败的结论
 	LastErrKind string       `json:"last_err_kind,omitempty"`
-	LastVerify  string       `json:"last_verify,omitempty"`
+	LastErrAt   string       `json:"last_err_at,omitempty"`
+	LastVerify  string       `json:"last_verify,omitempty"` // 最近一次复验结论
 	Verified    bool         `json:"verified"`
 	VerifyAt    string       `json:"verify_at,omitempty"`
+	Crashes     []CrashEvent `json:"crashes,omitempty"` // 崩溃历史（新在前）
 }
 
 // Issue 状态中心要显示的核心：**哪里有问题、该怎么办**。
@@ -227,33 +230,30 @@ func runtimeService(target string) ServiceState {
 	default:
 		st.Phase = phRunning
 	}
-	// 复验结论挂在服务状态上：running 但没验过 = degraded，
-	// 这正是"执行不等于成功"在状态上的体现。
+	// 复验结论与崩溃历史来自统一注册表（svcstate.go）。
 	//
-	// 判定用 svcVerifyRec.OK 布尔，**不做字符串匹配**——早先写成
+	// 判定用 svcVerifyRec.Verified 布尔，**不做字符串匹配**——早先写成
 	// strings.Contains(v, "已复验通过")，一旦 AI 换个说法就误判成"没验过"，
 	// 状态灯会莫名变黄。结论文本是给人看的，布尔才是给机器判断的。
-	if _, passed := svcLastVerifyErr(target); svcLastVerify(target) != "" || passed {
-		st.LastVerify = svcLastVerify(target)
-		st.VerifyAt = svcLastVerifyAt(target)
-		if kind, _ := svcLastVerifyErr(target); kind != "" {
-			st.LastErrKind = kind
-			st.LastErr = st.LastVerify
-		}
-		st.Verified = passed
+	rec := svcSnapshot(target)
+	if rec.Conclusion != "" || rec.ErrKind != "" {
+		st.LastVerify = rec.Conclusion
+		st.VerifyAt = rec.VerifyAt
+		st.Verified = rec.Verified
+	}
+	st.Restarts = rec.Restarts
+	st.Backoff = rec.Backoff
+	st.LastErr = rec.LastErr
+	st.LastErrAt = rec.LastErrAt
+	// 崩溃次数 > 0 且当前没在跑 → failed，而不是单纯的 stopped：
+	// "停着"和"崩了停着"对用户是完全不同的两件事。
+	if rec.Restarts > 0 && !si.Running && st.Phase == phStopped {
+		st.Phase = phFailed
 	}
 	if st.Phase == phRunning && !st.Verified {
 		st.Phase = phDegraded
 	}
 	return st
-}
-
-// svcPortOf 占位：端口漂移记录在 lifecycle.go 的 svcPortDrift。
-func svcPortOf(target string) (int, bool) {
-	svcPortDrift.Lock()
-	defer svcPortDrift.Unlock()
-	p, ok := svcPortDrift.m[target]
-	return p, ok
 }
 
 // ===== issues 计算 =====
@@ -313,12 +313,22 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 			add(rtIssWarn, "service", name+"进程在运行但未通过复验",
 				"点「复验」确认服务真的可用；未复验前不要当作已就绪")
 		case phFailed:
+			// 反复崩溃是最容易让人盲目重启的场景：把次数与建议一起给出来。
 			act := "查看「程序启动」日志最后几行"
-			if s.LastErr != "" {
-				add(rtIssError, "service", name+"启动失败："+firstLines(s.LastErr, 80), act)
-			} else {
-				add(rtIssError, "service", name+"启动失败", act)
+			switch {
+			case s.Restarts >= 3:
+				act = "已连续失败 " + itoa(s.Restarts) + " 次，别再盲目重启——" + s.Backoff
+			case s.LastErr != "":
+				act += "：" + firstLines(s.LastErr, 60)
 			}
+			what := name + "启动失败"
+			if s.Restarts > 1 {
+				what += "（连续 " + itoa(s.Restarts) + " 次）"
+			}
+			if s.LastErr != "" {
+				what += "：" + firstLines(s.LastErr, 80)
+			}
+			add(rtIssError, "service", what, act)
 		}
 	}
 
@@ -357,60 +367,7 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 	return out
 }
 
-// ===== 复验结论留痕 =====
-//
-// 服务状态要能回答"它跑着，但验过没有"——这正是"执行不等于成功"在状态上的体现。
-// 没有它，running 只能意味着"进程在"，不能意味着"服务可用"。
-
-var svcVerify = struct {
-	sync.Mutex
-	m map[string]svcVerifyRec
-}{m: map[string]svcVerifyRec{}}
-
-type svcVerifyRec struct {
-	Conclusion string
-	ErrKind    string
-	At         string
-	OK         bool
-}
-
-// svcRecordVerify 记录一次复验结论。
-func svcRecordVerify(target, conclusion, errKind string, ok bool) {
-	svcVerify.Lock()
-	defer svcVerify.Unlock()
-	svcVerify.m[target] = svcVerifyRec{
-		Conclusion: conclusion, ErrKind: errKind,
-		At: time.Now().Format("2006-01-02 15:04:05"), OK: ok,
-	}
-}
-
-// svcLastVerify 取最近一次复验结论。
-func svcLastVerify(target string) string {
-	svcVerify.Lock()
-	defer svcVerify.Unlock()
-	return svcVerify.m[target].Conclusion
-}
-
-func svcLastVerifyAt(target string) string {
-	svcVerify.Lock()
-	defer svcVerify.Unlock()
-	return svcVerify.m[target].At
-}
-
-func svcLastVerifyErr(target string) (string, bool) {
-	svcVerify.Lock()
-	defer svcVerify.Unlock()
-	r := svcVerify.m[target]
-	return r.ErrKind, r.OK
-}
-
-// svcForgetVerify 服务停止时清掉复验记录：下次启动是全新的一轮，
-// 留着旧的「已复验通过」会让人以为服务还验过。
-func svcForgetVerify(target string) {
-	svcVerify.Lock()
-	delete(svcVerify.m, target)
-	svcVerify.Unlock()
-}
+// 复验结论与崩溃记录统一放在 svcstate.go 的服务注册表（svcRecordVerify / svcLastVerify 等）。
 
 // ===== 采集与接口 =====
 
@@ -495,6 +452,26 @@ func handleRuntimeState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "state": currentRuntimeState()})
+}
+
+// itoa 极简整数转字符串（状态中心文案里要用，避免为此引入 strconv 的完整依赖）。
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	if neg {
+		return "-" + string(b)
+	}
+	return string(b)
 }
 
 // runtimeIssueSummary 给 AI 看的简短状态摘要（注入快照用）。

@@ -36,7 +36,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -60,26 +59,7 @@ var (
 const errKindCrash = "crash_after_start"
 
 // svcPortDrift 记录每个服务最近一次验证通过的端口，用于发现漂移。
-var svcPortDrift = struct {
-	sync.Mutex
-	m map[string]int
-}{m: map[string]int{}}
-
-// svcRememberPort 记住本次验证通过的端口，返回上一次的值（无则 0）。
-func svcRememberPort(target string, port int) int {
-	svcPortDrift.Lock()
-	defer svcPortDrift.Unlock()
-	prev := svcPortDrift.m[target]
-	svcPortDrift.m[target] = port
-	return prev
-}
-
-// svcForgetPort 服务停止/重启时清掉记录，避免拿旧端口去比。
-func svcForgetPort(target string) {
-	svcPortDrift.Lock()
-	delete(svcPortDrift.m, target)
-	svcPortDrift.Unlock()
-}
+// 端口漂移与崩溃记录见 svcstate.go 的统一服务注册表。
 
 // 可替换点：单测注入假实现，构造"起来又崩"这种真实环境里难复现的场景。
 // 生产代码走 svcAlive / portOwner 本身，这里只是转发。
