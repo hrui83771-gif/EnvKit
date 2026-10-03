@@ -939,6 +939,7 @@ func startGuardLoop() {
 			if st != reachOK {
 				guardDownCount++
 				first = true // 地址失效期间不做"首次恢复"
+				guardMark("skip_unreachable", reachHint(c, st), false)
 				warn(scChain, "守护", "链端不可达（%s），本轮不执行自动重启：%s", st, reachHint(c, st))
 				// 持续不可达时才升级提示一次，避免每次守护都刷屏
 				if guardDownCount == guardDownNotifyAt {
@@ -951,6 +952,7 @@ func startGuardLoop() {
 				continue
 			}
 			guardDownCount = 0
+			guardSetUnreachable(0)
 
 			nodeUp, nodeErr := sshLocalPortOpen(c.ChainPort)
 			if nodeErr != nil {
@@ -973,17 +975,20 @@ func startGuardLoop() {
 				vr := verifyChain(verifyChainGrowth)
 				auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
 				if vr.Ok && vr.Verified {
+					guardMark("recover", vr.Msg, true)
 					ok(scChain, "守护", "链端已自动恢复并通过复验：%s", vr.String())
 					if c.ChainNotify {
 						notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
 					}
 				} else if vr.Ok {
+					guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
 					warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
 					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
 					if c.ChainNotify {
 						notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
 					}
 				} else {
+					guardMark("recover", "自动恢复失败："+vr.Msg, false)
 					fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
 					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
 					if c.ChainNotify {
@@ -997,14 +1002,21 @@ func startGuardLoop() {
 			if wok, _ := tcpCheck(c.ChainHost, c.WebasePort); !wok {
 				warn(scChain, "守护", "WeBASE-Front 未响应，自动重启 WeBASE")
 				recordRecover()
+				guardMark("recover", "WeBASE-Front 未响应，已自动重启", true)
 				auditNow(actGuard, "webase_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.WebasePort), resStart, "守护检测触发")
 				if c.ChainNotify {
 					alertDispatch("WeBASE-Front 未响应", "后台守护正在自动重启 WeBASE...")
 				}
 				runChainStart("webase")
-			} else if first {
-				info(scChain, "守护", "后台守护已开启（每 %ds 检测一次），当前链端正常", interval)
-				first = false
+			} else {
+				// 正常轮次也要记：否则用户在界面上看到"从未检测过"，
+				// 会以为守护没在跑——而它其实每轮都在跑。
+				// 这与"没消息不等于好消息"是同一个原则。
+				guardMark("ok", "链端与 WeBASE 均正常", true)
+				if first {
+					info(scChain, "守护", "后台守护已开启（每 %ds 检测一次），当前链端正常", interval)
+					first = false
+				}
 			}
 		}
 	}()

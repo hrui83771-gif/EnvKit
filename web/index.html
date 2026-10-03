@@ -330,6 +330,15 @@
   .ai-tool pre{margin:8px 0 0;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all;background:#0f1720;color:#d7e2ee;padding:8px;border-radius:6px}
   .ai-stop{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:3px 10px;cursor:pointer}
   .ai-time{font-size:11px;color:var(--muted);margin-right:8px;letter-spacing:.5px;user-select:none}
+  /* v2.3 N5 计划面板：进行中默认展开（用户要看到它在干什么），结束自动折叠 */
+  .ai-plan{align-self:stretch;font-size:12px;color:var(--muted);background:var(--off);border-radius:8px;padding:6px 10px;margin:2px 0}
+  .ai-plan summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:5px}
+  .ai-plan summary::-webkit-details-marker{display:none}
+  .ai-plan summary::before{content:'\25B8';font-size:9px;transition:transform .15s}
+  .ai-plan[open] summary::before{transform:rotate(90deg)}
+  .ai-plan-list{margin-top:6px;max-height:200px;overflow:auto;border-left:2px solid var(--line);padding-left:10px}
+  .ai-plan-row{display:flex;gap:7px;padding:2px 0;line-height:1.5;word-break:break-all}
+  .ai-plan-n{color:var(--muted);opacity:.6;min-width:14px;text-align:right;flex:0 0 auto;font-variant-numeric:tabular-nums}
   /* 非阻塞 toast 通知（替代散落的 alert） */
   #toasts{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--text);box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:min(560px,90vw);animation:toast-in .18s ease;word-break:break-all}
@@ -622,6 +631,18 @@
             <label class="chkrow"><input type="checkbox" id="ch_guard" data-cfg /> 后台守护：定时检测并自动拉起（挂机用）</label>
             <div class="frow"><label>守护间隔</label><input id="ch_guard_secs" data-cfg placeholder="60" style="max-width:90px" /><span class="muted">秒（最小 30）</span></div>
             <label class="chkrow"><input type="checkbox" id="ch_notify" data-cfg /> 宕机 / 恢复时弹 Windows 桌面通知</label>
+            <!-- v2.3 N4：守护运行状态。开关只说明"你要求了它"，这里说明"它实际在做什么"。
+                 守护是无人值守的，用户最需要知道的就是它到底有没有在管。 -->
+            <div class="card" id="guard-box" style="margin-top:10px;padding:10px 12px">
+              <div class="head" style="display:flex;align-items:center;gap:8px">
+                <b style="font-size:12px">守护运行状态</b>
+                <span id="guard-badge" class="mini" style="padding:2px 8px;border-radius:8px;background:var(--off);color:var(--muted)">读取中</span>
+                <span style="flex:1"></span>
+                <button class="mini" id="guard-refresh">刷新</button>
+              </div>
+              <div class="muted" id="guard-note" style="margin-top:7px;line-height:1.7;font-size:12px"></div>
+              <div id="guard-recent" style="margin-top:8px"></div>
+            </div>
           </div>
         </details>
       </div>
@@ -2036,6 +2057,7 @@ async function loadConfig(){
   $('#cp-5002').textContent = C.webase_port||5002;
   syncStartDirs();
   psRenderChips(); wlRender();
+  loadGuardStatus();
   // 启动页的脚本选择器：留空 = 由服务端按 package.json 推断（v2.1）。
   // 旧版本在这里硬填 'serve'，导致"项目没有 serve 脚本"时必然失败，
   // 而且这个值只存在 localStorage 里，AI 读不到。
@@ -2383,6 +2405,52 @@ document.querySelectorAll('[data-remote]').forEach(b=>b.addEventListener('click'
 $('#btn-pick-sql').onclick = pickSQL;
 
 /* 自动探测后端目录下的 dbs\*.sql */
+// v2.3 N4：拉取链端守护的运行状态。
+// 开关只说明"你要求了它"，这里说明"它实际在做什么"——两者可能不一致
+// （比如刚勾上还没到下一轮，或配置没保存）。
+async function loadGuardStatus(){
+  const box = $('#guard-box');
+  if(!box) return;
+  const badge = $('#guard-badge'), note = $('#guard-note'), recent = $('#guard-recent');
+  let d = null;
+  try{ d = await (await fetch('/api/guard/status')).json(); }catch(e){}
+  const s = (d && d.status) || null;
+  if(!s){ badge.textContent = t('读取失败'); note.textContent = ''; recent.innerHTML=''; return; }
+
+  // 徽标分三色：进行中=绿、未开启=灰、有问题=橙。
+  // **连续不可达单独一档**：它需要用户去处理（虚拟机没开/IP 变了），
+  // 不是"守护坏了"，也不能算正常。
+  let cls = 'var(--muted)', label = t('未开启');
+  if(!s.host){ cls = 'var(--muted)'; label = t('未配置'); }
+  else if(s.last_unreachable > 0){ cls = 'var(--warn)'; label = t('连不上'); }
+  else if(s.enabled && s.last_check){ cls = 'var(--ok)'; label = t('运行中'); }
+  else if(s.enabled){ cls = 'var(--muted)'; label = t('已开启'); }
+  badge.textContent = label;
+  badge.style.color = cls;
+  badge.style.background = 'var(--card)';
+
+  note.textContent = s.note || '';
+  // 最近动作：这才是"它到底做了什么"的答案
+  const acts = (d && d.recent) || [];
+  if(acts.length){
+    let h = '<div class="muted" style="font-size:11px;margin-bottom:4px">' + esc(t('最近动作')) + '</div>';
+    for(const a of acts){
+      const okk = a.result === 'ok' || a.result === 'started';
+      const mark = a.result === 'fail' ? '<span style="color:var(--err)">✕</span>' : (okk ? '<span style="color:var(--ok)">✓</span>' : '·');
+      const when = String(a.ts||'').slice(5,16);
+      h += '<div class="ai-plan-row" style="font-size:12px;padding:1px 0">' +
+           '<span class="ai-plan-n">' + esc(when) + '</span>' +
+           '<span>' + mark + ' ' + esc(a.action||'') +
+           (a.detail ? ' <span class="muted">' + esc(String(a.detail).slice(0,80)) + '</span>' : '') +
+           (a.verify ? ' <span class="muted">' + esc(String(a.verify).slice(0,80)) + '</span>' : '') +
+           '</span></div>';
+    }
+    recent.innerHTML = h;
+  } else {
+    recent.innerHTML = '<div class="muted" style="font-size:11px">' + esc(t('暂无守护动作记录')) + '</div>';
+  }
+}
+
 async function detectSQL(){
   if(!loaded) return;
   const bd = $('#be_dir').value.trim();
@@ -3210,6 +3278,9 @@ async function pollProg(){ try{ renderProg(await (await fetch('/api/program/stat
 (async function init(){
   await loadConfig();
   auditBind();
+  // v2.3 N4：守护状态的手动刷新
+  const gb = $('#guard-refresh');
+  if(gb) gb.onclick = ()=> loadGuardStatus();
   memBind();
   fetch('/api/check',{method:'POST'});
   pollHealth(); pollState(); pollProg();
@@ -4087,6 +4158,40 @@ async function aiConsume(path, body){
   for(let i = ms.length - 1; i >= 0; i--){ if(ms[i] && ms[i].role === 'user'){ fb.last = String(ms[i].content || '').slice(0, 2000); break; } }
   let cur = null, curText = '', curTs = '';
   let think = null, rsnText = '', rsnEl = null, renderQueued = false;
+  // v2.3 N5：计划面板。同一轮里所有步骤归到一个可折叠块内，
+  // 结束后自动收起——用户中途能看，收完不占屏。
+  let planEl = null, planList = null, planN = 0;
+  const planBox = (maxTurns, reason)=>{
+    if(planEl){ planEl.remove(); planEl = null; planList = null; }
+    planN = 0;
+    planEl = document.createElement('details');
+    planEl.className = 'ai-plan';
+    const sm = document.createElement('summary');
+    sm.textContent = t('执行计划（{0}）', reason ? reason + ' · ' + t('上限 {0} 轮', maxTurns) : t('上限 {0} 轮', maxTurns));
+    planList = document.createElement('div');
+    planList.className = 'ai-plan-list';
+    planEl.appendChild(sm);
+    planEl.appendChild(planList);
+    $ai('ai-msgs').appendChild(planEl);
+  };
+  const planStep = (seq, text)=>{
+    if(!planList){ planBox(0, ''); }
+    const row = document.createElement('div');
+    row.className = 'ai-plan-row';
+    // 服务端数据必须 esc()：工具名/目标里可能有用户可控内容
+    row.innerHTML = '<span class="ai-plan-n">' + esc(String(seq|| ++planN)) + '</span><span>' + esc(text||'') + '</span>';
+    planList.appendChild(row);
+    planN = Number(seq) || planN;
+    $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+  };
+  const planEnd = (text)=>{
+    if(!planEl) return;
+    // 收完自动折叠：步骤已经执行完，继续展开只是噪音
+    planEl.open = false;
+    const sm = planEl.querySelector('summary');
+    if(sm && text) sm.title = text;
+    planEl = null; planList = null;
+  };
   try{
   think = document.createElement('div'); think.className = 'ai-think';
   think.innerHTML = '<span>' + t('思考中') + '</span><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
@@ -4134,6 +4239,17 @@ async function aiConsume(path, body){
           dropThink();
           petAIState('busy');
           aiAdd('sys', '\u2192 ' + aiToolName(ev.tool));
+        } else if(ev.type === 'plan_start'){
+          // v2.3 N5：开跑前告诉用户这一轮的上限与理由。
+          // 以前是静默开始、跑到 8 轮静默停下，用户两头都不知道。
+          dropThink();
+          planBox(ev.max_turns, ev.reason);
+        } else if(ev.type === 'plan_step'){
+          // 每步都显示"正在做什么"——用户看着 AI 查了什么，
+          // 比只看结论更可信（结论要能追到查过的东西）。
+          planStep(ev.seq, ev.text);
+        } else if(ev.type === 'plan_end'){
+          planEnd(ev.text);
         } else if(ev.type === 'tool_result'){
           dropThink();
           const d = document.createElement('details'); d.className = 'ai-tool';

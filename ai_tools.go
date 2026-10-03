@@ -406,6 +406,12 @@ func aiHealthSnapshotFor(task string) string {
 		"chain":       map[string]any{"checked": ci.Checked, "at": ci.At, "node_alive": ci.Port20200, "webase": ci.Port5002, "block": ci.BlockNumber, "tx": ci.TxCount, "guard": cfg.Chain.ChainGuard},
 		"install_dir": cfg.InstallDir,
 	}
+	// v2.3 N4：守护状态。给 AI 的是一段**可直接引用的说明**而不是布尔值——
+	// 模型看到"EnvKit 能自动恢复链端"才会在用户说"链挂了"时给出正确回答，
+	// 而不是让用户自己去重启。只给 bool 的话模型无从判断该不该提这件事。
+	if g := guardBrief(); g != "" {
+		snap["chain_guard"] = g
+	}
 	// 感知层补全：把最近的 FAIL/WARN 日志直接带给模型，让"为什么起不来"这类问题
 	// 第一轮就能对着具体错误作答，而不是再花一轮去调 get_logs。
 	// 快照整体拼在消息尾部（见 aiRunLoop），变化只会打断尾部前缀，不影响缓存命中。
@@ -523,7 +529,12 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - 子进程"零输出秒退"通常是杀毒软件拦截，系统已有自动重试与 cmd /c 兜底；根治建议把 EnvKit 目录加入 Defender 白名单（apply_whitelist）。
    - MySQL 组件下载地址为动态解析（官方 CDN 只保留每个系列的最新版）。
    - 数据库连不上优先排查：MySQL 服务是否运行 → root 密码 → 3306 端口。
-7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist。
+7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist；**查业务数据→db_query / db_list**（只读，无需确认）。
+7b. 链端（v2.3）：**EnvKit 具备链端自动恢复能力**，你不必让用户手动去重启节点。快照的 chain_guard 字段是守护状态的可读说明（get_chain_guard 拿完整版）：
+   - 守护已开启且 auto_recover 已开 → 链端宕机会被**后台自动拉起并复验**。用户说"链挂了"时先查这个字段，如实告知"守护会在下一轮（约 N 秒内）自动拉起"，**不要让用户手动重启**。
+   - 守护未开启 → 如实说"链端守护未开启，EnvKit 不会自动恢复"，并告诉用户可在「程序配置 → 链端」勾选。**不要谎称已在处理**。
+   - 连续不可达 > 0 → 这是**地址失效**（虚拟机没开 / IP 变了），此时自动恢复**不会执行**（恢复命令本身要靠 SSH 送达，连不上就无从谈起）。指引用户检查虚拟机与 IP，不要重复建议重启。
+   - 你自己也可以发起链端检测与恢复，但那会真在链机上执行命令，属于要用户确认的操作——不确定时先只读查询状态。
 8. 启动方式（v2.1）：**不要自己编造启动命令**。快照的 launch 字段已给出 EnvKit 的推断结果（前端 npm 脚本、后端 go run 入口）及其依据；多个候选时从 launch.web_all 里选一个填进 web_script。
    - 快照里的 launch 是**推断**，不是用户指令；推断可能出错。
    - **执行 start_service 之后，只要不是 stop_service，就必须用 verify_environment 复验**（web/backend 都要），否则不允许向用户报告"已启动"。工具返回「已复验通过」才算完成；「未复验」只能说"已执行、还没确认成功"。

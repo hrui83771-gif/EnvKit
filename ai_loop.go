@@ -822,7 +822,16 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			msgs = append(msgs, aiToolResultAsUser(tool, firstLines(resText, 3000)))
 		}
 	}
-	for turn := 0; turn < 8; turn++ {
+	// v2.3 N5：回合上限按任务性质分级，不再一刀切 8。
+	// 探索类问题（要读项目才能答）需要更宽的预算——每轮都是有用信息；
+	// 而非探索类给得紧，因为多轮往往意味着模型在打转。
+	// 原固定 8 的问题是：问"这个项目怎么跑起来"会被截断，而模型
+	// 静默停下，用户既不知道到此为止也不知道为什么。
+	budget := budgetFor(aiTaskHint(msgs))
+	plan := &planTrack{}
+	sseWrite(w, fl, map[string]any{"type": "plan_start",
+		"max_turns": budget.Max, "reason": budget.Reason})
+	for turn := 0; turn < budget.Max; turn++ {
 		// 客户端（页面）已关闭/刷新：立即停止，不再向上游要 token
 		if clientGone(ctx, w) {
 			warn(scSys, "AI", "客户端已断开，停止本轮对话")
@@ -1140,6 +1149,12 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				warn(scSys, "AI", "菜单式回复无法纠正，改用确定性提示")
 				sseWrite(w, fl, map[string]any{"type": "delta", "text": "没理解你的需求。可以直接说：「启动服务」「备份数据库」「查看日志」「检测数据库连接」。"})
 			}
+			// v2.3 N5：正常收尾也给一份"这次怎么做的"。
+			// 用户看着 AI 答完 knowing 它查了什么，比只看到结论更可信——
+			// 这也是"可核查"的体现：结论必须能追到查过的具体东西。
+			if s := planSummary(plan, "已得出结论"); s != "" {
+				sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
+			}
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -1221,6 +1236,14 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				return
 			default:
 				t0 := time.Now()
+				// v2.3 N5：执行前先把"正在做什么"告诉用户。
+				// 以前用户只能在全部跑完后才知道它做了什么，
+				// 中间十几秒完全不知道是在工作还是在卡住。
+				tgt := policyTargetOf(a.Name, args)
+				plan.add(a.Name, tgt, planLine(a.Name, tgt))
+				sseWrite(w, fl, map[string]any{"type": "plan_step",
+					"seq": len(plan.Steps), "tool": a.Name,
+					"target": tgt, "text": planLine(a.Name, tgt)})
 				res, exErr := def.Execute(args)
 				toolDur := time.Since(t0).Milliseconds()
 				toolMsg.Content = res
@@ -1246,6 +1269,17 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		msgs = append(msgs, toolMsgs...)
 		// 继续下一轮（模型消化工具结果）
 	}
-	sseWrite(w, fl, map[string]any{"type": "error", "text": "已达到单次任务的工具调用轮数上限（8），请拆分请求或重新提问"})
+	// 预算用尽：**必须说清楚**。
+	// 这与 v2.0 修掉的"谎报成功"同源——没把"到此为止"说出口，
+	// 用户看到的是一段没答完的话，既不知道停在哪也不知道为什么。
+	notice := budgetNotice(budget, budget.Max)
+	warn(scSys, "AI", "工具调用预算用尽（%d 轮，%s），已 %d 步",
+		budget.Max, budget.Reason, len(plan.Steps))
+	auditNow(actAI, "ai_budget_exhausted", "", budget.Reason, resFail,
+		fmt.Sprintf("max=%d steps=%d", budget.Max, len(plan.Steps)))
+	if s := planSummary(plan, notice); s != "" {
+		sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
+	}
+	sseWrite(w, fl, map[string]any{"type": "delta", "text": "\n" + notice + "\n"})
 	sseDoneUsage(w, fl, &usage)
 }

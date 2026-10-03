@@ -105,6 +105,15 @@ var policyRules = map[string]policyRule{
 	"read_file":          {PolicyAuto, false, "读文件，沙箱内只读"},
 	"verify_environment": {PolicyAuto, false, "复验只读取客观状态"},
 	"recall_lessons":     {PolicyAuto, false, "读取经验，不改变任何状态"},
+	// v2.3 N6：只读查询。判据是"能否修改数据"——答案是否定的：
+	// dbReadOnlySQL 限定首词、强制 LIMIT、readOnlyExec 先执行
+	// SET SESSION TRANSACTION READ ONLY、库名经 quoteIdent 转义。
+	// 四道防线都在 MySQL 侧生效，不依赖"调用方是否老实"，
+	// 所以给确认卡没有意义——只会训练用户闭眼点确认。
+	"db_query": {PolicyAuto, false, "只读查询：限定 SELECT/SHOW/DESC/EXPLAIN/WITH + 强制 LIMIT + 会话级 READ ONLY"},
+	"db_list":  {PolicyAuto, false, "列出库与表，只读 information_schema"},
+	// v2.3 N4：查守护状态是纯读取
+	"get_chain_guard": {PolicyAuto, false, "读取链端守护状态，不触发任何恢复动作"},
 
 	// ---- 需确认：可逆或影响可控 ----
 	"start_service":     {PolicyConfirm, false, "启动服务会占用端口并可能改动运行环境"},

@@ -146,6 +146,7 @@ func main() {
 	http.HandleFunc("/api/lessons", handleLessons)
 	http.HandleFunc("/api/launch", handleLaunch)
 	http.HandleFunc("/api/runtime/state", handleRuntimeState)
+	http.HandleFunc("/api/guard/status", handleGuardStatus)
 	http.HandleFunc("/api/memory", handleMemory)
 	http.HandleFunc("/api/memory/import", handleMemoryImport)
 	http.HandleFunc("/api/lesson/toggle", handleLessonToggle)
