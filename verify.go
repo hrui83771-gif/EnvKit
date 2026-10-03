@@ -483,6 +483,24 @@ func verifyChain(growth time.Duration) OpResult {
 	}
 	ev := []string{"host=" + host}
 
+	// 0) 可达性先判定（v2.0 P3）：「连不上主机」与「服务没监听」必须分开报。
+	// 虚拟机场景下 IP 变化 / NAT 下填了内网 IP / 虚拟机没开机，全都会落到不可达，
+	// 这时报「链端未恢复」会把用户引向错误的排查方向。
+	//
+	// 但只在配置了 SSH 时才门禁：完全没配 SSH 的用户走的是"纯 WeBASE 复验"路径，
+	// 那条路径没有 SSH 可探测，WeBASE 才是唯一判据，不该被这里拦下。
+	if strings.TrimSpace(c.SSHHost) != "" {
+		reach := chainReach(c)
+		ev = append(ev, "reach="+reach.String())
+		if reach != reachOK {
+			return opFail(action, c.SSHHost, errKindVerifyFail,
+				"链端主机不可达，无法确认链是否恢复（这不是链故障，是连接问题）",
+				nonEmpty(append(ev, reachHint(c, reach)))...)
+		}
+	} else {
+		ev = append(ev, "reach=skipped（未配置 SSH，按 WeBASE 判据复验）")
+	}
+
 	// 1) 节点端口：优先经 SSH 到远程本机探（节点可能已加固为仅本地监听）
 	portOK := false
 	var probeErr string
