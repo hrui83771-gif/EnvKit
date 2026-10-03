@@ -44,6 +44,17 @@ type Lesson struct {
 	Hits     int      `json:"hits"`
 	LastHit  string   `json:"last_hit"`
 	Enabled  bool     `json:"enabled"` // 用户可否决；否决状态外部持久化（见 lessonOffFile）
+
+	// ===== v2.3 N2：适用范围与置信度 =====
+	// 这两个字段是**视图**，每次提取时按当前上下文重算，不落盘。
+	// 落盘的是 outcomeFile 里的成败计数（见 scope.go）。
+	Scope      Scope   `json:"scope"`      // 适用项目/环境/动作
+	Confidence float64 `json:"confidence"` // 0~1，由成败计数算出
+	ConfLabel  string  `json:"conf_label"` // 高/中/低，给界面用
+	Succ       int     `json:"succ,omitempty"`
+	Fail       int     `json:"fail,omitempty"`
+	Stale      bool    `json:"stale,omitempty"`     // 已因环境变化失效
+	StaleWhy   string  `json:"stale_why,omitempty"` // 为什么失效（界面要能解释）
 }
 
 // 经验类型
@@ -184,12 +195,79 @@ func lessonsFor() []Lesson {
 	off := loadLessonOff()
 	for i := range ls {
 		ls[i].Enabled = !off[ls[i].ID]
+		lessonDecorate(&ls[i])
 	}
 
 	lessonMu.Lock()
 	lessonCacheV = &lessonCache{sig: sig, at: time.Now(), lessons: ls}
 	lessonMu.Unlock()
 	return ls
+}
+
+// lessonDecorate 补上作用域、置信度与失效状态（v2.3 N2）。
+//
+// **Stale 的经验不删除，只标记**。删掉的话用户会以为记忆功能坏了，
+// 而且"为什么这条不见了"无法解释。标记 + 给理由才能让人自己判断。
+func lessonDecorate(l *Lesson) {
+	action, target := splitTrigger(l.Trigger)
+	l.Scope = Scope{
+		Kind:    "project",
+		Project: projectFingerprint(),
+		Env:     envFingerprint(),
+		Action:  action,
+		Target:  target,
+	}
+	cfgMu.Lock()
+	fe, be := cfg.Projects.FrontendDir, cfg.Projects.BackendDir
+	cfgMu.Unlock()
+	l.Scope.Frontend = filepath.Base(filepath.Clean(fe))
+	l.Scope.Backend = filepath.Base(filepath.Clean(be))
+
+	st := outcomeOf(l.ID)
+	l.Succ, l.Fail = st.Succ, st.Fail
+	l.Confidence = Confidence(st.Succ, st.Fail)
+	l.ConfLabel = confidenceLabel(l.Confidence)
+
+	ok, why := scopeApplies(l.Scope, action)
+	l.Stale = !ok
+	l.StaleWhy = why
+}
+
+// splitTrigger 从 Trigger 串（"action @ target"）拆出动作。
+func splitTrigger(t string) (action, target string) {
+	i := strings.Index(t, " @ ")
+	if i < 0 {
+		return strings.TrimSpace(t), ""
+	}
+	return strings.TrimSpace(t[:i]), strings.TrimSpace(t[i+3:])
+}
+
+// lessonIDFor 找出这次操作对应哪条经验（用于记成败）。
+//
+// 刻意**只匹配 repeat_fail / verify_fail 两类**：它们是"某做法行不行"
+// 的结论，成功或失败都会改变置信度。user_fix 的结论是"用户那样做成了"，
+// 统计它自己的成败没有意义。
+//
+// 找不到就返回空——不是每条审计都属于某条经验，不匹配就不记，
+// 硬凑一个会让置信度被无关操作污染。
+func lessonIDFor(action, target string) string {
+	if action == "" {
+		return ""
+	}
+	ls := lessonsFor()
+	for i := range ls {
+		if ls[i].Kind != lsRepeatFail && ls[i].Kind != lsVerifyFail {
+			continue
+		}
+		a, t := splitTrigger(ls[i].Trigger)
+		if a != action {
+			continue
+		}
+		if t == "" || t == target || displayTarget(t) == displayTarget(target) {
+			return ls[i].ID
+		}
+	}
+	return ""
 }
 
 // lessonInvalidate 清缓存。写操作（用户开关、改记忆）后要调，否则界面上改了不生效。
@@ -511,18 +589,67 @@ func lessonsForTask(task string, n int) []Lesson {
 }
 
 // lessonBrief 注入提示词用的极简形态：每条只给标题（≤60 字），证据不进上下文。
+// lessonBrief 生成进提示词的简要经验。
+//
+// v2.3 N2 起按置信度与失效状态分流：
+//   - 用户否决的直接不进（过滤在这里做，不在调用方——它是最靠近"生成
+//     提示词"的一层，漏在这里就等于漏在最后一米）
+//   - Stale 的**完全不进**（环境都变了还提，等于给错建议）
+//   - 置信度低的标注"仅供参考"，让模型自己判断
+//   - 高置信度的排在前面（提示词前部权重更高）
+//
+// 顺序刻意做成"高置信度优先"而非"最新优先"：一条被反复验证的经验
+// 比一条刚出现的经验更可信。
 func lessonBrief(ls []Lesson) string {
 	if len(ls) == 0 {
 		return ""
 	}
-	var sb strings.Builder
+	off := loadLessonOff()
+	type row struct {
+		l   Lesson
+		cap bool // 是否达到主动提示门槛
+		cf  float64
+	}
+	var rows []row
 	for _, l := range ls {
-		t := l.Title
+		// 用否决表而不是 Enabled 字段：Enabled 是 lessonsFor 每次重算时赋值的
+		// 视图字段，直接构造的 Lesson 零值 false 会被误当成"已否决"。
+		if off[l.ID] {
+			continue
+		}
+		if l.Stale {
+			continue
+		}
+		cap, _ := confidenceGate(l.Confidence)
+		rows = append(rows, row{l: l, cap: cap, cf: l.Confidence})
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].cap != rows[j].cap {
+			return rows[i].cap
+		}
+		return rows[i].cf > rows[j].cf
+	})
+
+	var sb strings.Builder
+	for _, r := range rows {
+		t := r.l.Title
 		if len([]rune(t)) > 60 {
 			t = string([]rune(t)[:60]) + "…"
 		}
 		sb.WriteString("- ")
 		sb.WriteString(t)
+		// 适用范围要标出来：模型需要知道这条只在这个项目/这个动作上成立
+		if s := scopeSummary(r.l.Scope); s != "" && s != "本项目" {
+			sb.WriteString("（" + s + "）")
+		}
+		if !r.cap {
+			sb.WriteString("〔置信度" + r.l.ConfLabel + "，仅供参考〕")
+		} else if r.l.ConfLabel != "" && r.l.ConfLabel != "高" {
+			sb.WriteString("〔置信度" + r.l.ConfLabel + "〕")
+		}
 		sb.WriteString("\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")
