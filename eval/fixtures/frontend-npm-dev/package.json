@@ -1,0 +1,13 @@
+{
+  "name": "smoke-frontend-dev",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "lint": "eslint src --ext .js,.vue"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  }
+}

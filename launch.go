@@ -181,6 +181,12 @@ func launchScriptExplicitlyRisky(name string) bool {
 // 注意：parsePackageJSON 返回的是给人和 AI 看的可读形态 "名字: 命令"，
 // 这里必须剥掉命令部分。分隔符用 ": "（冒号+空格）而不是 ":"，
 // 因为脚本名本身可以含冒号（dev:serve / start:dev 这类很常见）。
+//
+// TODO(v2.2)：区分"文件不存在"与"文件存在但解析失败"（见 docs/eval/baseline-v2.1.md §2.1）。
+// 现状两者都返回空，调用方无法分辨——冒烟集 S05 首次运行就是被这个坑到的：
+// fixture 的 JSON 因未转义引号解析失败，推断层看不到任何脚本，
+// 于是报"无脚本"而不是"全是危险脚本"，结论错误但看起来合理。
+// 这与 v2.0 修掉的"AI 谎报成功"同源：失败被静默吞掉，上层给出看似合理的错误结论。
 func readPackageScripts(dir string) []string {
 	if strings.TrimSpace(dir) == "" {
 		return nil
