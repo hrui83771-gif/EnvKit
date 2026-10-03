@@ -330,6 +330,15 @@
   .ai-tool pre{margin:8px 0 0;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all;background:#0f1720;color:#d7e2ee;padding:8px;border-radius:6px}
   .ai-stop{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:3px 10px;cursor:pointer}
   .ai-time{font-size:11px;color:var(--muted);margin-right:8px;letter-spacing:.5px;user-select:none}
+  /* v2.3 N5 计划面板：进行中默认展开（用户要看到它在干什么），结束自动折叠 */
+  .ai-plan{align-self:stretch;font-size:12px;color:var(--muted);background:var(--off);border-radius:8px;padding:6px 10px;margin:2px 0}
+  .ai-plan summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:5px}
+  .ai-plan summary::-webkit-details-marker{display:none}
+  .ai-plan summary::before{content:'\25B8';font-size:9px;transition:transform .15s}
+  .ai-plan[open] summary::before{transform:rotate(90deg)}
+  .ai-plan-list{margin-top:6px;max-height:200px;overflow:auto;border-left:2px solid var(--line);padding-left:10px}
+  .ai-plan-row{display:flex;gap:7px;padding:2px 0;line-height:1.5;word-break:break-all}
+  .ai-plan-n{color:var(--muted);opacity:.6;min-width:14px;text-align:right;flex:0 0 auto;font-variant-numeric:tabular-nums}
   /* 非阻塞 toast 通知（替代散落的 alert） */
   #toasts{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--text);box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:min(560px,90vw);animation:toast-in .18s ease;word-break:break-all}
@@ -622,6 +631,18 @@
             <label class="chkrow"><input type="checkbox" id="ch_guard" data-cfg /> 后台守护：定时检测并自动拉起（挂机用）</label>
             <div class="frow"><label>守护间隔</label><input id="ch_guard_secs" data-cfg placeholder="60" style="max-width:90px" /><span class="muted">秒（最小 30）</span></div>
             <label class="chkrow"><input type="checkbox" id="ch_notify" data-cfg /> 宕机 / 恢复时弹 Windows 桌面通知</label>
+            <!-- v2.3 N4：守护运行状态。开关只说明"你要求了它"，这里说明"它实际在做什么"。
+                 守护是无人值守的，用户最需要知道的就是它到底有没有在管。 -->
+            <div class="card" id="guard-box" style="margin-top:10px;padding:10px 12px">
+              <div class="head" style="display:flex;align-items:center;gap:8px">
+                <b style="font-size:12px">守护运行状态</b>
+                <span id="guard-badge" class="mini" style="padding:2px 8px;border-radius:8px;background:var(--off);color:var(--muted)">读取中</span>
+                <span style="flex:1"></span>
+                <button class="mini" id="guard-refresh">刷新</button>
+              </div>
+              <div class="muted" id="guard-note" style="margin-top:7px;line-height:1.7;font-size:12px"></div>
+              <div id="guard-recent" style="margin-top:8px"></div>
+            </div>
           </div>
         </details>
       </div>
@@ -816,6 +837,7 @@
           <input id="mem-text" placeholder="写一条长期规矩，例如：备份前先停掉后端服务" style="flex:1;min-width:200px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
           <input id="mem-tags" placeholder="标签（可选）" style="width:110px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
           <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="mem-always">每轮都注入</label>
+          <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap" title="默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。"><input type="checkbox" id="mem-global">全局适用</label>
           <button class="mini" id="mem-add">添加</button>
         </div>
         <div class="row" style="margin:0 0 12px;gap:6px;flex-wrap:wrap">
@@ -826,20 +848,24 @@
         </div>
 
         <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:260px;min-height:60px;margin-bottom:14px">
-          <table class="vtab" id="mem-grid" style="min-width:520px">
-            <thead><tr><th style="width:34px">常</th><th style="min-width:180px">记忆内容</th><th style="width:96px">标签</th><th style="width:88px">加入时间</th><th style="width:132px">操作</th></tr></thead>
+          <table class="vtab" id="mem-grid" style="min-width:640px">
+            <thead><tr><th style="width:34px">常</th><th style="min-width:180px">记忆内容</th><th style="width:96px">标签</th><th style="width:88px">加入时间</th><th style="width:76px">范围</th><th style="width:132px">操作</th></tr></thead>
             <tbody id="mem-body"></tbody>
           </table>
         </div>
 
         <h3 style="margin-top:4px">自动经验 <span class="stepno">从操作记录统计，不是你在下的命令</span></h3>
         <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:300px;min-height:60px">
-          <table class="vtab" id="les-grid" style="min-width:600px">
-            <thead><tr><th style="width:88px">类型</th><th style="min-width:260px">结论</th><th style="width:48px">次数</th><th style="width:78px">采用</th></tr></thead>
+          <table class="vtab" id="les-grid" style="min-width:820px">
+            <thead><tr><th style="width:84px">类型</th><th style="min-width:240px">结论</th><th style="width:72px">成败</th><th style="width:74px">置信度</th><th style="width:96px">适用范围</th><th style="width:44px">次数</th><th style="width:76px">采用</th></tr></thead>
             <tbody id="les-body"></tbody>
           </table>
         </div>
-        <div class="hint" style="margin-top:8px">自动经验是操作审计的统计视图，不单独存储——审计保留 30 天，过期的经验随之失效；你否决过的不会再注入。</div>
+        <div class="hint" style="margin-top:8px">
+          置信度由这条经验自身的成败次数算出（同项目内统计）：<b>高</b>=多数时候成立、<b>中</b>=仅供参考、<b>低</b>不主动提示。
+          标「已失效」的项目/环境变了，该条不会注入——<b>失效不删除</b>，因为你需要知道它为什么不再被采纳。
+          自动经验是操作审计的统计视图，不单独存储；审计保留 30 天，过期的经验随之失效。
+        </div>
       </div>
     </section>
 
@@ -2031,6 +2057,7 @@ async function loadConfig(){
   $('#cp-5002').textContent = C.webase_port||5002;
   syncStartDirs();
   psRenderChips(); wlRender();
+  loadGuardStatus();
   // 启动页的脚本选择器：留空 = 由服务端按 package.json 推断（v2.1）。
   // 旧版本在这里硬填 'serve'，导致"项目没有 serve 脚本"时必然失败，
   // 而且这个值只存在 localStorage 里，AI 读不到。
@@ -2378,6 +2405,52 @@ document.querySelectorAll('[data-remote]').forEach(b=>b.addEventListener('click'
 $('#btn-pick-sql').onclick = pickSQL;
 
 /* 自动探测后端目录下的 dbs\*.sql */
+// v2.3 N4：拉取链端守护的运行状态。
+// 开关只说明"你要求了它"，这里说明"它实际在做什么"——两者可能不一致
+// （比如刚勾上还没到下一轮，或配置没保存）。
+async function loadGuardStatus(){
+  const box = $('#guard-box');
+  if(!box) return;
+  const badge = $('#guard-badge'), note = $('#guard-note'), recent = $('#guard-recent');
+  let d = null;
+  try{ d = await (await fetch('/api/guard/status')).json(); }catch(e){}
+  const s = (d && d.status) || null;
+  if(!s){ badge.textContent = t('读取失败'); note.textContent = ''; recent.innerHTML=''; return; }
+
+  // 徽标分三色：进行中=绿、未开启=灰、有问题=橙。
+  // **连续不可达单独一档**：它需要用户去处理（虚拟机没开/IP 变了），
+  // 不是"守护坏了"，也不能算正常。
+  let cls = 'var(--muted)', label = t('未开启');
+  if(!s.host){ cls = 'var(--muted)'; label = t('未配置'); }
+  else if(s.last_unreachable > 0){ cls = 'var(--warn)'; label = t('连不上'); }
+  else if(s.enabled && s.last_check){ cls = 'var(--ok)'; label = t('运行中'); }
+  else if(s.enabled){ cls = 'var(--muted)'; label = t('已开启'); }
+  badge.textContent = label;
+  badge.style.color = cls;
+  badge.style.background = 'var(--card)';
+
+  note.textContent = s.note || '';
+  // 最近动作：这才是"它到底做了什么"的答案
+  const acts = (d && d.recent) || [];
+  if(acts.length){
+    let h = '<div class="muted" style="font-size:11px;margin-bottom:4px">' + esc(t('最近动作')) + '</div>';
+    for(const a of acts){
+      const okk = a.result === 'ok' || a.result === 'started';
+      const mark = a.result === 'fail' ? '<span style="color:var(--err)">✕</span>' : (okk ? '<span style="color:var(--ok)">✓</span>' : '·');
+      const when = String(a.ts||'').slice(5,16);
+      h += '<div class="ai-plan-row" style="font-size:12px;padding:1px 0">' +
+           '<span class="ai-plan-n">' + esc(when) + '</span>' +
+           '<span>' + mark + ' ' + esc(a.action||'') +
+           (a.detail ? ' <span class="muted">' + esc(String(a.detail).slice(0,80)) + '</span>' : '') +
+           (a.verify ? ' <span class="muted">' + esc(String(a.verify).slice(0,80)) + '</span>' : '') +
+           '</span></div>';
+    }
+    recent.innerHTML = h;
+  } else {
+    recent.innerHTML = '<div class="muted" style="font-size:11px">' + esc(t('暂无守护动作记录')) + '</div>';
+  }
+}
+
 async function detectSQL(){
   if(!loaded) return;
   const bd = $('#be_dir').value.trim();
@@ -2604,23 +2677,34 @@ async function loadMemory(){
   let d = null;
   try{ d = await (await fetch('/api/lessons')).json(); }
   catch(e){
-    mb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;text-align:center">'+esc(t('读取失败'))+'</td></tr>';
+    mb.innerHTML = '<tr><td colspan="6" class="muted" style="padding:14px;text-align:center">'+esc(t('读取失败'))+'</td></tr>';
     return;
   }
   // 我的记忆
   const ms = (d && d.memories) || [];
   mb.innerHTML = '';
   if(!ms.length){
-    mb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;text-align:center">'+esc(t('还没有记忆条目'))+'</td></tr>';
+    mb.innerHTML = '<tr><td colspan="6" class="muted" style="padding:14px;text-align:center">'+esc(t('还没有记忆条目'))+'</td></tr>';
   } else {
     for(const m of ms){
       const tr = document.createElement('tr');
+      // 失效的记忆不删除、只标出来——用户需要知道它为什么不再生效
+      const dimStale = m.stale ? ' style="opacity:.5"' : '';
       tr.innerHTML =
         '<td style="text-align:center;color:var(--warn);font-weight:700">'+(m.always?'★':'')+'</td>'+
-        '<td>'+esc(m.text||'')+'</td>'+
+        '<td'+dimStale+'>'+esc(m.text||'')+(m.stale?' <span class="mini" style="color:var(--warn)">['+esc(t('已失效'))+']</span>':'')+'</td>'+
         '<td class="mini muted">'+esc(m.tags||'')+'</td>'+
         '<td class="mini muted">'+esc((m.created||'').slice(5,16))+'</td>'+
+        '<td class="mini"></td>'+
         '<td></td>';
+      // 范围列：单按钮切换（本项目 / 全局）
+      const scopeTd = tr.children[4];
+      const sb = document.createElement('button');
+      sb.className = 'mini' + (m.global ? ' on' : '');
+      sb.textContent = m.global ? t('全局') : t('本项目');
+      sb.title = m.global ? t('任何项目都生效') : t('换个项目后自动失效');
+      sb.onclick = async ()=>{ await memPost({op:'global', id:m.id, global:!m.global}); loadMemory(); };
+      scopeTd.appendChild(sb);
       const td = tr.lastElementChild;
       td.style.whiteSpace = 'nowrap';
       const b1 = document.createElement('button');
@@ -2638,16 +2722,31 @@ async function loadMemory(){
   const ls = (d && d.lessons) || [];
   lb.innerHTML = '';
   if(!ls.length){
-    lb.innerHTML = '<tr><td colspan="4" class="muted" style="padding:14px;text-align:center">'+esc(t('暂无经验，失败与被拒的记录累积到一定量后会自动出现'))+'</td></tr>';
+    lb.innerHTML = '<tr><td colspan="7" class="muted" style="padding:14px;text-align:center">'+esc(t('暂无经验，失败与被拒的记录累积到一定量后会自动出现'))+'</td></tr>';
     return;
   }
   for(const l of ls){
     const tr = document.createElement('tr');
     const dim = l.enabled ? '' : ' style="opacity:.45"';
     const ev = (l.evidence && l.evidence.length) ? '<div class="mini muted" style="margin-top:3px">'+esc(t('依据：{0}', l.evidence.join('　·　')))+'</div>' : '';
+    // 成败：0/0 时显示占位而不是 0/0 —— 没人提取到新经验时会误导成"零次"
+    const of = (l.succ||0) + '/' + (l.fail||0);
+    const ofText = (l.succ||l.fail) ? of : '—';
+    // 置信度分档着色，让"仅供参考"在视觉上就弱一档
+    const cf = l.conf_label || '';
+    const cfColor = cf==='高' ? 'var(--ok)' : (cf==='中' ? 'var(--warn)' : 'var(--muted)');
+    // 适用范围 + 失效理由
+    let scopeCell = esc(scopeLabelOf(l));
+    if(l.stale){
+      scopeCell = '<span style="color:var(--warn)">'+esc(t('已失效'))+'</span>';
+      if(l.stale_why) scopeCell += '<div class="mini muted" style="margin-top:2px">'+esc(l.stale_why)+'</div>';
+    }
     tr.innerHTML =
       '<td class="mini">'+esc(LESSON_KIND[l.kind] || l.kind || '')+'</td>'+
       '<td'+dim+'>'+esc(l.title||'')+ev+'</td>'+
+      '<td class="mini" style="text-align:center;white-space:nowrap">'+esc(ofText)+'</td>'+
+      '<td class="mini" style="text-align:center;white-space:nowrap;color:'+cfColor+'">'+esc(cf||'—')+'</td>'+
+      '<td class="mini">'+scopeCell+'</td>'+
       '<td class="mini" style="text-align:center">'+esc(String(l.hits||0))+'</td>'+
       '<td></td>';
     const td = tr.lastElementChild;
@@ -2663,6 +2762,16 @@ async function loadMemory(){
   }
 }
 
+// scopeLabelOf 把经验的作用域压成一行短文本。
+function scopeLabelOf(l){
+  const sc = l.scope || {};
+  const parts = [];
+  const who = [sc.frontend, sc.backend].filter(Boolean).join('/');
+  parts.push(who || t('本项目'));
+  if(sc.action) parts.push(sc.action);
+  return parts.join(' · ');
+}
+
 async function memPost(body, url){
   url = url || '/api/memory';
   try{
@@ -2675,11 +2784,17 @@ async function memPost(body, url){
 function memBind(){
   const add = $('#mem-add');
   if(add) add.onclick = async ()=>{
-    const inp = $('#mem-text'), tg = $('#mem-tags'), al = $('#mem-always');
+    const inp = $('#mem-text'), tg = $('#mem-tags'), al = $('#mem-always'), gl = $('#mem-global');
     const text = (inp.value||'').trim();
     if(!text){ toast(t('请先填写记忆内容'), 'err'); return; }
     const r = await memPost({op:'add', text: text, tags:(tg.value||'').trim(), always: !!(al && al.checked)});
-    if(r && r.ok){ inp.value=''; tg.value=''; if(al) al.checked=false; loadMemory(); }
+    if(r && r.ok){
+      inp.value=''; tg.value='';
+      if(al) al.checked=false;
+      // 全局勾选保持原状：用户可能正在批量写通用规矩
+      loadMemory();
+    }
+    if(gl && gl.checked) toast(t('已记为全局适用（换项目也生效）'), 'ok');
   };
   const ib = $('#mem-import-btn');
   if(ib) ib.onclick = async ()=>{
@@ -3163,6 +3278,9 @@ async function pollProg(){ try{ renderProg(await (await fetch('/api/program/stat
 (async function init(){
   await loadConfig();
   auditBind();
+  // v2.3 N4：守护状态的手动刷新
+  const gb = $('#guard-refresh');
+  if(gb) gb.onclick = ()=> loadGuardStatus();
   memBind();
   fetch('/api/check',{method:'POST'});
   pollHealth(); pollState(); pollProg();
@@ -4040,6 +4158,40 @@ async function aiConsume(path, body){
   for(let i = ms.length - 1; i >= 0; i--){ if(ms[i] && ms[i].role === 'user'){ fb.last = String(ms[i].content || '').slice(0, 2000); break; } }
   let cur = null, curText = '', curTs = '';
   let think = null, rsnText = '', rsnEl = null, renderQueued = false;
+  // v2.3 N5：计划面板。同一轮里所有步骤归到一个可折叠块内，
+  // 结束后自动收起——用户中途能看，收完不占屏。
+  let planEl = null, planList = null, planN = 0;
+  const planBox = (maxTurns, reason)=>{
+    if(planEl){ planEl.remove(); planEl = null; planList = null; }
+    planN = 0;
+    planEl = document.createElement('details');
+    planEl.className = 'ai-plan';
+    const sm = document.createElement('summary');
+    sm.textContent = t('执行计划（{0}）', reason ? reason + ' · ' + t('上限 {0} 轮', maxTurns) : t('上限 {0} 轮', maxTurns));
+    planList = document.createElement('div');
+    planList.className = 'ai-plan-list';
+    planEl.appendChild(sm);
+    planEl.appendChild(planList);
+    $ai('ai-msgs').appendChild(planEl);
+  };
+  const planStep = (seq, text)=>{
+    if(!planList){ planBox(0, ''); }
+    const row = document.createElement('div');
+    row.className = 'ai-plan-row';
+    // 服务端数据必须 esc()：工具名/目标里可能有用户可控内容
+    row.innerHTML = '<span class="ai-plan-n">' + esc(String(seq|| ++planN)) + '</span><span>' + esc(text||'') + '</span>';
+    planList.appendChild(row);
+    planN = Number(seq) || planN;
+    $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+  };
+  const planEnd = (text)=>{
+    if(!planEl) return;
+    // 收完自动折叠：步骤已经执行完，继续展开只是噪音
+    planEl.open = false;
+    const sm = planEl.querySelector('summary');
+    if(sm && text) sm.title = text;
+    planEl = null; planList = null;
+  };
   try{
   think = document.createElement('div'); think.className = 'ai-think';
   think.innerHTML = '<span>' + t('思考中') + '</span><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
@@ -4087,6 +4239,17 @@ async function aiConsume(path, body){
           dropThink();
           petAIState('busy');
           aiAdd('sys', '\u2192 ' + aiToolName(ev.tool));
+        } else if(ev.type === 'plan_start'){
+          // v2.3 N5：开跑前告诉用户这一轮的上限与理由。
+          // 以前是静默开始、跑到 8 轮静默停下，用户两头都不知道。
+          dropThink();
+          planBox(ev.max_turns, ev.reason);
+        } else if(ev.type === 'plan_step'){
+          // 每步都显示"正在做什么"——用户看着 AI 查了什么，
+          // 比只看结论更可信（结论要能追到查过的东西）。
+          planStep(ev.seq, ev.text);
+        } else if(ev.type === 'plan_end'){
+          planEnd(ev.text);
         } else if(ev.type === 'tool_result'){
           dropThink();
           const d = document.createElement('details'); d.className = 'ai-tool';

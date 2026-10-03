@@ -18,6 +18,8 @@ dist/
 memories.json
 memories.json.bak
 lessons-off.json
+# 经验成败统计（v2.3 N2）：本机数据，键里带项目指纹
+lesson-outcomes.json
 
 # ---------- 构建产物（发布走 GitHub Releases，不进 git）----------
 *.exe

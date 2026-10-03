@@ -114,6 +114,20 @@ func auditNow(actor, action, target, params, result, detail string) {
 		Result: result,
 		Detail: auditSanitize(detail),
 	})
+	// v2.3 N1：用户主动操作且成功 → 可能是"接手 AI 搞不定的动作"。
+	// 挂在 auditWrite 上是唯一的入口级做法——现有几十个调用点一个都不用改，
+	// 漏网的风险从"靠每个调用点自觉"降为"不可能漏"。
+	// 真正的判定在 humanFix 里（还要过 trace 上下文、动作同类、AI 失败过三关）。
+	if actor == actUser {
+		humanFix(policyActionKey(action, target), target, result)
+	}
+	// v2.3 N2：成败计数。成功也要记——只记失败的话，
+	// "这个做法不行"一旦写进经验就永远不会撤销，哪怕后来证明它其实是通的。
+	// 计数只在动作已有对应经验时才写（lessonIDFor 内部过滤），
+	// 所以不是每条审计都产生一次磁盘写。
+	if id := lessonIDFor(action, target); id != "" {
+		recordOutcome(id, action, result)
+	}
 }
 
 // confirmReason 按界面语言返回二次确认文案（英文界面不能弹中文）。
@@ -140,6 +154,11 @@ func auditStart(actor, action, target, params string) func(result, detail string
 			DurMs:  time.Since(start).Milliseconds(),
 		})
 		metAudit(actor, action, result)
+		// v2.3 N2：与 auditNow 同一个理由——真实写操作走的是这条路径，
+		// 不在这里计数就等于"备份/还原这类关键动作的成败不计入置信度"。
+		if id := lessonIDFor(action, target); id != "" {
+			recordOutcome(id, action, result)
+		}
 	}
 }
 

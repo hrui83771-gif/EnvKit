@@ -228,10 +228,22 @@ func TestVerifyServiceListening(t *testing.T) {
 	old := svcState["web"]
 	svcState["web"] = &SvcInfo{Running: true, PID: os.Getpid(), URL: fmt.Sprintf("http://localhost:%d/", port)}
 	svcMu.Unlock()
+	// 候选端口表必须完全隔离，只留本测试的随机端口。
+	//
+	// 为什么必须隔离：候选表来自 scan_ports / 项目画像 / 内置默认 {8080,8888}。
+	// 开发机上 8080 常常真有个 node 在跑（自己的前端），它会被当成
+	// "预期进程"而认定已就绪——**测试随开发机状态随机假失败或假通过**。
+	// 这类"依赖环境恰好为空"的测试是最难查的一类，隔离是唯一可靠解。
+	oldPorts := append([]int(nil), cfg.Projects.ScanPorts...)
+	cfg.Projects.ScanPorts = []int{port}
+	oldPortsFn := svcPortsFn
+	svcPortsFn = func(string) []int { return []int{port} }
 	t.Cleanup(func() {
 		svcMu.Lock()
 		svcState["web"] = old
 		svcMu.Unlock()
+		cfg.Projects.ScanPorts = oldPorts
+		svcPortsFn = oldPortsFn
 	})
 
 	r := verifyService("web", 8*time.Second)

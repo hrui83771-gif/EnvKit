@@ -57,6 +57,9 @@ func handleMemory(w http.ResponseWriter, r *http.Request) {
 		Text   string `json:"text"`
 		Tags   string `json:"tags"`
 		Always *bool  `json:"always"`
+		// Global v2.3 N2：勾上后这条记忆任何项目都注入。
+		// 默认不勾——"上次那台机器"的经验套到当前项目是错建议。
+		Global *bool  `json:"global"`
 		ID     string `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -75,10 +78,19 @@ func handleMemory(w http.ResponseWriter, r *http.Request) {
 	case "add":
 		var m Memory
 		var isNew bool
+		// global 通过 add 时的 body 传入；memUpsert 内部用默认值，
+		// 这里的做法是：先按常规 upsert，再按需切 global（复用 memSetGlobal）
 		m, isNew, err = memUpsert(body.Text, body.Tags, always, "manual")
+		if err == nil && body.Global != nil && *body.Global {
+			if e2 := memSetGlobal(m.ID, true); e2 != nil {
+				err = e2
+			} else {
+				m.Global = true
+			}
+		}
 		if err == nil {
 			auditNow(actUser, "memory_add", m.ID, body.Tags, resOK,
-				firstLines(m.Text, 80)+boolStr(isNew, "（新增）", "（更新）"))
+				firstLines(m.Text, 80)+boolStr(isNew, "（新增）", "（更新）")+boolStr(m.Global, "（全局）", ""))
 		}
 		msg = "已保存记忆"
 	case "delete":
@@ -93,8 +105,15 @@ func handleMemory(w http.ResponseWriter, r *http.Request) {
 			auditNow(actUser, "memory_toggle", body.ID, "", resOK, "")
 		}
 		msg = "已切换注入方式"
+	case "global":
+		// v2.3 N2：切换"是否跨项目适用"
+		err = memSetGlobal(body.ID, body.Global == nil || *body.Global)
+		if err == nil {
+			auditNow(actUser, "memory_global", body.ID, "", resOK, "")
+		}
+		msg = "已切换适用范围"
 	default:
-		writeJSON(w, map[string]any{"ok": false, "error": "op 必须是 add / delete / toggle"})
+		writeJSON(w, map[string]any{"ok": false, "error": "op 必须是 add / delete / toggle / global"})
 		return
 	}
 	lessonInvalidate()

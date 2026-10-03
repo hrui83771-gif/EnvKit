@@ -32,12 +32,23 @@ import (
 
 // Memory 一条用户记忆。
 type Memory struct {
-	ID      string `json:"id"`
-	Text    string `json:"text"`
-	Tags    string `json:"tags,omitempty"` // 逗号分隔，用于相关性匹配
-	Always  bool   `json:"always"`         // true=每回合都注入；false=仅相关时注入
-	Source  string `json:"source"`         // manual | import
-	Created string `json:"created"`
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	Tags   string `json:"tags,omitempty"` // 逗号分隔，用于相关性匹配
+	Always bool   `json:"always"`         // true=每回合都注入；false=仅相关时注入
+	// Global v2.3 N2：true=适用于任何项目。
+	//
+	// 默认必须是 false。"上次这台机器上 npm run serve 就行"换个前端项目
+	// 就完全错——记忆跨项目泛化是"AI 越用越笨"的主要来源。
+	// 真正通用的规矩（"备份前先停后端"）由用户显式勾这一项。
+	Global bool `json:"global,omitempty"`
+	// ScopeFP 创建时的项目指纹（v2.3 N2）。由程序写入，用户不必手填。
+	// 空值 = 老条目，视为无指纹（仍然注入，见 memoriesFor 的注释）。
+	ScopeFP  string `json:"scope_fp,omitempty"`
+	Source   string `json:"source"` // manual | import
+	Created  string `json:"created"`
+	Stale    bool   `json:"stale,omitempty"`     // 作用域已不匹配
+	StaleWhy string `json:"stale_why,omitempty"` // 为什么失效
 }
 
 // memoryFile 记忆文件路径。抽成变量供单测替换（同 auditDir 手法）。
@@ -127,7 +138,10 @@ func memUpsert(text, tags string, always bool, source string) (Memory, bool, err
 		}
 	}
 	m := Memory{ID: id, Text: text, Tags: tags, Always: always, Source: source,
-		Created: time.Now().Format("2006-01-02 15:04:05")}
+		Created: time.Now().Format("2006-01-02 15:04:05"),
+		// v2.3 N2：记录创建时的项目指纹，换项目后这条会自动失效。
+		// 已在别的项目创建过的同内容记忆沿用旧指纹（那是"更新"不是"新建"）。
+		ScopeFP: projectFingerprint()}
 	ms = append(ms, m)
 	if err := saveMemories(ms); err != nil {
 		return Memory{}, false, err
@@ -163,6 +177,29 @@ func memToggle(id string) error {
 			ms[i].Always = !ms[i].Always
 			return saveMemories(ms)
 		}
+	}
+	return fmt.Errorf("记忆不存在")
+}
+
+// memSetGlobal 设置某条记忆是否跨项目适用（v2.3 N2）。
+//
+// 切到 global 时清掉 ScopeFP：指纹已无意义，留着会让用户以为
+// "这条仍然绑定在某个项目上"。
+func memSetGlobal(id string, on bool) error {
+	memMu.Lock()
+	defer memMu.Unlock()
+	ms := loadMemories()
+	for i := range ms {
+		if ms[i].ID != id {
+			continue
+		}
+		ms[i].Global = on
+		if on {
+			ms[i].ScopeFP = ""
+		} else {
+			ms[i].ScopeFP = projectFingerprint()
+		}
+		return saveMemories(ms)
 	}
 	return fmt.Errorf("记忆不存在")
 }
@@ -248,9 +285,31 @@ func memoriesFor(task string, max int) []Memory {
 	if max <= 0 {
 		max = 20
 	}
+	// v2.3 N2：作用域过滤。Global 的记忆任何项目都注入；
+	// 非 global 的记忆只在指纹仍匹配时注入，**不匹配则标 Stale 并跳过**——
+	// 把"上次那台机器"的经验套到当前项目上，是"AI 越用越笨"的主要来源。
+	//
+	// 指纹存哪：用户不该手填一串哈希，所以存在 scopeFingerprint 字段里，
+	// 由程序在创建时写入。老条目（该字段为空）视为"无指纹"→ 仍然注入，
+	// 因为把已有记忆静默作废比"记忆跨项目"更糟。
+	cur := projectFingerprint()
+	for i := range ms {
+		m := &ms[i]
+		if m.Global || m.ScopeFP == "" {
+			continue
+		}
+		if m.ScopeFP != cur {
+			m.Stale = true
+			m.StaleWhy = "创建时属于另一个项目（" + currentScopeDirLabel() + " 已不同）"
+		}
+	}
+
 	always := make([]Memory, 0, len(ms))
 	var rest []Memory
 	for _, m := range ms {
+		if m.Stale {
+			continue
+		}
 		if m.Always {
 			always = append(always, m)
 		} else {

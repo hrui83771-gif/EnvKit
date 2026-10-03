@@ -105,6 +105,17 @@ var policyRules = map[string]policyRule{
 	"read_file":          {PolicyAuto, false, "读文件，沙箱内只读"},
 	"verify_environment": {PolicyAuto, false, "复验只读取客观状态"},
 	"recall_lessons":     {PolicyAuto, false, "读取经验，不改变任何状态"},
+	// v2.3 N6：只读查询。判据是"能否修改数据"——答案是否定的：
+	// dbReadOnlySQL 限定首词、强制 LIMIT、readOnlyExec 先执行
+	// SET SESSION TRANSACTION READ ONLY、库名经 quoteIdent 转义。
+	// 四道防线都在 MySQL 侧生效，不依赖"调用方是否老实"，
+	// 所以给确认卡没有意义——只会训练用户闭眼点确认。
+	"db_query": {PolicyAuto, false, "只读查询：限定 SELECT/SHOW/DESC/EXPLAIN/WITH + 强制 LIMIT + 会话级 READ ONLY"},
+	"db_list":  {PolicyAuto, false, "列出库与表，只读 information_schema"},
+	// v2.3 N4：查守护状态是纯读取
+	"get_chain_guard": {PolicyAuto, false, "读取链端守护状态，不触发任何恢复动作"},
+	// v2.3 N7：读 go.mod / package.json + 比对版本，纯只读
+	"check_env_req": {PolicyAuto, false, "只读项目版本要求并与实际比对"},
 
 	// ---- 需确认：可逆或影响可控 ----
 	"start_service":     {PolicyConfirm, false, "启动服务会占用端口并可能改动运行环境"},
@@ -218,22 +229,31 @@ func policyRecord(v PolicyVerdict, decision string) {
 // 只有含 script 参数时才用 "script=<名>" 形式——PolicyGate 据此做危险脚本检查。
 // 其余动作原样返回描述性 target（库名 / 服务名），不参与脚本判定。
 func policyTargetOf(tool string, args map[string]any) string {
+	// 服务名与脚本参数都要带上：缺一个都会让"AI 试过什么"与"人做了什么"对不上号。
+	// 第一版只返回先命中的那个（script=xxx 会把 service=web 直接吞掉），
+	// 结果 AI 侧归一得到 start_service、用户侧得到 start_service:web，
+	// Human Trace 永远匹配不上——而且两边都"看起来正常"，极难发现。
+	script := ""
 	if s, _ := args["script"].(string); strings.TrimSpace(s) != "" {
-		return "script=" + strings.TrimSpace(s)
+		script = strings.TrimSpace(s)
+	} else if s, _ := args["web_script"].(string); strings.TrimSpace(s) != "" {
+		script = strings.TrimSpace(s)
 	}
-	if s, _ := args["web_script"].(string); strings.TrimSpace(s) != "" {
-		return "script=" + strings.TrimSpace(s)
-	}
+	obj := ""
 	switch tool {
 	case "start_service", "restart_service", "stop_service":
-		if svc, _ := args["service"].(string); svc != "" {
-			return svc
-		}
-		return ""
+		obj, _ = args["service"].(string)
 	case "db_backup", "db_restore", "apply_sql", "db_create":
-		return cfg.Projects.DBName
-	case "kill_process", "cleanup_processes":
-		return ""
+		obj = cfg.Projects.DBName
+	}
+	obj = strings.TrimSpace(obj)
+	switch {
+	case obj != "" && script != "":
+		return obj + " script=" + script
+	case obj != "":
+		return obj
+	case script != "":
+		return "script=" + script
 	}
 	return ""
 }
