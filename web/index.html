@@ -756,6 +756,10 @@
           <label class="switch"><input type="checkbox" id="ai_pet_hide"><span class="sl"></span></label>
           <div class="cktext"><b>隐藏助手</b><span class="hint">勾选后彻底隐藏右下角桌面助手（对话面板仍可打开）；取消勾选即恢复</span></div>
         </div>
+        <div class="ckrow">
+          <label class="switch"><input type="checkbox" id="ai_memory_on"><span class="sl"></span></label>
+          <div class="cktext"><b>记忆与经验</b><span class="hint">默认关闭。启用后助手会记住你写的长期规矩，并从历史操作中学习失败模式以避免重复犯错；关闭时不再向模型注入任何记忆内容</span></div>
+        </div>
         <div class="row">
           <button id="btn-ai-save">保存配置</button>
           <button class="ghost" id="btn-ai-test">测试连接</button>
@@ -782,18 +786,21 @@
 
       <div class="card" id="ai-memory-box" style="margin-top:14px;display:none">
         <h3>记忆与经验 <span class="stepno">让助手下次不再犯同样的错</span></h3>
+        <div id="mem-gate-off" class="hint" style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;display:none">
+          记忆层当前<b>未启用</b>：以下内容可查看与编辑，但不会注入到模型对话中。请在「服务商与密钥」处开启「记忆与经验」。
+        </div>
         <div class="muted" style="line-height:1.8;margin-bottom:10px">
           <b>我的记忆</b>是你写给助手的规矩，它必须遵守；<b>自动经验</b>是系统从操作审计里统计出的失败模式，只是建议，你可以逐条否决。
           优先级：<b>你当场的明确要求 &gt; 我的记忆 &gt; 自动经验</b>。
         </div>
 
-        <div class="row" style="margin:0 0 8px;gap:6px">
-          <input id="mem-text" placeholder="写一条长期规矩，例如：备份前先停掉后端服务" style="flex:1;min-width:220px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
-          <input id="mem-tags" placeholder="标签（可选，逗号分隔）" style="width:150px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+        <div class="row" style="margin:0 0 8px;gap:6px;flex-wrap:wrap">
+          <input id="mem-text" placeholder="写一条长期规矩，例如：备份前先停掉后端服务" style="flex:1;min-width:200px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
+          <input id="mem-tags" placeholder="标签（可选）" style="width:110px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
           <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="mem-always">每轮都注入</label>
           <button class="mini" id="mem-add">添加</button>
         </div>
-        <div class="row" style="margin:0 0 12px;gap:6px">
+        <div class="row" style="margin:0 0 12px;gap:6px;flex-wrap:wrap">
           <button class="mini" id="mem-import-btn">批量导入</button>
           <span class="hint">每行一条，支持 <code>- 内容 | 标签</code> 或 JSON 数组；重复内容自动更新而非新增</span>
           <span style="flex:1"></span>
@@ -801,16 +808,16 @@
         </div>
 
         <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:260px;min-height:60px;margin-bottom:14px">
-          <table class="vtab" id="mem-grid">
-            <thead><tr><th style="width:30px">常</th><th>记忆内容</th><th style="width:120px">标签</th><th style="width:110px">加入时间</th><th style="width:56px">操作</th></tr></thead>
+          <table class="vtab" id="mem-grid" style="min-width:520px">
+            <thead><tr><th style="width:34px">常</th><th style="min-width:180px">记忆内容</th><th style="width:96px">标签</th><th style="width:88px">加入时间</th><th style="width:132px">操作</th></tr></thead>
             <tbody id="mem-body"></tbody>
           </table>
         </div>
 
         <h3 style="margin-top:4px">自动经验 <span class="stepno">从操作记录统计，不是你在下的命令</span></h3>
         <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:300px;min-height:60px">
-          <table class="vtab" id="les-grid">
-            <thead><tr><th style="width:96px">类型</th><th>结论</th><th style="width:46px">次数</th><th style="width:64px">采用</th></tr></thead>
+          <table class="vtab" id="les-grid" style="min-width:600px">
+            <thead><tr><th style="width:88px">类型</th><th style="min-width:260px">结论</th><th style="width:48px">次数</th><th style="width:78px">采用</th></tr></thead>
             <tbody id="les-body"></tbody>
           </table>
         </div>
@@ -1176,8 +1183,10 @@ const I18N_EN = {
   "亮色": "Light",
   "仅 DeepSeek 支持": "DeepSeek only",
   "仅执行 SQL": "Apply SQL only",
+  "仅相关时": "When relevant",
   "今日统计": "Today's usage",
   "仍有 {0} 个组件未就绪": "{0} component(s) still not ready",
+  "从操作记录统计，不是你在下的命令": "computed from activity, not an order from you",
   "以管理员身份重启": "Restart as administrator",
   "位置：": "Location: ",
   "余额 {0} {1}": "Balance {0} {1}",
@@ -1187,9 +1196,11 @@ const I18N_EN = {
   "作者保留在不另行通知的情况下修改、暂停或停止提供本软件及其相关服务的权利。": "The author reserves the right to modify, suspend, or discontinue this software and its related services without prior notice.",
   "你好！我可以查看日志与状态、执行备份/检测/启停等操作（写操作需你确认）。试试问我\"后端为什么起不来\"或\"帮我备份数据库\"。": "Hi! I can read logs and status, and run backups / checks / service start-stop (write actions need your confirmation). Try asking \"why won't the backend start?\" or \"back up the database for me\".",
   "你好！我可以查看日志与状态、执行备份/检测/启停等操作（写操作需你确认）。试试问我“后端为什么起不来”或“帮我备份数据库”。": "Hi! I can inspect logs and status and run backups, checks, starts and stops (write actions need your confirmation). Try asking “why won't the backend start” or “back up the database for me”.",
+  "你手动修好的": "Fixed by you",
   "使用 max_completion_tokens": "using max_completion_tokens",
   "使用上方 MySQL 连接配置；纯只读，不提供任何写操作": "Uses the MySQL connection above; strictly read-only, no write operations",
   "使用本软件所产生的任何后果（含环境配置失败、数据丢失、服务中断、端口 / 进程异常、链端操作失误、误操作等）均由使用者自行承担，作者不承担任何直接或间接的责任。": "Any consequence of using this software (failed environment setup, data loss, service interruption, port/process issues, chain operation mistakes, misoperation, etc.) is borne solely by the user; the author accepts no direct or indirect liability.",
+  "依据：{0}": "evidence: {0}",
   "依赖": "Dependencies",
   "依赖 就绪": "Deps ready",
   "依赖 待办": "Deps pending",
@@ -1217,12 +1228,15 @@ const I18N_EN = {
   "关于 / 免责声明": "About / Disclaimer",
   "关于 EnvKit": "About EnvKit",
   "关闭后 AI 对话与桌面助手均不可用": "When off, AI chat and the desktop assistant are both unavailable",
+  "内容 | 标签": "text | tags",
   "内嵌终端（页面内直接操作远程 shell）": "Built-in terminal (operate a remote shell in the page)",
   "再晃要吐了🫠": "Keep shaking and I'll be sick🫠",
+  "写一条长期规矩，例如：备份前先停掉后端服务": "Write a standing rule, e.g. stop the backend before backing up",
   "出错了…点我看日志": "Something failed… click me for the log",
   "分析最近错误": "Analyze recent errors",
   "刚停止，等 {0} 秒让端口释放后自动启动…": "Just stopped — waiting {0}s for ports to free up, will auto-start…",
   "初始化数据库": "Initialize database",
+  "删除": "Delete",
   "刷新": "Refresh",
   "刷新余额": "Refresh balance",
   "前端": "Frontend",
@@ -1237,6 +1251,7 @@ const I18N_EN = {
   "前端目录": "Frontend directory",
   "加入": "Add",
   "加入 Defender 白名单": "add Defender exclusion",
+  "加入时间": "Added",
   "加入杀软白名单": "Add to AV whitelist",
   "加载中…": "Loading…",
   "动作": "Action",
@@ -1250,6 +1265,7 @@ const I18N_EN = {
   "升级": "Upgrade",
   "升级组件": "Upgrade components",
   "占用": "In use",
+  "反复失败": "Repeated failure",
   "发送": "Send",
   "取消": "Cancel",
   "只收 .sql 文件哦，「{0}」先还给你": "I only take .sql files — \"{0}\" is returned to you",
@@ -1280,6 +1296,7 @@ const I18N_EN = {
   "在呢~": "Here~",
   "备份数据库": "back up database",
   "复制": "Copy",
+  "复验反复失败": "Verification keeps failing",
   "复验环境状态": "Verify environment state",
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
@@ -1334,6 +1351,7 @@ const I18N_EN = {
   "已停止生成": "Generation stopped",
   "已加白名单": "Whitelisted",
   "已取消，文件未生效": "Cancelled — the file was not applied",
+  "已否决": "Dismissed",
   "已复制": "Copied",
   "已安装": "Installed",
   "已导出 {0}": "Exported {0}",
@@ -1347,11 +1365,14 @@ const I18N_EN = {
   "已是最新": "Up to date",
   "已结束 PID {0}，可重新扫描确认": "Killed PID {0}; rescan to confirm",
   "已自动适配": "Auto-adapted",
+  "已被安全策略拒绝": "Denied by policy",
   "已装组件会自动跳过。": "Already-installed components are skipped.",
   "已进行 {0} 分 {1} 秒": "{0}m {1}s elapsed",
   "已退出": "Exited",
   "已配置": "configured",
+  "已采用": "In use",
   "帮你在日志里标出来了": "Highlighted it in the log for you",
+  "常": "Always",
   "常用：8080 前端 · 8888 后端": "Common: 8080 frontend · 8888 backend",
   "干活中…": "Working…",
   "建库并执行 SQL": "Create DB and apply SQL",
@@ -1367,7 +1388,10 @@ const I18N_EN = {
   "彩虹模式启动🌈": "Rainbow mode🌈",
   "思考中": "Thinking",
   "恢复演练": "Restore drill",
+  "慢路径": "Slow path",
   "我回来啦": "I'm back!",
+  "我的记忆": "My memories",
+  "我的记忆是你写给助手的规矩，它必须遵守；自动经验是系统从操作审计里统计出的失败模式，只是建议，你可以逐条否决。优先级：你当场的明确要求 > 我的记忆 > 自动经验。": "My memories are the rules you give the assistant and it must follow them; auto lessons are failure patterns computed from the audit log — suggestions only, and you can dismiss each one. Priority: your explicit instruction now > my memories > auto lessons.",
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
   "打开 ": "Open ",
   "打开 AI 抽屉": "Open AI drawer",
@@ -1382,6 +1406,7 @@ const I18N_EN = {
   "扫描失败": "Scan failed",
   "扫描失败：{0}": "Scan failed: {0}",
   "扫描端口": "Scan ports",
+  "批量导入": "Bulk import",
   "折叠": "Collapse",
   "拉取失败：": "Fetch failed: ",
   "拉取模型列表": "Fetch model list",
@@ -1420,6 +1445,7 @@ const I18N_EN = {
   "晕着呢…让我缓一缓": "Dizzy… give me a second",
   "晚上好": "Good evening",
   "暂无审计记录": "No audit records yet",
+  "暂无经验，失败与被拒的记录累积到一定量后会自动出现": "No lessons yet — they appear once enough failures or denials accumulate",
   "暗色": "Dark",
   "更改": "Change",
   "最近有任务失败": "A recent task failed",
@@ -1458,6 +1484,8 @@ const I18N_EN = {
   "查询中（探测官方最新版本，约几秒）...": "Checking the upstream latest version (a few seconds)…",
   "查询失败：{0}": "Query failed: {0}",
   "查询完成。升级完成后点「检查更新」刷新状态。": "Done. Click “Check for updates” after upgrading to refresh.",
+  "标签": "Tags",
+  "标签（可选，逗号分隔）": "Tags (optional, comma separated)",
   "核心功能": "Key features",
   "桌面助手": "Desktop assistant",
   "检查更新": "Check for updates",
@@ -1470,11 +1498,14 @@ const I18N_EN = {
   "模型": "Model",
   "模型名": "Model name",
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
+  "次数": "Hits",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
   "正在检测…": "Detecting…",
   "正在退出…": "Exiting…",
   "正常": "OK",
   "此电脑": "This PC",
+  "每轮注入": "every turn",
+  "每轮都注入": "Always inject",
   "没接到文件呢": "Hmm, no file received",
   "没有可导出的数据": "Nothing to export",
   "浅色": "Light",
@@ -1515,6 +1546,7 @@ const I18N_EN = {
   "眼睛跟随：开": "Eye tracking: on",
   "知道了": "Got it",
   "确定": "OK",
+  "确定删除这条记忆？": "Delete this memory?",
   "确定要退出 EnvKit 吗？": "Are you sure you want to exit EnvKit?",
   "确认": "Confirm",
   "确认后将真实执行该操作。": "It will really run after you confirm.",
@@ -1530,6 +1562,8 @@ const I18N_EN = {
   "端口与链信息": "Ports & chain info",
   "端口占用诊断": "Port diagnostics",
   "管理员": "Administrator",
+  "类型": "Kind",
+  "粘贴要导入的记忆，每行一条：": "Paste memories to import, one per line:",
   "系统": "System",
   "系统对话框": "System dialog",
   "组件下载源": "Component download sources",
@@ -1539,6 +1573,7 @@ const I18N_EN = {
   "结束进程": "Kill process",
   "结束项目目录下遗留的 node/webpack、go run 等后台进程": "Kill leftover node/webpack, go run processes under the project dirs",
   "结果": "Result",
+  "结论": "Conclusion",
   "统一开发环境助手": "All-in-one Dev Environment Helper",
   "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
   "缓存命中 {0}%": "cache hit {0}%",
@@ -1557,6 +1592,8 @@ const I18N_EN = {
   "自动保存": "Auto-save",
   "自动恢复": "Auto-recover",
   "自动滚动": "Auto-scroll",
+  "自动经验": "Auto lessons",
+  "自动经验是操作审计的统计视图，不单独存储——审计保留 30 天，过期的经验随之失效；你否决过的不会再注入。": "Auto lessons are a computed view over the audit log, not separate storage — the audit keeps 30 days, so stale lessons expire on their own; dismissed ones are never injected again.",
   "自定义": "Custom",
   "自定义查询 · {0} 行": "Custom query · {0} rows",
   "自定义模型名...": "Custom model name…",
@@ -1568,6 +1605,10 @@ const I18N_EN = {
   "表数据": "Table data",
   "让 AI 分析": "Analyze with AI",
   "让 AI 助手分析错误原因并给出解决步骤，还是直接查看日志？": "Have the AI assistant analyze the error and suggest fixes, or view the logs directly?",
+  "让助手下次不再犯同样的错": "so the assistant stops repeating mistakes",
+  "记忆与经验": "Memory & lessons",
+  "记忆与经验面板": "memory panel",
+  "记忆内容": "Memory",
   "设置": "Settings",
   "诊断报告": "Diagnostic report",
   "诊断报告 AI 解读": "AI analysis of diagnostic report",
@@ -1575,9 +1616,11 @@ const I18N_EN = {
   "该端口已在列表中": "Port already in the list",
   "详情 / 复验结论": "Detail / verification",
   "请先在左侧选择一张表": "Select a table on the left first",
+  "请先填写记忆内容": "Please enter the memory text first",
   "请先选择 SQL 文件": "Choose a SQL file first",
   "请先选择备份 .sql 文件": "Choose a backup .sql file first",
   "请先选择或输入模型名": "Select or type a model name first",
+  "请求失败": "Request failed",
   "请求失败：": "Request failed: ",
   "请输入要执行的命令": "Type a command to run",
   "读取中…": "Reading…",
@@ -1597,6 +1640,7 @@ const I18N_EN = {
   "还原": "Restore",
   "还原数据库": "Restore database",
   "还原文件": "Restore file",
+  "还有记忆条目": "No memory entries yet",
   "还缺：{0}": "Still missing: {0}",
   "进程名": "Process",
   "远程主机 · 选择根目录": "Remote host · pick root",
@@ -1619,6 +1663,7 @@ const I18N_EN = {
   "选择此文件夹": "Use this folder",
   "配置": "Configure",
   "配置已保存": "Config saved",
+  "采用": "Used",
   "重启服务": "Restart service",
   "重新安装": "Reinstall",
   "重新检测": "Re-check",
@@ -2470,6 +2515,15 @@ const LESSON_KIND = {
   slow:'慢路径', verify_fail:'复验反复失败'
 };
 
+// memSyncGate 记忆层总开关关闭时给出显式提示——
+// 否则用户会困惑"我明明写了记忆，助手怎么还是不知道"。
+function memSyncGate(){
+  const box = $('#mem-gate-off');
+  if(!box) return;
+  const cb = document.getElementById('ai_memory_on');
+  box.style.display = (cb && !cb.checked) ? '' : 'none';
+}
+
 async function loadMemory(){
   const mb = $('#mem-body'), lb = $('#les-body');
   if(!mb || !lb) return;
@@ -2494,8 +2548,10 @@ async function loadMemory(){
         '<td class="mini muted">'+esc((m.created||'').slice(5,16))+'</td>'+
         '<td></td>';
       const td = tr.lastElementChild;
+      td.style.whiteSpace = 'nowrap';
       const b1 = document.createElement('button');
       b1.className = 'mini'; b1.textContent = m.always ? t('仅相关时') : t('每轮注入');
+      b1.style.marginRight = '4px';
       b1.onclick = async ()=>{ await memPost({op:'toggle', id:m.id}); loadMemory(); };
       const b2 = document.createElement('button');
       b2.className = 'mini'; b2.textContent = t('删除');
@@ -2566,8 +2622,12 @@ function memBind(){
     if(!box) return;
     const show = box.style.display === 'none';
     box.style.display = show ? '' : 'none';
-    if(show) loadMemory();
+    if(show){ memSyncGate(); loadMemory(); }
   };
+  // 记忆层总开关：勾选状态变化即时反映到面板提示（真正生效需点「保存配置」）
+  const gate = document.getElementById('ai_memory_on');
+  if(gate) gate.addEventListener('change', memSyncGate);
+  memSyncGate();
 }
 async function pollHealth(){
   let h; try{ h = await (await fetch('/api/health')).json(); }catch(e){ return; }
@@ -3843,6 +3903,7 @@ async function aiLoadConfig(){
     aiApplyProvider(c.model || '');
     $ai('ai_base').value = c.base_url || $ai('ai_base').value;
     $ai('ai_enabled').checked = !!c.enabled;
+    $ai('ai_memory_on').checked = !!c.memory_enabled;
     $ai('ai_key').placeholder = c.key_set ? t('已保存（{0}），留空保留', c.key_masked||'****') : 'sk-...';
     $ai('ai_temp').value = (c.temperature === undefined || c.temperature === null) ? '' : (Math.round(Number(c.temperature)*100)/100);
     const q = c.quirk || {};
@@ -3860,8 +3921,8 @@ $ai('btn-ai-save').onclick = async ()=>{
   const model = aiCurrentModel();
   if(!model){ $ai('h-ai').textContent = t('请先选择或输入模型名'); return; }
   const r = await fetch('/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({enabled:$ai('ai_enabled').checked, provider:$ai('ai_provider').value, base_url:$ai('ai_base').value.trim(), api_key:$ai('ai_key').value.trim(), model, temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))})});
-  if(r.ok){ $ai('h-ai').textContent = t('已保存'); $ai('ai_key').value=''; aiLoadConfig(); } else { $ai('h-ai').textContent = t('保存失败：HTTP ')+r.status; }
+    body: JSON.stringify({enabled:$ai('ai_enabled').checked, memory_enabled:$ai('ai_memory_on').checked, provider:$ai('ai_provider').value, base_url:$ai('ai_base').value.trim(), api_key:$ai('ai_key').value.trim(), model, temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))})});
+  if(r.ok){ $ai('h-ai').textContent = t('已保存'); $ai('ai_key').value=''; aiLoadConfig(); memSyncGate(); } else { $ai('h-ai').textContent = t('保存失败：HTTP ')+r.status; }
 };
 $ai('btn-ai-models').onclick = async ()=>{
   $ai('h-ai').textContent = t('拉取模型列表中...');

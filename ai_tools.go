@@ -400,12 +400,15 @@ func aiHealthSnapshotFor(task string) string {
 	// 记忆层（v2.0 M1/M3）：用户记忆是"必须遵守的规矩"，排最前；
 	// 自动经验是"从历史失败里提取的建议"，放在后面且标明可信度。
 	// 顺序有讲究：用户手写的记忆优先级高于系统自动推断的经验。
-	if ms := memoriesBrief(memoriesFor(task, 12)); ms != "" {
-		snap["user_memories"] = ms
-	}
-	if ls := lessonBrief(lessonsForTask(task, 5)); ls != "" {
-		snap["lessons_learned"] = ls + "\n（以上是从历史操作记录中统计出的经验，仅供参考；" +
-			"若与用户当前的要求冲突，一律以用户的要求为准。可以用 recall_lessons 查看依据。）"
+	// 总开关关闭时一律不注入——新能力不该在升级后静默改变既有 Agent 行为。
+	if aiMemoryOn() {
+		if ms := memoriesBrief(memoriesFor(task, 12)); ms != "" {
+			snap["user_memories"] = ms
+		}
+		if ls := lessonBrief(lessonsForTask(task, 5)); ls != "" {
+			snap["lessons_learned"] = ls + "\n（以上是从历史操作记录中统计出的经验，仅供参考；" +
+				"若与用户当前的要求冲突，一律以用户的要求为准。可以用 recall_lessons 查看依据。）"
+		}
 	}
 	b, _ := json.Marshal(snap)
 	return string(b)

@@ -353,6 +353,10 @@ func memoriesJSON(task string, max int) string {
 
 // registerLessonTools 挂两个工具：recall_lessons 只读，manage_memories 需确认。
 // 记忆相关的一切都进确认闸门——它会长期影响 AI 行为，写错要能一眼看见、一键撤销。
+//
+// 工具本身**始终注册**，不受总开关影响：关闭记忆层时模型仍可查询"我掌握了哪些记忆"，
+// 但拿不到任何注入内容（门禁在 aiHealthSnapshotFor）。这样开关切换不需要重启 Agent 实例，
+// 也让界面上的"记忆面板"在关闭状态下依然可读、可编辑存量数据。
 func registerLessonTools() {
 	aiToolRegistry["recall_lessons"] = aiTool{
 		Desc: "查看从历史操作记录里总结出的经验，以及你被要求遵守的用户记忆。" +
