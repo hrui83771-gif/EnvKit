@@ -275,6 +275,20 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 	for _, m := range env.Missing {
 		add(rtIssError, "env", "缺少组件："+m, "在「环境安装」里安装 "+m)
 	}
+	// v2.3 N7：环境符合性。**装了不等于够用**——项目可能要更高版本。
+	//
+	// 只在**确实探测到版本且不够**时报警。探测不到（Go 不在 PATH ——
+	// EnvKit 自带的 SDK 就不在）属于"没检查到"，报成"未安装"或"不够"
+	// 都是误导：前者让用户去装一个他已经有的东西，后者是凭空断言。
+	// 这与 v2.0 修过的链端判据同源。
+	if env.HasResults {
+		for _, r := range checkAllEnvReq() {
+			if r.Status != reqTooLow {
+				continue
+			}
+			add(rtIssError, "env", r.Component+" 版本不满足项目要求："+r.Why, r.Action)
+		}
+	}
 
 	// ---- 项目 ----
 	if strings.TrimSpace(proj.FrontendDir) == "" {

@@ -114,6 +114,8 @@ var policyRules = map[string]policyRule{
 	"db_list":  {PolicyAuto, false, "列出库与表，只读 information_schema"},
 	// v2.3 N4：查守护状态是纯读取
 	"get_chain_guard": {PolicyAuto, false, "读取链端守护状态，不触发任何恢复动作"},
+	// v2.3 N7：读 go.mod / package.json + 比对版本，纯只读
+	"check_env_req": {PolicyAuto, false, "只读项目版本要求并与实际比对"},
 
 	// ---- 需确认：可逆或影响可控 ----
 	"start_service":     {PolicyConfirm, false, "启动服务会占用端口并可能改动运行环境"},

@@ -412,6 +412,11 @@ func aiHealthSnapshotFor(task string) string {
 	if g := guardBrief(); g != "" {
 		snap["chain_guard"] = g
 	}
+	// v2.3 N7：环境符合性。**装了不等于够用**——只给"确实不够用"的项，
+	// "项目未声明"的不给：那不是问题，塞进上下文只会稀释真正需要注意的那条。
+	if bad := envReqBadBrief(); bad != "" {
+		snap["env_requirements"] = bad
+	}
 	// 感知层补全：把最近的 FAIL/WARN 日志直接带给模型，让"为什么起不来"这类问题
 	// 第一轮就能对着具体错误作答，而不是再花一轮去调 get_logs。
 	// 快照整体拼在消息尾部（见 aiRunLoop），变化只会打断尾部前缀，不影响缓存命中。
