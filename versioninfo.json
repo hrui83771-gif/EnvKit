@@ -2,13 +2,13 @@
   "FixedFileInfo": {
     "FileVersion": {
       "Major": 2,
-      "Minor": 3,
+      "Minor": 4,
       "Patch": 0,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 2,
-      "Minor": 3,
+      "Minor": 4,
       "Patch": 0,
       "Build": 0
     },
@@ -22,13 +22,13 @@
     "Comments": "统一开发环境助手（Go 单文件，零依赖）：环境安装 / 程序配置 / 链端校验 / 程序启动 / AI 运维助手",
     "CompanyName": "",
     "FileDescription": "统一开发环境助手：环境安装 / 程序配置 / 链端校验 / 程序启动",
-    "FileVersion": "2.3.0.0",
+    "FileVersion": "2.4.0.0",
     "InternalName": "EnvKit",
     "LegalCopyright": "Copyright (C) 2026 hrui83771-gif",
     "LegalTrademarks": "",
     "OriginalFilename": "EnvKit.exe",
     "ProductName": "EnvKit",
-    "ProductVersion": "2.3.0"
+    "ProductVersion": "2.4.0"
   },
   "VarFileInfo": {
     "Translation": {
