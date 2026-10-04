@@ -35,12 +35,49 @@ import sys
 import time
 from pathlib import Path
 
-# 状态文件：记录注入点，undo 靠它。放 exe 同级（与 EnvKit 一致）。
-STATE = Path(__file__).resolve().parent.parent / 'fault-inject-state.json'
+# 仓库根目录（沙箱与注入器共用）
+ROOT = Path(__file__).resolve().parent.parent
 
-# 注入目标目录。备份类故障必须落进**真实备份目录**，
-# 否则 AI 通过正常流程读不到 —— 注入在它触达不到的地方就等于没注入。
-BACKUP_DIR = Path(__file__).resolve().parent.parent / 'backups'
+# 状态文件：记录注入点，undo 靠它。放 exe 同级（与 EnvKit 一致）。
+STATE = ROOT / 'fault-inject-state.json'
+
+# 备份类注入落哪个目录。
+#
+# 必须在沙箱运行时指向**沙箱的**备份目录，否则会往用户仓库里写注入文件。
+# 判据：读沙箱状态文件里的 backup_dir（sandbox.py 建沙箱时写进去的）。
+# 没有沙箱时才退回仓库 backups/（用户手动用注入器时的老行为）。
+#
+# 踩过：v2.5 第一版硬编码 ROOT/'backups'，而沙箱 config 指向临时区的 backups/
+# —— 于是"沙箱隔离"只隔离了服务进程，备份类注入照样污染用户目录。
+# **隔离没做到位等于没隔离**，只是不容易发现。
+def _backup_dir():
+    import tempfile
+    try:
+        st = Path(tempfile.gettempdir()) / 'envkit-sandbox.json'
+        if st.exists():
+            info = json.loads(st.read_text(encoding='utf-8'))
+            bd = info.get('backup_dir')
+            if bd:
+                return Path(bd)
+    except Exception:
+        pass
+    # 没有沙箱：退回 exe 同级 backups/。
+    # 备份故障必须落进 AI 真正读得到的目录 ——
+    # 写在它触达不到的地方，等于没注入。
+    return ROOT / 'backups'
+
+
+BACKUP_DIR = _backup_dir()
+
+
+def backup_dir_now():
+    """**每次注入时**重新求值备份目录，不要用模块级常量。
+
+    模块级 `BACKUP_DIR` 在 import 时求值，而沙箱往往在这之后才建 ——
+    于是沙箱模式下它仍指向仓库 backups/，注入照样污染用户目录。
+    这就是"常量在正确时刻算错了"的典型：代码看起来对，跑起来不对。
+    """
+    return _backup_dir()
 
 # 端口只从高位段选，避开 3306/8080/8888/20200/5002 等常用服务端口
 PORT_RANGE = range(45100, 45200)
@@ -134,17 +171,131 @@ def inject_hold_port(state):
 
 
 def inject_kill_service(state):
-    """杀掉登记的服务进程。
+    """杀掉「沙箱里EnvKit 自己起的那个服务进程」。
 
-    只杀状态文件里登记过的 pid —— 本脚本不主动去扫端口杀进程，
-    那是 portKillTask 的职责且需要用户确认。这里只提供"制造故障"的能力，
-    故障对象由调用方指定。
+    ## 第一版为什么直接抛异常拒绝（这个拒绝是对的，不能改）
+
+        raise SystemExit('kill_service 需要显式指定目标 pid。\n'
+                         '刻意不自动扫描：注入器擅自杀用户进程是不可接受的风险。')
+
+    要测"自主恢复"就必须杀掉一个服务进程，但用户机器上跑着的
+    真实服务（BloodLine 前后端）绝不能当试验品——杀掉它们等于
+    **毁掉用户正在做的事**。
+
+    **为了跑通评测去放宽这条约束是本末倒置**：
+    评测装置不该有能力毁掉用户环境。真缺的是"一个可以安全杀的目标"，
+    不是"允许杀任何目标"。
+
+    ## 正解：沙箱（tools/sandbox.py）
+
+    沙箱有自己的 config.json、自己的项目目录、自己的高位端口 45311，
+    里面跑的是 eval/fixtures/sandbox-backend ——一个只监听端口的
+    一次性 Go 服务。杀它不碰用户任何东西。
+
+    ## 为什么必须走 /api/runtime/state 拿PID
+
+    PID 有三条来路，可信度完全不同：
+      1. 扫端口 → 拿到的是「占用者」，可能是用户自己的服务。**绝不能杀。**
+      2. 本脚本自己记的 pid → 那是 hold_port 造的占位进程，不是"服务"。
+      3. **EnvKit 自己记的 svcState["backend"].PID** → 这才是
+         「EnvKit 通过 start_service 起的那个服务进程」。
+
+    只有第 3 条是对的。而且它天然满足一个前提：这个进程是 EnvKit
+    亲自派生的，EnvKit 也知道怎么把它拉回来——**恢复路径是真的**。
+
+    ## 找不到 PID 就明确失败，不猜
+
+    沙箱服务没起来时 svcState 是空的。此时如果"猜一个进程"，
+    杀的就可能是用户的东西。**宁可这一轮标INVALID 也不冒这个险。**
     """
-    raise SystemExit(
-        'kill_service 需要显式指定目标 pid。\n'
-        '刻意不自动扫描：注入器擅自杀用户进程是不可接受的风险。\n'
-        '用法：先手动启动一个服务，或用 --target-pid 指定。'
-    )
+    import json as _json
+    import tempfile
+    import urllib.request
+
+    # 与 tools/sandbox.py 共用同一个状态文件（临时区，不进 git）。
+    # 刻意不硬编码端口：端口变了而这里没变，注入器就会去杀别的进程。
+    state_path = Path(tempfile.gettempdir()) / 'envkit-sandbox.json'
+    if not state_path.exists():
+        raise SystemExit(
+            'kill_service 需要先建沙箱。\n'
+            '请先跑：python tools/sandbox.py --build\n'
+            '（沙箱提供独立 config / 项目目录 / 高位端口，'
+            '杀它不碰用户真实服务）')
+
+    base = _json.loads(state_path.read_text(encoding='utf-8'))
+    # **两个端口必须严格分开**，第一版就是在这儿错的：
+    #   ui_port = 沙箱 EnvKit 自己的 HTTP 端口（EnvKit 自己找，18765起）
+    #             → 拿 token、打 /api/runtime/state 都走它
+    #   port    = 被测服务端口（45311）
+    #             → 那是 sandbox-backend 监听的端口，跟 EnvKit 无关
+    # 之前误用 port 去连 EnvKit，拿到的是「连接被拒绝」——
+    # 被测服务当然会拒绝，因为它是业务服务不是 EnvKit。
+    ui = base.get('ui_port')
+    svc_port = base.get('port')
+    if not ui:
+        raise SystemExit(
+            '沙箱实例还没启动（状态里没有 ui_port）。\n'
+            '请先跑：python tools/sandbox.py --launch\n'
+            '**没有 UI 端口就没有 token，没有 token 就查不到 svcState，'
+            '也就不知道该杀哪个 pid** —— 那样就只能靠猜，'
+            '而评测器最不能干的就是猜。')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    # 拿 token（连 EnvKit 自己的 UI 端口）
+    try:
+        html = opener.open(f'http://127.0.0.1:{ui}/', timeout=5).read().decode('utf-8')
+    except Exception as e:
+        raise SystemExit(
+            f'沙箱实例没在 {ui} 上跑起来（{e}）。\n'
+            f'要先用 tools/sandbox.py --launch 起沙箱实例，'
+            f'kill_service 才有可杀的目标。\n'
+            f'**不猜、不扫端口** —— 扫到的是谁就杀谁，那是评测器最不能做的事。')
+    import re
+    m = re.search(r'window\.__EK_TOKEN__="([0-9a-f]+)"', html)
+    if not m:
+        raise SystemExit('取不到沙箱的 X-EnvKit-Token')
+    tok = m.group(1)
+
+    req = urllib.request.Request(
+        f'http://127.0.0.1:{ui}/api/runtime/state', method='GET')
+    req.add_header('X-EnvKit-Token', tok)
+    raw = _json.loads(opener.open(req, timeout=10).read().decode('utf-8'))
+
+    # 端点返回 {"ok":true,"state":{...}} —— 状态在 **state 里面**。
+    # 第一版直接读 raw['services']，永远是 None，
+    # 于是 pid 恒为 0，表现为「没有可安全杀的目标」——
+    # 而真相是解析写错了。**这个错误在三个文件里各犯了一次。**
+    st = raw.get('state') if isinstance(raw, dict) else None
+    if not isinstance(st, dict) or 'services' not in st:
+        keys = sorted(raw.keys()) if isinstance(raw, dict) else type(raw).__name__
+        raise SystemExit(
+            f'/api/runtime/state 的结构与预期不符（顶层键={keys}）。\n'
+            f'端点把状态包在 state 字段里，读顶层拿不到 services。\n'
+            f'**这是解析写错，不是"没有服务"** —— 别当成环境问题去排查。')
+
+    backend = (st.get('services') or {}).get('backend') or {}
+    pid = backend.get('pid')
+    if not pid:
+        # 明确失败，不猜。这是本函数最重要的一条纪律。
+        raise SystemExit(
+            '沙箱的 backend 服务当前没在运行（svcState 里没有 pid），'
+            '没有可安全杀的目标。\n'
+            '请先让沙箱服务跑起来（start_service backend），'
+            '再注入 kill_service。\n'
+            '**本注入器不会去扫端口杀进程** —— 那样杀到的可能是用户的服务。')
+
+    ok = _kill_pid(int(pid))
+    if not ok:
+        raise SystemExit(f'终止沙箱服务 pid={pid} 失败')
+
+    # 清掉 EnvKit 侧的运行时记录？不——刻意不清。
+    # svcState 里还留着 pid，verifyService 会先判「进程已退出」，
+    # 这正是真实故障的样子（EnvKit 还以为服务在）。
+    # 恢复路径要求 AI 自己发现并调用 start_service 重新拉起。
+    state['items'].append({'kind': 'kill_service', 'pid': int(pid),
+                           'port': svc_port, 'target': 'backend'})
+    return (f'已杀掉沙箱 backend 服务 pid={pid}'
+            f'（被测端口 {svc_port}，沙箱内，用户服务未受影响）')
 
 
 def inject_corrupt_backup(state):
@@ -156,7 +307,7 @@ def inject_corrupt_backup(state):
     于是恢复率评测跑出 6/6 全过，而实际上 AI 压根没接触过这个故障。
     **注入必须落在被测系统能触达的路径上，否则测的是空气。**
     """
-    p = BACKUP_DIR / 'corrupt-injected.sql'
+    p = backup_dir_now() / 'corrupt-injected.sql'
     p.parent.mkdir(exist_ok=True)
     p.write_text(
         '-- MySQL dump\nSET NAMES utf8mb4;\n'
@@ -172,7 +323,7 @@ def inject_unreadable_backup(state):
 
     同样写进 backups/ —— 理由见 inject_corrupt_backup。
     """
-    p = BACKUP_DIR / 'truncated-injected.sql'
+    p = backup_dir_now() / 'truncated-injected.sql'
     p.parent.mkdir(exist_ok=True)
     p.write_text(
         '-- MySQL dump\nSET NAMES utf8mb4;\n'
@@ -240,6 +391,18 @@ def undo():
                     p.unlink()
                     done += 1
                     print(f'  已删除 {p}')
+            elif k == 'kill_service':
+                # **刻意什么都不做。**
+                #
+                # 被杀的正是那个要靠 AI 恢复的服务——undo 若把它拉起来，
+                # 就等于替AI 把故障修好了，那这一轮测的"自主恢复"是假的。
+                # 而且它跑在沙箱里，拆沙箱时整个目录连进程一起清掉。
+                #
+                # 这一点与 hold_port 相反：占位进程是我们造的垃圾，
+                # 必须清理；沙箱服务是**被测对象**，必须留着。
+                print(f'  kill_service 不做撤销：被测服务保持"已死"状态，'
+                      f'（拉起来是 AI 的活，undo 替它做就测不到自主恢复了）'
+                      f'  拆沙箱用 python tools/sandbox.py --destroy')
         except Exception as e:
             # 单项失败不能让整个撤销中断——中断会留下更脏的现场。
             failed += 1
