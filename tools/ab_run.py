@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""起 EnvKit → 跑 A/B → 停 EnvKit（一条命令内完成）
+"""起 EnvKit → 跑评测 → 停 EnvKit（一条命令内完成）
 
 为什么必须写在一条命令里
 ------------------------
@@ -11,10 +11,15 @@
 所以这个包装器不做别的，只负责生命周期：
     1. 若 18765 已被占用且能拿到 token，直接复用（不重复起）
     2. 否则起 EnvKit_ab.exe，等到 HTML 里能取到 token 为止（最多 60s）
-    3. 跑 ab_memory.main()
+    3. 跑指定的评测脚本（默认 ab_memory）
     4. finally 里停掉自己起的那个实例
 
-它不吞异常：ab_memory 报错时这里也报错，只是保证进程一定被停。
+它不吞异常：评测脚本报错时这里也报错，只是保证进程一定被停。
+
+用法：
+    python tools/ab_run.py                 # 跑 A/B 对照
+    python tools/ab_run.py --script judge  # 跑判分器执行器
+    python tools/ab_run.py --list          # 列出可用的评测脚本
 """
 import os
 import re
@@ -30,6 +35,13 @@ BASE = 'http://127.0.0.1:18765'
 
 # 强制直连：走本机代理会被剥掉 POST body（GET 也会被代理绕，影响取 token）
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+# 可跑的评测脚本。key 是 --script 的取值。
+SCRIPTS = {
+    'ab': ('ab_memory', '经验增益 A/B 对照'),
+    'judge': ('judge_tasks', '任务成功率 / 首次成功率 判分器'),
+    'e2e23': ('e2e_v23', 'v2.3 能力端到端验收'),
+}
 
 
 def token_from(url=BASE, timeout=3):
@@ -68,14 +80,35 @@ def ensure_instance(wait=60):
 
 
 def main():
+    # 参数解析放在这里做，只透传给被调脚本——
+    # 让 "--script judge --repeat 3" 这类组合能直接工作。
+    argv = sys.argv[1:]
+    if '--list' in argv:
+        print('可用的评测脚本（--script 选一个）：')
+        for k, (mod, desc) in SCRIPTS.items():
+            print(f'  {k:<8} {mod}.py  {desc}')
+        return
+    which = 'ab'
+    if '--script' in argv:
+        i = argv.index('--script')
+        which = argv[i + 1]
+        del argv[i:i + 2]
+    if which not in SCRIPTS:
+        raise SystemExit(f'未知脚本 {which}，可用：{sorted(SCRIPTS)}')
+    mod_name = SCRIPTS[which][0]
+
     sys.path.insert(0, str(ROOT / 'tools'))
-    import ab_memory
+    mod = __import__(mod_name)
 
     tok, proc = ensure_instance()
     try:
-        # 把 token 交给 ab_memory，避免它自己再取一次
-        ab_memory.TOKEN = tok
-        ab_memory.main()
+        # 把 token 交给脚本，避免它自己再取一次
+        if hasattr(mod, 'TOKEN'):
+            mod.TOKEN = tok
+        elif hasattr(mod, 'ab'):
+            mod.ab.TOKEN = tok
+        sys.argv = [mod_name] + argv
+        mod.main()
     finally:
         if proc is not None:
             print('\n停止 EnvKit 实例...')
