@@ -38,6 +38,10 @@ from pathlib import Path
 # 状态文件：记录注入点，undo 靠它。放 exe 同级（与 EnvKit 一致）。
 STATE = Path(__file__).resolve().parent.parent / 'fault-inject-state.json'
 
+# 注入目标目录。备份类故障必须落进**真实备份目录**，
+# 否则 AI 通过正常流程读不到 —— 注入在它触达不到的地方就等于没注入。
+BACKUP_DIR = Path(__file__).resolve().parent.parent / 'backups'
+
 # 端口只从高位段选，避开 3306/8080/8888/20200/5002 等常用服务端口
 PORT_RANGE = range(45100, 45200)
 
@@ -144,8 +148,16 @@ def inject_kill_service(state):
 
 
 def inject_corrupt_backup(state):
-    """写一份校验和错误的备份：正文完整但 sha256 对不上。"""
-    p = Path(state['dir']) / 'corrupt.sql'
+    """写一份校验和错误的备份：正文完整但 sha256 对不上。
+
+    **刻意写进真实备份目录 `backups/`**（而不是 fault-tmp/）。
+    第一版写在 `envkit/fault-tmp/`，但探索沙箱只放行
+    「已配置的前后端目录」（BloodLine 项目），**AI 根本读不到那个文件**——
+    于是恢复率评测跑出 6/6 全过，而实际上 AI 压根没接触过这个故障。
+    **注入必须落在被测系统能触达的路径上，否则测的是空气。**
+    """
+    p = BACKUP_DIR / 'corrupt-injected.sql'
+    p.parent.mkdir(exist_ok=True)
     p.write_text(
         '-- MySQL dump\nSET NAMES utf8mb4;\n'
         'CREATE TABLE `t1` (`id` int NOT NULL) ENGINE=InnoDB;\n'
@@ -156,8 +168,12 @@ def inject_corrupt_backup(state):
 
 
 def inject_unreadable_backup(state):
-    """写一份内容被截断的备份：只有开头，尾部标记缺失。"""
-    p = Path(state['dir']) / 'truncated.sql'
+    """写一份内容被截断的备份：只有开头，尾部标记缺失。
+
+    同样写进 backups/ —— 理由见 inject_corrupt_backup。
+    """
+    p = BACKUP_DIR / 'truncated-injected.sql'
+    p.parent.mkdir(exist_ok=True)
     p.write_text(
         '-- MySQL dump\nSET NAMES utf8mb4;\n'
         'CREATE TABLE `t1` (`id` int NOT NULL) ENGINE=InnoDB;\n',

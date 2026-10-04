@@ -41,6 +41,7 @@ SCRIPTS = {
     'ab': ('ab_memory', '经验增益 A/B 对照'),
     'judge': ('judge_tasks', '任务成功率 / 首次成功率 判分器'),
     'e2e23': ('e2e_v23', 'v2.3 能力端到端验收'),
+    'recovery': ('recovery_rate', '故障恢复率（注入异常后自主恢复）'),
 }
 
 

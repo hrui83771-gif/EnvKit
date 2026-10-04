@@ -45,6 +45,7 @@ v2.4 交付了任务集（`eval/tasks/tasks.json`）与A/B 执行器，
 import argparse
 import json
 import statistics
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -66,8 +67,14 @@ REPORT = ROOT / 'docs' / 'eval' / 'success-rate-report.json'
 WRITE_TASKS = {'T10'}
 
 
-def run_task(task, repeat, timeout_ms_budget=None):
-    """跑一道题 repeat 次，返回每次的记录。"""
+def run_task(task, repeat):
+    """跑一道题 repeat 次，返回每次的记录。
+
+    `task['injects']` 声明了要在答题前注入的异常。
+    注入必须在**答题之前**、撤销必须在**全部跑完之后**——
+    中途撤销会让后两次跑的环境与第一次不同，A/B 就失去可比性了。
+    """
+    injects = task.get('injects') or []
     rows = []
     for i in range(repeat):
         try:
@@ -79,10 +86,14 @@ def run_task(task, repeat, timeout_ms_budget=None):
             print(f'  ERR {task["id"]} run{i+1}  {e}')
             continue
         ok, detail = ab.judge(task, text, events)
-        rows.append({
+        # min_explore：这题要求至少 N 次探索才算是"真答出来了"。
+        # 目的不是判成败，而是**标记哪些题真的有区分度**——
+        # 探索轮数为 0 的题说明画像已能直接回答，它不产生信息。
+        explore = ab.explore_rounds(events)
+        row = {
             'task': task['id'], 'task_name': task['name'], 'run': i + 1,
             'success': ok,
-            'explore_rounds': ab.explore_rounds(events),
+            'explore_rounds': explore,
             'total_rounds': ab.total_rounds(events),
             'seconds': round(dur, 1),
             'tools': ab.tool_seq(events),
@@ -90,16 +101,37 @@ def run_task(task, repeat, timeout_ms_budget=None):
             'answer_head': text[:300],
             'error_events': [e.get('text', '')[:200] for e in events
                              if e.get('type') == 'error'],
-            # 确认卡出现 = 这题会写操作。不自动点，如实记录。
             'confirm_requested': any(e.get('type') == 'confirm_request' for e in events),
-        })
+        }
+        me = task.get('min_explore')
+        if me:
+            row['min_explore'] = me
+            row['has_discriminating_power'] = explore >= me
+        rows.append(row)
         flag = 'PASS' if ok else 'FAIL'
-        cr = ' [弹确认卡]' if rows[-1]['confirm_requested'] else ''
-        print(f'  {flag} {task["id"]} run{i+1}  探索{rows[-1]["explore_rounds"]} '
-              f'{rows[-1]["seconds"]}s{cr}')
-        if rows[-1]['error_events']:
-            print(f'       ⚠ 报错事件：{rows[-1]["error_events"]}')
+        cr = ' [弹确认卡]' if row['confirm_requested'] else ''
+        dp = ''
+        if me:
+            dp = f' 探索{explore}(需≥{me}){"✓" if row["has_discriminating_power"] else "✗"}'
+        else:
+            dp = f' 探索{explore}'
+        print(f'  {flag} {task["id"]} run{i+1} {dp} {row["seconds"]}s{cr}')
+        if row['error_events']:
+            print(f'       ⚠ 报错事件：{row["error_events"]}')
     return rows
+
+
+def apply_injection(kind):
+    """注入一种异常，返回 (成功, 消息)。"""
+    r = subprocess.run(
+        [sys.executable, str(ROOT / 'tools' / 'fault_inject.py'), '--inject', kind, '--go'],
+        capture_output=True, text=True)
+    return r.returncode == 0, (r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr) else ''
+
+
+def clear_injections():
+    subprocess.run([sys.executable, str(ROOT / 'tools' / 'fault_inject.py'), '--undo'],
+                   capture_output=True, text=True)
 
 
 def summarize(rows, repeat):
@@ -163,7 +195,13 @@ def main():
     print(f"模型：{cfg.get('model')}")
     print(f'题集：{len(tasks)} 题 × {a.repeat} 次 = {len(tasks) * a.repeat} 次真实调用\n')
     for t in tasks:
-        mark = ' [会触发写操作确认]' if t['id'] in WRITE_TASKS else ''
+        mark = ''
+        if t['id'] in WRITE_TASKS:
+            mark = ' [会触发写操作确认]'
+        if t.get('injects'):
+            mark += f' [注入异常: {",".join(t["injects"])}]'
+        if t.get('min_explore'):
+            mark += f' [需探索≥{t["min_explore"]}]'
         print(f"  {t['id']} {t['name']}{mark}")
         print(f"      问：{t['ask']}")
         print(f"      验：{t['why']}")
@@ -177,9 +215,25 @@ def main():
         raise SystemExit('AI 未配置 key，做不了真实调用评测')
 
     rows = []
+    # 有注入的题先统一注入，**跑完全部再撤销**——
+    # 中途撤销会让后几次跑的环境与第一次不同，成功率就不可比了。
+    injected = set()
     for t in tasks:
-        print(f'\n--- {t["id"]} ---')
-        rows.extend(run_task(t, a.repeat))
+        for k in (t.get('injects') or []):
+            if k not in injected:
+                okk, msg = apply_injection(k)
+                print(f'注入 {k}：{"成功" if okk else "失败"} {msg}')
+                injected.add(k)
+    try:
+        for t in tasks:
+            print(f'\n--- {t["id"]} ---')
+            rows.extend(run_task(t, a.repeat))
+    finally:
+        # 用 try/finally：即使判分中途报错也要撤销，
+        # 否则注入的端口会一直占着（它能占一小时）
+        if injected:
+            print('\n撤销注入...')
+            clear_injections()
 
     summary = summarize(rows, a.repeat)
     print('\n===== 汇总 =====')
@@ -210,10 +264,51 @@ def main():
               f" · 探索中位 {d['explore_median']} · {d['seconds_median']}s"
               + (f" · {'/'.join(flags)}" if flags else ''))
 
+    # ===== 区分度统计 =====
+    # 这是本轮新增的核心指标：**满分本身不是结果，题目能不能区分才是**。
+    # 一道题若探索轮数常年为 0，说明画像里已有答案，AI 不需要探索就能过——
+    # 它验的是"底线"（不谎报、不越界），不是"能力上限"。
+    # 这样的题留在题集里只会把成功率推向 1.000，让人误以为能力已满分。
+    with_me = [r for r in rows if r.get('min_explore')]
+    if with_me:
+        got = sum(1 for r in with_me if r.get('has_discriminating_power'))
+        print(f'\n区分度检查（有 min_explore 的hard 题）：')
+        print(f'  {got}/{len(with_me)} 次达到要求的探索轮数')
+        for t in sorted({r['task'] for r in with_me}):
+            rs = [r for r in with_me if r['task'] == t]
+            g = sum(1 for r in rs if r.get('has_discriminating_power'))
+            exp = rs[0]['min_explore']
+            med = ab.median([r['explore_rounds'] for r in rs])
+            mark = '✅' if g == len(rs) else ('🟡' if g else '❌')
+            print(f'  {mark} {t}: {g}/{len(rs)} 达标（需≥{exp}，实测中位 {med}）')
+
+    # 全题探索轮数分布：一眼看出哪些题不产生信息
+    print('\n探索轮数分布（0 轮的题不产生信息，建议从题集移除）：')
+    zero = [tid for tid, d in sorted(summary['per_task'].items())
+            if (d['explore_median'] or 0) == 0]
+    for tid, d in sorted(summary['per_task'].items()):
+        med = d['explore_median'] or 0
+        bar = '█' * int(med)
+        tag = '  ← 0 轮' if med == 0 else ''
+        print(f"  {tid} {med:>4.1f} {bar}{tag}")
+    print(f'\n  0 轮题：{len(zero)}/{summary["n_tasks"]} 题'
+          + (f'（{",".join(zero)}）' if zero else ''))
+
     result = {
         'model': cfg.get('model'),
         'repeat': a.repeat,
         'n_tasks': len(tasks),
+        'injections_used': sorted(injected),
+        'discrimination': {
+            # 区分度：本轮新增的核心观测量。
+            # 满分不是结果，"题目能不能区分"才是。
+            'hard_tasks': sorted({r['task'] for r in rows if r.get('min_explore')}),
+            'hard_runs_total': len(with_me),
+            'hard_runs_meeting_bar': sum(1 for r in with_me if r.get('has_discriminating_power')),
+            # 探索轮数为 0 的题：画像已含答案，AI 不探索就能过，不产生信息
+            'zero_explore_tasks': zero,
+            'zero_explore_ratio': round(len(zero) / summary['n_tasks'], 3) if summary.get('n_tasks') else None,
+        },
         'summary': summary,
         'rows': rows,
     }

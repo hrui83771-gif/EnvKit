@@ -130,6 +130,7 @@ func main() {
 	http.HandleFunc("/api/av-exclude", handleAVExclude)
 	http.HandleFunc("/api/av-clean", handleAVClean)
 	http.HandleFunc("/api/ai/config", handleAIConfig)
+	http.HandleFunc("/api/ai/debug", handleAIDebug)
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 	http.HandleFunc("/api/ai/explain", handleAIExplain)
