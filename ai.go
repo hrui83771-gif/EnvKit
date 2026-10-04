@@ -136,16 +136,40 @@ func aiFixParamError(msg string) (AIQuirk, bool, string) {
 }
 
 // aiProviderPreset 服务商预置：新增服务商/模型只需更新此列表；任意服务商都可用「自定义」手填。
+//
+// ## 为什么预设不能落后于厂商
+//
+// 硬编码的预设列表是「厂商当前在售模型」的快照，**厂商改名或下架后它不会自己更新**，
+// 而用户从下拉里点一个失效的名字会直接吃 400。
+//
+// 真实踩过：预设写着 `deepseek-chat` / `deepseek-reasoner`，
+// 而这两个别名 DeepSeek 已于 **2026-07-24 停用**（过渡期内的对应关系是
+// chat→非思考模式、reasoner→思考模式，两者**都指向 v4-flash**）。
+// 用户实际配的 `deepseek-flash` 是对的、能跑 —— 只有这份预设是过期的。
+//
+// **所以预设里的每个名字都要在使用前核实一次**，不能凭印象写。
+// 用户也可以用「拉取模型列表」取服务商实时返回的真值（见 handleAIModels）——
+// 预设只是省一步输入，不是权威来源。
 type aiProviderPreset struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	BaseURL string   `json:"base_url"`
 	Models  []string `json:"models"`
+	// Note 给前端的一句话说明。厂商有「思考模式是请求参数而非独立模型」
+	// 这类概念时必须讲清，否则用户会以为下拉框里少了一个模型。
+	//
+	// **内容用中文原文，前端走 t() 翻译** —— 服务端直出中文会让英文界面露中文。
+	Note string `json:"note,omitempty"`
 }
 
 var aiProviderPresets = []aiProviderPreset{
-	{"deepseek", "DeepSeek", "https://api.deepseek.com", []string{"deepseek-chat", "deepseek-reasoner"}},
-	{"custom", "自定义", "", nil},
+	{
+		ID: "deepseek", Name: "DeepSeek", BaseURL: "https://api.deepseek.com",
+		Models: []string{"deepseek-flash", "deepseek-v4-pro"},
+		Note: "flash 是当前主力，思考与非思考由请求参数切换，不是两个模型；" +
+			"pro 更强也更贵。旧名 deepseek-chat / deepseek-reasoner 已停用。",
+	},
+	{"custom", "自定义", "", nil, ""},
 }
 
 func handleAIProviders(w http.ResponseWriter, r *http.Request) {
