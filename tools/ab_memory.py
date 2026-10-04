@@ -200,8 +200,81 @@ def verify_seeded(expected=1):
     return len(ms)
 
 
-def chat(messages, timeout=300):
-    """发一轮对话，返回 (文本, 事件列表, 耗时秒)。
+# 自动确认的白名单：**只放评测明确知道后果的工具**。
+#
+# ## 为什么默认关闭，为什么要有白名单
+#
+# 自动确认 = 让 AI 真的执行写操作。这是评测装置唯一能自主授权的地方，
+# 一旦放开就是"模型想删什么就删什么"。
+#
+# 两条硬约束：
+#   1. **默认关闭**，必须显式 --allow-writes 才启用。
+#   2. **只对白名单工具生效**；白名单为空时等于不自动确认。
+#
+# 白名单里只有 start_service：恢复类评测唯一需要的动作，
+# 而它作用于沙箱里的一次性服务（eval/fixtures/sandbox-backend，端口 45311），
+# 杀掉重起都不影响用户任何东西。
+#
+# **绝不放** db_backup / db_restore / apply_whitelist / cleanup_processes
+# —— 那些碰用户真实数据与进程。
+AUTO_APPROVE_WHITELIST = {
+    'start_service',    # 沙箱的一次性服务
+    # restart_service 不放：它内部是 stop+start，沙箱里用 start_service 就够，
+    # 多放一个就多一个能让模型在真实环境里乱叫的机会。
+}
+
+
+def _validate_response(text, events):
+    """校验响应有效性。**无效必须报错，绝不能当 0 数据用。**
+
+    实测踩过两次，都会给出一个漂亮但假的 0：
+    - 第一次：代理剥掉 POST body，一个事件都没收到 -> 报告写"增益 0.000"
+    - 第二次：只有 error 事件，没正文也没工具 -> 同样写成 0
+    两次看起来都像"记忆层没影响"，真相是"根本没测到"。
+    """
+    if not events:
+        raise SystemExit(
+            '\n**空响应**：一个 SSE 事件都没收到。\n'
+            '几乎可以确定是本机代理拦截了 POST 请求体。\n'
+            '（EnvKit 日志里会有「请求体未到达（被本机代理/预览容器拦截）」）')
+    if not text.strip() and not tool_seq(events):
+        kinds = [e.get('type') for e in events]
+        errs = [e.get('text', '')[:200] for e in events if e.get('type') == 'error']
+        raise SystemExit(
+            f'\n**无效响应**：收到 {len(events)} 个事件但没有正文也没有工具调用。\n'
+            f'事件类型：{kinds}\n错误事件：{errs}\n'
+            f'这说明模型没被真正调用到，结果不能当数据用。\n'
+            f'常见原因：本机代理拦截上游请求 / 模型配置不可用 / key 失效。')
+
+
+def _pending_confirm(events):
+    """返回 (tool, args) —— 最后一个未被回执的确认卡，没有则 None。
+
+    ## 判断依据是「有没有 tool_result」，不是「有没有 confirm_request」
+
+    第一段事件里若有确认卡，说明这次调用**停住了**；
+    若已跟着出现 tool_result，说明那是已处理完的历史，不该再点。
+    不做这个区分的话，第二段请求返回的事件里会再次出现 confirm_request
+    （模型可能又想别的写操作），从而被误判成"还有一个待确认"。
+    """
+    last = None
+    tid = ''
+    for e in events:
+        t = e.get('type')
+        if t == 'confirm_request':
+            last = (e.get('tool'), e.get('args') or {})
+            tid = e.get('tool_call_id') or ''
+        elif t == 'tool_result' and last is not None:
+            last = None
+            tid = ''
+    return (last[0], last[1], tid) if last else None
+
+
+def chat_once(messages, confirm=None, timeout=300):
+    """发一轮请求，返回 (文本, 事件列表, 耗时秒)。
+
+    confirm 非空时走"确认回执"路径：服务端执行该写工具、把结果交给模型、
+    然后继续同一轮推理（见 ai_loop.go:97-129）。
 
     两处必须写对，否则测出来的数是假的：
 
@@ -210,10 +283,7 @@ def chat(messages, timeout=300):
        服务端也能从回退头里恢复出用户消息。
        编码方式与前端 `web/index.html:4221` 一致——JSON 后 URL-encode，
        服务端做 `url.QueryUnescape`。
-       这是 EnvKit 自己的既有兜底机制（见 ai_loop.go:57-60），不是为评测新加的。
-
-    不自动确认写操作：探索类任务不需要确认卡，
-    若真弹了确认卡说明任务设计有问题，记下来但不自动点。
+       这是 EnvKit 自己的既有兜底机制（ai_loop.go:57-60），不是为评测新加的。
     """
     last_user = ''
     for m in reversed(messages):
@@ -221,11 +291,14 @@ def chat(messages, timeout=300):
             last_user = m.get('content', '')
             break
     fb = urllib.parse.quote(json.dumps(
-        {'last': last_user, 'confirm': None, 'lang': 'zh'}, ensure_ascii=False))
+        {'last': last_user, 'confirm': confirm, 'lang': 'zh'}, ensure_ascii=False))
 
+    payload = {'messages': messages}
+    if confirm is not None:
+        payload['confirm'] = confirm
     req = urllib.request.Request(
-        BASE + '/api/ai/chat', data=json.dumps({'messages': messages}).encode('utf-8'),
-        method='POST')
+        BASE + '/api/ai/chat',
+        data=json.dumps(payload).encode('utf-8'), method='POST')
     req.add_header('Content-Type', 'application/json')
     req.add_header('X-EnvKit-Token', TOKEN)
     req.add_header('X-EnvKit-Chat-Fallback', fb)
@@ -251,30 +324,64 @@ def chat(messages, timeout=300):
             events.append(ev)
             if ev.get('type') == 'delta':
                 text += ev.get('text', '')
-    dur = time.time() - t0
-    if not events:
-        raise SystemExit(
-            f'\n**空响应**：{dur:.2f}s 内一个 SSE 事件都没收到。\n'
-            f'几乎可以确定是本机代理拦截了 POST 请求体。\n'
-            f'先确认：curl -s -X POST http://127.0.0.1:18765/api/ai/chat '
-            f'-H "Content-Type: application/json" -H "X-EnvKit-Token: {TOKEN}" '
-            f'-d "{{}}" 能拿到 SSE。\n'
-            f'（EnvKit 日志里会有「请求体未到达（被本机代理/预览容器拦截）」）')
-    # 有事件但一个工具都没调、也没有正文 —— 同样是"没测到"，不是"0 轮"。
-    # 实测踩过：事件流里只有 error 类事件，delta 与 tool_result 都是 0，
-    # 于是"探索0 轮 / 耗时 0.0s"被当成有效数据记进报告，A/B 两组都是 0，
-    # 增益算成 0+0 —— 看起来像"记忆层没影响"，实际是模型压根没被调用。
-    # 所以这里要求：**至少有正文或有一次工具调用**，否则报错。
-    if not text.strip() and not tool_seq(events):
-        kinds = [e.get('type') for e in events]
-        errs = [e.get('text', '')[:200] for e in events if e.get('type') == 'error']
-        raise SystemExit(
-            f'\n**无效响应**：收到 {len(events)} 个事件但没有正文也没有工具调用。\n'
-            f'事件类型：{kinds}\n'
-            f'错误事件：{errs}\n'
-            f'这说明模型没被真正调用到，结果不能当数据用。\n'
-            f'常见原因：本机代理拦截上游请求 / 模型配置不可用 / key 失效。')
-    return text, events, dur
+    return text, events, time.time() - t0
+
+
+def chat(messages, timeout=300, allow_writes=False):
+    """发一轮对话，返回 (文本, 全部事件, 总耗时秒)。
+
+    allow_writes=True 时自动批准确认卡（**仅限 AUTO_APPROVE_WHITELIST**）。
+
+    ## 为什么要这个开关
+
+    v2.5 评测实测出来的：不给它这个能力，两维指标永远没数据。
+
+    kill_service 注入杀掉沙箱服务后，AI 诊断完全正确，原话是
+    「确认进程不在了，复验通过过，说明是被外部终止的，不是启动失败。
+    我直接重新拉起」——**然后停在确认卡上**，因为 start_service 是写操作。
+
+    于是 Autonomous Recovery 与 False Recovery 两维都是「无样本」。
+    **那不是产品缺陷，是评测装置的授权闸门挡着。**
+
+    不加这个开关，这两维就只能永远是"无样本"，
+    而它们恰恰是 v2.4 抓出缺陷的那两维。
+    闸门是对的——写操作就该要人点头。**要改的是评测装置，不是产品。**
+
+    ## 确认是独立的一次请求，不是同一条连接上的后续
+
+    服务端把 confirm 做成新 POST（ai_loop.go:97）：它执行工具、把结果
+    交给模型、然后继续同一轮推理。所以这里要**再发一次请求**，
+    带上原历史 + confirm 字段。
+
+    ## 事件要跨两段拼接
+
+    返回的 events 是「第一次请求的」+「第二次请求的」，
+    判分器才能看到完整的工具序列与最终回答。
+    只返回第二段的话，AI 前面那些诊断调用会凭空消失，
+    看起来像它什么都没查就动手了。
+    """
+    t0 = time.time()
+    text, events, _ = chat_once(messages, None, timeout)
+
+    if allow_writes:
+        # 最多连点 3 次：一次确认后模型可能又想第二个写操作
+        for _ in range(3):
+            pending = _pending_confirm(events)
+            if not pending:
+                break
+            tool, args, tid = pending
+            if tool not in AUTO_APPROVE_WHITELIST:
+                # 不在白名单：停在这里，如实记录。
+                # **静默批准会让评测变成它自己也不信任的东西。**
+                break
+            confirm = {'tool_call_id': tid, 'tool': tool,
+                       'args': args, 'approved': True}
+            text2, events2, _ = chat_once(messages, confirm, timeout)
+            text += text2
+            events += events2
+
+    _validate_response(text, events)
+    return text, events, time.time() - t0
 
 
 # ---------- 观测量的提取 ----------

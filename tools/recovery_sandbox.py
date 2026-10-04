@@ -141,6 +141,12 @@ def main():
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--keep', action='store_true', help='跑完不拆沙箱（调试用）')
     ap.add_argument('--min-samples', type=int, default=3)
+    ap.add_argument('--allow-writes', action='store_true',
+                    help='自动批准确认卡（**仅限 ab_memory.AUTO_APPROVE_WHITELIST '
+                         '里的 start_service**）。\n'
+                         '不加时恢复类注入会停在确认卡，Autonomous Recovery '
+                         '与 False Recovery 两维记为「无样本」——\n'
+                         '那是授权闸门在工作，不是 AI 判断错。')
     a = ap.parse_args()
 
     injections = rr.INJECTIONS
@@ -210,7 +216,13 @@ def main():
         print(f'      已就绪：pid={be.get("pid")} 端口={sb.SANDBOX_PORT} LISTENING')
 
         print('[5/5] 跑注入...\n')
-        results = run_injections(injections, a.repeat, ui, tok)
+        if a.allow_writes:
+            print('  [允许写操作] 自动批准确认卡，白名单 = '
+                  f'{sorted(ab.AUTO_APPROVE_WHITELIST)}')
+            print('  ⚠ 这会让 AI 真的执行写操作。沙箱模式下被写的只是一次性服务，'
+                  '但请确认沙箱确实在跑。\n')
+        results = run_injections(injections, a.repeat, ui, tok,
+                                 allow_writes=a.allow_writes)
     finally:
         print('\n[收尾] 拆沙箱...')
         if a.keep:
@@ -248,7 +260,7 @@ def box_hint():
         return '（沙箱状态不可读）'
 
 
-def run_injections(injections, repeat, ui, tok):
+def run_injections(injections, repeat, ui, tok, allow_writes=False):
     """在沙箱实例上跑注入。ab.TOKEN/BASE 已在 main 里指向沙箱。"""
     results = []
     for inj in injections:
@@ -287,7 +299,8 @@ def run_injections(injections, repeat, ui, tok):
             time.sleep(0.5)
             before = sandbox_health()
             try:
-                text, events, dur = ab.chat([{'role': 'user', 'content': inj['ask']}])
+                text, events, dur = ab.chat([{'role': 'user', 'content': inj['ask']}],
+                                             allow_writes=allow_writes)
             except SystemExit:
                 raise
             except Exception as e:
