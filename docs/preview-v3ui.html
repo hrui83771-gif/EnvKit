@@ -127,20 +127,63 @@
   .g .it .hint{color:var(--muted);font-size:11.5px}
 
   /* ===== 对话：助手页用方形；桌宠用右侧抽屉（保持原样） ===== */
-  /* 方形对话（助手页内） */
+  /* 方形对话（助手页内） —— 结构与现有 #ai-drawer 完全一致，只是外框不同 */
   .sq{background:var(--card);border:1px solid var(--line);border-radius:10px;
-    display:flex;flex-direction:column;height:420px}
-  .sq .h{padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px;font-weight:650;
-    display:flex;align-items:center;gap:7px}
-  .sq .m{flex:1;overflow:auto;padding:13px;display:flex;flex-direction:column;gap:11px}
-  .bub{max-width:82%;padding:8px 11px;border-radius:10px;font-size:12.5px;line-height:1.65}
+    display:flex;flex-direction:column;height:520px}
+  .sq .h{padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:650;
+    display:flex;align-items:center;gap:6px}
+  .sq .m{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .tbtn{font-size:11.5px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);
+    background:var(--card);color:var(--muted);cursor:pointer}
+  .tbtn:hover{background:var(--hover);color:var(--text)}
+
+  /* 消息四类：sys / me / ai（含思考、计划、工具、token） */
+  .bub{max-width:82%;padding:7px 10px;border-radius:10px;font-size:12.5px;line-height:1.65;position:relative}
   .bub.me{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:3px}
   .bub.ai{align-self:flex-start;background:var(--soft);border:1px solid var(--line);border-bottom-left-radius:3px}
-  .bub .pl{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 9px;
-    font-size:11.5px;color:var(--muted)}
-  .bub .pl div{padding:1px 0}
-  .sq .f{padding:9px 11px;border-top:1px solid var(--line);display:flex;gap:7px}
-  .sq .f input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+  .bub.sys{align-self:center;background:var(--off);color:var(--muted);font-size:11.5px;
+    border-radius:8px;max-width:94%;text-align:center}
+  .bub .tm{font-size:10.5px;opacity:.62;margin-bottom:3px;letter-spacing:.3px}
+
+  /* 思考过程（可折叠） */
+  .th{background:var(--card);border:1px solid var(--line);border-radius:7px;
+    padding:5px 8px;font-size:11.5px;color:var(--muted);margin-bottom:6px}
+  .th summary{cursor:pointer;list-style:none}
+  .th summary::-webkit-details-marker{display:none}
+  .th summary::before{content:'▸ ';font-size:9px}
+  .th[open] summary::before{content:'▾ '}
+  .th div{padding:4px 0 2px;line-height:1.6}
+
+  /* 执行计划（步骤可扫，结束自动折叠） */
+  .pl{background:var(--card);border:1px solid var(--line);border-radius:7px;
+    padding:5px 8px;font-size:11.5px;margin-bottom:6px}
+  .pl summary{cursor:pointer;color:var(--muted);list-style:none}
+  .pl summary::-webkit-details-marker{display:none}
+  .pl summary::before{content:'▸ ';font-size:9px}
+  .pl[open] summary::before{content:'▾ '}
+  .plr{padding:2px 0 2px 14px;color:var(--text);position:relative;line-height:1.6}
+  .plr span{position:absolute;left:0;opacity:.5}
+
+  /* 工具结果（折叠） */
+  .tr{background:var(--card);border:1px solid var(--line);border-radius:7px;
+    padding:5px 8px;font-size:11.5px;margin-bottom:6px}
+  .tr summary{cursor:pointer;color:var(--ok);list-style:none}
+  .tr summary::-webkit-details-marker{display:none}
+  .tr pre{margin:5px 0 2px;padding:6px 7px;background:var(--bg);border-radius:5px;
+    font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--muted)}
+
+  /* 单次 token 消耗行 */
+  .tk{font-size:10.5px;color:var(--muted);text-align:right;margin-top:5px;opacity:.8;letter-spacing:.2px}
+  .tk:hover{opacity:1}
+
+  /* 确认卡 */
+  .cf{border:1px solid var(--warn);background:var(--warnbg);border-radius:8px;padding:8px 10px}
+  .cf .cfh{font-size:12px;font-weight:650;color:var(--warn);margin-bottom:3px}
+  .cf .cfb{font-size:12px;color:var(--text);margin-bottom:7px}
+  .cf .cfr{display:flex;gap:6px}
+
+  .sq .f{padding:8px 10px;border-top:1px solid var(--line);display:flex;gap:7px}
+  .sq .f input{flex:1;padding:6px 9px;border:1px solid var(--line);border-radius:7px;
     font:inherit;background:var(--bg);color:var(--text)}
 
   /* 桌宠：右下角固定 + 点击展开右侧抽屉 */
@@ -156,6 +199,18 @@
   .hair{fill:var(--warn);opacity:.85}
   .eye{fill:var(--text)}
   .blush{fill:var(--err);opacity:.3}
+  .pet-badge{position:absolute;top:4px;right:4px;background:var(--err);color:#fff;
+    font-size:10px;border-radius:999px;padding:0 5px;line-height:15px;font-weight:600}
+
+  /* 桌宠悬停卡：今日统计 / 缓存命中率 / 余额 */
+  #pettip{position:fixed;right:104px;bottom:20px;width:216px;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11.5px;
+    color:var(--muted);line-height:1.65;z-index:39;box-shadow:0 6px 20px rgba(0,0,0,.11)}
+  #pettip.hidden{display:none}
+  #pettip .tt-h{font-weight:700;color:var(--text);font-size:12.5px;margin-bottom:6px}
+  #pettip .tt-r{margin-bottom:5px}
+  #pettip .u-sep{border-top:1px dashed var(--line);margin:7px 0}
+  .bal-ref{cursor:pointer;color:var(--brand);padding:0 3px}
 
   #drawer{position:fixed;top:0;right:0;bottom:0;width:392px;max-width:92vw;background:var(--card);
     border-left:1px solid var(--line);z-index:50;display:none;flex-direction:column;
@@ -419,31 +474,67 @@
   <!-- ---------- 助手 ---------- -->
   <section class="page" id="p-agent">
     <div class="ptitle">助手</div>
-    <div class="psub">对话做成方形放在页内；右下角桌宠保持原样，点它开右侧抽屉 —— 两条路径都在。</div>
+    <div class="psub">左侧方形与右下角桌宠抽屉<b>是同一套对话</b>（同渲染、同历史、同状态），只是停靠位置不同。</div>
     <div class="grid" style="grid-template-columns:minmax(0,1fr) 250px">
       <div class="sq">
-        <div class="h">AI 助手<span class="bg off" style="margin-left:auto">未启用</span></div>
-        <div class="m">
-          <div class="bub me">把服务起起来</div>
-          <div class="bub ai">
-            <div class="pl" style="margin-bottom:6px">
-              <div>1 · 正在读取项目画像</div>
-              <div>2 · 正在搜索 npm scripts</div>
-              <div>3 · 正在启动后端</div>
+        <div class="h">AI 助手
+          <button class="tbtn" style="margin-left:auto;display:inline-block" onclick="T('停止生成')">停止生成</button>
+          <button class="tbtn" onclick="T('清空')">清空</button>
+        </div>
+        <div class="m" id="sqm">
+          <!-- 系统消息 -->
+          <div class="bub sys">你好！我可以查看日志与状态、执行备份/检测/启停等操作（写操作需你确认）。</div>
+
+          <!-- 用户消息 + 时间戳 -->
+          <div class="bub me" style="max-width:100%">
+            <div class="tm">10:12</div>
+            把服务起起来
+          </div>
+
+          <!-- 助手消息：思考折叠 + 计划 + 工具结果 + 结论 + token 行 -->
+          <div class="bub ai" style="max-width:100%">
+            <div class="tm">10:12</div>
+            <details class="th"><summary>思考中…（已展开）</summary>
+              <div>用户要启动前后端。先读项目画像确认启动方式，别硬编码 serve。</div>
+            </details>
+
+            <details class="pl" open><summary>执行计划（需要探索项目才能回答 · 上限 4 轮）</summary>
+              <div class="plr"><span>1</span>正在读取项目画像</div>
+              <div class="plr"><span>2</span>正在搜索 npm scripts</div>
+              <div class="plr"><span>3</span>正在启动后端</div>
+              <div class="plr"><span>4</span>正在启动前端</div>
+            </details>
+
+            <details class="tr"><summary>✓ get_project_brief · 查看结果</summary>
+              <pre>kinds: [vue, go]  web_script: serve (package.json)  backend: main.go</pre>
+            </details>
+
+            <div style="margin-top:7px">前端用 <b>npm run serve</b>（从 package.json 推断，不是猜的），后端 <b>go run main.go</b>。</div>
+            <div style="margin-top:4px;color:var(--warn)">后端复验未通过，先别当它可用。</div>
+
+            <!-- 单次 token 消耗行 -->
+            <div class="tk" title="prompt / completion tokens">↑ 1.2k ↓ 340</div>
+          </div>
+
+          <!-- 写操作确认卡 -->
+          <div class="bub ai" style="max-width:100%">
+            <div class="tm">10:13</div>
+            <div class="cf">
+              <div class="cfh">AI 请求执行：db_backup</div>
+              <div class="cfb">备份数据库 farm（会生成 .sql + sha256）</div>
+              <div class="cfr"><button class="pri" onclick="T('确认')">确认</button>
+                <button onclick="T('拒绝')">拒绝</button></div>
             </div>
-            前端用 <b>npm run serve</b>（从 package.json 推断，不是猜的），后端入口
-            <b>go run main.go</b>。已启动并复验通过：前端 :8080、后端 :8888。
-            <div style="margin-top:6px;color:var(--warn)">提示：后端虽然起来了，但复验未通过，先别当它可用。</div>
           </div>
         </div>
-        <div class="f"><input placeholder="例如：端口被谁占了"><button class="pri" onclick="T('发送')">发送</button></div>
+        <div class="f"><input placeholder="问我任何环境问题…（Enter 发送）"><button class="pri" onclick="T('发送')">发送</button></div>
       </div>
 
       <div>
         <div class="c" style="min-height:0"><h3>任务轨迹</h3>
           <div class="bd" style="gap:7px">
             <div class="kv">t-…1012-A3F1　<span class="bg ok">成功</span></div>
-            <small>启动前后端 · 5 步 · 含人工介入 0 次</small>
+            <small>启动前后端 · 5 步 · 人工介入 0 次</small>
             <div class="kv">t-…0930-77C2　<span class="bg ok">成功</span></div>
             <small>查端口占用 · 2 步</small>
           </div></div>
@@ -456,6 +547,13 @@
         <div class="c" style="min-height:0;margin-top:11px"><h3>操作审计</h3>
           <div class="bd"><div class="kv">580 条</div><small>AI 230 · 用户 340 · 守护 10</small></div>
           <div class="ft"><button onclick="T('打开审计')">打开</button></div></div>
+        <div class="c" style="min-height:0;margin-top:11px"><h3>今日用量</h3>
+          <div class="bd" style="gap:5px">
+            <div class="kv">对话 <b>7</b> 次 · ↑<b>8.4k</b> ↓<b>2.1k</b></div>
+            <small>缓存命中率 86%</small>
+            <div class="kv">余额 <b>¥42.18</b>　<button class="ghost" style="padding:0 4px" onclick="T('刷新余额')">↻</button></div>
+            <small>桌宠悬停卡也显示这三行</small>
+          </div></div>
       </div>
     </div>
   </section>
@@ -501,6 +599,18 @@
 </div>
 
 <!-- ===== 桌宠（保持原样：右下角固定 + 点击开右侧抽屉） ===== -->
+<!-- 桌宠悬停卡：今日统计 + 缓存命中率 + 余额（四态），点它开抽屉 -->
+<div id="pettip" class="hidden">
+  <div class="tt-h">AI 助手</div>
+  <div class="tt-r"><b>当前任务</b><br>启动后端 · 已 3 步</div>
+  <div class="tt-r"><b>上次</b><br>查端口占用 · 成功 · 2 步</div>
+  <div class="u-sep"></div>
+  <b>今日统计</b><br>
+  <span>对话 7 次 · ↑8.4k ↓2.1k</span><br>
+  <span>缓存命中率 86%</span><br>
+  <span>余额 ¥42.18 <span class="bal-ref" title="刷新余额">↻</span></span>
+</div>
+
 <div id="pet" title="AI 助手 · 点我对话 / 右键更多">
   <div class="bub2">点我开对话 →</div>
   <svg viewBox="0 0 100 100">
@@ -513,69 +623,82 @@
     <ellipse class="blush" cx="67" cy="63" rx="5" ry="3"/>
     <path d="M45 67 Q50 71 55 67" stroke="var(--text)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
   </svg>
+  <div class="pet-badge">3</div>
 </div>
 <button class="fab ghost" onclick="document.getElementById('dsh').classList.add('on')">设计说明</button>
 
-<!-- 右侧抽屉（桌宠点开） -->
+<!-- 右侧抽屉：与助手页方形同源（同一套渲染） -->
 <div id="drawer">
-  <div class="dh"><b>AI 助手</b><span class="bg off">未启用</span><span style="flex:1"></span>
-    <button class="ghost" onclick="T('缩成小圆点')">缩成点</button>
-    <button class="ghost" onclick="document.getElementById('drawer').classList.remove('on')">×</button></div>
+  <div class="dh"><b>AI 助手</b><span style="flex:1"></span>
+    <button class="tbtn" onclick="T('缩成小圆点')">缩成点</button>
+    <button class="tbtn" onclick="T('清空')">清空</button>
+    <button class="tbtn" onclick="document.getElementById('drawer').classList.remove('on')">×</button></div>
   <div class="dm">
-    <div class="bub me" style="align-self:flex-end">端口 8888 是谁在占</div>
-    <div class="bub ai" style="align-self:flex-start">扫描结果是 <b>node.exe</b>（pid 19080）——
-      它是我们自己启的前端，不是别的程序占的。</div>
-    <div class="bub me" style="align-self:flex-end">那后端呢</div>
-    <div class="bub ai" style="align-self:flex-start">后端 :8888 进程在，但<b>没通过复验</b>。
-      <span style="color:var(--warn)">别当它可用</span>，先点复验看结论。</div>
+    <div class="bub me" style="max-width:100%"><div class="tm">10:15</div>端口 8888 是谁在占</div>
+    <div class="bub ai" style="max-width:100%"><div class="tm">10:15</div>
+      <details class="th"><summary>思考中…</summary><div>先扫端口看 owner，再判断是不是我们自己的进程。</div></details>
+      <details class="tr"><summary>✓ get_system_state · 查看结果</summary><pre>8888 LISTENING pid=19080 node.exe</pre></details>
+      <div>是 <b>node.exe</b>（pid 19080）—— 我们自己启的前端，不是别的程序占的。</div>
+      <div class="tk">↑ 620 ↓ 158</div>
+    </div>
+    <div class="bub me" style="max-width:100%"><div class="tm">10:15</div>那后端呢</div>
+    <div class="bub ai" style="max-width:100%"><div class="tm">10:16</div>
+      后端 :8888 进程在，但<b>没通过复验</b>。
+      <span style="color:var(--warn)">别当它可用</span>，先点复验看结论。
+      <div class="tk">↑ 480 ↓ 96</div>
+    </div>
   </div>
-  <div class="df"><input placeholder="说点什么…"><button class="pri" onclick="T('发送')">发送</button></div>
+  <div class="df"><input placeholder="问我任何环境问题…"><button class="pri" onclick="T('发送')">发送</button></div>
 </div>
 
 <div class="dsh" id="dsh" onclick="if(event.target===this)this.classList.remove('on')">
   <div class="dp">
     <button class="x" onclick="document.getElementById('dsh').classList.remove('on')">×</button>
     <h2>这一版改了什么</h2>
-    <p>依据你的四条意见。</p>
+    <p>依据你的四条意见 + <b>AI 交互零删减</b>。</p>
 
-    <h4>1 · 桌宠保留，右侧抽屉保持原样</h4>
-    <p>右下角桌宠仍在原位，点它开右侧抽屉 —— <b>这条路径完全不动</b>。
-    现有桌宠是一整套 SVG 角色（表情 / 任务提示 / 气泡 / 点击彩蛋），不是临时加的，
-    v3.0 不碰它。</p>
-    <p>助手页里的对话<b>另做一份方形</b>。两条路径并存的理由：页内方形适合认真问一件事，
-    桌宠适合顺手问一句。取舍见下。</p>
+    <h4>1 · AI 交互：一处都不删</h4>
+    <p>这是上一版最大的问题。上一版的方框是我手画的简化版，只画了两条气泡，
+    <b>漏掉了 token 行、时间戳、执行计划、确认卡、停止生成、思考折叠、余额与今日统计</b>——
+    而这些恰恰是原版打磨得最细的地方。</p>
+    <p>这一版全部补齐，并且明确：<b>助手页的方形与桌宠抽屉是同一套对话</b>，
+    同渲染代码、同历史、同状态，只是停靠位置不同。方形不是新做的聊天框，
+    是把现有的 <code>#ai-drawer</code> 换个外框。</p>
+    <p>现在能看到的（原版全有）：系统消息 · 用户消息 + 时间戳 · 思考过程折叠 ·
+    执行计划（含提额行） · 工具结果折叠 · 单次 token 行 <code>↑1.2k ↓340</code> ·
+    写操作确认卡 · 停止生成 · 清空 · 桌宠今日统计 + 缓存命中率 + 余额四态。</p>
+    <p><b>试试</b>：鼠标悬停右下角桌宠 → 看悬停卡的三行统计；点桌宠 → 抽屉里也有
+    token 行和思考折叠，两边内容同源。</p>
 
-    <h4>2 · 方形对话 vs 抽屉，用途不同</h4>
+    <h4>2 · 桌宠完整保留</h4>
+    <p>它不是装饰图标，是一整套角色系统：4 种眼状态、8 项面部特征、3 套发型、
+    任务提示浮层（任务 / 上次 / 今日统计 / 余额）、点击彩蛋、收缩为小圆点、
+    右键菜单 4 项（含眼睛跟随开关）、拖动贴边与抽屉开合联动。</p>
+    <p><b>位置可调，行为不可改。</b>v3.0 允许做的只有一件：调整默认停靠位置，
+    避免与首页右下角内容重叠。</p>
+
+    <h4>3 · 排布不整齐怎么解决</h4>
     <ul>
-      <li><b>助手页方形</b>：常驻、可展开执行计划、旁边能放轨迹与记忆</li>
-      <li><b>桌宠抽屉</b>：不打断当前视线，从任意页面唤起</li>
-    </ul>
-    <p>如果你觉得重复，砍掉方形只留抽屉也行 —— 但那样助手页就只剩三块审计类卡片，
-    点"助手"进来没什么可看的。我倾向两个都留。</p>
-
-    <h4>3 · 每块一个小卡片（诊断 / 数据 / 运行）</h4>
-    <p>原来是一张卡片里塞一整组。现在<b>一块一卡</b>，用等高栅格对齐。</p>
-
-    <h4>4 · 排布不整齐怎么解决</h4>
-    <ul>
-      <li><code>grid-template-columns:repeat(auto-fill,minmax(230px,1fr))</code>
-        —— 卡片按容器宽度自动换行，<b>不留半行空缺</b></li>
+      <li><code>repeat(auto-fill,minmax(230px,1fr))</code> —— 自动换行不留半行空缺</li>
       <li><code>align-items:stretch</code> —— 同行卡片强制等高</li>
-      <li>卡片内 <code>flex-direction:column</code> + <code>justify-content:center</code>
-        —— 内容长短不影响按钮行位置</li>
-      <li>按钮统一收在卡片底部 <code>.ft</code>，跨卡片横向对齐</li>
-      <li>首页三张主卡单独一行（<code>.hero</code>），权重与次级卡区分</li>
+      <li>卡片内 flex 分区，按钮统一贴底 → 跨卡横向对齐</li>
+      <li><code>auto-fill</code> 不能写成 <code>auto-fit</code>：后者把最后一行拉宽，
+        同样卡片在不同行不同宽——那是"不整齐"的另一种形态</li>
+      <li>状态色用左边条 3px，不整块染色，扫视可快速定位</li>
     </ul>
+
+    <h4>4 · 每块一个小卡片</h4>
+    <p>诊断 9 张、数据 6 张、运行 8 张，一块一卡，等高对齐。</p>
 
     <h4>5 · 中英文与亮暗色：全部保留</h4>
-    <p>沿用现有 <code>index.html</code> 的变量名与配色，<b>暗色不是新造的一套</b>，
-    是把已有的 <code>[data-theme="dark"]</code> 搬过来。顶栏有切换按钮，右上角 ◐。</p>
-    <p>全站只用 <code>var(--*)</code>，不写死颜色 —— 切主题时一处都不用改。
-    英文走原有的 <code>t()</code>，这一版原型为了省事只出了中文，正式实现时按现有
-    <code>i18n_build.py</code> 流程补词条。</p>
+    <p>沿用现有 <code>index.html</code> 的变量名与 <code>[data-theme="dark"]</code> 块，
+    <b>不是新造的一套</b>。全站只用 <code>var(--*)</code>，主题块外零硬编码颜色。
+    右上角 ◐ 切换。</p>
+    <p>英文走原有 <code>t()</code>。这一版原型只出中文，正式实现按
+    <code>i18n_build.py</code> 补词条——验收时会切到英文断言无中文残留。</p>
 
     <h4>6 · 状态灯规则仍可对照</h4>
-    <p>顶栏「按旧规则上色」勾上，后端立刻变绿 —— 但它 <code>phase=degraded</code>。
+    <p>勾上「按旧规则上色」，后端立刻变绿——但它 <code>phase=degraded</code>。
     这条不能因为改版式就丢掉。</p>
   </div>
 </div>
@@ -595,7 +718,11 @@ function go(pg){
 
 document.getElementById('pet').onclick = function(){
   document.getElementById('drawer').classList.toggle('on');
+  // 现有行为：抽屉开合时桌宠让位（petShift）
+  document.getElementById('pettip').classList.add('hidden');
 };
+// 悬停显示今日统计 + 余额（原型：桌宠旁固定展示，方便截图）
+document.getElementById('pettip').classList.remove('hidden');
 
 var legacy = document.getElementById('legacy');
 function lamps(){
