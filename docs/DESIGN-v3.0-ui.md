@@ -9,6 +9,10 @@
 
 ## 零、本稿的定位
 
+> **交互原型**：[`preview-v3ui.html`](preview-v3ui.html)（浏览器直接打开）
+> 可切换工作区、切换状态灯规则、查看设计说明。用真实字段与真实数据渲染。
+> 其中首页有一个开关能把「绿灯只看 running」的旧规则切回来，用来看清 v3.0 改掉了什么。
+
 v2.2 已经交付了统一状态源 `/api/runtime/state`（`runtime.go:88`），但**前端一次都没接**——
 `web/index.html` 中 `"/api/runtime/state"` 出现次数为 0，`issues` 字段被引用 0 次。
 
