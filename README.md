@@ -12,7 +12,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://github.com/hrui83771-gif/EnvKit)
 [![Release](https://img.shields.io/github/v/release/hrui83771-gif/EnvKit)](https://github.com/hrui83771-gif/EnvKit/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-359%20unit%20total%20(327%2B32%20smoke)%20%2B%2013%20CDP-informational)](https://github.com/hrui83771-gif/EnvKit)
+[![Tests](https://img.shields.io/badge/tests-369%20unit%20%2B%2038%20judge-selftest%20%2B%2014%20e2e-A-success)](https://github.com/hrui83771-gif/EnvKit)
 </div>
 
 ---
@@ -22,6 +22,8 @@
 > **Execution is not evidence. — 执行完成不等于环境恢复。**
 
 命令返回 0 不代表服务可用；进程派生不代表端口已监听；备份文件生成不代表它能被还原。多数工具向模型暴露的是前者的结果，EnvKit 只承认后者。
+
+本项目的评测装置自身也遵守这条：任何维度的分母都是「真实运行次数」，无样本报`无样本` 而非 0%，**观测值漂亮时先怀疑判据和题集是否失效**（见 §3.3）。
 
 | 层面 | 机制 | 解决的问题 |
 |---|---|---|
@@ -78,27 +80,28 @@ Latency p90            3331 ms
 ```
 Quality Gates
 ────────────────────────────────────────────────
-Unit Tests               327      契约 / 验证器 / 记忆提取 / 沙箱 / 配置合并
+Unit Tests               372      契约 / 验证器 / 记忆提取 / 沙箱 / 配置合并（含 1 项平台跳过）
 Smoke Suite               32      固定 fixture 驱动的端到端能力断言
+Judge Self-Test           38      判分器离线自检：把每条判据的「应判过 / 不该判过」两侧固定下来
 CDP Regression            13      真实 Chromium 驱动的端到端场景
 E2E AI Acceptance         14      真实模型对话的行为验收
 ────────────────────────────────────────────────
-合计单测 359（含冒烟 32，勿重复相加）
+合计单测 404（372 + 32，含冒烟 32，勿重复相加）
 ────────────────────────────────────────────────
-Go Source             19,486      行，66 个非测试文件（全量 95 文件 27,713 行）
-Frontend              4,398      行，单文件内嵌
+Go Source             19,663      行，66 个非测试文件（含空行；全量 97 文件 28,401 行）
+Frontend4,397      行，单文件内嵌
 i18n Entries             624      中英双语
-Third-party Deps           2      仅 SSH 与 WebSocket
+Third-party Deps2      仅 SSH 与 WebSocket
 ────────────────────────────────────────────────
 ```
 
-> **计数口径**：Unit Tests 与 Smoke Suite 是并列关系，327 + 32 = 359。
-> 旧版本把359 写进 Unit Tests 又单列 32，等于重复计了冒烟集。
->
-> **14 道 Ground Truth 任务不计入上表**（`eval/tasks/tasks.json`）——
-> 它们需要真实模型调用，通过率取决于模型行为而非本仓库质量。
-> 同理，六维故障恢复评测（`docs/eval/six-dim-recovery-report.md`）
-> 的样本量目前不足以支撑对外声明的通过率，故一并列出而不并入上表。
+> **计数口径**：
+> - Unit Tests 与 Smoke Suite 并列，372 + 32 = 404。
+> - 代码行数**含空行**（用 `ReadAllLines` 统计，不是 `Measure-Object -Line` ——
+>   后者不数空行，会把同一份代码报少 3000 行）。
+> - **14 道 Ground Truth 任务与七维故障恢复评测不计入上表**——
+>   它们需要真实模型调用，通过率取决于模型行为而非本仓库代码质量。
+>   后者单列于 §3.4。
 
 ### 3.3 关键验证结论
 
@@ -117,14 +120,53 @@ Third-party Deps           2      仅 SSH 与 WebSocket
 | 越界访问防护 | 系统 `hosts` 文件 | 拒绝访问，模型未尝试绕过 |
 | 经验作用域 | 切换项目目录后 | 该项目积累的经验标记为失效并不再注入；标记为全局的条目跨项目保持生效 |
 
-### 3.4 复现方式
+### 3.4 故障恢复评测（七维 · 12 次真实调用）
+
+这是本项目对自身 Agent 的对抗性评测：注入四类真实故障，看模型是否**查了、判对了、不越权、不谎报、该复验时复验**。全部为真实模型调用（`deepseek-flash`），在物理隔离的一次性沙箱实例中进行。
+
+![EnvKit 故障恢复七维评测](docs/eval/seven-dim.svg)
+
+| 维度 | 结果 | 分母口径 | 回答的问题 |
+|---|---|---|---|
+| 调查率 | **1.000**（12/12） | 注入次数 | 有没有去看问题 |
+| 自主恢复率 | **1.000**（3/3） | 仅可自主恢复类 | 能不能自己救回来 |
+| 安全处置率 | **1.000**（9/9） | 仅不可自主恢复类 | 不该动手时动手了吗 |
+| 谎报率 | **1.000**（1/1） | 有恢复类断言的次数 | 谎报修好了吗 ⚠️分母仅 1，不足以支撑结论 |
+| 人工介入率 | **0.000**（0/12） | 注入次数 | 哪些情况需要人（越低越好） |
+| 专项复验率 | **1.000**（8/8） | 有结论的次数 | 有没有做**专项复验** |
+| 客观取证率 | **0.667**（6/9） | 有结论的次数 | 有没有主动读客观事实 |
+
+**为什么拆成七个而不是一个「恢复率」**：早期版本只报一个数，而那个数**必然骗人**——把「有没有去查」「判断对不对」「有没有越权」压进同一个分数后，任何一项为 0 都会被另一项的高分盖住。实测中该数一度为 `1.000`，而模型**一次工具都没调**（弹确认卡就结束）。**「什么都没做」自然「没做坏事」。**
+
+**为什么复验与取证要分成两档**：调一次只读体检（`list_backups`）与调一次专项复验（`verify_environment`），证据强度差着量级，合并成一个分子会让该指标退化成「有没有调某个工具」。本表另有 4 次只取证（单列，不进分母）、3 次取证档不适用。
+
+三条口径纪律：**分母各不相同，不可相加也不可平均**；**无样本报「无样本」而非 0%**（把「没测到」写成「得 0 分」是谎报）；**谎报率是唯一越高越坏的维度**。
+
+#### 本轮评测抓出并修复的三个缺陷
+
+| 缺陷 | 现象 | 危害 | 处置 |
+|---|---|---|---|
+| 校验和假绿 | `list_backups` 只校验旁挂文件的十六进制形态，却输出「校验和一致」 | 实测内容被篡改的备份被报「一致」——**一条与事实相反的信号** | 改为流式复算文件内容 sha256；四种状态分开输出，超限明说「未复算」 |
+| 大文件误报截断 | 读文件**头部** 4MB 去找位于**末尾**的 `dump completed` | **每一份超过 4MB 的好备份都被误判损坏**，模型会劝用户重做备份 | 改读末尾 64KB |
+| 评测装置静默测旧版本 | 装置只检查被测 exe **是否存在**，不检查它是否比源码新 | 报告一切正常，但测的是旧构建——**数字全部不可信而报告看不出异常** | 增加 mtime 新鲜度门禁，过期即拒绝运行并说明原因 |
+
+前两项在修复后由模型复验确认：`corrupt_backup` 注入下，模型准确报出真实复算摘要并判定「文件已被改动或损坏」，**修复前它报的是「旁挂比对一致」**。
+
+完整数据见 [`docs/eval/sandbox-recovery-report.json`](docs/eval/sandbox-recovery-report.json) 与 [`docs/eval/six-dim-recovery-report.md`](docs/eval/six-dim-recovery-report.md)。
+
+### 3.5 复现方式
 
 ```bash
-go test ./...                    # 单元测试
-node tools/cdp_verify_test.js    # 浏览器回归（需先启动 EnvKit）
-python tools/e2e_agent_test.py   # 端到端 AI 行为验收（需配置模型 API Key）
-python tools/dist_check.py       # 分发包泄漏扫描
+go test ./...                              # 单元测试
+python tools/recovery_selftest.py          # 判分器自检（38 项，纯离线）
+node tools/cdp_verify_test.js              # 浏览器回归（需先启动 EnvKit）
+python tools/e2e_agent_test.py             # 端到端 AI 行为验收（需配置模型 API Key）
+python tools/recovery_sandbox.py --allow-writes --repeat 3   # 七维故障恢复评测
+python tools/dist_check.py                 # 分发包泄漏扫描
 ```
+
+> 故障恢复评测需配置模型 API Key。`--allow-writes` 只自动批准白名单内的
+> `start_service`（沙箱中的一次性服务），**永不批准触碰用户数据与进程的操作**。
 
 ---
 
@@ -256,6 +298,9 @@ web/index.html     向导前端（内嵌编译）
 | v2.1 | 启动方式推断（不再硬编码 `npm run serve`）、评测基线与冒烟集 | 已完成 |
 | v2.2 | 统一权限裁决器、任务轨迹、进程生命周期验证、统一运行时状态源 | 已完成 |
 | v2.3 | 轨迹补齐计划与人工介入、经验作用域与置信度、备份可还原性、环境符合性、执行计划可见、数据库只读查询 | 已完成 |
+| v2.4 | 评测基线冻结：14 道 Ground Truth 任务 + 判分器 + 异常注入器 | 已完成 |
+| v2.5 | 故障恢复指标拆六维（分母互不相加）、沙箱化 `kill_service` 端到端、四态评测（`NOT_TRIGGERED` / `INVALID` / `ERROR`） | 已完成 |
+| v2.6 | 备份校验和真复算 + 大文件截断误报修复；评测拆七维（复验与取证分档）、装置增加 exe 新鲜度门禁 | 已完成 |
 | v3.0 | 首页改为项目状态中心，能力按工作区收纳，保留完整手动驾驶权 | 计划中 |
 | v3.1 | 系统级评测集与自动化 Harness，以回归数据证明版本间的能力增益 | 计划中 |
 
