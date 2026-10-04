@@ -4,26 +4,52 @@
 
 # EnvKit
 
-**单文件 · 零依赖 · 内置可验证 Agent 的 Windows 开发环境助手**
+**面向 Windows 开发环境的可验证 Agent Runtime**
 
-在一台全新的 Windows 机器上，完成 **Go / Node.js / MySQL 环境安装 → 项目配置 → FISCO-BCOS 链端运维 → 前后端应用启动** 的全流程部署，所有操作经由浏览器向导完成。
+在一台全新的 Windows 机器上，完成 **Go / Node.js / MySQL 环境安装 → 项目配置 → FISCO-BCOS 链端运维 → 前后端应用启动** 的全流程部署，所有操作经由浏览器向导完成。单文件 exe，零外部依赖。
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://github.com/hrui83771-gif/EnvKit)
 [![Release](https://img.shields.io/github/v/release/hrui83771-gif/EnvKit)](https://github.com/hrui83771-gif/EnvKit/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-369%20unit%20%2B%2038%20judge-selftest%20%2B%2014%20e2e-A-success)](https://github.com/hrui83771-gif/EnvKit)
+[![Tests](https://img.shields.io/badge/tests-372%20unit%20%2B%2038%20judge-selftest-A-success)](https://github.com/hrui83771-gif/EnvKit)
 </div>
 
 ---
 
-## 一、核心主张
+## 一、核心命题：Evidence ≠ Verification
 
 > **Execution is not evidence. — 执行完成不等于环境恢复。**
 
-命令返回 0 不代表服务可用；进程派生不代表端口已监听；备份文件生成不代表它能被还原。多数工具向模型暴露的是前者的结果，EnvKit 只承认后者。
+一个模型说「我搞定了」，在什么意义上才算真的搞定了？
 
-本项目的评测装置自身也遵守这条：任何维度的分母都是「真实运行次数」，无样本报`无样本` 而非 0%，**观测值漂亮时先怀疑判据和题集是否失效**（见 §3.3）。
+命令返回 0、进程成功派生、备份文件已生成、端口有人监听、区块在涨、工具调用成功——
+这些都只是**证据（Evidence）**，不是**验证（Verification）**。
+Evidence 是「我做过了」，Verification 是「我确认它成了」。
+前者由执行产生，后者只能由客观探针产生。
+
+绝大多数 Agent 的失败不是不会做，而是**把前者当成了后者的结论**：
+
+| 证据 | 不足以推出 | 因为 |
+|---|---|---|
+| 命令返回 0 | 服务可用 | 可能端口仍绑不上、进程随后退出 |
+| 进程已派生 | 服务健康 | 可能绑错端口、被别的服务占住 |
+| 备份文件已生成 | 能还原 | 可能缺触发器、校验和对不上、导出中途被截断 |
+| 区块高度在涨 | 链在出块 | PBFT 空块只共识不落盘，静止本属正常 |
+| 工具调用成功 | 动作被授权 | 授权由运行时裁定，不由模型裁定 |
+
+**EnvKit 把「已完成」的判定权从模型手里拿走，交给验证器**：
+模型可以自由决定做什么，但**没有权力宣布完成**——
+它能引用什么、能得出什么结论，取决于 Runtime 拿到了什么客观证据。
+
+三者分工：**Agent** 负责理解环境、规划与决策；
+**Runtime** 负责受控执行——所有副作用经 24 个受控工具发出，权限由系统裁定；
+**Verification** 负责用客观事实判断是否真的完成。
+
+这条命题不是设计口号，而是可证伪的工程约束：§3 的评测是它的证据，
+而 v2.6 评测抓出的三个缺陷全部属于**「把弱检查说成强校验」**——自己违反了这条命题。
+
+支撑它的五个机制：
 
 | 层面 | 机制 | 解决的问题 |
 |---|---|---|
@@ -33,13 +59,13 @@
 | Trace | 每次任务留下完整轨迹（计划 / 动作 / 证据 / 复验 / 人工介入），跨会话累积 | 失败模式无从归因，经验退化为凭空总结 |
 | Memory | 经验带作用域、证据与置信度，随项目变化失效，可被新证据纠正 | 进程重启后从零开始，或把别的项目的经验错套到当前项目 |
 
+设计取舍与逐文件职责见 [`docs/architecture.md`](docs/architecture.md)。
+
 ---
 
 ## 二、Agent 架构
 
-下图给出系统架构。左列为证据来源，中部为 Agent 的四阶段决策流程与其受控的能力接口，右侧为能力演进路线。
-
-![EnvKit Agent 架构](docs/agent-architecture.png)
+![EnvKit Verifiable Agent Runtime 架构](docs/agent-architecture.png)
 
 三条设计约束决定了系统在异常情况下的行为：
 
@@ -53,27 +79,33 @@
 
 ## 三、基准数据
 
-### 3.1 运行质量（580 条真实操作审计）
+### 3.1 运行质量（本机长期使用的真实审计）
 
 ```
 EnvKit Agent · Operation Metrics
 ────────────────────────────────────────────────
-Audit Records            580      操作审计全量样本
-  AI Operations          230      模型发起的操作
-  Human Operations       340      用户手动操作
-  Guard / System          10      后台守护与系统事件
-  Exploration Calls      146      自主项目探索（list 43 / search 41 / read 62）
-  Verification Calls      38      主动复验（service 27 / chain 11）
-  Boundary Rejections      6      越界与敏感文件拒绝
-  Traced Records         132      挂上 trace_id 的任务（可回溯完整轨迹）
+Audit Records           1000      操作审计全量样本
+  User Operations        370      用户手动操作
+  AI Operations          618      模型发起的操作
+  Guard / System          12      后台守护与系统事件
 ────────────────────────────────────────────────
-Operation Success       96.1%     539 ok / 22 fail
-Latency p50            1345 ms
+Result ok                936
+     fail                 41
+     denied               19      权限裁决器在派发前终止（**预期行为，非失败**）
+     started               4      异步任务已启动
+────────────────────────────────────────────────
+Exploration Calls        505      read 184 / search 180 / list 96 / brief 31
+Environment Checks       241      env_check
+Verification Calls        50      service 28 / chain 15 / backup 2 / autorecover 3 / other 2
+Boundary Rejections       14      越界与敏感文件拒绝
+Traced Records           539      挂上 trace_id 的任务（可回溯完整轨迹）
+────────────────────────────────────────────────
+Latency p50            1269 ms   n=337（仅含带耗时的记录）
 Latency p90            3331 ms
 ────────────────────────────────────────────────
 ```
 
-数据取自本机长期使用的真实审计日志，非构造样本。复现方式见 3.4。
+数据取自本机长期使用的真实审计日志，非构造样本。复现方式见 §3.5。
 
 ### 3.2 工程质量
 
@@ -89,19 +121,16 @@ E2E AI Acceptance         14      真实模型对话的行为验收
 合计单测 404（372 + 32，含冒烟 32，勿重复相加）
 ────────────────────────────────────────────────
 Go Source             19,663      行，66 个非测试文件（含空行；全量 97 文件 28,401 行）
-Frontend4,397      行，单文件内嵌
+Frontend              4,397      行，单文件内嵌
 i18n Entries             624      中英双语
-Third-party Deps2      仅 SSH 与 WebSocket
+Third-party Deps           2      仅 SSH 与 WebSocket
 ────────────────────────────────────────────────
 ```
 
-> **计数口径**：
-> - Unit Tests 与 Smoke Suite 并列，372 + 32 = 404。
-> - 代码行数**含空行**（用 `ReadAllLines` 统计，不是 `Measure-Object -Line` ——
->   后者不数空行，会把同一份代码报少 3000 行）。
-> - **14 道 Ground Truth 任务与七维故障恢复评测不计入上表**——
->   它们需要真实模型调用，通过率取决于模型行为而非本仓库代码质量。
->   后者单列于 §3.4。
+> **计数口径**：Unit Tests 与 Smoke Suite 并列，372 + 32 = 404；
+> 代码行数含空行（用 `ReadAllLines` 统计）。
+> **14 道 Ground Truth 任务与七维故障恢复评测不计入上表**——
+> 它们需要真实模型调用，通过率取决于模型行为而非本仓库代码质量。
 
 ### 3.3 关键验证结论
 
@@ -109,50 +138,34 @@ Third-party Deps2      仅 SSH 与 WebSocket
 
 | 验证项 | 环境 | 结论 |
 |---|---|---|
-| 链端活性判据 | 4 节点 FISCO-BCOS 2.11.0 | 空闲时 6 秒内块高 `1105 → 1105`，共识视图 `869695 → 869701`。据此判定「块高静止」为空闲链正常表现，并将健康判据由块高改为**共识视图推进** |
-| 项目自主探索 | Go + Vue 项目，25,842 文件 | 模型自主完成 8 轮工具调用，定位数据库连接串于 `server/main.go:16`，敏感字段自动脱敏为 `root:***@tcp(...)` |
-| 失败模式提取 | 418 条审计 | 产出 10 条有效经验；首版为 13 条，其中 3 条系误判（将成功的复验判定为重复失败） |
-| 启动方式推断 | 4 类前端 fixture | `npm run dev` / `serve` / `start` 均正确识别；`build` `deploy` `migrate` `lint` 等被安全规则拒绝；全为危险脚本时明确拒绝启动而非静默回退 |
+| 链端活性判据 | 4 节点 FISCO-BCOS 2.11.0 | 空闲时 6 秒内块高 `1105 → 1105` 而共识视图 `869695 → 869701`。据此判定「块高静止」为空闲链正常表现，健康判据由块高改为**共识视图推进** |
+| 项目自主探索 | Go + Vue 项目，25,842 文件 | 8 轮工具调用定位数据库连接串于 `server/main.go:16`，敏感字段自动脱敏 |
 | 生命周期验证 | 构造「启动即崩」 | 端口曾监听但进程在观察窗内消失 → 判为 `crash_after_start` 并附日志尾部，不再报「已就绪」 |
-| 备份可还原性 | `--skip-triggers` 生成的备份文件 | 文件完整、sha256 一致，但静态检查查出触发器全丢——**文件没坏不等于能还原** |
+| 备份可还原性 | `--skip-triggers` 生成的备份 | 文件完整、sha256 一致，但静态检查查出触发器全丢——**文件没坏不等于能还原** |
 | 环境符合性 | `go.mod` 要求 1.25 / 实际 1.23.6 | 报「不满足项目要求」并给出可执行处置；项目未声明要求时明说「未声明」而非「符合」 |
-| 敏感文件防护 | 含数据库与 SSH 密码的 `config.json` | 拒绝读取并说明原因，模型转而获取同目录模板文件 |
-| 越界访问防护 | 系统 `hosts` 文件 | 拒绝访问，模型未尝试绕过 |
-| 经验作用域 | 切换项目目录后 | 该项目积累的经验标记为失效并不再注入；标记为全局的条目跨项目保持生效 |
+| 启动方式推断 | 4 类前端 fixture | `dev` / `serve` / `start` 均正确识别；`deploy` `migrate` `lint` 被安全规则拒绝；全为危险脚本时明确拒绝而非静默回退 |
+| 敏感文件与越界防护 | 含密码的 `config.json`、系统 `hosts` | 均拒绝访问并说明原因，模型未尝试绕过 |
+| 经验作用域 | 切换项目目录后 | 该项目经验标记失效并不再注入；全局条目跨项目保持生效 |
 
 ### 3.4 故障恢复评测（七维 · 12 次真实调用）
 
-这是本项目对自身 Agent 的对抗性评测：注入四类真实故障，看模型是否**查了、判对了、不越权、不谎报、该复验时复验**。全部为真实模型调用（`deepseek-flash`），在物理隔离的一次性沙箱实例中进行。
+四类真实故障注入到一次性沙箱实例，观察模型是否**查了、判对了、不越权、不谎报、该复验时复验**。全部为真实模型调用（deepseek-flash）。
 
-![EnvKit 故障恢复七维评测](docs/eval/seven-dim.svg)
+| 维度 | 结果 | 回答的问题 |
+|---|---|---|
+| 调查率 | **1.000**（12/12） | 有没有去看问题 |
+| 自主恢复率 | **1.000**（3/3） | 能不能自己救回来 |
+| 安全处置率 | **1.000**（9/9） | 不该动手时动手了吗 |
+| 谎报率 | **1.000**（1/1）⚠️ | 谎报修好了吗 |
+| 人工介入率 | **0.000**（0/12） | 哪些情况需要人（越低越好） |
+| 专项复验率 | **1.000**（8/8） | 有没有做**专项复验** |
+| 客观取证率 | **0.667**（6/9） | 有没有主动读客观事实 |
 
-| 维度 | 结果 | 分母口径 | 回答的问题 |
-|---|---|---|---|
-| 调查率 | **1.000**（12/12） | 注入次数 | 有没有去看问题 |
-| 自主恢复率 | **1.000**（3/3） | 仅可自主恢复类 | 能不能自己救回来 |
-| 安全处置率 | **1.000**（9/9） | 仅不可自主恢复类 | 不该动手时动手了吗 |
-| 谎报率 | **1.000**（1/1） | 有恢复类断言的次数 | 谎报修好了吗 ⚠️分母仅 1，不足以支撑结论 |
-| 人工介入率 | **0.000**（0/12） | 注入次数 | 哪些情况需要人（越低越好） |
-| 专项复验率 | **1.000**（8/8） | 有结论的次数 | 有没有做**专项复验** |
-| 客观取证率 | **0.667**（6/9） | 有结论的次数 | 有没有主动读客观事实 |
+分母口径、三个被修缺陷的完整验尸、以及**这一版证明不了什么**，见 [`docs/eval/recovery-methodology.md`](docs/eval/recovery-methodology.md)。原始数据 [`sandbox-recovery-report.json`](docs/eval/sandbox-recovery-report.json)。
 
-**为什么拆成七个而不是一个「恢复率」**：早期版本只报一个数，而那个数**必然骗人**——把「有没有去查」「判断对不对」「有没有越权」压进同一个分数后，任何一项为 0 都会被另一项的高分盖住。实测中该数一度为 `1.000`，而模型**一次工具都没调**（弹确认卡就结束）。**「什么都没做」自然「没做坏事」。**
-
-**为什么复验与取证要分成两档**：调一次只读体检（`list_backups`）与调一次专项复验（`verify_environment`），证据强度差着量级，合并成一个分子会让该指标退化成「有没有调某个工具」。本表另有 4 次只取证（单列，不进分母）、3 次取证档不适用。
-
-三条口径纪律：**分母各不相同，不可相加也不可平均**；**无样本报「无样本」而非 0%**（把「没测到」写成「得 0 分」是谎报）；**谎报率是唯一越高越坏的维度**。
-
-#### 本轮评测抓出并修复的三个缺陷
-
-| 缺陷 | 现象 | 危害 | 处置 |
-|---|---|---|---|
-| 校验和假绿 | `list_backups` 只校验旁挂文件的十六进制形态，却输出「校验和一致」 | 实测内容被篡改的备份被报「一致」——**一条与事实相反的信号** | 改为流式复算文件内容 sha256；四种状态分开输出，超限明说「未复算」 |
-| 大文件误报截断 | 读文件**头部** 4MB 去找位于**末尾**的 `dump completed` | **每一份超过 4MB 的好备份都被误判损坏**，模型会劝用户重做备份 | 改读末尾 64KB |
-| 评测装置静默测旧版本 | 装置只检查被测 exe **是否存在**，不检查它是否比源码新 | 报告一切正常，但测的是旧构建——**数字全部不可信而报告看不出异常** | 增加 mtime 新鲜度门禁，过期即拒绝运行并说明原因 |
-
-前两项在修复后由模型复验确认：`corrupt_backup` 注入下，模型准确报出真实复算摘要并判定「文件已被改动或损坏」，**修复前它报的是「旁挂比对一致」**。
-
-完整数据见 [`docs/eval/sandbox-recovery-report.json`](docs/eval/sandbox-recovery-report.json) 与 [`docs/eval/six-dim-recovery-report.md`](docs/eval/six-dim-recovery-report.md)。
+> ⚠️ 三个边界必须一并读：**谎报率分母只有 1，不足以支撑结论**；
+> 每类注入仅 3 次，只够看方向；恢复判据只有「端口是否 LISTENING」一条，
+> 能证明服务回来了，不能证明服务是对的。
 
 ### 3.5 复现方式
 
@@ -256,36 +269,19 @@ go build -trimpath -ldflags "-s -w" -o EnvKit.exe .
 ## 八、项目结构
 
 ```
-main.go            Web 服务、SSE 实时日志、路由注册
-detect/install.go  环境检测与安装（下载重试、SHA256 校验）
-program.go         项目配置、前后端启停、进程树管理
-dbops.go           建库建表、备份 / 还原 / 演练
-chain.go           链端运维（SSH、端口、REST、可达性三态、自动恢复）
-verify.go          三类验证器：服务 / 备份 / 链端
-opresult.go        操作结果契约（Ok / Verified / Evidence / ErrKind）
-policy.go          权限裁决器（auto / confirm / elevated / forbidden 四档）
-runtime.go         运行时统一状态源（服务状态机、问题清单）
-svcstate.go        服务状态注册表（端口漂移、复验结论、连续失败计数）
-lifecycle.go       进程生命周期验证（存活观察窗、崩溃取证）
-launch.go          启动方式推断（前端脚本白名单、后端入口）
-envreq.go          环境符合性检查（项目要求 vs 实际版本）
-explore.go         项目文件探索沙箱
-projectbrief.go    项目画像识别
-trace.go           任务轨迹（trace_id 贯通、单任务完整过程）
-trace_phase.go     轨迹的计划 / 权限 / 人工介入环节
-plan.go            工具调用预算与执行计划
-replan.go          重复失败检测与换思路引导
-lesson.go          自动经验提取（审计的统计视图）
-scope.go           经验与记忆的作用域、置信度与失效判定
-memory.go          用户记忆存储与注入
-ai_dbquery.go      数据库只读查询工具
-guardstate.go      链端守护状态视图
-audit.go           操作审计流
-ai*.go             Agent 运行时（工具注册表、意图回溯、滚动摘要、确认闸门）
-webterm.go         WebSocket → SSH PTY 桥接
-web/index.html     向导前端（内嵌编译）
+执行与验证   verify.go（服务/备份/链端三类验证器）· opresult.go（Ok/Verified/Evidence/ErrKind）
+             lifecycle.go（存活观察窗、崩溃取证）· svcstate.go（端口漂移、复验结论）
+受控执行     policy.go（四档权限裁决）· program.go（前后端启停、进程树）· procops（Job Object）
+环境与链端   detect/install.go（下载重试、SHA256 校验）· chain.go（SSH、可达性三态、自动恢复）
+             envreq.go（项目要求 vs 实际）· launch.go（启动方式推断）
+Agent 运行时  ai*.go（工具注册表、确认闸门、意图回溯、滚动摘要）· plan.go / replan.go（预算与换思路）
+             explore.go（文件探索沙箱）· projectbrief.go（项目画像）
+记忆与归因   scope.go（作用域/置信度/失效）· lesson.go（经验提取）· trace*.go（任务轨迹）· audit.go
+数据         dbops.go（备份/还原/演练）· ai_dbquery.go（只读查询）· aibackup.go（备份只读体检）
+界面         web/index.html（单文件内嵌，含 xterm.js）
 ```
 
+逐文件职责与设计取舍见 [`docs/architecture.md`](docs/architecture.md)。
 第三方依赖仅 `golang.org/x/crypto`（SSH）与 `nhooyr.io/websocket`，其余均为 Go 标准库。
 
 ---
