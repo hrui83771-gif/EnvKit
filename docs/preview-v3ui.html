@@ -1,126 +1,191 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EnvKit v3.0 布局原型 · 状态中心</title>
+<title>EnvKit v3.0 布局原型 · v2</title>
 <style>
+  /* ============================================================
+     设计变量 —— 沿用现有 index.html 的命名与配色
+     亮/暗两套，仅切 data-theme，CSS 其余部分完全共用
+     ============================================================ */
   :root{
-    --bg:#f6f7f9; --card:#ffffff; --line:#e3e6ea; --line2:#eef0f3;
-    --text:#1b1f24; --muted:#6b7280; --faint:#9aa1ab;
-    --ok:#12a150; --warn:#d9820a; --err:#d63a2f; --off:#b6bcc4;
-    --accent:#2563eb; --accent-bg:#eef3ff;
+    --bg:#f5f7fa; --card:#ffffff; --soft:#fbfcfe; --soft2:#f2f6f4; --off:#eef2f6;
+    --hover:#e2e8ef; --line:#e3e8ef; --text:#1f2933; --muted:#6b7785;
+    --brand:#2f7d4f; --brand2:#3a9d63;
+    --ok:#1f9d55; --okbg:#e6f6ec; --warn:#b07800; --warnbg:#fdf3e0;
+    --err:#d64545; --errbg:#fdeaea; --info:#5b93d6; --infobg:#eaf2fb;
+    --dotoff:#b6bcc4; --focusbg:#eef2f6;
+  }
+  [data-theme="dark"]{
+    --bg:#0f1520; --card:#161e2b; --soft:#1c2534; --soft2:#232e40; --off:#232c3b;
+    --hover:#2b3850; --line:#2a3547; --text:#e4eaf2; --muted:#8b96a8;
+    --brand:#2e8f58; --brand2:#3fae73;
+    --ok:#37b56a; --okbg:#12301f; --warn:#d99a26; --warnbg:#32260f;
+    --err:#e05a5a; --errbg:#3a1a1a; --info:#5b93d6; --infobg:#15243a;
+    --dotoff:#3a4658; --focusbg:#1c2534;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
-  code,.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  body{margin:0;background:var(--bg);color:var(--text);font-size:13px;
+    font-family:-apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
+    transition:background .2s,color .2s}
 
-  /* ===== 顶栏：现状保留的 5 个状态芯片 ===== */
-  .top{background:var(--card);border-bottom:1px solid var(--line);
-    padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
-  .brand{font-weight:700;letter-spacing:-.2px}
-  .chip{font-size:12px;color:var(--muted);background:#f0f2f5;border-radius:999px;padding:3px 10px;display:flex;align-items:center;gap:5px}
-  .top .sp{margin-left:auto;display:flex;align-items:center;gap:8px}
+  /* ===== 顶栏 ===== */
+  .top{background:var(--card);border-bottom:1px solid var(--line);padding:9px 18px;
+    display:flex;align-items:center;gap:7px;flex-wrap:wrap;position:sticky;top:0;z-index:30}
+  .brand{font-weight:700;letter-spacing:-.2px;margin-right:4px}
+  .chip{font-size:12px;color:var(--muted);background:var(--soft);border:1px solid var(--line);
+    border-radius:999px;padding:2px 9px;display:flex;align-items:center;gap:5px}
+  .top .sp{margin-left:auto;display:flex;align-items:center;gap:7px}
   .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;display:inline-block}
-  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-err{background:var(--err)} .d-off{background:var(--off)}
+  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)}
+  .d-err{background:var(--err)} .d-off{background:var(--dotoff)}
 
-  .wrap{display:grid;grid-template-columns:196px 1fr;gap:20px;padding:20px;max-width:1400px;margin:0 auto}
+  button{font:inherit;font-size:12px;padding:4px 10px;border-radius:7px;
+    border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+  button:hover{background:var(--hover)}
+  button.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+  button.pri:hover{filter:brightness(.94);background:var(--brand2)}
+  button.ghost{background:transparent}
 
-  /* ===== 侧栏 ===== */
-  .side{position:sticky;top:64px;align-self:start}
-  .nav{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;cursor:pointer;
-    color:var(--text);margin-bottom:2px;border:1px solid transparent;font-size:13.5px}
-  .nav:hover{background:#eef0f3}
-  .nav.on{background:var(--accent-bg);border-color:#cfe0ff;color:var(--accent);font-weight:600}
-  .nav .ic{width:16px;text-align:center;opacity:.75;font-size:13px}
-  .nav .cnt{margin-left:auto;font-size:11px;background:var(--err);color:#fff;border-radius:999px;padding:0 6px;line-height:17px}
-  .sidenote{margin-top:14px;padding:10px 12px;background:#fff8e8;border:1px solid #f5e0b0;border-radius:9px;font-size:12px;color:#7a5c15;line-height:1.55}
+  /* ===== 骨架：侧栏 + 主区 + 右侧 AI 抽屉 ===== */
+  .wrap{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px;
+    max-width:1560px;margin:0 auto}
+  .side{position:sticky;top:58px;align-self:start}
+  .nav{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:8px;
+    cursor:pointer;border:1px solid transparent;margin-bottom:2px}
+  .nav:hover{background:var(--hover)}
+  .nav.on{background:var(--soft2);border-color:var(--line);color:var(--brand);font-weight:600}
+  .nav .ic{width:15px;text-align:center;opacity:.8}
+  .nav .cnt{margin-left:auto;font-size:11px;background:var(--warnbg);color:var(--warn);
+    border-radius:999px;padding:0 6px;line-height:16px}
 
-  /* ===== 主体 ===== */
   .main{min-width:0}
-  .page{display:none} .page.on{display:block}
-  .ptitle{font-size:17px;font-weight:700;margin:2px 0 3px;letter-spacing:-.2px}
-  .psub{color:var(--muted);font-size:12.5px;margin-bottom:16px}
+  .page{display:none}.page.on{display:block}
+  .ptitle{font-size:16px;font-weight:700;letter-spacing:-.2px;margin:0 0 3px}
+  .psub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
 
-  /* ===== 实体卡片行 ===== */
-  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  .ent{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px}
-  .ent h3{margin:0 0 8px;font-size:14px;display:flex;align-items:center;gap:7px;font-weight:650}
-  .meta{color:var(--muted);font-size:12.5px;line-height:1.75;min-height:22px}
-  .meta b{color:var(--text);font-weight:600}
-  .btns{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
-  button{font:inherit;font-size:12px;padding:4px 11px;border-radius:7px;border:1px solid var(--line);
-    background:#fff;color:var(--text);cursor:pointer}
-  button:hover{background:#f3f5f7}
-  button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-  button.pri:hover{filter:brightness(.94)}
-  button:disabled{opacity:.45;cursor:not-allowed}
+  /* ===== 紧凑卡片网格：解决"空缺多、排布不整齐" =====
+     等高栅格 + 卡片内 flex 分区，任何视口下都整齐 */
+  .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+    align-items:stretch}
+  .c{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 13px;display:flex;flex-direction:column;min-height:104px}
+  .c>h3{margin:0 0 7px;font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:6px}
+  .c .bd{flex:1;display:flex;flex-direction:column;gap:5px;justify-content:center}
+  .c .kv{font-size:12.5px;color:var(--muted);line-height:1.6}
+  .c .kv b{color:var(--text);font-weight:600}
+  .c .ft{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  .c .ft .sp{margin-left:auto}
+  .c small{display:block;color:var(--muted);font-size:11.5px;line-height:1.5}
 
-  .strip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-top:12px}
-  .strip .r{display:flex;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px dashed var(--line2);font-size:13px}
-  .strip .r:last-child{border-bottom:0}
-  .strip .k{color:var(--muted);width:64px;flex:0 0 auto;font-size:12.5px}
-  .strip .v{color:var(--muted);font-size:12.5px}
-  .strip .v b{color:var(--text)}
+  /* 首页三张主卡占满一行（高权重） */
+  .hero{display:grid;gap:11px;grid-template-columns:repeat(3,1fr)}
+  .hero .c{min-height:150px}
 
-  /* ===== 问题区 ===== */
-  .issues{margin-top:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);overflow:hidden}
-  .issues>h4{margin:0;padding:10px 15px;font-size:13px;background:#fafbfc;border-bottom:1px solid var(--line);
-    display:flex;align-items:center;gap:7px;font-weight:650}
-  .iss{padding:11px 15px;border-bottom:1px solid var(--line2);display:flex;gap:11px;align-items:flex-start}
+  /* 状态色条：给卡片一个可扫的视觉锚 */
+  .c.okbar{border-left:3px solid var(--ok)}
+  .c.warnbar{border-left:3px solid var(--warn)}
+  .c.offbar{border-left:3px solid var(--dotoff)}
+
+  /* 徽标 */
+  .bg{font-size:11px;border-radius:5px;padding:1px 6px;font-weight:600;line-height:16px}
+  .bg.ok{background:var(--okbg);color:var(--ok)}
+  .bg.warn{background:var(--warnbg);color:var(--warn)}
+  .bg.err{background:var(--errbg);color:var(--err)}
+  .bg.info{background:var(--infobg);color:var(--info)}
+  .bg.off{background:var(--off);color:var(--muted)}
+
+  /* 问题区 */
+  .issbox{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:11px;overflow:hidden}
+  .issbox>h4{margin:0;padding:9px 13px;font-size:12.5px;font-weight:650;background:var(--soft);
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px}
+  .iss{display:flex;gap:10px;align-items:flex-start;padding:10px 13px;border-bottom:1px solid var(--soft2)}
   .iss:last-child{border-bottom:0}
-  .tag{font-size:11px;border-radius:5px;padding:1px 7px;flex:0 0 auto;margin-top:2px;font-weight:600}
-  .tag.warn{background:#fff3e0;color:#a86400}
-  .tag.err{background:#fdecea;color:#b1281e}
-  .tag.info{background:#eef3ff;color:#1d4ed8}
-  .iss .txt{flex:1;min-width:0}
-  .iss .what{font-size:13px}
-  .iss .act{color:var(--muted);font-size:12.5px;margin-top:2px}
-  .iss .go{flex:0 0 auto;align-self:center}
+  .iss .tx{flex:1;min-width:0}
+  .iss .w{font-size:12.5px}
+  .iss .a{color:var(--muted);font-size:12px;margin-top:1px}
 
-  .recent{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 15px;
-    font-size:12.5px;color:var(--muted)}
-  .recent b{color:var(--text);font-weight:600}
-
-  /* ===== 工作区 ===== */
-  .ws{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
-  .grp{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  .grp>h4{margin:0;padding:10px 14px;font-size:13px;font-weight:650;background:#fafbfc;border-bottom:1px solid var(--line);
+  /* 分组标题（诊断/数据/助手） */
+  .gt{font-size:12px;color:var(--muted);font-weight:600;margin:16px 0 7px;
     display:flex;align-items:center;gap:7px}
-  .grp .bd{padding:11px 14px}
-  .item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line2);font-size:13px}
-  .item:last-child{border-bottom:0}
-  .item .nm{flex:1}
-  .item .hint{color:var(--faint);font-size:11.5px}
+  .gt::after{content:'';flex:1;height:1px;background:var(--line)}
+  .gt:first-child{margin-top:0}
 
-  details.grp summary{cursor:pointer;list-style:none;padding:10px 14px;font-size:13px;font-weight:650;
-    background:#fafbfc;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px}
-  details.grp summary::-webkit-details-marker{display:none}
-  details.grp summary::before{content:'▸';font-size:10px;color:var(--faint);transition:transform .15s}
-  details.grp[open] summary::before{transform:rotate(90deg)}
-  details.grp[open] summary{border-bottom:1px solid var(--line)}
+  /* 折叠组（设置） */
+  details.g{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  details.g+details.g{margin-top:9px}
+  details.g summary{cursor:pointer;list-style:none;padding:10px 13px;font-size:13px;
+    font-weight:650;display:flex;align-items:center;gap:7px;background:var(--soft)}
+  details.g summary::-webkit-details-marker{display:none}
+  details.g summary::before{content:'▸';font-size:10px;color:var(--muted);transition:transform .15s}
+  details.g[open] summary::before{transform:rotate(90deg)}
+  .g .ib{padding:10px 13px}
+  .g .it{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--soft2);font-size:12.5px}
+  .g .it:last-child{border-bottom:0}
+  .g .it .nm{flex:1;min-width:0}
+  .g .it .hint{color:var(--muted);font-size:11.5px}
 
-  /* ===== 说明抽屉 ===== */
-  .fab{position:fixed;right:18px;bottom:18px;z-index:30}
-  .drawer{position:fixed;inset:0;background:rgba(15,18,22,.35);display:none;z-index:40}
-  .drawer.on{display:block}
-  .dpanel{position:absolute;right:0;top:0;bottom:0;width:520px;max-width:94vw;background:var(--card);
-    border-left:1px solid var(--line);padding:20px 22px;overflow:auto}
-  .dpanel h2{margin:0 0 4px;font-size:16px}
-  .dpanel h4{margin:18px 0 6px;font-size:13px;color:var(--accent)}
-  .dpanel p,.dpanel li{font-size:13px;line-height:1.7;color:var(--muted);margin:4px 0}
-  .dpanel ul{padding-left:18px;margin:6px 0}
-  .dpanel b{color:var(--text)}
-  .x{float:right;border:0;background:transparent;font-size:19px;color:var(--faint);cursor:pointer;line-height:1}
+  /* ===== 对话：助手页用方形；桌宠用右侧抽屉（保持原样） ===== */
+  /* 方形对话（助手页内） */
+  .sq{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    display:flex;flex-direction:column;height:420px}
+  .sq .h{padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px;font-weight:650;
+    display:flex;align-items:center;gap:7px}
+  .sq .m{flex:1;overflow:auto;padding:13px;display:flex;flex-direction:column;gap:11px}
+  .bub{max-width:82%;padding:8px 11px;border-radius:10px;font-size:12.5px;line-height:1.65}
+  .bub.me{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:3px}
+  .bub.ai{align-self:flex-start;background:var(--soft);border:1px solid var(--line);border-bottom-left-radius:3px}
+  .bub .pl{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 9px;
+    font-size:11.5px;color:var(--muted)}
+  .bub .pl div{padding:1px 0}
+  .sq .f{padding:9px 11px;border-top:1px solid var(--line);display:flex;gap:7px}
+  .sq .f input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+    font:inherit;background:var(--bg);color:var(--text)}
 
-  .banner{background:#fff8e8;border:1px solid #f5e0b0;color:#7a5c15;padding:9px 13px;border-radius:9px;
-    font-size:12.5px;margin-bottom:14px;display:flex;align-items:center;gap:9px}
-  .banner label{display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap}
+  /* 桌宠：右下角固定 + 点击展开右侧抽屉 */
+  #pet{position:fixed;right:18px;bottom:16px;width:76px;height:76px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;z-index:40}
+  #pet .bub2{position:absolute;right:84px;bottom:8px;background:var(--card);border:1px solid var(--line);
+    border-radius:9px;padding:7px 10px;font-size:11.5px;color:var(--muted);white-space:nowrap;
+    opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 4px 14px rgba(0,0,0,.09)}
+  #pet:hover .bub2{opacity:1}
+  #pet svg{width:64px;height:64px}
+  .ring{stroke:var(--brand);opacity:.45}
+  .face{fill:var(--warnbg);stroke:var(--warn);stroke-width:1.6}
+  .hair{fill:var(--warn);opacity:.85}
+  .eye{fill:var(--text)}
+  .blush{fill:var(--err);opacity:.3}
+
+  #drawer{position:fixed;top:0;right:0;bottom:0;width:392px;max-width:92vw;background:var(--card);
+    border-left:1px solid var(--line);z-index:50;display:none;flex-direction:column;
+    box-shadow:-6px 0 22px rgba(0,0,0,.10)}
+  #drawer.on{display:flex}
+  #drawer .dh{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  #drawer .dm{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:11px}
+  #drawer .df{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:7px}
+  #drawer .df input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+    font:inherit;background:var(--bg);color:var(--text)}
+
+  .note{background:var(--warnbg);border:1px solid var(--line);border-radius:9px;padding:8px 12px;
+    font-size:12px;color:var(--warn);margin-bottom:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+  .fab{position:fixed;right:104px;bottom:26px;z-index:41}
+  .dsh{position:fixed;inset:0;background:rgba(0,0,0,.32);display:none;z-index:60}
+  .dsh.on{display:block}
+  .dp{position:absolute;right:0;top:0;bottom:0;width:520px;max-width:94vw;background:var(--card);
+    border-left:1px solid var(--line);padding:18px 20px;overflow:auto}
+  .dp h2{margin:0 0 3px;font-size:15px}
+  .dp h4{margin:17px 0 5px;font-size:12.5px;color:var(--brand)}
+  .dp p,.dp li{font-size:12.5px;line-height:1.7;color:var(--muted);margin:4px 0}
+  .dp ul{padding-left:17px;margin:5px 0}
+  .dp b{color:var(--text)}
+  .x{float:right;border:0;background:transparent;font-size:18px;color:var(--muted);cursor:pointer;line-height:1}
 </style>
 </head>
 <body>
 
+<!-- ===== 顶栏 ===== -->
 <div class="top">
   <span class="brand">EnvKit</span>
   <span class="chip"><i class="dot d-ok"></i>环境 就绪</span>
@@ -128,14 +193,15 @@
   <span class="chip"><i class="dot d-warn"></i>依赖 待办</span>
   <span class="chip"><i class="dot d-ok"></i>服务 运行中</span>
   <span class="sp">
-    <span style="font-size:12px;color:var(--faint)">上次更新 3s 前</span>
-    <button class="pri" onclick="toast('全部启动')">全部启动</button>
-    <button onclick="toast('退出')">退出</button>
+    <span style="font-size:11.5px;color:var(--muted)" id="tick">3s 前</span>
+    <button class="pri" onclick="T('全部启动')">全部启动</button>
+    <button class="ghost" id="btn-theme" onclick="theme()">◐ 暗色</button>
+    <button class="ghost" onclick="T('退出')">退出</button>
   </span>
 </div>
 
 <div class="wrap">
-  <!-- ============ 侧栏 ============ -->
+  <!-- ===== 侧栏 ===== -->
   <div class="side">
     <div class="nav on" data-pg="home"><span class="ic">◉</span>首页<span class="cnt">2</span></div>
     <div class="nav" data-pg="run"><span class="ic">▷</span>运行</div>
@@ -143,348 +209,425 @@
     <div class="nav" data-pg="data"><span class="ic">⛁</span>数据</div>
     <div class="nav" data-pg="agent"><span class="ic">✦</span>助手</div>
     <div class="nav" data-pg="set"><span class="ic">⚙</span>设置</div>
-
-    <div class="sidenote">
-      <b>入口从 6 个顶层面板 → 6 个工作区</b><br>
-      数量没变，但每个工作区内部按任务分组，不再一屏铺开。<br>
-      <span style="color:#9a7a1e">「设置」里的四组默认全部折叠。</span>
+    <div style="margin-top:14px;padding:9px 11px;background:var(--card);border:1px solid var(--line);
+                border-radius:9px;font-size:11.5px;color:var(--muted);line-height:1.6">
+      <b style="color:var(--text)">紧凑栅格</b><br>
+      卡片等高、按容器宽度自动换行，不留半行空缺。
     </div>
   </div>
 
-  <!-- ============ 主体 ============ -->
   <div class="main">
-
   <!-- ---------- 首页 ---------- -->
   <section class="page on" id="p-home">
     <div class="ptitle">FarmTrace</div>
-    <div class="psub">以实体组织，不是以功能组织。首页只回答"现在怎样、哪里有问题、最近发生了什么"。</div>
+    <div class="psub">以实体组织。首页只回答"现在怎样、哪里有问题、最近发生了什么"。</div>
 
-    <div class="banner">
-      <span>对照开关：把「绿灯只看 running」切过去，能看到 v3.0 改掉了什么 ——</span>
+    <div class="note">
+      <span>对照：</span>
       <label><input type="checkbox" id="legacy"> 按旧规则上色（running 即绿）</label>
+      <span style="color:var(--muted)">—— 打开后后端变绿，但它 <code>phase=degraded</code>（进程在但未复验）</span>
     </div>
 
-    <div class="row3">
-      <div class="ent">
-        <h3><i class="dot" id="d-web"></i>前端</h3>
-        <div class="meta">:<span id="p-web">8080</span> · 运行 <b id="u-web">2h14m</b><br>
-          <span id="v-web" style="font-size:12px">已复验 · 端口 8080 监听且存活观察 5s 内持续</span></div>
-        <div class="btns"><button onclick="toast('重启前端')">重启</button><button onclick="toast('停止前端')">停止</button></div>
+    <div class="hero">
+      <div class="c okbar" id="c-web">
+        <h3><i class="dot d-ok"></i>前端</h3>
+        <div class="bd">
+          <div class="kv">:<b>8080</b> · 运行 <b>2h14m</b></div>
+          <small>已复验 · 端口监听且存活观察 5s 内持续</small>
+        </div>
+        <div class="ft"><button onclick="T('重启前端')">重启</button><button onclick="T('停止前端')">停止</button></div>
       </div>
 
-      <div class="ent">
-        <h3><i class="dot" id="d-be"></i>后端</h3>
-        <div class="meta">:<span id="p-be">8888</span> · 运行 <b id="u-be">45s</b><br>
-          <span id="v-be" style="font-size:12px">未复验</span></div>
-        <div class="btns"><button onclick="toast('重启后端')">重启</button><button onclick="toast('停止后端')">停止</button>
-          <button onclick="toast('复验后端')">复验</button></div>
+      <div class="c warnbar" id="c-be">
+        <h3><i class="dot d-warn" id="d-be"></i>后端</h3>
+        <div class="bd">
+          <div class="kv">:<b>8888</b> · 运行 <b>45s</b></div>
+          <small id="v-be">未复验 —— 进程在，但没验过服务真的可用</small>
+        </div>
+        <div class="ft"><button onclick="T('重启后端')">重启</button><button onclick="T('停止后端')">停止</button>
+          <button class="pri" onclick="T('复验后端')">复验</button></div>
       </div>
 
-      <div class="ent">
-        <h3><i class="dot" id="d-db"></i>数据库</h3>
-        <div class="meta"><b>farm</b> · 已连接<br>MySQL 8.0 · 12 张表 · 3s 前检测</div>
-        <div class="btns"><button onclick="toast('备份')">备份</button><button onclick="toast('浏览数据')">浏览</button></div>
+      <div class="c okbar">
+        <h3><i class="dot d-ok"></i>数据库</h3>
+        <div class="bd">
+          <div class="kv"><b>farm</b> · 已连接</div>
+          <small>MySQL 8.0 · 12 张表 · 3s 前</small>
+        </div>
+        <div class="ft"><button onclick="T('备份')">备份</button><button onclick="T('浏览数据')">浏览</button></div>
       </div>
     </div>
 
-    <div class="strip">
-      <div class="r"><span class="k">链端</span>
-        <span><i class="dot d-ok"></i> 节点存活</span>
-        <span class="v">块 <b>1105</b> · 交易 <b>1355</b> · 节点进程 <b>4</b> · 20200 与 5002 均响应</span></div>
-      <div class="r"><span class="k">依赖</span>
-        <span><i class="dot d-warn"></i> 待办 1 项</span>
-        <span class="v">磁盘 42% · 内存 3.2G · 后端依赖未 tidy</span></div>
-      <div class="r"><span class="k">启动方式</span>
-        <span class="v">前端 <b>npm run serve</b>（package.json 推断） · 后端 <b>go run main.go</b></span></div>
+    <div class="grid" style="margin-top:11px">
+      <div class="c okbar">
+        <h3><i class="dot d-ok"></i>链端</h3>
+        <div class="bd">
+          <div class="kv">块 <b>1105</b> · 交易 <b>1355</b></div>
+          <small>节点进程 4 · 20200 / 5002 均响应</small>
+        </div>
+        <div class="ft"><span class="bg ok">节点存活</span><span class="sp"></span><button onclick="T('链端详情')">详情</button></div>
+      </div>
+      <div class="c warnbar">
+        <h3><i class="dot d-warn"></i>依赖</h3>
+        <div class="bd">
+          <div class="kv">待办 <b>1</b> 项</div>
+          <small>磁盘 42% · 内存 3.2G · 后端未 tidy</small>
+        </div>
+        <div class="ft"><button onclick="T('去处理依赖')">去处理</button></div>
+      </div>
+      <div class="c offbar">
+        <h3><i class="dot d-off"></i>启动方式</h3>
+        <div class="bd">
+          <div class="kv"><b>npm run serve</b></div>
+          <small>package.json 推断 · 后端 go run main.go</small>
+        </div>
+        <div class="ft"><button onclick="T('改启动方式')">修改</button></div>
+      </div>
+      <div class="c offbar">
+        <h3><i class="dot d-off"></i>AI 助手</h3>
+        <div class="bd">
+          <div class="kv">未启用</div>
+          <small>不影响其它功能 · 右下角桌宠可直接对话</small>
+        </div>
+        <div class="ft"><button onclick="T('去配置 AI')">配置</button></div>
+      </div>
     </div>
 
-    <div class="issues">
+    <div class="issbox">
       <h4><i class="dot d-warn"></i>需要处理（2）</h4>
       <div class="iss">
-        <span class="tag warn">警告</span>
-        <div class="txt">
-          <div class="what">后端进程在运行但未通过复验</div>
-          <div class="act">点「复验」确认服务真的可用；未复验前不要当作已就绪</div>
-        </div>
-        <button class="go" onclick="toast('跳转 → 运行 / 后端')">去处理</button>
+        <span class="bg warn">警告</span>
+        <div class="tx"><div class="w">后端进程在运行但未通过复验</div>
+          <div class="a">点「复验」确认服务真的可用；未复验前不要当作已就绪</div></div>
+        <button onclick="go('run')">去处理</button>
       </div>
       <div class="iss">
-        <span class="tag info">提示</span>
-        <div class="txt">
-          <div class="what">链端守护未开启</div>
-          <div class="act">开启后链端宕机会被后台自动拉起并复验；未开启时不会自动恢复</div>
-        </div>
-        <button class="go" onclick="toast('跳转 → 设置 / 链端')">去处理</button>
+        <span class="bg info">提示</span>
+        <div class="tx"><div class="w">链端守护未开启</div>
+          <div class="a">开启后链端宕机会被后台自动拉起并复验；未开启时不会自动恢复</div></div>
+        <button onclick="go('set')">去处理</button>
       </div>
     </div>
 
-    <div class="recent">
-      <b>最近</b>　后端已启动 45s 前 · 前端已启动 2h14m 前 · 前端复验通过 2h13m 前 · 数据库备份完成 2h 前 · 后端复验未通过 45s 前
+    <div class="issbox" style="background:var(--card)">
+      <h4 style="background:transparent;border:0;padding:10px 13px">最近</h4>
+      <div style="padding:0 13px 11px;font-size:12.5px;color:var(--muted);line-height:1.8">
+        后端已启动 45s 前 · 前端已启动 2h14m 前 · 前端复验通过 2h13m 前 ·
+        数据库备份完成 2h 前 · <b style="color:var(--warn)">后端复验未通过 45s 前</b>
+      </div>
     </div>
   </section>
 
   <!-- ---------- 运行 ---------- -->
   <section class="page" id="p-run">
     <div class="ptitle">运行</div>
-    <div class="psub">原「程序启动」面板 + 进程与端口。每张卡片的状态都来自 /api/runtime/state，手动按钮不经过 AI。</div>
-    <div class="ws">
-      <div class="grp"><h4>服务控制</h4><div class="bd">
-        <div class="item"><span class="nm">前端</span><span class="hint">npm run serve · :8080</span>
-          <button onclick="toast('启动前端')">启动</button><button onclick="toast('停止前端')">停止</button></div>
-        <div class="item"><span class="nm">后端</span><span class="hint">go run main.go · :8888</span>
-          <button onclick="toast('启动后端')">启动</button><button onclick="toast('停止后端')">停止</button></div>
-        <div class="item"><span class="nm">整套启停</span><span class="hint">先后端再前端，一次确认</span>
-          <button class="pri" onclick="toast('全部启动')">全部启动</button></div>
-      </div></div>
-
-      <div class="grp"><h4>进程</h4><div class="bd">
-        <div class="item"><span class="nm">进程树</span><span class="hint">Job Object 托管，退出即回收</span>
-          <button onclick="toast('查看进程树')">查看</button></div>
-        <div class="item"><span class="nm">清理遗留进程</span><span class="hint">node / go run / main.exe</span>
-          <button onclick="toast('清理（需确认）')">清理</button></div>
-      </div></div>
-
-      <div class="grp"><h4>端口</h4><div class="bd">
-        <div class="item"><span class="nm">8888</span><span class="hint">后端 · 运行中</span><button onclick="toast('占用详情')">详情</button></div>
-        <div class="item"><span class="nm">3306</span><span class="hint">MySQL · 运行中</span><button onclick="toast('占用详情')">详情</button></div>
-        <div class="item"><span class="nm">占用诊断</span><span class="hint">扫描项目常用端口</span>
-          <button onclick="toast('扫描端口')">扫描</button></div>
-      </div></div>
-
-      <div class="grp"><h4>安全</h4><div class="bd">
-        <div class="item"><span class="nm">Defender 白名单</span><span class="hint">根治子进程被误拦</span>
-          <button onclick="toast('加白名单（需 UAC）')">添加</button></div>
-      </div></div>
+    <div class="psub">服务启停、进程、端口。卡片等高对齐，手动操作不经 AI。</div>
+    <div class="gt">服务</div>
+    <div class="grid">
+      <div class="c okbar"><h3><i class="dot d-ok"></i>前端</h3>
+        <div class="bd"><div class="kv">npm run serve · :8080</div><small>运行 2h14m · 已复验</small></div>
+        <div class="ft"><button onclick="T('停止前端')">停止</button><button onclick="T('重启前端')">重启</button></div></div>
+      <div class="c warnbar"><h3><i class="dot d-warn"></i>后端</h3>
+        <div class="bd"><div class="kv">go run main.go · :8888</div><small>运行 45s · 未复验</small></div>
+        <div class="ft"><button onclick="T('停止后端')">停止</button><button onclick="T('重启后端')">重启</button>
+          <button class="pri" onclick="T('复验后端')">复验</button></div></div>
+      <div class="c offbar"><h3><i class="dot d-off"></i>整套启停</h3>
+        <div class="bd"><div class="kv">先后端再前端</div><small>一次确认完成</small></div>
+        <div class="ft"><button onclick="T('全部启动')">全部启动</button><button onclick="T('全部停止')">全部停止</button></div></div>
+    </div>
+    <div class="gt">进程</div>
+    <div class="grid">
+      <div class="c"><h3>进程树</h3>
+        <div class="bd"><div class="kv">Job Object 托管</div><small>退出 / 被杀均自动回收</small></div>
+        <div class="ft"><button onclick="T('查看进程树')">查看</button></div></div>
+      <div class="c"><h3>清理遗留进程</h3>
+        <div class="bd"><div class="kv">node / go run / main.exe</div><small>项目目录内残留</small></div>
+        <div class="ft"><button onclick="T('清理（需确认）')">清理</button></div></div>
+    </div>
+    <div class="gt">端口与安全</div>
+    <div class="grid">
+      <div class="c"><h3>端口占用</h3>
+        <div class="bd"><div class="kv">8888 后端 · 3306 MySQL</div><small>扫描项目常用端口</small></div>
+        <div class="ft"><button onclick="T('扫描端口')">扫描</button></div></div>
+      <div class="c"><h3>Defender 白名单</h3>
+        <div class="bd"><div class="kv">未添加</div><small>根治子进程被误拦</small></div>
+        <div class="ft"><button onclick="T('加白名单（需 UAC）')">添加</button></div></div>
     </div>
   </section>
 
   <!-- ---------- 诊断 ---------- -->
   <section class="page" id="p-diag">
     <div class="ptitle">诊断</div>
-    <div class="psub">原「链端运维」并入。查状态不必进链端页——首页已有；这里放"做操作"的部分。</div>
-    <div class="ws">
-      <div class="grp"><h4>健康检查</h4><div class="bd">
-        <div class="item"><span class="nm">环境符合性</span><span class="hint">项目要求 vs 实际版本</span>
-          <button onclick="toast('检查环境')">检查</button></div>
-        <div class="item"><span class="nm">服务复验</span><span class="hint">端口 + HTTP + 存活观察窗</span>
-          <button onclick="toast('复验服务')">复验</button></div>
-        <div class="item"><span class="nm">备份可还原性</span><span class="hint">静态检查，毫秒级</span>
-          <button onclick="toast('检查备份')">检查</button></div>
-      </div></div>
-
-      <div class="grp"><h4>链端</h4><div class="bd">
-        <div class="item"><span class="nm">节点状态</span><span class="hint">块 1105 · 交易 1355</span>
-          <button onclick="toast('刷新链端')">刷新</button></div>
-        <div class="item"><span class="nm">端口扫描</span><span class="hint">20200 / 5002</span>
-          <button onclick="toast('扫描链端端口')">扫描</button></div>
-        <div class="item"><span class="nm">重启链端</span><span class="hint">经 WeBASE-Front 拉起</span>
-          <button onclick="toast('重启（需确认）')">重启</button></div>
-        <div class="item"><span class="nm">SSH 终端</span><span class="hint">内嵌 PTY</span>
-          <button onclick="toast('打开终端')">打开</button></div>
-        <div class="item"><span class="nm">主机密钥</span><span class="hint">TOFU 指纹已记录</span>
-          <button onclick="toast('查看指纹')">查看</button></div>
-      </div></div>
-
-      <div class="grp"><h4>守护</h4><div class="bd">
-        <div class="item"><span class="nm">后台守护</span><span class="hint">每 60s 检测，宕机自动拉起</span>
-          <button class="pri" onclick="toast('跳转 → 设置 / 链端')">去开启</button></div>
-        <div class="item"><span class="nm">最近一次检测</span><span class="hint">尚未完成第一轮检测</span></div>
-      </div></div>
-
-      <div class="grp"><h4>日志与报告</h4><div class="bd">
-        <div class="item"><span class="nm">运行日志</span><span class="hint">安装 / 配置 / 启动 / 链端 / 系统</span>
-          <button onclick="toast('查看日志')">查看</button></div>
-        <div class="item"><span class="nm">诊断包</span><span class="hint">报告 + 脱敏配置 + 日志 + 审计</span>
-          <button onclick="toast('导出诊断包')">导出</button></div>
-      </div></div>
+    <div class="psub">每块一个卡片。查状态在首页，这里放"做操作"。</div>
+    <div class="grid">
+      <div class="c"><h3>环境符合性</h3>
+        <div class="bd"><div class="kv">项目要求 vs 实际版本</div><small>go.mod / engines.node</small></div>
+        <div class="ft"><button class="pri" onclick="T('检查环境')">检查</button></div></div>
+      <div class="c"><h3>服务复验</h3>
+        <div class="bd"><div class="kv">端口 + HTTP + 存活观察</div><small>观察窗 5s</small></div>
+        <div class="ft"><button onclick="T('复验服务')">复验</button></div></div>
+      <div class="c"><h3>备份可还原性</h3>
+        <div class="bd"><div class="kv">静态检查 · 毫秒级</div><small>文件没坏 ≠ 能还原</small></div>
+        <div class="ft"><button onclick="T('检查备份')">检查</button></div></div>
+      <div class="c"><h3>链端状态</h3>
+        <div class="bd"><div class="kv">块 1105 · 交易 1355</div><small>节点进程 4</small></div>
+        <div class="ft"><button onclick="T('刷新链端')">刷新</button></div></div>
+      <div class="c"><h3>链端端口</h3>
+        <div class="bd"><div class="kv">20200 / 5002</div><small>均响应</small></div>
+        <div class="ft"><button onclick="T('扫描')">扫描</button><button onclick="T('重启链端')">重启</button></div></div>
+      <div class="c"><h3>SSH 终端</h3>
+        <div class="bd"><div class="kv">内嵌 PTY</div><small>指纹 TOFU 已记录</small></div>
+        <div class="ft"><button onclick="T('打开终端')">打开</button></div></div>
+      <div class="c warnbar"><h3>后台守护</h3>
+        <div class="bd"><div class="kv">未开启</div><small>宕机自动拉起并复验</small></div>
+        <div class="ft"><button onclick="go('set')">去开启</button></div></div>
+      <div class="c"><h3>运行日志</h3>
+        <div class="bd"><div class="kv">安装 / 配置 / 启动 / 链端</div><small>最近 200 行</small></div>
+        <div class="ft"><button onclick="T('查看日志')">查看</button></div></div>
+      <div class="c"><h3>诊断包</h3>
+        <div class="bd"><div class="kv">报告 + 脱敏配置</div><small>含日志与审计</small></div>
+        <div class="ft"><button onclick="T('导出诊断包')">导出</button></div></div>
     </div>
   </section>
 
   <!-- ---------- 数据 ---------- -->
   <section class="page" id="p-data">
     <div class="ptitle">数据</div>
-    <div class="psub">数据库、备份、SQL、数据浏览收在一处。AI 也有只读查询能力，但它不替代这里的直接操作。</div>
-    <div class="ws">
-      <div class="grp"><h4>数据库</h4><div class="bd">
-        <div class="item"><span class="nm">farm</span><span class="hint">已连接 · 12 张表</span>
-          <button onclick="toast('连接设置')">设置</button></div>
-        <div class="item"><span class="nm">建库 / 建表</span><span class="hint">按 SQL 文件执行</span>
-          <button onclick="toast('建库建表（需确认）')">执行</button></div>
-      </div></div>
-      <div class="grp"><h4>备份</h4><div class="bd">
-        <div class="item"><span class="nm">最近一份</span><span class="hint">2h 前 · sha256 一致 · 静态检查通过</span></div>
-        <div class="item"><span class="nm">立即备份</span><span class="hint">自动保留最近 10 份</span>
-          <button onclick="toast('备份（需确认）')">备份</button></div>
-        <div class="item"><span class="nm">还原</span><span class="hint">高危，需二次确认</span>
-          <button onclick="toast('还原（高危）')">还原</button></div>
-        <div class="item"><span class="nm">还原演练</span><span class="hint">恢复到临时库实测，不碰业务库</span>
-          <button onclick="toast('开始演练')">演练</button></div>
-      </div></div>
-      <div class="grp"><h4>SQL</h4><div class="bd">
-        <div class="item"><span class="nm">生效 SQL</span><span class="hint">执行前自动备份</span>
-          <button onclick="toast('选择文件')">选择</button></div>
-        <div class="item"><span class="nm">上传执行</span><span class="hint">DROP / TRUNCATE 需确认</span>
-          <button onclick="toast('上传')">上传</button></div>
-      </div></div>
-      <div class="grp"><h4>浏览</h4><div class="bd">
-        <div class="item"><span class="nm">表与数据</span><span class="hint">只读浏览，不改数据</span>
-          <button onclick="toast('打开浏览')">打开</button></div>
-        <div class="item"><span class="nm">只读查询</span><span class="hint">SELECT / SHOW / DESCRIBE</span>
-          <button onclick="toast('查询')">查询</button></div>
-      </div></div>
+    <div class="psub">数据库、备份、SQL、浏览。AI 也有只读查询，但不替代这里的直接操作。</div>
+    <div class="grid">
+      <div class="c okbar"><h3><i class="dot d-ok"></i>farm</h3>
+        <div class="bd"><div class="kv">已连接 · 12 张表</div><small>MySQL 8.0</small></div>
+        <div class="ft"><button onclick="T('连接设置')">设置</button><button class="pri" onclick="T('建库建表')">建库建表</button></div></div>
+      <div class="c okbar"><h3>最近备份</h3>
+        <div class="bd"><div class="kv">2h 前 · sha256 一致</div><small>静态检查通过</small></div>
+        <div class="ft"><button onclick="T('立即备份')">备份</button><button onclick="T('还原（高危）')">还原</button></div></div>
+      <div class="c"><h3>还原演练</h3>
+        <div class="bd"><div class="kv">恢复到临时库实测</div><small>全程不碰业务库</small></div>
+        <div class="ft"><button onclick="T('开始演练')">演练</button></div></div>
+      <div class="c"><h3>SQL 生效</h3>
+        <div class="bd"><div class="kv">执行前自动备份</div><small>DROP / TRUNCATE 需确认</small></div>
+        <div class="ft"><button onclick="T('选择文件')">选择</button><button onclick="T('上传')">上传</button></div></div>
+      <div class="c"><h3>表与数据</h3>
+        <div class="bd"><div class="kv">只读浏览</div><small>不改数据</small></div>
+        <div class="ft"><button onclick="T('打开浏览')">打开</button></div></div>
+      <div class="c"><h3>只读查询</h3>
+        <div class="bd"><div class="kv">SELECT / SHOW / DESCRIBE</div><small>强制 LIMIT · 会话只读</small></div>
+        <div class="ft"><button onclick="T('查询')">查询</button></div></div>
     </div>
   </section>
 
   <!-- ---------- 助手 ---------- -->
   <section class="page" id="p-agent">
     <div class="ptitle">助手</div>
-    <div class="psub">原「AI 助手」+「操作审计」。放一起才看得出因果：它做了什么 → 留下了什么 → 学到了什么。</div>
-    <div class="ws">
-      <div class="grp" style="grid-column:1/-1"><h4>对话</h4><div class="bd">
-        <div class="meta" style="padding:2px 0 8px">自然语言入口。它能做的你都能手动做；它不可用时下面四页照常工作。</div>
-        <input placeholder="例如：把服务起起来 / 端口被谁占了 / 这个备份真能还原吗"
-               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit">
-      </div></div>
-      <div class="grp"><h4>任务轨迹</h4><div class="bd">
-        <div class="item"><span class="nm">t-20261004-1012-A3F1</span><span class="hint">启动前后端 · 成功 · 5 步</span></div>
-        <div class="item"><span class="nm">t-20261004-0930-77C2</span><span class="hint">查端口占用 · 成功 · 2 步</span></div>
-      </div></div>
-      <div class="grp"><h4>记忆与经验</h4><div class="bd">
-        <div class="item"><span class="nm">我的记忆</span><span class="hint">3 条 · 本项目</span><button onclick="toast('管理记忆')">管理</button></div>
-        <div class="item"><span class="nm">自动经验</span><span class="hint">10 条 · 1 条已失效</span><button onclick="toast('查看经验')">查看</button></div>
-      </div></div>
-      <div class="grp"><h4>操作审计</h4><div class="bd">
-        <div class="item"><span class="nm">580 条记录</span><span class="hint">AI 230 · 用户 340 · 守护 10</span>
-          <button onclick="toast('打开审计')">打开</button></div>
-      </div></div>
+    <div class="psub">对话做成方形放在页内；右下角桌宠保持原样，点它开右侧抽屉 —— 两条路径都在。</div>
+    <div class="grid" style="grid-template-columns:minmax(0,1fr) 250px">
+      <div class="sq">
+        <div class="h">AI 助手<span class="bg off" style="margin-left:auto">未启用</span></div>
+        <div class="m">
+          <div class="bub me">把服务起起来</div>
+          <div class="bub ai">
+            <div class="pl" style="margin-bottom:6px">
+              <div>1 · 正在读取项目画像</div>
+              <div>2 · 正在搜索 npm scripts</div>
+              <div>3 · 正在启动后端</div>
+            </div>
+            前端用 <b>npm run serve</b>（从 package.json 推断，不是猜的），后端入口
+            <b>go run main.go</b>。已启动并复验通过：前端 :8080、后端 :8888。
+            <div style="margin-top:6px;color:var(--warn)">提示：后端虽然起来了，但复验未通过，先别当它可用。</div>
+          </div>
+        </div>
+        <div class="f"><input placeholder="例如：端口被谁占了"><button class="pri" onclick="T('发送')">发送</button></div>
+      </div>
+
+      <div>
+        <div class="c" style="min-height:0"><h3>任务轨迹</h3>
+          <div class="bd" style="gap:7px">
+            <div class="kv">t-…1012-A3F1　<span class="bg ok">成功</span></div>
+            <small>启动前后端 · 5 步 · 含人工介入 0 次</small>
+            <div class="kv">t-…0930-77C2　<span class="bg ok">成功</span></div>
+            <small>查端口占用 · 2 步</small>
+          </div></div>
+        <div class="c" style="min-height:0;margin-top:11px"><h3>记忆与经验</h3>
+          <div class="bd" style="gap:7px">
+            <div class="kv">我的记忆　<span class="bg info">3 条</span></div>
+            <div class="kv">自动经验　<span class="bg warn">10 条 · 1 失效</span></div>
+          </div>
+          <div class="ft"><button onclick="T('管理记忆')">管理</button></div></div>
+        <div class="c" style="min-height:0;margin-top:11px"><h3>操作审计</h3>
+          <div class="bd"><div class="kv">580 条</div><small>AI 230 · 用户 340 · 守护 10</small></div>
+          <div class="ft"><button onclick="T('打开审计')">打开</button></div></div>
+      </div>
     </div>
   </section>
 
   <!-- ---------- 设置 ---------- -->
   <section class="page" id="p-set">
     <div class="ptitle">设置</div>
-    <div class="psub">四组全部默认折叠——配置是"改一次用很久"的操作，不该每次打开都占满屏。</div>
-    <div class="ws">
-      <details class="grp"><summary>组件</summary><div class="bd">
-        <div class="item"><span class="nm">Go</span><span class="hint">1.25.0 · 已安装</span><button onclick="toast('重新检测')">检测</button></div>
-        <div class="item"><span class="nm">Node.js</span><span class="hint">22.22.2 · 已安装</span><button onclick="toast('重新检测')">检测</button></div>
-        <div class="item"><span class="nm">MySQL</span><span class="hint">8.0 · 已安装</span><button onclick="toast('重新检测')">检测</button></div>
-        <div class="item"><span class="nm">安装 / 升级</span><span class="hint">镜像加速 · SHA256 校验</span><button class="pri" onclick="toast('安装组件')">安装</button></div>
+    <div class="psub">四组默认折叠。配置是"改一次用很久"的操作，不该每次打开都占满屏。</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+      <details class="g"><summary>组件</summary><div class="ib">
+        <div class="it"><span class="nm">Go</span><span class="hint">1.25.0</span><button onclick="T('检测')">检测</button></div>
+        <div class="it"><span class="nm">Node.js</span><span class="hint">22.22.2</span><button onclick="T('检测')">检测</button></div>
+        <div class="it"><span class="nm">MySQL</span><span class="hint">8.0</span><button onclick="T('检测')">检测</button></div>
+        <div class="it"><span class="nm">安装 / 升级</span><span class="hint">镜像加速 · SHA256</span><button class="pri" onclick="T('安装')">安装</button></div>
       </div></details>
 
-      <details class="grp"><summary>项目</summary><div class="bd">
-        <div class="item"><span class="nm">前端目录</span><span class="hint">D:\BCGD\FarmTrace\web</span><button onclick="toast('选择目录')">选择</button></div>
-        <div class="item"><span class="nm">后端目录</span><span class="hint">D:\BCGD\FarmTrace\server</span><button onclick="toast('选择目录')">选择</button></div>
-        <div class="item"><span class="nm">前端启动脚本</span><span class="hint">serve · 留空则自动推断</span><button onclick="toast('编辑')">编辑</button></div>
-        <div class="item"><span class="nm">后端入口</span><span class="hint">main.go · 留空则自动推断</span><button onclick="toast('编辑')">编辑</button></div>
-        <div class="item"><span class="nm">数据库名</span><span class="hint">farm</span><button onclick="toast('编辑')">编辑</button></div>
+      <details class="g"><summary>项目</summary><div class="ib">
+        <div class="it"><span class="nm">前端目录</span><span class="hint">web\</span><button onclick="T('选择')">选择</button></div>
+        <div class="it"><span class="nm">后端目录</span><span class="hint">server\</span><button onclick="T('选择')">选择</button></div>
+        <div class="it"><span class="nm">前端启动脚本</span><span class="hint">serve · 空=推断</span><button onclick="T('编辑')">编辑</button></div>
+        <div class="it"><span class="nm">后端入口</span><span class="hint">main.go · 空=推断</span><button onclick="T('编辑')">编辑</button></div>
+        <div class="it"><span class="nm">数据库名</span><span class="hint">farm</span><button onclick="T('编辑')">编辑</button></div>
       </div></details>
 
-      <details class="grp"><summary>链端</summary><div class="bd">
-        <div class="item"><span class="nm">SSH 主机</span><span class="hint">未配置</span><button onclick="toast('编辑')">编辑</button></div>
-        <div class="item"><span class="nm">节点端口 / WeBASE</span><span class="hint">20200 / 5002</span><button onclick="toast('编辑')">编辑</button></div>
-        <div class="item"><span class="nm">后台守护</span><span class="hint">宕机自动拉起并复验</span><label><input type="checkbox"> 开启</label></div>
-        <div class="item"><span class="nm">桌面通知</span><span class="hint">宕机 / 恢复时提醒</span><label><input type="checkbox" checked> 开启</label></div>
+      <details class="g"><summary>链端</summary><div class="ib">
+        <div class="it"><span class="nm">SSH 主机</span><span class="hint">未配置</span><button onclick="T('编辑')">编辑</button></div>
+        <div class="it"><span class="nm">节点 / WeBASE 端口</span><span class="hint">20200 / 5002</span><button onclick="T('编辑')">编辑</button></div>
+        <div class="it"><span class="nm">后台守护</span><span class="hint">宕机自动拉起</span><label><input type="checkbox"> 开</label></div>
+        <div class="it"><span class="nm">桌面通知</span><span class="hint">宕机 / 恢复</span><label><input type="checkbox" checked> 开</label></div>
       </div></details>
 
-      <details class="grp"><summary>AI</summary><div class="bd">
-        <div class="item"><span class="nm">启用助手</span><span class="hint">未启用也不影响其它功能</span><label><input type="checkbox"> 开启</label></div>
-        <div class="item"><span class="nm">服务商 / 密钥</span><span class="hint">OpenAI 兼容</span><button onclick="toast('配置')">配置</button></div>
-        <div class="item"><span class="nm">模型</span><span class="hint">未选择</span><button onclick="toast('选择')">选择</button></div>
-        <div class="item"><span class="nm">记忆与经验层</span><span class="hint">默认关闭，升级后不改变既有行为</span><label><input type="checkbox"> 开启</label></div>
+      <details class="g"><summary>AI</summary><div class="ib">
+        <div class="it"><span class="nm">启用助手</span><span class="hint">不影响其它功能</span><label><input type="checkbox"> 开</label></div>
+        <div class="it"><span class="nm">服务商 / 密钥</span><span class="hint">OpenAI 兼容</span><button onclick="T('配置')">配置</button></div>
+        <div class="it"><span class="nm">模型</span><span class="hint">未选择</span><button onclick="T('选择')">选择</button></div>
+        <div class="it"><span class="nm">记忆与经验层</span><span class="hint">默认关闭</span><label><input type="checkbox"> 开</label></div>
+        <div class="it"><span class="nm">界面语言</span><span class="hint">中文 / English</span><button onclick="T('切换语言')">EN</button></div>
+        <div class="it"><span class="nm">主题</span><span class="hint">亮 / 暗</span><button onclick="theme()">切换</button></div>
       </div></details>
     </div>
   </section>
-
   </div>
 </div>
 
-<!-- 说明抽屉 -->
-<button class="fab pri" onclick="document.getElementById('dr').classList.add('on')">设计说明</button>
-<div class="drawer" id="dr" onclick="if(event.target===this)this.classList.remove('on')">
-  <div class="dpanel">
-    <button class="x" onclick="document.getElementById('dr').classList.remove('on')">×</button>
-    <h2>v3.0 布局：设计说明</h2>
-    <p style="font-size:12px">原型用真实字段与真实数据渲染，非静态图。数据取自本机实测。</p>
+<!-- ===== 桌宠（保持原样：右下角固定 + 点击开右侧抽屉） ===== -->
+<div id="pet" title="AI 助手 · 点我对话 / 右键更多">
+  <div class="bub2">点我开对话 →</div>
+  <svg viewBox="0 0 100 100">
+    <circle class="ring" cx="50" cy="50" r="46" fill="none" stroke-width="2"/>
+    <ellipse class="face" cx="50" cy="56" rx="26" ry="28"/>
+    <path class="hair" d="M24 50 Q26 26 50 24 Q74 26 76 50 Q66 38 50 38 Q34 38 24 50Z"/>
+    <ellipse class="eye" cx="41" cy="55" rx="3.4" ry="4.4"/>
+    <ellipse class="eye" cx="59" cy="55" rx="3.4" ry="4.4"/>
+    <ellipse class="blush" cx="33" cy="63" rx="5" ry="3"/>
+    <ellipse class="blush" cx="67" cy="63" rx="5" ry="3"/>
+    <path d="M45 67 Q50 71 55 67" stroke="var(--text)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>
+</div>
+<button class="fab ghost" onclick="document.getElementById('dsh').classList.add('on')">设计说明</button>
 
-    <h4>1. 这份布局解决的核心问题</h4>
-    <p>v2.2 已经交付了统一状态源 <code>/api/runtime/state</code>，但
-    <b>前端一次都没接</b>——它在 web/index.html 里出现 0 次，<code>issues</code> 被引用 0 次。
-    前端仍在用三套轮询自己算状态。所以 v3.0 第一批工作不是改版式，是<b>把已交付但闲置的能力接上</b>。</p>
+<!-- 右侧抽屉（桌宠点开） -->
+<div id="drawer">
+  <div class="dh"><b>AI 助手</b><span class="bg off">未启用</span><span style="flex:1"></span>
+    <button class="ghost" onclick="T('缩成小圆点')">缩成点</button>
+    <button class="ghost" onclick="document.getElementById('drawer').classList.remove('on')">×</button></div>
+  <div class="dm">
+    <div class="bub me" style="align-self:flex-end">端口 8888 是谁在占</div>
+    <div class="bub ai" style="align-self:flex-start">扫描结果是 <b>node.exe</b>（pid 19080）——
+      它是我们自己启的前端，不是别的程序占的。</div>
+    <div class="bub me" style="align-self:flex-end">那后端呢</div>
+    <div class="bub ai" style="align-self:flex-start">后端 :8888 进程在，但<b>没通过复验</b>。
+      <span style="color:var(--warn)">别当它可用</span>，先点复验看结论。</div>
+  </div>
+  <div class="df"><input placeholder="说点什么…"><button class="pri" onclick="T('发送')">发送</button></div>
+</div>
 
-    <h4>2. 绿灯必须以 verified 为条件</h4>
-    <p>试试顶部的「按旧规则上色」开关。切过去后<b>后端会变绿</b>——但它的
-    <code>phase</code> 是 <code>degraded</code>（runtime.go:52 的定义：
-    「进程在但未通过复验」）。</p>
-    <p>如果只按 <code>running</code> 上色，<b>前面所有验证层的努力在视觉上等于零</b>：
-    用户看到绿灯，AI 说已启动，实际上从没验过。这与链端判据、守护状态是同一条纪律——
-    <b>不确定时显示"未验证"，不显示"正常"</b>。</p>
+<div class="dsh" id="dsh" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="dp">
+    <button class="x" onclick="document.getElementById('dsh').classList.remove('on')">×</button>
+    <h2>这一版改了什么</h2>
+    <p>依据你的四条意见。</p>
 
-    <h4>3. 问题区每条必须带出路</h4>
-    <p><code>Issue.Action</code> 是后端算好的可执行下一步。前端丢掉它，
-    等于把「该干什么」的负担推回给用户——而<b>给不出下一步的告警等于噪音</b>。
-    所以每条都必须渲染 <code>action</code>，并带一个跳到对应工作区的入口。</p>
+    <h4>1 · 桌宠保留，右侧抽屉保持原样</h4>
+    <p>右下角桌宠仍在原位，点它开右侧抽屉 —— <b>这条路径完全不动</b>。
+    现有桌宠是一整套 SVG 角色（表情 / 任务提示 / 气泡 / 点击彩蛋），不是临时加的，
+    v3.0 不碰它。</p>
+    <p>助手页里的对话<b>另做一份方形</b>。两条路径并存的理由：页内方形适合认真问一件事，
+    桌宠适合顺手问一句。取舍见下。</p>
 
-    <h4>4. 入口数量没变，但不再一屏铺开</h4>
-    <p>6 个顶层面板 → 6 个工作区。变化在于每个工作区内部按<b>任务</b>分组：
-    「诊断」里的健康检查、链端、守护、日志是四件不同的事，不该平铺在一个页面里。</p>
-    <p>「设置」四组默认全部折叠——配置是"改一次用很久"的操作。
-    <b>如果你实际是天天改配置，这一条该反过来</b>，说一声我调。</p>
-
-    <h4>5. 手动驾驶权</h4>
+    <h4>2 · 方形对话 vs 抽屉，用途不同</h4>
     <ul>
-      <li>首页按钮直连服务端，不经过 AI、不依赖记忆开关</li>
-      <li>手动操作后立即刷新状态，不等下一个轮询周期</li>
-      <li>AI 未配置 / 未启用 / 密钥失效时，本页全部功能照常</li>
-      <li>手动与 AI 的操作在审计里 actor 区分，结构一致</li>
+      <li><b>助手页方形</b>：常驻、可展开执行计划、旁边能放轨迹与记忆</li>
+      <li><b>桌宠抽屉</b>：不打断当前视线，从任意页面唤起</li>
+    </ul>
+    <p>如果你觉得重复，砍掉方形只留抽屉也行 —— 但那样助手页就只剩三块审计类卡片，
+    点"助手"进来没什么可看的。我倾向两个都留。</p>
+
+    <h4>3 · 每块一个小卡片（诊断 / 数据 / 运行）</h4>
+    <p>原来是一张卡片里塞一整组。现在<b>一块一卡</b>，用等高栅格对齐。</p>
+
+    <h4>4 · 排布不整齐怎么解决</h4>
+    <ul>
+      <li><code>grid-template-columns:repeat(auto-fill,minmax(230px,1fr))</code>
+        —— 卡片按容器宽度自动换行，<b>不留半行空缺</b></li>
+      <li><code>align-items:stretch</code> —— 同行卡片强制等高</li>
+      <li>卡片内 <code>flex-direction:column</code> + <code>justify-content:center</code>
+        —— 内容长短不影响按钮行位置</li>
+      <li>按钮统一收在卡片底部 <code>.ft</code>，跨卡片横向对齐</li>
+      <li>首页三张主卡单独一行（<code>.hero</code>），权重与次级卡区分</li>
     </ul>
 
-    <h4>6. 布局未定死的部分</h4>
-    <p>卡片的具体尺寸、栅格断点、折叠默认态、问题区最多显示几条——
-    这些要看真实使用反馈再定，不在设计稿里锁死。</p>
+    <h4>5 · 中英文与亮暗色：全部保留</h4>
+    <p>沿用现有 <code>index.html</code> 的变量名与配色，<b>暗色不是新造的一套</b>，
+    是把已有的 <code>[data-theme="dark"]</code> 搬过来。顶栏有切换按钮，右上角 ◐。</p>
+    <p>全站只用 <code>var(--*)</code>，不写死颜色 —— 切主题时一处都不用改。
+    英文走原有的 <code>t()</code>，这一版原型为了省事只出了中文，正式实现时按现有
+    <code>i18n_build.py</code> 流程补词条。</p>
+
+    <h4>6 · 状态灯规则仍可对照</h4>
+    <p>顶栏「按旧规则上色」勾上，后端立刻变绿 —— 但它 <code>phase=degraded</code>。
+    这条不能因为改版式就丢掉。</p>
   </div>
 </div>
 
 <script>
-// ---- 侧栏切换（原型行为） ----
 document.querySelectorAll('.nav').forEach(function(n){
-  n.onclick = function(){
-    document.querySelectorAll('.nav').forEach(x=>x.classList.remove('on'));
-    document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
-    n.classList.add('on');
-    document.getElementById('p-'+n.dataset.pg).classList.add('on');
-  };
+  n.onclick = function(){ go(n.dataset.pg); };
 });
+function go(pg){
+  document.querySelectorAll('.nav').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  var nav = document.querySelector('.nav[data-pg="'+pg+'"]');
+  if(nav) nav.classList.add('on');
+  var el = document.getElementById('p-'+pg);
+  if(el) el.classList.add('on');
+}
 
-// ---- 状态灯：核心是绿色要求 verified ----
+document.getElementById('pet').onclick = function(){
+  document.getElementById('drawer').classList.toggle('on');
+};
+
 var legacy = document.getElementById('legacy');
 function lamps(){
-  var useLegacy = legacy.checked;
-  // 后端：phase=degraded, verified=false
-  document.getElementById('d-be').className = 'dot ' + (useLegacy ? 'd-ok' : 'd-warn');
-  document.getElementById('v-be').textContent = useLegacy
+  var old = legacy.checked;
+  document.getElementById('d-be').className = 'dot ' + (old ? 'd-ok' : 'd-warn');
+  document.getElementById('c-be').className = 'c ' + (old ? 'okbar' : 'warnbar');
+  document.getElementById('v-be').textContent = old
     ? '已启动（仅凭 running，未复验）'
     : '未复验 —— 进程在，但没验过服务真的可用';
-  // 前端：phase=running, verified=true
-  document.getElementById('d-web').className = 'dot d-ok';
-  document.getElementById('d-db').className = 'dot d-ok';
 }
 legacy.onchange = lamps;
 lamps();
 
-// ---- 按钮反馈（原型） ----
-function toast(s){
-  var el = document.getElementById('dr');
-  document.getElementById('p-home').dataset.flash = s;
-  var old = document.querySelector('#toast');
-  if(old) old.remove();
+function theme(){
+  var r = document.documentElement;
+  var dark = r.getAttribute('data-theme') === 'dark';
+  r.setAttribute('data-theme', dark ? 'light' : 'dark');
+  document.getElementById('btn-theme').textContent = dark ? '◐ 暗色' : '◑ 亮色';
+}
+document.getElementById('btn-theme').textContent = '◐ 暗色';
+
+function T(s){
+  var o = document.getElementById('toast');
+  if(o) o.remove();
   var d = document.createElement('div');
   d.id = 'toast';
   d.textContent = '原型：' + s;
   d.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);'
-    + 'background:#1b1f24;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:50';
+    + 'background:var(--card);color:var(--text);border:1px solid var(--line);padding:7px 15px;'
+    + 'border-radius:8px;font-size:12.5px;z-index:70;box-shadow:0 4px 14px rgba(0,0,0,.12)';
   document.body.appendChild(d);
-  setTimeout(function(){ d.remove(); }, 1400);
+  setTimeout(function(){ d.remove(); }, 1300);
 }
 </script>
 </body>
