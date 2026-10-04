@@ -1,0 +1,490 @@
+{
+  "spec_version": "1.0",
+  "model": "deepseek-flash",
+  "repeat": 3,
+  "groups": {
+    "A": {
+      "memory_enabled": false,
+      "rows": [
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 1,
+          "success": true,
+          "explore_rounds": 5,
+          "total_rounds": 6,
+          "plan_steps": 5,
+          "seconds": 7.0,
+          "tools": [
+            "db_check",
+            "search_files",
+            "search_files",
+            "search_files",
+            "search_files",
+            "read_file"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['read_file', 'search_files']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.env', 'main.go']"
+            }
+          ],
+          "answer_head": "我先在项目里搜一下数据库连接相关的配置。数据库连接串是**硬编码在后端入口里**的，没有独立的配置文件（项目里没有 .env / yaml / ini 之类的配置文件）：\n\n- **`backend/main.go:13`** ← 就是这一处：\n  `dbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTime=true"
+        },
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 2,
+          "success": true,
+          "explore_rounds": 4,
+          "total_rounds": 5,
+          "plan_steps": 4,
+          "seconds": 11.8,
+          "tools": [
+            "db_check",
+            "get_project_brief",
+            "search_files",
+            "read_file",
+            "search_files"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['get_project_brief', 'read_file', 'search_files']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.json', '.yaml', '.env', 'main.go', 'config']"
+            }
+          ],
+          "answer_head": "我先在项目里定位数据库配置。数据库连接串**不在配置文件里，而是硬编码在后端 Go 代码里**，位置如下：\n\n| 环节 | 文件 | 说明 |\n|---|---|---|\n| ① 定义 DSN（唯一来源） | `backend/main.go` 第 13 行 | `dbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTi"
+        },
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 3,
+          "success": true,
+          "explore_rounds": 4,
+          "total_rounds": 5,
+          "plan_steps": 4,
+          "seconds": 8.6,
+          "tools": [
+            "db_check",
+            "search_files",
+            "list_project",
+            "read_file",
+            "read_file"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['list_project', 'read_file', 'search_files']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.json', '.yaml', '.env', 'main.go', 'config']"
+            }
+          ],
+          "answer_head": "数据库连接串就写死在**后端入口文件**里，不是配置文件：\n\n**1. `backend/main.go` 第 13 行（唯一的 DSN 定义处）**\n```go\ndbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTime=true\")\n```\n这是硬编码字面量：账号 `root`、库名 `blood`、`localh"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 1,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 2,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 3,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        }
+      ],
+      "summary": {
+        "n": 6,
+        "success_rate": 1.0,
+        "explore_median": 2.0,
+        "explore_p90": 4,
+        "seconds_median": 3.5,
+        "per_task": {
+          "T09": {
+            "name": "启动方式不得编造",
+            "success_rate": 1.0,
+            "explore_median": 0,
+            "total_median": 0,
+            "seconds_median": 0.0
+          },
+          "T01": {
+            "name": "数据库 DSN 写在哪个文件",
+            "success_rate": 1.0,
+            "explore_median": 4,
+            "total_median": 5,
+            "seconds_median": 8.6
+          }
+        }
+      }
+    },
+    "B": {
+      "memory_enabled": true,
+      "rows": [
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 1,
+          "success": true,
+          "explore_rounds": 2,
+          "total_rounds": 3,
+          "plan_steps": 2,
+          "seconds": 6.5,
+          "tools": [
+            "db_check",
+            "read_file",
+            "search_files"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['read_file', 'search_files']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.env', 'main.go', 'config']"
+            }
+          ],
+          "answer_head": "数据库连接串**不是**写在 .env / yaml 配置里的，而是硬编码在后端代码里：\n\n**位置：`backend/main.go` 第 13 行**\n\n```go\nfunc main() {\n    dbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTime=true\")\n    defer dbs.CloseD"
+        },
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 2,
+          "success": true,
+          "explore_rounds": 2,
+          "total_rounds": 3,
+          "plan_steps": 2,
+          "seconds": 5.3,
+          "tools": [
+            "db_check",
+            "read_file",
+            "search_files"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['read_file', 'search_files']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.env', 'main.go']"
+            }
+          ],
+          "answer_head": "**写在 `backend/main.go` 第 13 行**，是硬编码的字符串，没有单独的 .env / yaml 配置文件：\n\n```go\ndbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTime=true\")\n```\n\n几个要点：\n\n- **格式**：`用户:密码@tcp(主机:端口)/库名?charset=u"
+        },
+        {
+          "task": "T01",
+          "task_name": "数据库 DSN 写在哪个文件",
+          "run": 3,
+          "success": true,
+          "explore_rounds": 1,
+          "total_rounds": 2,
+          "plan_steps": 1,
+          "seconds": 3.5,
+          "tools": [
+            "db_check",
+            "read_file"
+          ],
+          "criteria": [
+            {
+              "kind": "explore_used",
+              "values": [],
+              "passed": true,
+              "why": "explore=['read_file']"
+            },
+            {
+              "kind": "text_contains_any",
+              "values": [
+                ".go",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".env",
+                ".toml",
+                "main.go",
+                "config"
+              ],
+              "passed": true,
+              "why": "hit=['.go', '.env', 'main.go']"
+            }
+          ],
+          "answer_head": "数据库连接配置没有放在 .env / yaml 之类的配置文件里，是**硬编码在后端入口**的：\n\n- **文件**：`backend/main.go`，第 13 行\n- **内容**：`dbs.InitDB(\"root:***@tcp(localhost:3306)/blood?charset=utf8&parseTime=true\")`（真实密码在源码里明文写着，界面读取时已做掩码）\n- 参数"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 1,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 2,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        },
+        {
+          "task": "T09",
+          "task_name": "启动方式不得编造",
+          "run": 3,
+          "success": true,
+          "explore_rounds": 0,
+          "total_rounds": 0,
+          "plan_steps": 0,
+          "seconds": 0.0,
+          "tools": [],
+          "criteria": [
+            {
+              "kind": "no_backtrack",
+              "values": [],
+              "passed": true,
+              "why": "no backtrack"
+            },
+            {
+              "kind": "text_lacks_any",
+              "values": [
+                "我猜",
+                "大概是",
+                "可能是"
+              ],
+              "passed": true,
+              "why": "clean"
+            }
+          ],
+          "answer_head": "好的，准备执行：启动前后端服务（先后端、再前端）。请在下方点「确认执行」。\n"
+        }
+      ],
+      "summary": {
+        "n": 6,
+        "success_rate": 1.0,
+        "explore_median": 0.5,
+        "explore_p90": 2,
+        "seconds_median": 1.8,
+        "per_task": {
+          "T09": {
+            "name": "启动方式不得编造",
+            "success_rate": 1.0,
+            "explore_median": 0,
+            "total_median": 0,
+            "seconds_median": 0.0
+          },
+          "T01": {
+            "name": "数据库 DSN 写在哪个文件",
+            "success_rate": 1.0,
+            "explore_median": 2,
+            "total_median": 3,
+            "seconds_median": 5.3
+          }
+        }
+      }
+    }
+  },
+  "restored_memory_enabled": false,
+  "cleaned_seeded_memories": 1,
+  "gain": {
+    "success_delta": 0.0,
+    "explore_delta": 1.5,
+    "seconds_delta": 1.7
+  }
+}
