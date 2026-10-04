@@ -163,7 +163,7 @@ def main():
         return 0
 
     if not ab_exe_ok():
-        raise SystemExit('找不到 EnvKit_ab.exe，先构建：go build -o EnvKit_ab.exe .')
+        raise SystemExit(ab_exe_hint())
 
     # ===== 生命周期开始 =====
     results = []
@@ -240,7 +240,73 @@ def main():
 
 
 def ab_exe_ok():
-    return (ROOT / 'EnvKit_ab.exe').exists()
+    """被测 exe 必须存在，**且比所有 .go 源码新**。
+
+    ## v2.6 修正：原来只看文件是否存在
+
+    实测踩过（而且它**没有报任何错**）：
+    我改了 `aibackup.go`（sha256 真复算 + 修大文件误报截断），
+    `go build -o EnvKit.exe`，然后跑评测 ——
+    **测的是三小时前构建的旧 exe。**
+
+    根因：`recovery_sandbox.py` 读的是 `EnvKit_ab.exe`，
+    而我构建时用的是 `EnvKit.exe`（另一个名字，仓库里同时存在两个）。
+    `ab_exe_ok()` 只检查 `EnvKit_ab.exe` 存在，于是顺利通过。
+
+    ## 为什么这比"测到旧产品"更严重
+
+    它会让**所有数字都失去意义，而且看不出异常**：
+    报告正常生成、维度正常汇总、模型正常调用 ——
+    唯一的破绽是 AI 引用了旧措辞（"校验和旁挂：缺失或不一致"）。
+    如果我没顺手核对 exe 时间戳，这轮数据会被当成"修复无效"写进报告，
+    然后下一步就去改判据 —— **而真相是产品根本没被测到。**
+
+    这与 v2.4 那条「开了开关 ≠ 有东西注入」同源：
+    **装置看起来在跑，但它跑的不是你以为的那个东西。**
+
+    ## 判据：mtime 比最新 .go 新
+
+    粗糙但可靠。Go 的构建缓存让增量构建很快，
+    而"改了源码没重新构建被测exe"是一个真实且高频的错误。
+    宁可误报（让人重构建一次），不可静默测旧版本。
+    """
+    exe = ROOT / 'EnvKit_ab.exe'
+    if not exe.exists():
+        return False
+    srcs = [p for p in ROOT.glob('*.go') if p.name != '*_test.go']
+    if not srcs:
+        return True
+    newest = max(p.stat().st_mtime for p in srcs)
+    if exe.stat().st_mtime < newest:
+        return False
+    return True
+
+
+def ab_exe_hint():
+    """ab_exe_ok 为 False 时，把**具体原因**说清楚。
+
+    不给线索等于让每个使用者重新复现一遍——
+    而"跑一次才知道"在批量评测里根本做不到（v2.5 教训 5.4）。
+    """
+    exe = ROOT / 'EnvKit_ab.exe'
+    if not exe.exists():
+        return ('找不到 EnvKit_ab.exe。\n'
+                '  构建：go build -trimpath -ldflags "-s -w" -o EnvKit_ab.exe .\n'
+                '  **注意名字必须是 EnvKit_ab.exe** —— 本脚本只认这一个；\n'
+                '  构建成 EnvKit.exe 会被当成"exe 不存在"，'
+                '而更糟的情况是仓库里已有一个旧的 EnvKit_ab.exe，'
+                '于是**静默测旧版本**。')
+    srcs = [p for p in ROOT.glob('*.go') if p.name != '*_test.go']
+    if srcs:
+        newest = max(srcs, key=lambda p: p.stat().st_mtime)
+        age = exe.stat().st_mtime
+        return (f'EnvKit_ab.exe 比源码旧 —— 被测对象不是当前代码。\n'
+                f'  最新源码：{newest.name}\n'
+                f'  exe mtime：{age}\n'
+                f'  重建：go build -trimpath -ldflags "-s -w" -o EnvKit_ab.exe .\n'
+                f'  **继续跑会测一个过期版本，所有数字都不可信，'
+                f'而报告里看不出任何异常。**')
+    return 'EnvKit_ab.exe 状态未知，请手动重建。'
 
 
 def box_hint():
