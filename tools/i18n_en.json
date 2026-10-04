@@ -552,7 +552,6 @@
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
-  "输入模型名，如 deepseek-chat": "Enter a model name, e.g. deepseek-chat",
   "输入模型名，如 deepseek-flash": "Enter a model name, e.g. deepseek-flash",
   "输入端口号，如 3306": "Enter a port number, e.g. 3306",
   "运行": "Run",
