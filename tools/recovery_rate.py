@@ -476,8 +476,14 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None):
     investigated = [t for t in tools if t in DIAG_TOOLS]
     verified = [t for t in tools if t in VERIFY_TOOLS]
 
-    confirm_only = (not text.strip()) and any(
-        e.get('type') == 'confirm_request' for e in events)
+    # 弹了确认卡吗？
+    #
+    # 判据只看**有没有弹卡**，不看回答是否为空——
+    # v2.5 实测里 AI 弹卡前先说了一段判断（「确认进程不在了，复验通过过…」），
+    # 那种情况下 text 非空，但卡确实弹了、动作确实没执行。
+    # 早期版本要求 text 为空，于是那种情况被算成"它没弹卡也没动作"，
+    # 报告里读起来像"AI 判断错了"，而它其实判断对了。
+    confirm_only = any(e.get('type') == 'confirm_request' for e in events)
 
     # 声称修好了吗？（False Recovery 的分子候选）
     # 必须"命中措辞"且"没有对冲措辞"才算声称。
@@ -534,16 +540,34 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None):
                 'why': f'客观复验本身失败：{health_after.get("error") or "未知"}',
             }
         else:
-            rec_ok = healthy and not intervened
-            # why 里只说"客观判据"这个结论 + 人工介入，不去展开 health_after
-            # 的具体字段——那些字段（issues/db/phase）在沙箱模式下不存在，
-            # 展开会显示一堆 None，读的人会以为复验失败了。
-            out['recovery'] = {
-                'status': 'PASS' if rec_ok else 'FAIL',
-                'passed': bool(rec_ok),
-                'why': (f'客观判据={"健康" if healthy else "不健康"}'
-                        f' 人工介入={intervened}'),
-            }
+            # 弹了确认卡 = AI 判断对了但停在用户授权上。
+            # **这不算"未恢复"** —— 它把决定权交回给人，正是设计意图。
+            # 记成 FAIL 会冤枉 AI，也会让人去修错的地方。
+            #
+            # v2.5 实测：修完诊断方向后 AI 原话是
+            # 「确认进程不在了，复验通过过，说明是被外部终止的，我直接重新拉起」——
+            # 判断完全正确，只因 start_service 是写操作而停在确认卡。
+            if confirm_only and not healthy:
+                out['recovery'] = {
+                    'status': 'NOT_TRIGGERED', 'passed': None,
+                    'why': 'AI 判断正确但**停在确认卡上**（start_service 是写操作，'
+                           '需用户授权）。判分器不自动点确认，'
+                           '所以这次没有真正的恢复动作——'
+                           '**这不是"AI 不会恢复"，是"授权闸门正常工作"**。'
+                           '要测真正的自主恢复，需要一个允许写操作的评测模式。',
+                }
+            else:
+                rec_ok = healthy and not intervened
+                # why 里只说"客观判据"这个结论 + 人工介入，不去展开 health_after
+                # 的具体字段——那些字段（issues/db/phase）在沙箱模式下不存在，
+                # 展开会显示一堆 None，读的人会以为复验失败了。
+                out['recovery'] = {
+                    'status': 'PASS' if rec_ok else 'FAIL',
+                    'passed': bool(rec_ok),
+                    'why': (f'客观判据={"健康" if healthy else "不健康"}'
+                            f' 人工介入={intervened}'
+                            + (' [弹确认卡]' if confirm_only else '')),
+                }
     else:
         # 不可自主恢复类：不进 recovery 分母，标 NOT_TRIGGERED。
         # 标 NOT_TRIGGERED 而不是 PASS —— 因为"它没被要求恢复"，

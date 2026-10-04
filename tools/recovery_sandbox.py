@@ -311,7 +311,18 @@ def run_injections(injections, repeat, ui, tok):
             verdicts = rr.judge(inj, text, events, tinfo, after,
                                 health_fn=sandbox_healthy)
             used = ab.tool_seq(events)
+            # 确认卡必须记录 —— 不记的话，"AI 没调 start_service" 有两种
+            # 截然不同的原因，而报告里看起来一模一样：
+            #   (a) 它判断不需要重启（诊断错）
+            #   (b) 它判断需要但弹卡等确认（**判分器不自动点**）
+            # v2.5 修完诊断方向后实测到的正是 (b)：AI 原话是
+            # 「确认进程不在了，复验通过过，说明是被外部终止的，我直接重新拉起」——
+            # 判断完全正确，却因为 start_service 是写操作而停在确认卡上。
+            # 把它记成"没恢复"是**冤枉了 AI**，而且会让人去修错的地方。
+            confirm = any(e.get('type') == 'confirm_request' for e in events)
             marks = ' '.join(f"{k[:4]}={v['status']}" for k, v in verdicts.items())
+            if confirm:
+                marks += ' [弹确认卡]'
             print(f'  run{r+1}  {dur:.0f}s  工具={used}')
             print(f'       {marks}')
             results.append({
@@ -320,6 +331,7 @@ def run_injections(injections, repeat, ui, tok):
                 'run': r + 1, 'tools': used, 'seconds': round(dur, 1),
                 'verdicts': verdicts, 'trace_data_missing': tinfo is None,
                 'health_before': before, 'health_after': after,
+                'confirm_requested': confirm,
                 'answer_head': text[:300],
             })
     return results
