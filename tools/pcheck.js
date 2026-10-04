@@ -59,11 +59,20 @@ for (const [k, what] of [
   ['class="sq"', 'square chat'],
   ['id="legacy"', 'legacy lamp toggle'],
   ["setAttribute('data-theme'", 'theme toggle'],
-  ['auto-fill,minmax(230px', 'equal-height grid'],
+  // v4 起不再用栅格卡片，改用「区块 + 状态行」单一版式。
+  // 这两条检查的是版式纪律：区块与行是唯一的容器，行内不得再嵌卡片。
+  ['class="blk"', 'block container'],
+  ['class="row"', 'status row'],
+  ['class="c "', 'no legacy card class (should be 0)'],
   ['id="toast"', 'toast'],
 ]) {
   out.push((h.includes(k) ? 'OK   ' : 'MISS ') + what);
 }
+
+// 版式纪律：行内不得嵌套旧式卡片
+const legacyCards = (h.match(/class="c[ "]/g) || []).length;
+out.push(legacyCards === 0 ? 'OK   legacy cards = 0'
+  : 'FAIL legacy cards = ' + legacyCards + ' (v4 改用区块+行，不该再有 .c)');
 
 // 是否还有硬编码颜色（应仅出现在 :root / [data-theme] 两块内）
 const body = h.replace(/:root\{[\s\S]*?\}/, '').replace(/\[data-theme="dark"\]\{[\s\S]*?\}/, '');
