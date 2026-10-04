@@ -12,7 +12,6 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://github.com/hrui83771-gif/EnvKit)
 [![Release](https://img.shields.io/github/v/release/hrui83771-gif/EnvKit)](https://github.com/hrui83771-gif/EnvKit/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-372%20unit%20%2B%2038%20judge-selftest-A-success)](https://github.com/hrui83771-gif/EnvKit)
 </div>
 
 ---
