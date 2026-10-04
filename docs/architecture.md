@@ -85,6 +85,30 @@ OpenAI 兼容任意 baseURL。24 个工具，全部副作用经此发出。
 确认机制：需确认的动作以 HTTP 428 由**服务端强制**返回，模型无法跳过。
 白名单内的动作在评测里可自动批准，但**永不批准触碰用户数据与进程的操作**。
 
+### 工具清单（24 个）
+
+**为什么没有「执行任意命令」**：系统只暴露下面这些接口，
+模型无法绕过工具层直接操作系统——这是提示注入防护的结构性前提。
+
+| 类别 | 工具 | 写? |
+|---|---|---|
+| 环境观测 | `get_system_state`　`get_logs`　`get_diag_report`　`run_detection`　`check_env_req`　`get_project_brief`　`get_env_snapshot`（读自己这一回合的输入） | 只读 |
+| 数据读取 | `db_check`　`db_query`　`db_list`　`list_backups`（备份只读体检：sha256 真复算 + 截断检测） | 只读 |
+| 项目探索 | `list_project`　`search_files`　`read_file` | 只读 |
+| 链端 | `get_chain_guard`（`chain_autorecover` 是配置开关，不是工具） | 只读 |
+| 记忆 | `recall_lessons`　`manage_memories` | 混合 |
+| 服务控制 | `start_service`　`restart_service`　`stop_service`　`cleanup_processes` | **写** |
+| 数据操作 | `db_backup`　`apply_whitelist` | **写** |
+| 验证 | `verify_environment` | 触发复验 |
+
+**两个刻意的边界**：
+
+1. `list_backups`（只读体检）与 `db_backup`（创建）**不能互相顶替**。
+   问「检查备份能不能用」时用前者——用后者会生成新文件覆盖损坏现场，
+   之后再想查「当时坏在哪」就没有证据了。
+2. `get_env_snapshot` 让模型能读到自己这一回合被注入了什么，
+   而不是靠猜——**「开了记忆开关」与「真的有东西被注入」是两件事**。
+
 ### `plan.go` / `replan.go` —— 预算与换思路
 
 预算分两级：文本分类给初始预算（只是起点），运行中观察「每轮有无新信息」按事实提额。
