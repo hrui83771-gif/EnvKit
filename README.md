@@ -136,16 +136,16 @@ python tools/dist_check.py       # 分发包泄漏扫描
 | **Agent 助手** | 浏览器内的运维 Agent | 23 个工具、四档权限裁决、实时执行计划、任务轨迹、记忆与经验层 |
 | **操作审计** | 全量操作留痕 | 主体 / 动作 / 目标 / 结果 / 耗时 / 复验结论 / 任务轨迹 ID，按天分文件保留 30 天 |
 
-### 工具清单（23 个）
+### 工具清单（24 个）
 
 | 类别 | 工具 |
 |---|---|
-| 环境观测 | `get_system_state`　`get_logs`　`get_diag_report`　`run_detection`　`db_check`　`check_env_req`　`get_project_brief` |
+| 环境观测 | `get_system_state`　`get_logs`　`get_diag_report`　`run_detection`　`db_check`　`check_env_req`　`get_project_brief`　`get_env_snapshot`（只读：读自己这一回合的输入） |
 | 项目探索 | `list_project`　`search_files`　`read_file` |
 | 服务控制 | `start_service`　`restart_service`　`stop_service`　`cleanup_processes` |
-| 数据操作 | `db_query`（只读）　`db_list`（只读）　`db_backup`　`apply_whitelist` |
+| 数据操作 | `db_query`（只读）　`db_list`（只读）　`db_backup`　`list_backups`（只读）　`apply_whitelist` |
 | 验证 | `verify_environment` |
-| 链端 | `chain_autorecover`　`get_chain_guard` |
+| 链端 | `get_chain_guard`（`chain_autorecover` 是配置开关，不是工具） |
 | 记忆 | `recall_lessons`　`manage_memories` |
 
 ---
