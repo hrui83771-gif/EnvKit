@@ -356,6 +356,82 @@ var aiToolRegistry = map[string]aiTool{
 
 // ---------- 环境快照 ----------
 
+// svcAIView 把服务运行态转成**AI 能据以行动的判据**，而不是原始字段堆砌。
+//
+// ## 这段代码是被评测逼出来的（v2.5 kill_service 实测）
+//
+// 沙箱故障注入杀掉backend 之后，AI 连查 7~8 轮工具、翻日志、读源码，
+// 最后得出一个**技术上正确但方向完全错**的结论：
+//
+//	「日志显示启动后 2~3 秒 exit status 1，代码里唯一 os.Exit(1) 是
+//	  ListenAndServe 失败 —— 最可能是端口被残留进程占着」
+//
+// 并据此去查端口占用，**从头到尾没调过一次 start_service**。
+//
+// ## 根因不是模型笨，是信息不在它手上
+//
+// 旧快照的 services 只给 SvcInfo{running, url, pid, since} ——
+// **全是"当前"状态，没有"历史"**。于是这两种情况在AI 眼里完全同形：
+//
+//	(a) 服务反复启动失败，从未成功 → 该查端口占用 / 编译错误
+//	(b) 服务曾经成功运行，现已被杀 → 只需要重新拉起
+//
+// 两者的日志都是"启动 → 进程退出"，**不告诉模型"上次到底成功没有"，
+// 它只能猜**。猜错了就从第一步错到底。
+//
+// ## 所以这里给的是"结论"而不是"字段"
+//
+// ever_verified（曾经复验通过）+ last_verify（最近一次复验结论）
+// 加上 crashes（崩溃历史）构成一条明确的判据：
+//
+//	ever_verified=true  → 曾经起来过，现在没了 = 重新拉起（start_service）
+//	ever_verified=false → 从未成功过 = 查为什么起不来（端口 / 编译 / 依赖）
+//
+// 判据用文字写死而不是让模型自己推断，是因为**模型的默认倾向是
+// "启动失败 → 排查环境"**（这是它最熟悉的模式）。要翻转这个倾向，
+// 就得把结论直接摆出来。
+func svcAIView(target string, si SvcInfo) map[string]any {
+	rec := svcSnapshot(target)
+	view := map[string]any{
+		"running": si.Running,
+		"pid":     si.PID,
+		"since":   si.Since,
+	}
+	if si.URL != "" {
+		view["url"] = si.URL
+	}
+	// 曾成功过吗 —— 这是区分 (a) 与 (b) 的唯一依据
+	everVerified := false
+	if rec.Conclusion != "" {
+		view["last_verify"] = rec.Conclusion
+		view["verified"] = rec.Verified
+		everVerified = rec.Verified
+	}
+	view["ever_verified"] = everVerified
+	if len(rec.Crashes) > 0 {
+		// 只给最近一次：更多是噪音，模型不会从 5 条历史里推出结论。
+		view["crashed_once"] = rec.Crashes[0].Why
+	}
+	if rec.Backoff != "" {
+		view["backoff"] = rec.Backoff
+	}
+
+	// 明确告诉模型该怎么处置 —— 不让它在"诊断"和"重启"之间自己选。
+	switch {
+	case si.Running:
+		view["what_to_do"] = "服务在运行。若用户说它不可用，先复验（verify_environment），别直接重启。"
+	case everVerified:
+		view["what_to_do"] = "服务**曾经成功运行过**（复验通过过），现在进程不在了。" +
+			"这说明它是被外部终止的，不是启动失败。" +
+			"正确处置：用 start_service 重新拉起，不要去排查端口占用或编译错误。"
+	default:
+		view["what_to_do"] = "服务从未成功运行过。这是**启动失败**，" +
+			"应排查原因（端口占用 / 编译错误 / 依赖缺失），" +
+			"反复重启解决不了问题。"
+	}
+	return view
+}
+
 func aiHealthSnapshot() string {
 	return aiHealthSnapshotFor("")
 }
@@ -401,7 +477,7 @@ func aiHealthSnapshotFor(task string) string {
 	chainMu.Unlock()
 	snap := map[string]any{
 		"components":  comps,
-		"services":    map[string]any{"web": websv, "backend": besv},
+		"services":    map[string]any{"web": svcAIView("web", websv), "backend": svcAIView("backend", besv)},
 		"database":    map[string]any{"status": db.Msg, "target": cfg.Projects.DBName, "host": fmt.Sprintf("%s:%d", cfg.Projects.MySQLHost, cfg.Projects.MySQLPort)},
 		"chain":       map[string]any{"checked": ci.Checked, "at": ci.At, "node_alive": ci.Port20200, "webase": ci.Port5002, "block": ci.BlockNumber, "tx": ci.TxCount, "guard": cfg.Chain.ChainGuard},
 		"install_dir": cfg.InstallDir,

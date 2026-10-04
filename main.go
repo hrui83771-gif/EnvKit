@@ -24,8 +24,8 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "2.3.0"
-	buildDate  = "2026-10-03"
+	appVersion = "2.6.0"
+	buildDate  = "2026-10-04"
 )
 
 //go:embed web/index.html
@@ -130,6 +130,7 @@ func main() {
 	http.HandleFunc("/api/av-exclude", handleAVExclude)
 	http.HandleFunc("/api/av-clean", handleAVClean)
 	http.HandleFunc("/api/ai/config", handleAIConfig)
+	http.HandleFunc("/api/ai/debug", handleAIDebug)
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 	http.HandleFunc("/api/ai/explain", handleAIExplain)

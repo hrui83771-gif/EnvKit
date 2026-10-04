@@ -97,6 +97,108 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
+// ===== 运行时预算调节 =====
+
+// budgetGovernor 在任务执行过程中按**实际行为**调整预算。
+//
+// ## 为什么必须有它
+//
+// v2.3 首次上线时只用文本关键词分档，结果用户问「区块链的定义，以及在本项目
+// 上链了什么数据」被判成「常规排查」4 轮——因为这句话不含任何既有关键词
+// （没有"怎么跑"也没有"分析"）。**问题问得完全合理，是判据错了。**
+//
+// 根因不是关键词表不够大，而是**判据方向错了**：
+//
+//	文本 → 猜性质 → 定预算
+//
+// 文本分类天然漏。补关键词能让这一次判对，但下一个人还会问出表外的说法。
+//
+// 改成：
+//
+//	文本 → 初始预算（只是起点）
+//	运行中观察 → 每一步有没有产出 → 按事实提额
+//
+// 这与本项目一贯的主张同源：v2.0 修的是"调用没报错就说成功"，
+// 这里修的是"文本没关键词就给紧预算"——**都是拿代理指标当判据**。
+//
+// ## 为什么提额不会导致无限空转
+//
+// 提额有两个硬条件，缺一不可：
+//
+//  1. 每一轮都调用了**探索类工具**（读文件/搜文件/查画像/查数据库），
+//     而不是反复打转——replan 机制同时在盯着重复失败。
+//  2. 只提一次，且有上限（aiTurnDeep）。
+//
+// 真正打转的场景（同一个搜索词反复搜）拿不到 productive 计数，
+// 因为它不推进探索目标。
+type budgetGovernor struct {
+	base       turnBudget // 文本分档给出的初始预算
+	max        int        // 当前生效上限（随提额变化）
+	productive int        // 有产出的探索步数
+	escalated  int        // 已提额次数（上限 1）
+}
+
+// budgetToolProductive 判断一次工具调用是否算"有产出的探索"。
+//
+// 只认四类**读多且推进认知**的工具。写操作不算（启动服务不是探索），
+// 状态快照不算（一轮就问完了）。
+func budgetToolProductive(tool string) bool {
+	switch tool {
+	case "list_project", "search_files", "read_file",
+		"get_project_brief", "db_query", "db_list":
+		return true
+	}
+	return false
+}
+
+func newBudgetGovernor(b turnBudget) *budgetGovernor {
+	return &budgetGovernor{base: b, max: b.Max}
+}
+
+// observe 记一步，返回是否应当提额。
+//
+// 提额条件：**每一个已用回合都换来了新信息**（productive == max）。
+// 用「每一轮」而不是「总数」是因为——总数达标但其中有无效调用时，
+// 说明模型在打转，那正是不该给更多轮次的情形。
+func (g *budgetGovernor) observe(tool string) (raised bool, newMax int) {
+	if g == nil {
+		return false, 0
+	}
+	if budgetToolProductive(tool) {
+		g.productive++
+	}
+	if g.escalated >= budgetMaxEscalations {
+		return false, 0
+	}
+	if g.productive < g.max {
+		return false, 0
+	}
+	// 已经在最高档：没什么可提的。**必须在这里挡掉**，
+	// 否则会记下一次"提额了 0 轮"的假提额——
+	// 审计里出现一条上限没变的提额记录，比不提额更糟：
+	// 它让"为什么这次没被截断"这个问题得到一个假的答案。
+	if g.max >= aiTurnDeep {
+		return false, 0
+	}
+	// 提额：+6 轮，封顶 deep。上限存在的意义是——
+	// 「服务端决定停」必须始终是一个可达的状态，否则这条分支就成了死代码。
+	g.max += budgetEscalateStep
+	if g.max > aiTurnDeep {
+		g.max = aiTurnDeep
+	}
+	g.escalated++
+	return true, g.max
+}
+
+const (
+	// budgetEscalateStep 每次提额加多少轮。
+	budgetEscalateStep = 6
+	// budgetMaxEscalations 最多提额几次。
+	// 设成 1 而非"无限"：第二次提额说明问题很可能问错了，
+	// 那时应该让用户介入而不是继续烧 token。
+	budgetMaxEscalations = 1
+)
+
 // 各档预算。名称带数字是为了让 grep 一步看到全部。
 const (
 	aiTurnNormal  = 4  // 状态查询、单点排查
@@ -108,13 +210,14 @@ const (
 // budgetNotice 达上限时给用户的话。
 //
 // **关键是"说清楚发生了什么"**而不是静默停：用户要知道是预算用完了、
-// 不是它不想说了。同时给出可执行的下一步（分几次问 / 缩小范围）。
+// 不是它不想说了。同时给出可执行的下一步。
 func budgetNotice(b turnBudget, used int) string {
 	return fmt.Sprintf(
 		"已达到本轮 %d 次工具调用上限（%s）。\n"+
 			"这不是出错，是防止在没边界的探索里空转。\n"+
-			"可以这样继续：把问题拆成更小的一块再问一次（我保留了这个会话的上下文），"+
-			"或者直接告诉我你已经知道的信息、我从那里接着查。",
+			"我已探到的部分和判断如下（见上文）。\n"+
+			"接下来你可以：让我基于已查到的信息直接回答你的原问题、"+
+			"把范围缩小到某一步再深挖，或者你补充线索我继续查。",
 		used, b.Reason)
 }
 

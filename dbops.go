@@ -25,8 +25,10 @@ const prunedBackupsKeep = 10
 // backupDir 备份目录。
 // 历史坑：曾经优先用 SQL 文件所在目录（= 项目源码目录），dump 会混进业务代码被 git 提交，
 // 且失败残留的 0 字节文件一直堆着。现在默认放在 exe 同级的 backups/ 独立目录，
-// 用户可通过 projects.backup_dir 显式指定（例如挂到别的盘/网络位置）。
-func backupDir() string {
+// backupDirFn 备份目录的实际取值点。抽成变量供单测替换——
+// 不抽的话测list_backups 会去读用户真实的 backups/，
+// 那既污染不了想要的场景，也可能把真实备份当测试数据删掉。
+var backupDirFn = func() string {
 	if p := strings.TrimSpace(cfg.Projects.BackupDir); p != "" {
 		return p
 	}
@@ -35,6 +37,9 @@ func backupDir() string {
 	}
 	return "backups"
 }
+
+// 用户可通过 projects.backup_dir 显式指定（例如挂到别的盘/网络位置）。
+func backupDir() string { return backupDirFn() }
 
 func mysqlDumpExe() string { return findExe("mysqldump.exe", "mysqldump") }
 

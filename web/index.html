@@ -4167,6 +4167,7 @@ async function aiConsume(path, body){
     planEl = document.createElement('details');
     planEl.className = 'ai-plan';
     const sm = document.createElement('summary');
+    sm.dataset.reason = reason || '';
     sm.textContent = t('执行计划（{0}）', reason ? reason + ' · ' + t('上限 {0} 轮', maxTurns) : t('上限 {0} 轮', maxTurns));
     planList = document.createElement('div');
     planList.className = 'ai-plan-list';
@@ -4191,6 +4192,24 @@ async function aiConsume(path, body){
     const sm = planEl.querySelector('summary');
     if(sm && text) sm.title = text;
     planEl = null; planList = null;
+  };
+  // 提额：标题里的上限要跟着变，否则用户看到的还是那个已经作废的初值。
+  // 标题上留一个可点开看原因的 title——不额外插一行，那个位置留给结论。
+  const planExtend = (maxTurns, reason)=>{
+    if(!planEl){
+      planBox(maxTurns, reason);
+      return;
+    }
+    const sm = planEl.querySelector('summary');
+    if(!sm) return;
+    sm.textContent = t('执行计划（{0}）', (sm.dataset.reason || '') + ' · ' + t('上限 {0} 轮', maxTurns));
+    sm.title = reason || '';
+    const row = document.createElement('div');
+    row.className = 'ai-plan-row';
+    row.innerHTML = '<span class="ai-plan-n">+</span><span style="color:var(--ok)">' +
+      esc(t('每一轮都有新信息，上限自动放宽到 {0} 轮', maxTurns)) + '</span>';
+    planList.appendChild(row);
+    $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   };
   try{
   think = document.createElement('div'); think.className = 'ai-think';
@@ -4250,6 +4269,8 @@ async function aiConsume(path, body){
           planStep(ev.seq, ev.text);
         } else if(ev.type === 'plan_end'){
           planEnd(ev.text);
+        } else if(ev.type === 'plan_extend'){
+          planExtend(ev.max_turns, ev.reason);
         } else if(ev.type === 'tool_result'){
           dropThink();
           const d = document.createElement('details'); d.className = 'ai-tool';

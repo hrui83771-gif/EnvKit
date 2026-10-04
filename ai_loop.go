@@ -292,16 +292,28 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		}
 	}
 	// v2.3 N5：回合上限按任务性质分级，不再一刀切 8。
-	// 探索类问题（要读项目才能答）需要更宽的预算——每轮都是有用信息；
-	// 而非探索类给得紧，因为多轮往往意味着模型在打转。
-	// 原固定 8 的问题是：问"这个项目怎么跑起来"会被截断，而模型
-	// 静默停下，用户既不知道到此为止也不知道为什么。
+	// 但**文本分档只是起点，不是判据**——用户问「区块链的定义，以及在本项目
+	// 上链了什么数据」这类不含任何关键词的问题会被误判成 4 轮。
+	// 治理器会在运行中按"每一轮是否都换来了新信息"提额，见 plan.go。
 	budget := budgetFor(aiTaskHint(msgs))
+	gov := newBudgetGovernor(budget)
 	plan := &planTrack{}
 	rp := newReplan()
 	sseWrite(w, fl, map[string]any{"type": "plan_start",
-		"max_turns": budget.Max, "reason": budget.Reason})
-	for turn := 0; turn < budget.Max; turn++ {
+		"max_turns": gov.max, "reason": gov.base.Reason})
+	for turn := 0; turn < gov.max; turn++ {
+		// 预算即将耗尽时**提前告知模型**，让它有机会收敛成一个完整回答。
+		//
+		// 为什么必须提前说：若等到真的耗尽才说，模型的第一反应是"停"，
+		// 用户拿到的是半截答案 + 一句解释。提前一轮告知，它会改为
+		// "用已掌握的信息先给结论，缺的部分列出来"——**这是能用的输出**。
+		//
+		// 这是本项目一贯主张的又一例：边界要提前讲清，不能事后补。
+		if turn == gov.max-1 && gov.max > aiTurnMin {
+			msgs = append(msgs, aiMsg{Role: "user", Content: "（系统提示：这是本轮最后一次工具调用机会。下一轮你必须直接给出回答——" +
+				"用已经查到的信息回答用户的问题，查不到的部分明确说\"这部分没查到\"，不要再调用工具。" +
+				"不要为了凑完整性而继续探索。）"})
+		}
 		// 客户端（页面）已关闭/刷新：立即停止，不再向上游要 token
 		if clientGone(ctx, w) {
 			warn(scSys, "AI", "客户端已断开，停止本轮对话")
@@ -746,6 +758,19 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": firstLines(toolMsg.Content, 300)})
+				// 提额判定放在**工具执行之后**：调用前不知道结果，
+				// 而"这一轮有没有换来新信息"正是要看结果才知道。
+				// 失败不计入 productive——失败那一轮没有推进认知。
+				if exErr == nil {
+					if raised, newMax := gov.observe(a.Name); raised {
+						info(scSys, "AI", "每一轮都有新信息，工具调用预算从 %d 提到 %d 轮",
+							newMax-budgetEscalateStep, newMax)
+						auditNow(actAI, "ai_budget_raised", a.Name, gov.base.Reason, resOK,
+							fmt.Sprintf("%d->%d", newMax-budgetEscalateStep, newMax))
+						sseWrite(w, fl, map[string]any{"type": "plan_extend",
+							"max_turns": newMax, "reason": "每一轮都有新信息，自动放宽上限"})
+					}
+				}
 			}
 			msgs[assistantIdx].ToolCalls = append(msgs[assistantIdx].ToolCalls, func() aiToolCall {
 				var t aiToolCall
@@ -763,11 +788,12 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 	// 预算用尽：**必须说清楚**。
 	// 这与 v2.0 修掉的"谎报成功"同源——没把"到此为止"说出口，
 	// 用户看到的是一段没答完的话，既不知道停在哪也不知道为什么。
-	notice := budgetNotice(budget, budget.Max)
+	budget.Max = gov.max // 用提额后的真实上限，不让用户看到已经作废的初值
+	notice := budgetNotice(budget, gov.max)
 	warn(scSys, "AI", "工具调用预算用尽（%d 轮，%s），已 %d 步",
-		budget.Max, budget.Reason, len(plan.Steps))
+		gov.max, budget.Reason, len(plan.Steps))
 	auditNow(actAI, "ai_budget_exhausted", "", budget.Reason, resFail,
-		fmt.Sprintf("max=%d steps=%d", budget.Max, len(plan.Steps)))
+		fmt.Sprintf("max=%d steps=%d raised=%d", gov.max, len(plan.Steps), gov.escalated))
 	if s := planSummary(plan, notice); s != "" {
 		sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
 	}

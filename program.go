@@ -577,11 +577,27 @@ func handleWebStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "脚本名含非法字符（只允许字母、数字、- _ : . /）", 400)
 		return
 	}
-	if r := webStartTask(dir, script, actUser); !r.Ok {
-		http.Error(w, r.String(), 409)
+	res := webStartTask(dir, script, actUser)
+	if !res.Ok {
+		http.Error(w, res.String(), 409)
 		return
 	}
-	_, _ = w.Write([]byte(`{"started":true}`))
+	// v2.5：与后端端点同一个修复——点「启动」后当场复验。
+	// 理由见 handleBackendStart 的注释：只反映部分调用路径的复验记录
+	// 会让 ever_verified变成假判据，比不复验更糟。
+	verified := verifyService("web", verifyWaitWeb)
+	if !verified.Ok {
+		writeJSON(w, map[string]any{
+			"started": true, "verified": false,
+			"message":  res.Msg + "；" + verified.Msg,
+			"err_kind": verified.ErrKind,
+		})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"started": true, "verified": verified.Verified,
+		"message": res.Msg + "；" + verified.Msg,
+	})
 }
 
 // validScriptName 校验 npm 脚本名：防注入兜底（exec 走 argv 不经 shell，此为纵深防御）。
@@ -703,11 +719,46 @@ func handleBackendStart(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = cfg.Projects.BackendDir
 	}
-	if r := backendStartTask(dir, actUser); !r.Ok {
-		http.Error(w, r.String(), 409)
+	res := backendStartTask(dir, actUser)
+	if !res.Ok {
+		http.Error(w, res.String(), 409)
 		return
 	}
-	_, _ = w.Write([]byte(`{"started":true}`))
+	// v2.5：用户点「启动」后**当场复验**，不只报"进程已派生"。
+	//
+	// ## 为什么必须在这里补（评测逼出来的）
+	//
+	// 原来只有 AI 工具路径走 aiStartVerify（会调 verifyService 并写
+	// svcRecordVerify），而**用户点按钮这条路径完全不复验**。
+	// 后果不只是"用户不知道有没有起来"，还有一个更隐蔽的问题：
+	//
+	//   svcRecordVerify 从没被调用 → ever_verified 永远是 false
+	//   → 快照里那句「服务从未成功运行过」是**错的**
+	//   → AI 拿到一个假判据，据此做出错误诊断
+	//
+	// 实测踩到：沙箱评测里服务被杀掉后，AI 读到 ever_verified=false，
+	// 于是判成"启动失败"而不是"被杀后需要重启"，方向从第一步就错。
+	//
+	// **一个只反映部分调用路径的记录比没有记录更危险**——
+	// 它让判据看起来是客观事实，实际取决于谁触发的。
+	//
+	// 同步等待而不是异步：这是用户点按钮，本来就该等结果。
+	// 45s 是上限，正常服务 1~2s 内就绪。
+	verified := verifyService("backend", verifyWaitBackend)
+	if !verified.Ok {
+		// 复验失败不回滚启动——进程可能还在启动中，
+		// 但必须如实说"派生成功但复验没通过"，不能报"已启动"。
+		writeJSON(w, map[string]any{
+			"started": true, "verified": false,
+			"message":  res.Msg + "；" + verified.Msg,
+			"err_kind": verified.ErrKind,
+		})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"started": true, "verified": verified.Verified,
+		"message": res.Msg + "；" + verified.Msg,
+	})
 }
 
 // backendStartTask 构建并启动后端（供按钮与 AI 工具共用）；同步等待完成（含 go build）。

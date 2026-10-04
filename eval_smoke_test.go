@@ -584,3 +584,559 @@ func TestSmoke20_NoAutoRestart(t *testing.T) {
 	}
 	svcReset("backend")
 }
+
+// ======================================================================
+// v2.3 新增题（S21~S32）
+//
+// 这十二题测的是 v2.3 交付的九项能力。补它们的理由不是"多几道题"，
+// 而是 v2.3 的九项交付**在单测里有 99 项覆盖，却一次都没进过冒烟集**——
+// 冒烟集回答的是"这项能力对外承诺是否成立"，与单测的"函数在给定输入下
+// 是否正确"不是一回事。把冒烟集停在 20 题，等于 v2.3 的能力从未被
+// 端到端验证过。
+//
+// 每题都刻意**避开单测已覆盖的内部函数分支**，只验对外承诺：
+// 三态不能混、错误归类要分开、提额必须真提额、参数不进键等。
+// ======================================================================
+
+// ===== S21 环境符合性：没声明 ≠ 符合 =====
+// 主张：不确定时必须说"没验到"，不能说"检查通过"（v2.0 链端判据同源）
+// 这是 v2.3 N7 最要紧的一条。绝大多数项目不写 engines，
+// 此时若报"符合"，就是把"没检查到"当成"检查通过"——
+// 用户据此认为环境没问题，真编译失败时不知道该看哪里。
+func TestSmoke21_UndeclaredIsNotOK(t *testing.T) {
+	dir := t.TempDir()
+	// 一个既没有 go.mod 也没有 package.json 的目录
+	oldFE, oldBE := cfg.Projects.FrontendDir, cfg.Projects.BackendDir
+	cfg.Projects.FrontendDir, cfg.Projects.BackendDir = dir, dir
+	defer func() { cfg.Projects.FrontendDir, cfg.Projects.BackendDir = oldFE, oldBE }()
+
+	reqs := checkAllEnvReq()
+	if len(reqs) == 0 {
+		t.Fatal("前提不成立：没有返回任何符合性结论")
+	}
+
+	// 核心断言：项目未声明要求时**绝不能报 ok**。
+	// 注意这里刻意不强制状态是 undeclared —— 实际版本探测不到时会给
+	// not_installed（那是另一个真问题，不是"符合"）。把两者混为一谈会让
+	// 这道题在装了 Go / 没装 Go 的机器上表现不同。
+	for _, r := range reqs {
+		if r.Status == reqOK {
+			t.Errorf("[%s] 项目未声明版本要求时不得报「符合」，实际 Why=%q",
+				r.Component, r.Why)
+		}
+		// not_installed 是"确实缺组件"，与"未声明"是两件事，各归各的
+		if r.Status == reqNotInstalled() && r.Required != "" {
+			t.Errorf("[%s] 未安装不该同时报出 Required=%q（两者语义不同）",
+				r.Component, r.Required)
+		}
+	}
+
+	// 摘要必须如实说"未声明"或指出真问题，不能声称"所有组件都满足"
+	sum := envReqSummary(reqs)
+	if strings.Contains(sum, "所有组件都满足") {
+		t.Errorf("未声明或有缺失时摘要不得声称「所有组件都满足」：%s", sum)
+	}
+
+	// 显式构造"全部未声明"验证摘要措辞：
+	// 这是本条主张最直接的形态——大多数项目都不写 engines，
+	// 若此时报"全部满足"，用户就以为环境没问题。
+	allUndeclared := []EnvReq{
+		{Component: "go", Status: reqUndeclared, Why: "go.mod 未声明 go 指令版本（说明它不挑版本）"},
+		{Component: "node", Status: reqUndeclared, Why: "package.json 的 engines 未声明 node 版本（说明它不挑版本）"},
+	}
+	sum2 := envReqSummary(allUndeclared)
+	if !strings.Contains(sum2, "未声明") {
+		t.Errorf("全部未声明时摘要必须如实说明：%s", sum2)
+	}
+	if !strings.Contains(sum2, "不构成问题") {
+		t.Errorf("未声明不等于有问题，摘要应说清这点（否则制造无谓告警）：%s", sum2)
+	}
+
+	// 未声明不是问题：摘要里出现"问题"字样就会制造无谓告警，
+	// 用户会开始无视所有告警。
+	if strings.Contains(sum2, "有问题") {
+		t.Errorf("全部未声明时摘要不得说「有问题」：%s", sum2)
+	}
+
+	// 反面对照：真有 too_low 时摘要必须喊出来，且带上可执行信息。
+	// 没有这条，上面的"不得说有问题"就变成了"永远不说有问题"。
+	oneTooLow := []EnvReq{
+		{Component: "go", Status: reqTooLow, Required: "1.99.0", Actual: "1.25.0",
+			Why: "go.mod 声明 go 1.99.0，实际 1.25 —— 版本不够，编译或运行会失败"},
+		{Component: "node", Status: reqUndeclared, Why: "engines 未声明"},
+	}
+	sum3 := envReqSummary(oneTooLow)
+	if !strings.Contains(sum3, "有问题") {
+		t.Errorf("确有版本不够时摘要必须指出问题：%s", sum3)
+	}
+	if !strings.Contains(sum3, "1.99.0") {
+		t.Errorf("摘要要带上要求版本，用户才知道升到多少：%s", sum3)
+	}
+	// 未声明的那条不该混进问题描述里稀释重点
+	if strings.Contains(sum3, "node:") {
+		t.Errorf("问题描述里不该混入未声明的组件（会稀释真正要注意的那条）：%s", sum3)
+	}
+}
+
+// reqNotInstalled 返回"未安装"状态常量。
+// 抽出来是因为 reqNotInstall 是包内常量名，与测试里其他命名容易混。
+func reqNotInstalled() string { return reqNotInstall }
+
+// ===== S22 环境符合性：版本不够要报 too_low 且给得出下一步 =====
+// 主张：告警必须带出路（与 S19 同源纪律，作用在版本检查上）
+func TestSmoke22_VersionTooLowIsActionable(t *testing.T) {
+	// go.mod 声明 1.99.0，实际 1.25.0 → 必须报不够用
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module x\n\ngo 1.99.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := checkGoReq(dir, "1.25.0")
+	if r.Status != reqTooLow {
+		t.Fatalf("1.25 < 1.99 应为 too_low，实际 %q（Why=%q）", r.Status, r.Why)
+	}
+	if r.Required != "1.99.0" || r.Actual != "1.25.0" {
+		t.Errorf("必须如实报出要求与实际版本，实际 req=%q act=%q", r.Required, r.Actual)
+	}
+	// 下一步必须是可执行的：说清升到多少、从多少升
+	if r.Action == "" {
+		t.Fatal("版本不够必须给出下一步")
+	}
+	for _, must := range []string{"1.99.0", "1.25"} {
+		if !strings.Contains(r.Action, must) {
+			t.Errorf("下一步应含目标版本 %q：%s", must, r.Action)
+		}
+	}
+	// 比要求新是正常的（向后兼容），不得报不一致
+	if r2 := checkGoReq(dir, "1.99.5"); r2.Status != reqOK {
+		t.Errorf("实际版本高于要求应为 ok（向后兼容），实际 %q（Why=%q）", r2.Status, r2.Why)
+	}
+}
+
+// ===== S23 备份：文件完整 ≠ 内容完整，缺口必须降级 =====
+// 主张：v2.3 N3 的核心。"mysqldump 带了 --skip-triggers"这类情况
+// 校验和一致、能导进去，但触发器全没了——只验完整性会把"不能还原"
+// 报成"已复验通过"。
+func TestSmoke23_BackupGapIsNotPass(t *testing.T) {
+	dir := t.TempDir()
+	// 构造一份"完整但缺触发器"的 dump：有建表、有字符集、结尾标记齐全，
+	// 唯独没有 CREATE TRIGGER。
+	path := filepath.Join(dir, "farm.sql")
+	body := "-- MySQL dump\n" +
+		"SET NAMES utf8mb4;\n" +
+		"CREATE TABLE `trace` (\n  `id` int NOT NULL\n) ENGINE=InnoDB;\n" +
+		"CREATE VIEW `v_trace` AS SELECT * FROM `trace`;\n" +
+		"-- Dump completed\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	finds, gaps := backupStaticCheck(path)
+	if len(finds) == 0 {
+		t.Error("应报出已发现的表/字符集等事实")
+	}
+	var trigGap bool
+	for _, g := range gaps {
+		if strings.Contains(g, "触发器") {
+			trigGap = true
+		}
+	}
+	if !trigGap {
+		t.Fatalf("缺触发器必须被报为缺口，实际 gaps=%v", gaps)
+	}
+
+	// 一张表都没有 → 失败级，不是警告级
+	empty := filepath.Join(dir, "empty.sql")
+	if err := os.WriteFile(empty, []byte("-- nothing here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, g2 := backupStaticCheck(empty)
+	var noTable bool
+	for _, g := range g2 {
+		if strings.Contains(g, "CREATE TABLE") {
+			noTable = true
+		}
+	}
+	if !noTable {
+		t.Errorf("一张表都没有必须报为缺口（空库或产物无效）：%v", g2)
+	}
+}
+
+// ===== S24 备份缺口必须归类为 restore_fail，与文件损坏分开 =====
+// 主张：两类失败处置完全不同——文件坏了要重新备份，
+// 内容缺损要改备份命令（如去掉 --skip-triggers）。混成一种等于
+// 让用户做无用功。
+func TestSmoke24_BackupFailKindsAreDistinct(t *testing.T) {
+	if errKindRestoreFail == "" {
+		t.Fatal("必须定义 restore_fail 归类")
+	}
+	if errKindRestoreFail == errKindVerifyFail {
+		t.Fatal("restore_fail 与 verify_fail 必须是两个归类：" +
+			"前者要改备份命令，后者要重新备份，处置完全不同")
+	}
+	// 归类文本能被 verifyErrKind 抠出来 —— 这条链路一旦断了，
+	// 经验提取会静默失效（v2.2 baseline §4.1 记录过同类事故）
+	// 用 OpResult.String() 的真实格式，不手写字面量。
+	r := opFail("verify_backup", "farm", errKindRestoreFail,
+		"备份文件本身完整，但内容可能有缺失（这不等于文件损坏）：未发现触发器定义", "")
+	if got := verifyErrKind(r.String()); got != errKindRestoreFail {
+		t.Errorf("restore_fail 必须能从结论文本抠出，实际抠出 %q（文本=%q）", got, r.String())
+	}
+}
+
+// ===== S25 工具预算：分档必须真的不同档 =====
+// 主张：v2.3 N5。固定 8 轮的问题不是"太少"而是"一刀切"——
+// 问"端口被占是谁占的"用 16 轮是浪费，问"这个项目怎么跑起来"用 4 轮
+// 是截断。
+func TestSmoke25_BudgetGrading(t *testing.T) {
+	cases := []struct {
+		task string
+		want int
+		why  string
+	}{
+		{"8888 端口被占是谁占的", aiTurnNormal, "单点排查不该给多轮"},
+		{"这个项目怎么跑起来", aiTurnExplore, "需读代码才能答"},
+		{"入口文件在哪", aiTurnExplore, "需探索项目"},
+		{"分析各表数据分布", aiTurnDeep, "跨表统计"},
+	}
+	for _, c := range cases {
+		b := budgetFor(c.task)
+		if b.Max != c.want {
+			t.Errorf("「%s」预算=%d 档，期望 %d（%s）", c.task, b.Max, c.want, c.why)
+		}
+		if strings.TrimSpace(b.Reason) == "" {
+			t.Errorf("「%s」必须带理由（用户要知道自己为什么被限制）", c.task)
+		}
+	}
+	// 下限保护：再简单的任务也够两轮（问 + 答）
+	if aiTurnMin < 2 {
+		t.Errorf("预算下限应至少 2 轮（问+答），实际 %d", aiTurnMin)
+	}
+	// 超限提示必须给可操作的下一步，不能只说"到上限了"
+	n := budgetNotice(budgetFor("这个项目怎么跑起来"), aiTurnExplore)
+	for _, must := range []string{"直接回答", "缩小"} {
+		if !strings.Contains(n, must) {
+			t.Errorf("超限提示应给出可操作的下一步（%s）：%s", must, n)
+		}
+	}
+}
+
+// ===== S26 提额必须真的提额，且可审计 =====
+// 主张：v2.3 N5 的观测事件不许撒谎。用户报"每次都是 4 轮"，
+// 根因是判据方向错了；改成运行中按实际行为提额之后，
+// **如果提额时上限没变，审计里就会出现"提额了 0 轮"的假记录**，
+// 比不提额更糟——它让"为什么这次没被截断"得到一个假答案。
+func TestSmoke26_BudgetRaiseIsRealAndAuditable(t *testing.T) {
+	// 已在 deep 档时不得再提额
+	g := newBudgetGovernor(turnBudget{Max: aiTurnDeep, Reason: "已是最高档"})
+	for i := 0; i < 8; i++ {
+		if raised, _ := g.observe("search_files"); raised {
+			t.Fatal("已在最高档不得提额（否则产生「提额了 0 轮」的假记录）")
+		}
+	}
+
+	// 正常档位每一轮都有产出 → 提额，且上限真的变大。
+	// 循环必须在**内部**接住提额：observe 的判定是"本次调用后 productive >= max"，
+	// 所以 max=4 时第 4 次调用就会提额，循环外再调一次只会拿到 false。
+	g2 := newBudgetGovernor(turnBudget{Max: aiTurnNormal, Reason: "状态查询"})
+	before := g2.max
+	var raised bool
+	var after int
+	for i := 0; i < before; i++ {
+		if r, n := g2.observe("read_file"); r {
+			raised, after = true, n
+		}
+	}
+	if !raised {
+		t.Fatalf("连续 %d 轮探索都应有产出，应在第 %d 轮提额", before, before)
+	}
+	if after <= before {
+		t.Fatalf("提额后上限必须真的变大：%d → %d", before, after)
+	}
+	if after > aiTurnDeep {
+		t.Fatalf("提额不得越过 deep 上限：%d > %d", after, aiTurnDeep)
+	}
+	// 关键不变式：提额事件发生时，上限一定真的变了。
+	// 这条断言写死后，将来任何人改observe 逻辑导致空提额都会 FAIL。
+	if raised && g2.max == before {
+		t.Fatal("报告提额但上限未变 —— 这是会误导排查的假记录")
+	}
+	// 只提一次：第二次提额说明问题很可能问错了，该让用户介入
+	if r, _ := g2.observe("search_files"); r {
+		t.Error("最多提额一次（第二次说明问题很可能问错了）")
+	}
+
+	// 非探索工具不算产出：写操作连调十次也不该提额
+	g3 := newBudgetGovernor(turnBudget{Max: aiTurnNormal, Reason: "状态查询"})
+	for i := 0; i < 10; i++ {
+		if r, _ := g3.observe("start_service"); r {
+			t.Fatal("启动服务不是探索，不该提额")
+		}
+	}
+	// 打转不提额：同一个非探索动作反复调用
+	g4 := newBudgetGovernor(turnBudget{Max: aiTurnNormal, Reason: "状态查询"})
+	for i := 0; i < 10; i++ {
+		g4.observe("get_system_state")
+	}
+	if g4.max != aiTurnNormal {
+		t.Errorf("模型在原地打转时不得提额，实际上限 %d", g4.max)
+	}
+}
+
+// ===== S27 Re-plan：换参数不算重复，且只引导一次 =====
+// 主张：v2.3 N8。search_files("启动") 失败后换 search_files("启动脚本")
+// 是**正确做法**，把它判成"还在重复"会逼模型放弃正确的换方向。
+func TestSmoke27_ReplanOnlyOnIdenticalParams(t *testing.T) {
+	r := newReplan()
+	// 同参数连续失败两次 → 判定卡住，且需要引导
+	r.markFail("search_files", "启动")
+	if stuck, n := r.markFail("search_files", "启动"); !stuck || n != 2 {
+		t.Fatalf("同参数失败 2 次应判定卡住，实际 stuck=%v n=%d", stuck, n)
+	}
+	if !r.shouldIntervene("search_files", "启动") {
+		t.Fatal("应判定为需要引导换思路")
+	}
+
+	// 只引导一次。
+	// 注意职责分离：`shouldIntervene` 只负责**判断**，
+	// 标记"已提示"由调用方在真正插入引导后写 `stuckTools[key]=true`
+	// （见 ai_loop.go:728-730）。这里必须模拟那条写入，
+	// 否则测的是"没人标记就重复提示"——不是设计意图。
+	r.stuckTools[replanKey("search_files", "启动")] = true // 模拟 ai_loop 的标记
+	if r.shouldIntervene("search_files", "启动") {
+		t.Error("已提示过的动作不应重复引导")
+	}
+	// 卡住判定本身仍应继续累计（失败次数要如实记录）
+	if _, n := r.markFail("search_files", "启动"); n != 3 {
+		t.Errorf("失败计数应累加，实际 %d", n)
+	}
+	// 换了参数就是新动作，未提示过 → 但失败次数不够，仍不该引导
+	if r.shouldIntervene("search_files", "package") {
+		t.Error("新参数只失败 0 次，不该引导")
+	}
+
+	// 换参数 → 是正确做法，不该判成卡住
+	r2 := newReplan()
+	r2.markFail("search_files", "启动")
+	if stuck, _ := r2.markFail("search_files", "package"); stuck {
+		t.Error("换关键词是正确的做法，不该判成重复")
+	}
+	if r2.shouldIntervene("search_files", "package") {
+		t.Error("换参数后不该引导")
+	}
+
+	// 写操作连续失败不引导：那是环境问题，换工具没用
+	r3 := newReplan()
+	r3.markFail("start_service", "web")
+	r3.markFail("start_service", "web")
+	if r3.shouldIntervene("start_service", "web") {
+		t.Error("写操作连续失败应先解决环境，不该引导换工具")
+	}
+
+	// 引导必须给具体替代动作，不能空喊"再试别的"
+	h := replanHint("search_files", "启动")
+	if strings.TrimSpace(h) == "" {
+		t.Fatal("必须给出换思路的具体指引")
+	}
+	if !strings.Contains(h, "read_file") || !strings.Contains(h, "list_project") {
+		t.Errorf("指引应给出具体替代动作（换关键词 / list_project / read_file）：%s", h)
+	}
+	// 换参数这个正解必须出现在指引里 —— 否则等于告诉模型"别换参数"
+	if !strings.Contains(h, "关键词") {
+		t.Errorf("指引必须包含「换关键词」这个正解：%s", h)
+	}
+}
+
+// ===== S28 只读数据库工具：四道防线在 MySQL 侧 =====
+// 主张：v2.3 N6。给只读操作 auto 档（不弹确认卡）的依据是
+// "它改不了数据"，而不是"我们相信调用方老实"。
+// **一旦这四道防线有一道是提示词层面的，安全就归零。**
+func TestSmoke28_ReadOnlySQLIsEnforcedServerSide(t *testing.T) {
+	// 写语句必须被拒
+	for _, bad := range []string{
+		"DROP TABLE farm_user",
+		"DELETE FROM farm_user WHERE id=1",
+		"UPDATE farm_user SET name='x' WHERE id=1",
+		"INSERT INTO farm_user (name) VALUES ('x')",
+		"ALTER TABLE farm_user ADD COLUMN x int",
+		"TRUNCATE TABLE farm_user",
+	} {
+		if _, err := dbReadOnlySQL(bad); err == nil {
+			t.Errorf("写语句必须被拒：%s", bad)
+		}
+	}
+	// 只读必须放行。
+	// 注意：自动补 LIMIT 有例外——SHOW / DESC / DESCRIBE 本来就返回元数据，
+	// 补 LIMIT 会让 MySQL 报语法错（源码 dbReadOnlySQL 第 205 行显式排除）。
+	// 这条例外是正确设计，断言必须与实现一致，不能笼统要求"都补 LIMIT"。
+	needLimit := []string{
+		"SELECT * FROM farm_user",
+		"SELECT COUNT(*) FROM trace",
+		"EXPLAIN SELECT * FROM trace",
+	}
+	for _, ok := range needLimit {
+		got, err := dbReadOnlySQL(ok)
+		if err != nil {
+			t.Errorf("只读语句应放行：%s（%v）", ok, err)
+			continue
+		}
+		if !strings.Contains(strings.ToUpper(got), "LIMIT") {
+			t.Errorf("SELECT 类应自动补 LIMIT：%s → %s", ok, got)
+		}
+	}
+	for _, meta := range []string{"SHOW TABLES", "DESC farm_user", "DESCRIBE farm_user"} {
+		if _, err := dbReadOnlySQL(meta); err != nil {
+			t.Errorf("元数据语句应放行：%s（%v）", meta, err)
+		}
+	}
+	// 多语句必须被拒：一次注入两句话就绕过了所有检查
+	if _, err := dbReadOnlySQL("SELECT 1 LIMIT 1; DROP TABLE x"); err == nil {
+		t.Error("多语句必须被拒绝（一次注入两句就能绕过所有检查）")
+	}
+}
+
+// ===== S29 Human Trace：介入判定四条全部满足才记 =====
+// 主张：v2.3 N1。AI 试 A 失败、用户手动做 B 成功 —— 这是纯 Agent 框架
+// 日志里根本没有的信号（它们不记录"人接手"）。
+// 但**误判一次就会生成一条持续影响所有后续任务的错误经验**，
+// 噪声代价远高于漏报，所以四条判定缺一不可。
+func TestSmoke29_HumanTraceRequiresAllFour(t *testing.T) {
+	// ① 不在任务上下文 → 不是接手（挡掉绝大多数噪声）
+	defer withTraceEnv(t)()
+	traceStep(phAction, actAI, "start_service", "web", resFail, 10, "", "npm run serve 失败")
+	humanFix("start_service:web", "web", resOK)
+	if got := readTraces(t); len(got) != 0 {
+		t.Fatalf("无任务上下文时不该产生轨迹（人工独立操作不是接手），实际 %d 条", len(got))
+	}
+
+	// ② AI 此前失败过 + 用户同类动作成功 → 才算接手
+	beginTrace("把项目跑起来", actAI)
+	traceStep(phAction, actAI, "start_service", "web", resFail, 10, "", "npm run serve 失败")
+	humanFix("start_service:web", "web", resOK)
+	endTrace("success")
+
+	ts := traceQuery(5, "")
+	if len(ts) != 1 {
+		t.Fatalf("应有 1 条轨迹，实际 %d", len(ts))
+	}
+	var human int
+	for _, s := range ts[0].Steps {
+		if s.Phase == phHuman {
+			human++
+		}
+	}
+	if human != 1 {
+		t.Fatalf("AI 失败后用户同类动作成功应记为人工接手，实际 %d 次", human)
+	}
+
+	// ③ 人工操作自己失败 → 不构成监督信号（人也没搞掂）
+	defer withTraceEnv(t)()
+	beginTrace("任务B", actAI)
+	traceStep(phAction, actAI, "start_service", "web", resFail, 10, "", "AI 试过且失败")
+	humanFix("start_service:web", "web", resFail)
+	endTrace("failure")
+	for _, tr := range traceQuery(5, "") {
+		for _, s := range tr.Steps {
+			if s.Phase == phHuman {
+				t.Error("人工操作自己失败时不该记为接手（人也没搞掂）")
+			}
+		}
+	}
+}
+
+// ===== S30 动作键归一：参数不进键 =====
+// 主张：Human Trace 最有价值的一类信号是"人怎么修的"——
+// AI 试 npm run serve 失败、用户改用 npm run dev 成功。
+// 参数若进键，这两个会被当成两件无关的事，信号就此丢失。
+func TestSmoke30_ActionKeyExcludesParams(t *testing.T) {
+	// 同一动作换了 script 参数 → 键必须相同
+	a := policyActionKey("start_service", "web script=serve")
+	b := policyActionKey("start_service", "web script=dev")
+	if a != b {
+		t.Errorf("script 是参数不该进键，实际 %q != %q", a, b)
+	}
+	// 目标不同 → 键必须不同（否则会把"启动前端失败"与"启动后端失败"混为一谈）
+	c := policyActionKey("start_service", "backend")
+	if a == c {
+		t.Errorf("目标不同必须是不同的键，实际都是 %q", a)
+	}
+	// 键里不得残留参数值 —— 踩过的坑：第一版写成 "start_service:serve"，
+	// AI 试 serve 与用户改 dev 仍然对不上号
+	if strings.Contains(a, "serve") || strings.Contains(a, "dev") {
+		t.Errorf("键里不得残留 script 参数值，实际 %q", a)
+	}
+	// 无目标时就是动作名本身
+	if got := policyActionKey("get_logs", ""); got != "get_logs" {
+		t.Errorf("无目标时键应为动作名，实际 %q", got)
+	}
+}
+
+// ===== S31 链端守护三态：有信号才亮 =====
+// 主张：v2.3 N4。守护刚启动还没跑过第一轮时说"正常"是撒谎——
+// 它只是还不知道。与 v2.0 修过的链端判据同源。
+func TestSmoke31_GuardUnknownBeforeFirstCheck(t *testing.T) {
+	// 未配置主机 → 守护不运行，必须如实说。
+	// withGuardCfg 同时重置 guardRec，保证不依赖执行顺序。
+	defer withGuardCfg(t, "", false, false, 60)()
+	s := guardSnapshot()
+	if s.Note == "" {
+		t.Fatal("Note 必须有值：不能让用户自己解读布尔值")
+	}
+	if s.Enabled {
+		t.Error("未配置主机时不得报「已开启」")
+	}
+
+	// 配置了主机 + 守护开启 + 还没跑过第一轮 → 必须是"尚未完成第一轮"，
+	// 不是"正常"
+	defer withGuardCfg(t, "192.0.2.10", true, true, 60)()
+	s2 := guardSnapshot()
+	if s2.LastCheck == "" && strings.Contains(s2.Note, "正常") {
+		t.Errorf("未完成第一轮检测时不得说「正常」（它只是还不知道）：%s", s2.Note)
+	}
+	if s2.LastCheck == "" && !strings.Contains(s2.Note, "尚未完成第一轮") {
+		t.Errorf("应明确说尚未完成第一轮检测：%s", s2.Note)
+	}
+
+	// AI 快照里必须告知"具备自动恢复能力"这件事，
+	// 即使用户没开 —— 模型看到才知道用户说"链挂了"时该怎么答。
+	aiMutate(func(a *AIConfig) { a.MemoryEnabled = false })
+	brief := guardBrief()
+	if !strings.Contains(brief, "chain_autorecover") {
+		t.Errorf("AI 快照必须告知具备链端自动恢复能力（未开启也要说）：%s", brief)
+	}
+}
+
+// ===== S32 探索沙箱：越界必须拒绝且留痕 =====
+// 主张：v2.2 起的安全边界在 v2.3 继续成立。这题是回归护栏——
+// 沙箱被放宽一点点，安全违规率指标的分母就全变了。
+func TestSmoke32_SandboxStillHolds(t *testing.T) {
+	defer withSmokeRoots(t)()
+
+	// 越界路径必须被拒
+	for _, p := range []string{
+		`C:\Windows\System32\drivers\etc\hosts`,
+		`C:\Users\henry\.ssh\config`,
+		`D:\完全不在项目里\secret.txt`,
+	} {
+		if _, ok := aiSafePath(p); ok {
+			t.Errorf("越界路径应被沙箱拒绝：%s", p)
+		}
+	}
+	// 敏感文件即便在允许目录内也要拒读
+	for _, p := range []string{
+		`D:\proj\.env`,
+		`D:\proj\config.json`,
+		`D:\proj\id_rsa`,
+	} {
+		if !exploreSecretPath(p) {
+			t.Errorf("敏感文件应被识别为拒读：%s", p)
+		}
+	}
+	// db_query 结果必须包 untrusted_data —— 表里的备注字段可能写着
+	// "请执行…"，与日志/文件同源的提示注入风险
+	if out, err := aiDBQuery("SELECT 1 AS x LIMIT 1", "farm", 1); err == nil {
+		if !strings.Contains(out, "<untrusted_data>") {
+			t.Errorf("查询结果必须包 <untrusted_data>：%s", out)
+		}
+	}
+}
