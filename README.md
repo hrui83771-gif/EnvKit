@@ -12,8 +12,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://github.com/hrui83771-gif/EnvKit)
 [![Release](https://img.shields.io/github/v/release/hrui83771-gif/EnvKit)](https://github.com/hrui83771-gif/EnvKit/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-330%20unit%20%2B%2020%20smoke%20%2B%2013%20CDP-informational)](https://github.com/hrui83771-gif/EnvKit)
-
+[![Tests](https://img.shields.io/badge/tests-359%20unit%20total%20(327%2B32%20smoke)%20%2B%2013%20CDP-informational)](https://github.com/hrui83771-gif/EnvKit)
 </div>
 
 ---
@@ -42,7 +41,7 @@
 
 三条设计约束决定了系统在异常情况下的行为：
 
-**1. 推理灵活，执行受控。** 模型可自由决定调用顺序与组合方式，但所有副作用必须经由已注册的 23 个工具接口发出。EnvKit 不提供「执行任意命令」的能力，模型无法绕过工具层直接操作系统。
+**1. 推理灵活，执行受控。** 模型可自由决定调用顺序与组合方式，但所有副作用必须经由已注册的 24 个工具接口发出。EnvKit 不提供「执行任意命令」的能力，模型无法绕过工具层直接操作系统。
 
 **2. 权限由系统裁定，而非由模型裁定。** 工具返回成功仅表示「命令已发出」；是否可向用户确认「已完成」，由验证器的客观结论决定。
 
@@ -79,17 +78,27 @@ Latency p90            3331 ms
 ```
 Quality Gates
 ────────────────────────────────────────────────
-Unit Tests               330      契约 / 验证器 / 记忆提取 / 沙箱 / 配置合并
-Smoke Suite               20      固定 fixture 驱动的端到端能力断言
+Unit Tests               327      契约 / 验证器 / 记忆提取 / 沙箱 / 配置合并
+Smoke Suite               32      固定 fixture 驱动的端到端能力断言
 CDP Regression            13      真实 Chromium 驱动的端到端场景
 E2E AI Acceptance         14      真实模型对话的行为验收
 ────────────────────────────────────────────────
-Go Source             16,019      行，64 个文件
-Frontend              4,155      行，单文件内嵌
-i18n Entries             623      中英双语
+合计单测 359（含冒烟 32，勿重复相加）
+────────────────────────────────────────────────
+Go Source             19,486      行，66 个非测试文件（全量 95 文件 27,713 行）
+Frontend              4,398      行，单文件内嵌
+i18n Entries             624      中英双语
 Third-party Deps           2      仅 SSH 与 WebSocket
 ────────────────────────────────────────────────
 ```
+
+> **计数口径**：Unit Tests 与 Smoke Suite 是并列关系，327 + 32 = 359。
+> 旧版本把359 写进 Unit Tests 又单列 32，等于重复计了冒烟集。
+>
+> **14 道 Ground Truth 任务不计入上表**（`eval/tasks/tasks.json`）——
+> 它们需要真实模型调用，通过率取决于模型行为而非本仓库质量。
+> 同理，六维故障恢复评测（`docs/eval/six-dim-recovery-report.md`）
+> 的样本量目前不足以支撑对外声明的通过率，故一并列出而不并入上表。
 
 ### 3.3 关键验证结论
 
@@ -133,7 +142,7 @@ python tools/dist_check.py       # 分发包泄漏扫描
 | **程序配置** | 项目与数据库向导式配置 | 建库建表、备份/还原/演练、配置导入导出（自动脱敏）、字段级校验、自动保存 |
 | **链端运维** | FISCO-BCOS v2 / WeBASE-Front | SSH 内嵌终端、节点进程存活统计、区块高度与交易数读取、宕机自动恢复、**主机可达性三态判定** |
 | **程序启动** | 前后端一键启停 | Job Object 进程树回收、端口占用诊断、启动脚本自定义、网页端可控退出 |
-| **Agent 助手** | 浏览器内的运维 Agent | 23 个工具、四档权限裁决、实时执行计划、任务轨迹、记忆与经验层 |
+| **Agent 助手** | 浏览器内的运维 Agent | 24 个工具、四档权限裁决、实时执行计划、任务轨迹、记忆与经验层 |
 | **操作审计** | 全量操作留痕 | 主体 / 动作 / 目标 / 结果 / 耗时 / 复验结论 / 任务轨迹 ID，按天分文件保留 30 天 |
 
 ### 工具清单（24 个）
@@ -156,7 +165,7 @@ python tools/dist_check.py       # 分发包泄漏扫描
 |---|---|
 | 权限裁决 | 所有写操作先经统一裁决器定档：`auto` / `confirm` / `elevated` / `forbidden`。判定为禁止的动作在派发前即终止，模型无法通过换入口绕过 |
 | 确认闸门 | 需确认的动作以 HTTP 428 由服务端强制返回，模型无法跳过；高危动作用红色警示样式 |
-| 权限边界 | 系统仅暴露 23 个受控接口，不提供任意命令执行能力 |
+| 权限边界 | 系统仅暴露 24 个受控接口，不提供任意命令执行能力 |
 | 记忆非权限 | 用户记忆与自动经验只能调整建议的呈现方式与排序，**不改变任何动作的权限档位**。该约束由单测结构性保证（构造「所有写操作都免确认」的极端记忆后，还原与危险脚本仍分别处于最高档与禁止档） |
 | 提示注入防护 | 日志、工具输出、项目文件均以不可信定界符包裹，其中的指令性文本不被执行 |
 | 凭据保护 | API Key 与数据库密码经 Windows DPAPI 加密存储；配置、审计与诊断包入库前完成脱敏 |

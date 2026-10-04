@@ -38,12 +38,29 @@ import (
 
 // backupEntry 一份备份的只读摘要。
 type backupEntry struct {
-	Name     string
-	SizeKB   int64
-	AgeMin   int64  // 多少分钟前
-	SHAOk    bool   // .sha256 是否存在且内容对得上
-	Static   string // 静态检查结论摘要
-	Truncate bool   // 文件被截断（尾部标记缺失）
+	Name string
+	// SizeBytes 存字节而非 KB。KB 是展示单位，不是存储单位——
+	// 用 KB 存储会让 <1KB 的文件（**截断的备份正是这一类**）
+	// 一律显示为 0，模型据此跳过内容检查。
+	SizeBytes int64
+	AgeMin    int64  // 多少分钟前
+	SHAOk     bool   // .sha256 是否存在且内容对得上
+	Static    string // 静态检查结论摘要
+	Truncate  bool   // 文件被截断（尾部标记缺失）
+}
+
+// humanSize 把字节数格式化成带单位的字符串。
+// 小于 1KB 时给**字节**而不是「0 KB」——
+// 「0 KB」会被读成"空文件"，而真相是"很小但非空"，那正是最需要看的内容。
+func humanSize(n int64) string {
+	switch {
+	case n < 1024:
+		return fmt.Sprintf("%d 字节", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+	}
 }
 
 // listBackups 列出备份目录里的 .sql 并给出只读体检结果。
@@ -70,9 +87,21 @@ func listBackups(db string) []backupEntry {
 		}
 		names = append(names, n)
 	}
-	// 去掉注入的测试产物：它们不是真实备份，列出来会干扰判断。
-	// 刻意保留在磁盘上（undo 才删），但报告里不列——
-	// 评测注入的故障文件对用户没有意义。
+	// 注入的测试产物（*-injected.sql）**照常列出**，不排除。
+	//
+	// ## 这里原来写着"去掉注入的测试产物：它们不是真实备份"
+	//
+	// 那个理由在人工手动跑注入器时成立（不想看到测试文件干扰判断）。
+	// 但**评测必须看到自己注入的故障**——否则会出现一个很隐蔽的错位：
+	// 注入器往备份目录写了损坏文件，AI 调 list_backups 却看不到它，
+	// 于是报告里"AI 检查了备份"这句话与AI 实际看到的东西无关。
+	//
+	// 实测踩到过：v2.5 前两轮跑出「目录里只有 1 份，0 KB」，
+	// 而那份其实是**别的残留文件**，被注入的损坏备份根本没进列表。
+	// AI 的分析再细致也是在分析一个不相干的文件。
+	//
+	// 判据：**装置注入的东西必须能被被测对象看到**，
+	// 否则测的就不是我们以为在测的东西。
 	sort.Strings(names)
 
 	now := time.Now()
@@ -81,7 +110,18 @@ func listBackups(db string) []backupEntry {
 		p := filepath.Join(dir, n)
 		be := backupEntry{Name: n}
 		if st, err := os.Stat(p); err == nil {
-			be.SizeKB = st.Size() / 1024
+			// **存字节，不存 KB。**
+			//
+			// 原来这里写 st.Size() / 1024（整除），于是任何小于 1KB 的文件
+			// 都被报成「0 KB」。评测实测踩到：注入的损坏备份只有 200 多字节，
+			// AI 读到的却是「大小 0 KB，文件是空的」——
+			// **它对文件内容的判断全部建立在一个错误的数字上**，
+			// 后面整段分析（"导入后肯定不会还原"）虽然结论碰巧对，
+			// 理由却是错的。
+			//
+			// 小文件恰恰是**最该被认真检查**的那类（截断的备份就是这样），
+			// 报成 0 KB 会让模型直接跳过内容检查。
+			be.SizeBytes = st.Size()
 			be.AgeMin = int64(now.Sub(st.ModTime()).Minutes())
 		}
 		// 校验和：文件旁有 .sha256 才算验过
@@ -147,7 +187,7 @@ func backupsBrief(db string) string {
 		limit = 5
 	}
 	for _, b := range lst[:limit] {
-		sb.WriteString(fmt.Sprintf("· %s（%d KB，%d 分钟前）\n", b.Name, b.SizeKB, b.AgeMin))
+		sb.WriteString(fmt.Sprintf("· %s（%s，%d 分钟前）\n", b.Name, humanSize(b.SizeBytes), b.AgeMin))
 		sb.WriteString("    校验和旁挂：" + yesNo(b.SHAOk, "一致（仅旁挂比对，未重算内容）", "缺失或不一致") + "\n")
 		if b.Truncate {
 			sb.WriteString("    ⚠ 未见 mysqldump 结束标记 —— 文件可能被截断\n")

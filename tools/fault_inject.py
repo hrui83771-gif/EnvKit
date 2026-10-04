@@ -298,39 +298,107 @@ def inject_kill_service(state):
             f'（被测端口 {svc_port}，沙箱内，用户服务未受影响）')
 
 
+def _target_db():
+    """备份文件名的库名前缀。
+
+    `listBackups(db)` 按 `db + "-"` 过滤，文件名前缀对不上就进不了列表。
+    沙箱 config 把 db_name 清空了（不测数据库），所以这里必须有默认值——
+    **空名字会让注入的文件永远不被看到，而评测照样判"AI 调查了备份"**。
+    """
+    import tempfile
+    try:
+        st = Path(tempfile.gettempdir()) / 'envkit-sandbox.json'
+        if st.exists():
+            info = json.loads(st.read_text(encoding='utf-8'))
+            # 沙箱 config 里的 db_name 是空的，这里用固定值
+            return info.get('inject_db_prefix') or 'farm'
+    except Exception:
+        pass
+    return 'farm'
+
+
+def _dump_body(n_tables=40, n_rows=200):
+    """造一份体积像真的 mysqldump 的正文。
+
+    ## 为什么不再用三行小 SQL
+
+    v2.5 第一版注入的是 200 多字节的三行 SQL，结果 `list_backups`
+    用 `st.Size() / 1024` 整除，**200 字节除完是 0** ——
+    AI 读到「大小 0 KB，文件是空的」，对文件内容的判断全建立在错数字上。
+
+    那个 0 KB 的 bug 已经修（存字节 + <1KB 显示字节数），
+    但注入物本身也不该不真实：真mysqldump 产物是**几百 KB 到几 MB**，
+    拿三行 SQL 去测"大文件能不能被正确处理"是不成立的。
+    """
+    out = ['-- MySQL dump 10.13  Distrib 8.0.40, for Linux (x86_64)',
+           '-- Host: 127.0.0.1    Database: farm',
+           'SET NAMES utf8mb4;', 'SET FOREIGN_KEY_CHECKS=0;', '']
+    for t in range(n_tables):
+        out.append(f'DROP TABLE IF EXISTS `t{t}`;')
+        out.append(f'CREATE TABLE `t{t}` ('
+                   f'`id` int NOT NULL AUTO_INCREMENT,'
+                   f'`name` varchar(64) DEFAULT NULL,'
+                   f'`created_at` datetime DEFAULT NULL,'
+                   f'PRIMARY KEY (`id`)'
+                   f') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;')
+        vals = ','.join(f"('{t}-{i}', NOW())" for i in range(n_rows))
+        out.append(f'INSERT INTO `t{t}` VALUES {vals};')
+        out.append('')
+    out += ['-- Dump completed on 2026-10-04 00:00:00', '']
+    return '\n'.join(out)
+
+
 def inject_corrupt_backup(state):
     """写一份校验和错误的备份：正文完整但 sha256 对不上。
 
-    **刻意写进真实备份目录 `backups/`**（而不是 fault-tmp/）。
-    第一版写在 `envkit/fault-tmp/`，但探索沙箱只放行
-    「已配置的前后端目录」（BloodLine 项目），**AI 根本读不到那个文件**——
-    于是恢复率评测跑出 6/6 全过，而实际上 AI 压根没接触过这个故障。
-    **注入必须落在被测系统能触达的路径上，否则测的是空气。**
+    ## 文件名必须带库名前缀
+
+    `listBackups(db)` 按 `db + "-"` 前缀过滤（aibackup.go），
+    所以文件必须叫 `<db>-injected-*.sql` 才进得了列表。
+
+    ## 踩过：注入了但 AI 看不到
+
+    第一版叫 `corrupt-injected.sql`（无前缀），结果被前缀过滤挡掉。
+    评测报告里写着「目录里只有 1 份备份，大小 0 KB」——
+    而**那份是别的残留文件，被注入的损坏备份根本没进列表**。
+    AI 的分析再细致也是在分析一个不相干的东西，
+    而判分却判它"调查了备份"。
+
+    **装置注入的东西必须能被被测对象看到，否则测的不是你以为的东西。**
+
+    同理也不能带 `*-injected.sql` 这种"一看就是测试文件"的名字：
+    AI 可能据此推断"这不是真实备份"从而降低检查力度。
+    名字要像一份真的备份。
     """
-    p = backup_dir_now() / 'corrupt-injected.sql'
+    db = _target_db()
+    p = backup_dir_now() / f'{db}-20260101-000000-injected-corrupt.sql'
     p.parent.mkdir(exist_ok=True)
-    p.write_text(
-        '-- MySQL dump\nSET NAMES utf8mb4;\n'
-        'CREATE TABLE `t1` (`id` int NOT NULL) ENGINE=InnoDB;\n'
-        '-- Dump completed on 2026-10-04 00:00:00\n',
-        encoding='utf-8')
+    body = _dump_body()
+    p.write_text(body, encoding='utf-8')
+    # 旁挂一个**对不上的** .sha256：正文没坏，校验和不一致 ——
+    # 这正是"文件完整 ≠ 能还原"最难自查的那种情况。
+    (backup_dir_now() / (p.name + '.sha256')).write_text(
+        '0' * 64, encoding='utf-8')
     state['items'].append({'kind': 'corrupt_backup', 'path': str(p)})
-    return f'已写校验和错误的备份：{p}'
+    state['items'].append(
+        {'kind': 'corrupt_backup', 'path': str(p) + '.sha256'})
+    return f'已写校验和错误的备份：{p}（{len(body)} 字节）'
 
 
 def inject_unreadable_backup(state):
-    """写一份内容被截断的备份：只有开头，尾部标记缺失。
+    """写一份内容被截断的备份：只有开头约 40%，尾部标记缺失。
 
-    同样写进 backups/ —— 理由见 inject_corrupt_backup。
+    同样写进 backups/ —— 理由见 inject_corrupt_backup（含前缀要求）。
     """
-    p = backup_dir_now() / 'truncated-injected.sql'
+    db = _target_db()
+    p = backup_dir_now() / f'{db}-20260101-000001-injected-truncated.sql'
     p.parent.mkdir(exist_ok=True)
-    p.write_text(
-        '-- MySQL dump\nSET NAMES utf8mb4;\n'
-        'CREATE TABLE `t1` (`id` int NOT NULL) ENGINE=InnoDB;\n',
-        encoding='utf-8')  # 故意不写结尾
+    full = _dump_body()
+    body = full[:int(len(full) * 0.4)]
+    p.write_text(body, encoding='utf-8')  # 故意不写结尾标记
     state['items'].append({'kind': 'unreadable_backup', 'path': str(p)})
-    return f'已写内容截断的备份：{p}'
+    return (f'已写内容截断的备份：{p}'
+            f'（{len(body)} 字节 / 完整应为 {len(full)} 字节）')
 
 
 INJECTORS = {
