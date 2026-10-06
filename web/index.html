@@ -120,8 +120,8 @@
      纯 SVG，不引任何图表库——「单文件零依赖」是本工具的硬约束。
      配色全部走 CSS 变量，深浅色自动适配。 */
   /* 固定 4 列而不是 auto-fit：
-   * auto-fit 在 1100px 宽度下算出 6 列，7 张卡必然断成「6 + 1」，
-   * 最后一张孤零零掉到第二行。4 列在窄屏与宽屏上都稳定成2×4 / 1×7。
+   * auto-fit 在 1100px 宽度下算出 6 列，卡片数与列数不整除时最后一张
+   * 会孤零零掉到第二行。v2.7.1 把卡片数定为 4，4 列刚好一行。
    */
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
   @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}
@@ -941,18 +941,12 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">
-        <div class="chart-card">
-          <div class="chart-hd"><span class="t">任务结局</span><span class="x" id="st-tr-tip"></span></div>
-          <div id="st-trace-chart"></div>
-          <div class="lgd" id="st-trace-legend"></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-hd"><span class="t">Token 用量</span><span class="x" id="st-tk-tip"></span></div>
-          <div id="st-token-chart"></div>
-          <div class="lgd" id="st-token-legend"></div>
-        </div>
-      </div>
+      <!-- v2.7.1：任务结局与 Token 用量两张图已移除。
+           原因：① 轨迹只保留 14 天而审计 30 天，同一张图上时间轴长度不一致，
+           容易让人误读；② Token 的样本还只有 10 个（v2.7 才开始记录），
+           画成柱状图会显得像有趋势，实际不足以支撑趋势结论。
+           **数据没丢** —— /api/stats 仍返回这些字段，只是不再作为主视觉呈现。
+           保留的口径提醒（notes）里仍会说明轨迹与审计的覆盖差异。 -->
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-bottom:12px">
         <div class="chart-card">
@@ -1783,6 +1777,7 @@ const I18N_EN = {
   "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
   "缓存命中": "Cache hit",
   "缓存命中 {0}%": "cache hit {0}%",
+  "缓存命中 {0}%　输入 {1} · 输出 {2}": "cache hit {0}% · in {1} · out {2}",
   "缓存命中率 {0}%": "cache hit rate {0}%",
   "缩成小圆点": "Shrink to a dot",
   "缩成小圆点啦，点我一下就恢复": "Now a tiny dot — click me to restore",
@@ -2908,23 +2903,35 @@ async function loadStats(){
   }
   const t2 = d.totals || {}, ds = d.days || [];
 
-  /* ---- KPI 卡 ---- */
+  /* ---- KPI 卡（v2.7.1：4 张，正好一行）----
+   *
+   * 去掉「失败」「被拦下」「任务数」三张：
+   * 它们的数字**已经在下面的图表里**（结果分布堆叠条 + 图例数字），
+   * 再放一张卡是重复；而「Token 消耗」是 v2.7 才有数据的新指标，
+   * 样本还只有十几个，摆在最显眼的位置反而像结论。
+   *
+   * 留这 4 张的理由：它们是**图表画不出来的**——
+   * 操作量给分母、复验率给质量、延迟给性能、Token 给成本。
+   */
   const vr = t2.verify_rate_has_sample
     ? {v: (t2.verify_rate*100).toFixed(1)+'%', cls:'', s: t('通过 {0} / {1} 次复验', stFull(t2.verify_ok), stFull(t2.verify_count))}
     : {v: t('无样本'), cls:'none', s: t('区间内没有带复验结论的记录')};
   const kpis = [
     {k:t('操作总数'), v: stFull(t2.ops), cls:'', s: t('{0} 天有记录', t2.audit_days_available)},
-    {k:t('失败'), v: stFull(t2.fail), cls: t2.fail>0?'bad':'good', s: t('占比 {0}%', t2.ops?((t2.fail/t2.ops)*100).toFixed(1):'0')},
-    {k:t('被拦下'), v: stFull(t2.denied), cls:'', s: t('策略预期行为，不算失败')},
     {k:t('复验通过率'), v: vr.v, cls: vr.cls, s: vr.s},
-    {k:t('任务数'), v: stFull(t2.traces), cls:'', s: t('成功 {0} · 部分 {1} · 失败 {2}',
-        stFull(t2.traces_success), stFull(t2.traces_partial), stFull(t2.traces_failed))},
-    {k:t('Token 消耗'), v: t2.token_samples? stFmt(t2.token_total): t('无数据'),
-     cls: t2.token_samples?'':'none',
-     s: t2.token_samples ? t('输入 {0} · 输出 {1}', stFmt(t2.token_prompt), stFmt(t2.token_completion))
-                         : t('v2.7 起才记录')},
     {k:t('延迟 p50'), v: t2.latency_p50? stFull(t2.latency_p50)+' ms': t('无数据'),
      cls: t2.latency_p50?'':'none', s: t('p90 {0} ms', stFull(t2.latency_p90))},
+    {k:t('Token 消耗'), v: t2.token_samples? stFmt(t2.token_total): t('无数据'),
+     cls: t2.token_samples?'':'none',
+     s: t2.token_samples
+        ? (t2.token_has_cache && t2.token_prompt
+            // 有缓存细分时把命中率写进去 —— 它是判断成本的关键，
+            // 而原来那张 token 图被移除后，这个信息不该一起丢
+            ? t('缓存命中 {0}%　输入 {1} · 输出 {2}',
+                ((t2.token_cache_hit/t2.token_prompt)*100).toFixed(0),
+                stFmt(t2.token_prompt), stFmt(t2.token_completion))
+            : t('输入 {0} · 输出 {1}', stFmt(t2.token_prompt), stFmt(t2.token_completion)))
+        : t('v2.7 起才记录')},
   ];
   box.innerHTML = kpis.map(x =>
     '<div class="kpi '+x.cls+'"><div class="k">'+esc(x.k)+'</div>'+
@@ -2962,56 +2969,18 @@ async function loadStats(){
   const tip = $('#st-ops-tip');
   if(tip) tip.textContent = t('日均 {0} 次', (t2.ops/Math.max(1,t2.audit_days_available)).toFixed(0));
 
-  /* ---- 任务结局（注意：轨迹只保留 14 天，覆盖比上面短）---- */
-  const TKEY = [
-    {k:'traces_success', color:'var(--ok)',   name:'成功'},
-    {k:'traces_partial', color:'var(--warn)', name:'部分完成'},
-    {k:'traces_failed',  color:'var(--err)',  name:'失败'},
-    {k:'traces_aborted', color:'var(--dotoff)',name:'无结论'},
-  ];
-  stBars('#st-trace-chart', ds, TKEY, {height:100});
-  const tl = $('#st-trace-legend');
-  if(tl) tl.innerHTML = TKEY.map(k => {
-    const tot = t2.traces || 1;
-    return '<span><i style="background:'+k.color+'"></i>'+esc(t(k.name))+' '+
-           ((t2[k.k]||0)/tot*100).toFixed(0)+'%</span>';
-  }).join('');
-  const tt = $('#st-tr-tip');
-  if(tt){
-    // 「无结论」占比高时必须说清原因，否则看起来像新出了故障。
-    // 现实是：v2.7 之前 trace 的 outcome 恒为 aborted（一个从未赋值的死变量），
-    // 所以历史数据里几乎全是「无结论」——**它反映的是当时的缺陷，不是现在**。
-    const ab = t2.traces || 1;
-    const abPct = ((t2.traces_aborted||0) / ab * 100);
-    tt.textContent = (abPct > 50)
-      ? t('仅覆盖最近 {0} 天；「无结论」多为 v2.7 前的历史数据', t2.trace_retention_days||14)
-      : t('仅覆盖最近 {0} 天（轨迹保留期）', t2.trace_retention_days||14);
-    if(abPct > 50) tt.style.color = 'var(--muted)';
-  }
-
-  /* ---- Token（只有带 usage 的轨迹才计入）---- */
-  const stDays = ds.map(x => ({date:x.date, p:x.token_prompt, c:x.token_completion}));
-  const hasTk = t2.token_samples > 0;
-  if(hasTk){
-    stBars('#st-token-chart', stDays, [
-      {k:'p', color:'var(--brand)', name:'输入'},
-      {k:'c', color:'var(--brand2)', name:'输出'},
-    ], {height:100});
-    const tkl = $('#st-token-legend');
-    if(tkl) tkl.innerHTML =
-      '<span><i style="background:var(--brand)"></i>'+esc(t('输入'))+' '+stFmt(t2.token_prompt)+'</span>'+
-      '<span><i style="background:var(--brand2)"></i>'+esc(t('输出'))+' '+stFmt(t2.token_completion)+'</span>'+
-      (t2.token_has_cache ? '<span><i style="background:var(--info)"></i>'+esc(t('缓存命中'))+' '+
-        stFmt(t2.token_cache_hit)+'（'+(t2.token_prompt?((t2.token_cache_hit/t2.token_prompt)*100).toFixed(0):0)+'%）</span>' : '');
-    const tkt = $('#st-tk-tip');
-    if(tkt) tkt.textContent = t('{0} 个轨迹有记录', t2.token_samples);
-  } else {
-    const box2 = $('#st-token-chart');
-    if(box2) box2.innerHTML = '<div class="hint">'+esc(t('暂无数据'))+'</div>';
-    const tkl = $('#st-token-legend'); if(tkl) tkl.innerHTML='';
-    const tkt = $('#st-tk-tip');
-    if(tkt) tkt.textContent = t('usage 字段是 v2.7 才加的，此前的对话没有记录');
-  }
+  /* ---- v2.7.1：任务结局与 Token 两张图已从界面移除（DOM 与渲染代码一并删掉）----
+   *
+   * 删而不只是隐藏：留着渲染代码查空元素是死代码，
+   * 而空元素上`getElementById` 返回 null、`.innerHTML=` 会抛——
+   * 第一版若只删 DOM 不删代码，页面会报 TypeError。
+   *
+   * **数据仍从 /api/stats 返回**（stats.go 的统计与测试全部保留），
+   * 将来样本够了（轨迹 14 天覆盖、token 样本上百）再加回来即可。
+   *
+   * token 的缓存命中率挪进了 KPI 副标题 —— 它是成本判断的关键，
+   * 值得留下，但不值得单独占一张图。
+   */
 
   /* ---- 主体分布 ---- */
   const ACTOR_NAME = {user:'用户', ai:'AI', guard:'守护', system:'系统'};

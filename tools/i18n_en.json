@@ -528,6 +528,7 @@
   "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
   "缓存命中": "Cache hit",
   "缓存命中 {0}%": "cache hit {0}%",
+  "缓存命中 {0}%　输入 {1} · 输出 {2}": "cache hit {0}% · in {1} · out {2}",
   "缓存命中率 {0}%": "cache hit rate {0}%",
   "缩成小圆点": "Shrink to a dot",
   "缩成小圆点啦，点我一下就恢复": "Now a tiny dot — click me to restore",

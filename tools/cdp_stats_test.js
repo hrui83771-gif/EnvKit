@@ -104,8 +104,13 @@ const check = (name, ok, extra) => {
     await ev("document.querySelector('[data-panel=\"audit\"]').click()");
     await sleep(2500);
 
-    check('kpis-rendered', (await ev("document.querySelectorAll('#st-kpis .kpi').length")) >= 7,
-      'count=' + await ev("document.querySelectorAll('#st-kpis .kpi').length"));
+    check('kpis-rendered', (await ev("document.querySelectorAll('#st-kpis .kpi').length")) === 4,
+      'count=' + await ev("document.querySelectorAll('#st-kpis .kpi').length") +
+      '（v2.7.1 精简为 4 张：总数/复验率/延迟/Token）');
+
+    // **KPI 必须一行排完** —— 卡片数与列数不整除时最后一张会掉到第二行
+    const kpiRows = await ev("(function(){const ks=[...document.querySelectorAll('#st-kpis .kpi')];if(!ks.length)return 0;const top=ks[0].getBoundingClientRect().top;return new Set(ks.map(k=>Math.round(k.getBoundingClientRect().top))).size})()");
+    check('kpis-single-row', kpiRows === 1, 'distinct rows = ' + kpiRows);
 
     // **数字一致性**：KPI 里的数字必须与 API 一致。
     //
@@ -125,16 +130,15 @@ const check = (name, ok, extra) => {
       'dom=' + kpiOps + ' api=' + stats.totals.ops + '（允许 ±30，实测差 ' +
       Math.abs(Number(String(kpiOps).replace(/,/g, '')) - stats.totals.ops) + '）');
 
-    const kpiFail = await ev("(function(){const k=[...document.querySelectorAll('#st-kpis .kpi')].find(x=>/^失败|^Failed/.test(x.querySelector('.k').textContent));return k?k.querySelector('.v').textContent:''})()");
-    check('kpi-fail-matches-api', numEq(kpiFail, stats.totals.fail, 5),
-      'dom=' + kpiFail + ' api=' + stats.totals.fail);
+    // v2.7.1 删掉了「失败」KPI（信息在下方结果分布的图例数字里），
+    // 所以**不再断言它** —— 第一版留着这条断言，于是报 dom= 空。
+    // 失败数改由下面的 stack 图例断言覆盖。
 
     // 图表 SVG 真的画出来了
     check('ops-chart-has-svg', (await ev("!!document.querySelector('#st-ops-chart svg')")));
     check('ops-chart-has-rects',
       (await ev("document.querySelectorAll('#st-ops-chart rect').length")) > 0,
       'rects=' + await ev("document.querySelectorAll('#st-ops-chart rect').length"));
-    check('trace-chart-has-svg', (await ev("!!document.querySelector('#st-trace-chart svg')")));
     check('actor-chart-has-bars',
       (await ev("document.querySelectorAll('#st-actor-chart i').length")) > 0,
       'bars=' + await ev("document.querySelectorAll('#st-actor-chart i').length"));
@@ -142,10 +146,30 @@ const check = (name, ok, extra) => {
       (await ev("document.querySelectorAll('#st-action-chart i').length")) > 0,
       'bars=' + await ev("document.querySelectorAll('#st-action-chart i').length"));
 
-    // 堆叠条四段
+    // v2.7.1 移除的两张图：**DOM 与渲染代码都要真的删掉**。
+    // 只删 DOM 不删代码的话，渲染时 getElementById 返回 null、
+    // `.innerHTML=` 会抛 TypeError —— 所以「元素不存在」本身就是断言。
+    check('trace-chart-removed', (await ev("!document.getElementById('st-trace-chart')")));
+    check('token-chart-removed', (await ev("!document.getElementById('st-token-chart')")));
+    // 被删的 KPI 也不该再有（它们的信息在下方图表的结果分布里）
+    const kpiKeys = await ev("JSON.stringify([...document.querySelectorAll('#st-kpis .kpi .k')].map(e=>e.textContent))");
+    out.push('kpi keys = ' + kpiKeys);
+    check('no-redundant-kpis',
+      !/任务数/.test(kpiKeys) && !/被拦下/.test(kpiKeys), kpiKeys);
+
+    // 堆叠条四段 + **图例数字必须与 API 一致**（v2.7.1 删掉「失败」KPI 后，
+    // 失败数唯一的呈现位置就是这里的图例数字，所以这条断言顶替了原来那条）
     check('stack-four-segments',
       (await ev("document.querySelectorAll('#st-ops-stack i').length")) === 4,
       'n=' + await ev("document.querySelectorAll('#st-ops-stack i').length"));
+    const lgn = await ev("JSON.stringify([...document.querySelectorAll('#panel-audit .lgnv')].map(e=>e.textContent))");
+    out.push('legend numbers = ' + lgn);
+    const nums = JSON.parse(lgn).map(s => Number(String(s).replace(/,/g, '')));
+    check('legend-matches-api',
+      nums.length === 4 && numEq(nums[0], stats.totals.ok, 30) &&
+      numEq(nums[1], stats.totals.fail, 5) && numEq(nums[2], stats.totals.denied, 1),
+      lgn + '  api ok/fail/denied=' +
+      [stats.totals.ok, stats.totals.fail, stats.totals.denied].join('/'));
 
     // **无样本必须显式说明，不能画成 0**
     const vrText = await ev("(function(){const k=[...document.querySelectorAll('#st-kpis .kpi')].find(x=>/复验|Verification/.test(x.querySelector('.k').textContent));return k?k.className+'|'+k.querySelector('.v').textContent:''})()");
@@ -156,22 +180,25 @@ const check = (name, ok, extra) => {
       check('verify-rate-shows-nosample', /none/.test(vrText) && /无样本|No data/.test(vrText), vrText);
     }
 
-    // token 无样本时要有说明文案
-    const tkTip = await ev("(document.getElementById('st-tk-tip')||{}).textContent||''");
+    // token 无样本时要有说明文案（在 KPI 副标题里）
+    const tkSub = await ev("(function(){const k=[...document.querySelectorAll('#st-kpis .kpi')].find(x=>/Token/.test(x.querySelector('.k').textContent));return k?k.className+'|'+k.querySelector('.v').textContent+'|'+k.querySelector('.s').textContent:''})()");
+    out.push('token card: ' + tkSub);
     if (!stats.totals.token_samples) {
-      check('token-nosample-explained', /v2\.7|usage/i.test(tkTip), tkTip);
+      check('token-nosample-explained', /none/.test(tkSub) && /v2\.7/.test(tkSub), tkSub);
     } else {
-      check('token-tip-has-count', /轨迹|trace/i.test(tkTip), tkTip);
+      check('token-card-has-value', /[\d]/.test(tkSub), tkSub);
     }
 
-    // 轨迹保留期提醒（覆盖长度不同，必须说出来）
-    const trTip = await ev("(document.getElementById('st-tr-tip')||{}).textContent||''");
-    check('trace-retention-noted', /14|覆盖|Covers/.test(trTip), trTip);
+    // 轨迹保留期提醒（覆盖长度不同，必须说出来）—— 在 notes 里
+    const notesTxt = await ev("(document.getElementById('st-notes')||{}).textContent||''");
+    check('retention-noted-in-notes', /14|30|轨迹/.test(notesTxt), notesTxt.slice(0, 90));
 
-    // 区间切换
+    // 区间切换（v2.7.1 后是 4 张卡，断言同步改）
     await ev("(function(){const s=document.getElementById('st-days');s.value='7';s.dispatchEvent(new Event('change'));return 1})()");
     await sleep(1200);
-    check('days-switch-works', (await ev("document.querySelectorAll('#st-kpis .kpi').length")) >= 7);
+    check('days-switch-works',
+      (await ev("document.querySelectorAll('#st-kpis .kpi').length")) === 4,
+      'count=' + await ev("document.querySelectorAll('#st-kpis .kpi').length"));
     out.push('after switch to 7 days, ops label = ' + await ev("(function(){const k=[...document.querySelectorAll('#st-kpis .kpi')].find(x=>/操作总数|Total operations/.test(x.querySelector('.k').textContent));return k?k.querySelector('.s').textContent:''})()"));
 
     check('no-runtime-errors', errs.length === 0, errs.slice(0, 3).join(' | '));
