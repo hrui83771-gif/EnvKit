@@ -116,6 +116,31 @@
   #issues-list li.warn{border-left-color:var(--warn)}
   #issues-list li.info{border-left-color:var(--info)}
   #issues-list li .act{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  /* ===== v2.7 统计看板 =====
+     纯 SVG，不引任何图表库——「单文件零依赖」是本工具的硬约束。
+     配色全部走 CSS 变量，深浅色自动适配。 */
+  /* 固定 4 列而不是 auto-fit：
+   * auto-fit 在 1100px 宽度下算出 6 列，7 张卡必然断成「6 + 1」，
+   * 最后一张孤零零掉到第二行。4 列在窄屏与宽屏上都稳定成2×4 / 1×7。
+   */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--soft);border-radius:9px;padding:10px 12px}
+  .kpi .k{font-size:11.5px;color:var(--muted);line-height:1.3}
+  .kpi .v{font-size:19px;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.15}
+  .kpi .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .kpi.good .v{color:var(--ok)} .kpi.bad .v{color:var(--err)} .kpi.warn .v{color:var(--warn)}
+  .kpi.none .v{color:var(--muted);font-size:14px}
+  .chart-card{background:var(--soft);border-radius:9px;padding:10px 12px;margin-bottom:10px}
+  .chart-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .chart-hd .t{font-size:12.5px;font-weight:600}
+  .chart-hd .x{font-size:11px;color:var(--muted)}
+  .lgd{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:5px}
+  .lgd i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .stack{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--off);margin:2px 0 6px}
+  .stack i{display:block;height:100%}
+  .stat-notes{font-size:11.5px;color:var(--muted);line-height:1.7;margin-top:6px}
+  .stat-notes li{margin:0 0 2px}
   .banner.err{background:var(--errbg);color:var(--err)}
   .banner.ok{background:var(--okbg);color:var(--ok)}
   .banner.info{background:var(--infobg);color:var(--info)}
@@ -886,6 +911,60 @@
 
     <section class="panel" id="panel-audit">
       <div class="phead"><h2>操作审计 <span class="stepno">谁 · 何时 · 做了什么 · 结果如何</span></h2></div>
+
+      <!-- v2.7 统计看板：先看趋势，再看明细 -->
+      <div class="chart-card">
+        <div class="chart-hd">
+          <span class="t" id="st-range">近 30 天</span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <select id="st-days" style="font-size:12px;border:1px solid var(--line);border-radius:8px;padding:2px 6px;background:var(--card);color:var(--text)">
+              <option value="7">近 7 天</option>
+              <option value="14">近 14 天</option>
+              <option value="30" selected>近 30 天</option>
+            </select>
+            <button class="mini" id="st-refresh">刷新</button>
+          </span>
+        </div>
+        <div class="kpis" id="st-kpis"></div>
+        <ul class="stat-notes" id="st-notes" style="display:none"></ul>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-hd"><span class="t">操作量与结果分布</span><span class="x" id="st-ops-tip"></span></div>
+        <div id="st-ops-chart"></div>
+        <div class="stack" id="st-ops-stack"></div>
+        <div class="lgd">
+          <span><i style="background:var(--ok)"></i><span class="lgt">成功</span> <b class="lgnv">0</b></span>
+          <span><i style="background:var(--err)"></i><span class="lgt">失败</span> <b class="lgnv">0</b></span>
+          <span><i style="background:var(--warn)"></i><span class="lgt">被拦下</span> <b class="lgnv">0</b></span>
+          <span><i style="background:var(--info)"></i><span class="lgt">已启动</span> <b class="lgnv">0</b></span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">
+        <div class="chart-card">
+          <div class="chart-hd"><span class="t">任务结局</span><span class="x" id="st-tr-tip"></span></div>
+          <div id="st-trace-chart"></div>
+          <div class="lgd" id="st-trace-legend"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-hd"><span class="t">Token 用量</span><span class="x" id="st-tk-tip"></span></div>
+          <div id="st-token-chart"></div>
+          <div class="lgd" id="st-token-legend"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-bottom:12px">
+        <div class="chart-card">
+          <div class="chart-hd"><span class="t">操作主体</span></div>
+          <div id="st-actor-chart"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-hd"><span class="t">高频动作</span></div>
+          <div id="st-action-chart"></div>
+        </div>
+      </div>
+
       <div class="row" style="margin:0 0 10px;gap:6px">
         <button class="mini on" id="audit-f-all">全部</button>
         <button class="mini" id="audit-f-user">用户</button>
@@ -1176,6 +1255,7 @@ const APP_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACq
    因此新增界面文案只要补进 I18N_EN 即可（tools/i18n_inventory.py 可查漏）。 */
 const I18N_EN = {
   "0 行": "0 lines",
+  "AI": "AI",
   "AI 助手": "AI Assistant",
   "AI 助手 · 点我对话 / 右键更多": "AI assistant · click to chat, right-click for more",
   "AI 助手（右下角悬浮球）": "AI assistant (floating ball, bottom-right)",
@@ -1196,6 +1276,8 @@ const I18N_EN = {
   "SQL 查询": "SQL query",
   "SQL 生效": "SQL apply",
   "SSH 连通": "SSH reachability",
+  "Token 消耗": "Token usage",
+  "Token 用量": "Token usage",
   "W 目录": "W dir",
   "W 端口": "W port",
   "W 脚本": "W script",
@@ -1204,12 +1286,17 @@ const I18N_EN = {
   "https://api.deepseek.com 或完整 .../v1/chat/completions（都支持）": "https://api.deepseek.com or a full .../v1/chat/completions (both work)",
   "npm registry（Node 代理）": "npm registry (Node mirror)",
   "npm run 脚本名（可输入自定义）": "npm run script name (custom allowed)",
+  "p90 {0} ms": "p90 {0} ms",
   "package.json 推断": "detected from package.json",
   "sk-...（留空保留已存值）": "sk-... (leave blank to keep the saved key)",
   "temperature 固定为 1": "temperature fixed to 1",
+  "usage 字段是 v2.7 才加的，此前的对话没有记录": "The usage field was added in v2.7; earlier conversations have none",
+  "v2.7 起才记录": "Recorded since v2.7",
   "{0} 个存活": "{0} alive",
   "{0} 个被占用": "{0} in use",
+  "{0} 个轨迹有记录": "{0} traces recorded",
   "{0} 升级中，进度见下方安装日志，完成后点「检查更新」刷新。": "{0} is upgrading — watch the install log below, then click “Check for updates” to refresh.",
+  "{0} 天有记录": "{0} days with records",
   "{0} 失败了，点红标看日志": "{0} failed — click the red badge for the log",
   "{0} 已启动": "{0} started",
   "{0} 条": "{0} entries",
@@ -1247,11 +1334,14 @@ const I18N_EN = {
   "仅 DeepSeek 支持": "DeepSeek only",
   "仅执行 SQL": "Apply SQL only",
   "仅相关时": "When relevant",
+  "仅覆盖最近 {0} 天（轨迹保留期）": "Covers last {0} days (trace retention)",
   "今日统计": "Today's usage",
   "仍有 {0} 个组件未就绪": "{0} component(s) still not ready",
   "从操作记录统计，不是你在下的命令": "computed from activity, not an order from you",
   "以管理员身份重启": "Restart as administrator",
   "任何项目都生效": "applies to all projects",
+  "任务数": "Tasks",
+  "任务结局": "Task outcomes",
   "位置：": "Location: ",
   "低": "Low",
   "余额 {0} {1}": "Balance {0} {1}",
@@ -1331,8 +1421,11 @@ const I18N_EN = {
   "区块链 :": "Blockchain :",
   "区块链上链数据具有不可篡改性，但仅供参考，不构成任何投资、法律、财务或商业建议；据此操作产生的风险由使用者自行承担。": "On-chain data is immutable but for reference only; it constitutes no investment, legal, financial, or business advice. You bear the risk of acting on it.",
   "区块高度": "Block height",
+  "区间内没有可统计的数据": "Nothing to chart in this range",
+  "区间内没有带复验结论的记录": "No verification records in this range",
   "升级": "Upgrade",
   "升级组件": "Upgrade components",
+  "占比 {0}%": "{0}%",
   "占用": "In use",
   "反复失败": "Repeated failure",
   "发送": "Send",
@@ -1372,6 +1465,7 @@ const I18N_EN = {
   "复制": "Copy",
   "复验反复失败": "Verification keeps failing",
   "复验环境状态": "Verify environment state",
+  "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
   "失败": "Failed",
@@ -1429,6 +1523,7 @@ const I18N_EN = {
   "已加白名单": "Whitelisted",
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
+  "已启动": "Started",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
   "已失效": "Stale",
@@ -1457,6 +1552,7 @@ const I18N_EN = {
   "常": "Always",
   "常用：8080 前端 · 8888 后端": "Common: 8080 frontend · 8888 backend",
   "干活中…": "Working…",
+  "延迟 p50": "Latency p50",
   "建库并执行 SQL": "Create DB and apply SQL",
   "建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Run EnvKit as administrator to skip the UAC prompt. Reboot once when done.",
   "建议：{0}": "Suggestion: {0}",
@@ -1474,6 +1570,8 @@ const I18N_EN = {
   "思考中": "Thinking",
   "恢复演练": "Restore drill",
   "慢路径": "Slow path",
+  "成功": "OK",
+  "成功 {0} · 部分 {1} · 失败 {2}": "{0} ok · {1} partial · {2} failed",
   "成败": "Pass/Fail",
   "我回来啦": "I'm back!",
   "我的记忆": "My memories",
@@ -1504,8 +1602,11 @@ const I18N_EN = {
   "换上{0}围裙！": "New {0} apron!",
   "换个项目后自动失效": "goes stale after switching project",
   "搜索项目文件": "Search project files",
+  "操作主体": "By actor",
   "操作失败：": "Operation failed: ",
   "操作审计": "Audit log",
+  "操作总数": "Total operations",
+  "操作量与结果分布": "Operations by result",
   "收藏": "Save",
   "收起": "Collapse",
   "收起一会儿": "Tuck away for a while",
@@ -1524,6 +1625,8 @@ const I18N_EN = {
   "断开": "Disconnect",
   "新发型+新勋章，好看吗✨": "New hair + new medal, like it✨",
   "无效端口号": "Invalid port number",
+  "无结论": "No verdict",
+  "日均 {0} 次": "{0} per day",
   "日志": "Logs",
   "日志里暂时没有错误行": "No error lines in the log yet",
   "早上好": "Good morning",
@@ -1534,6 +1637,7 @@ const I18N_EN = {
   "晚上好": "Good evening",
   "暂无守护动作记录": "No guard actions recorded",
   "暂无审计记录": "No audit records yet",
+  "暂无数据": "No data yet",
   "暂无经验，失败与被拒的记录累积到一定量后会自动出现": "No lessons yet — they appear once enough failures or denials accumulate",
   "暗色": "Dark",
   "更改": "Change",
@@ -1661,6 +1765,7 @@ const I18N_EN = {
   "端口": "Port",
   "端口与链信息": "Ports & chain info",
   "端口占用诊断": "Port diagnostics",
+  "策略预期行为，不算失败": "Expected policy behaviour, not a failure",
   "管理员": "Administrator",
   "类型": "Kind",
   "粘贴要导入的记忆，每行一条：": "Paste memories to import, one per line:",
@@ -1676,6 +1781,7 @@ const I18N_EN = {
   "结论": "Conclusion",
   "统一开发环境助手": "All-in-one Dev Environment Helper",
   "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
+  "缓存命中": "Cache hit",
   "缓存命中 {0}%": "cache hit {0}%",
   "缓存命中率 {0}%": "cache hit rate {0}%",
   "缩成小圆点": "Shrink to a dot",
@@ -1705,6 +1811,7 @@ const I18N_EN = {
   "节点进程": "Node process",
   "表列表读取失败：{0}": "Failed to list tables: {0}",
   "表数据": "Table data",
+  "被拦下": "Blocked",
   "让 AI 分析": "Analyze with AI",
   "让 AI 助手分析错误原因并给出解决步骤，还是直接查看日志？": "Have the AI assistant analyze the error and suggest fixes, or view the logs directly?",
   "让助手下次不再犯同样的错": "so the assistant stops repeating mistakes",
@@ -1731,17 +1838,22 @@ const I18N_EN = {
   "读取文件失败：": "Failed to read file: ",
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
+  "读取统计失败：{0}": "Failed to load stats: {0}",
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
+  "输入": "Input",
+  "输入 {0} · 输出 {1}": "in {0} · out {1}",
   "输入模型名，如 deepseek-flash": "Enter a model name, e.g. deepseek-flash",
   "输入端口号，如 3306": "Enter a port number, e.g. 3306",
+  "输出": "Output",
   "运行": "Run",
   "运行中": "Running",
   "运行中 · 已复验": "Running · verified",
   "运行中 · 未复验": "Running · not verified",
   "运行中…": "Running…",
   "运行状态": "Running status",
+  "近 30 天": "Last 30 days",
   "还原": "Restore",
   "还原数据库": "Restore database",
   "还原文件": "Restore file",
@@ -1768,6 +1880,8 @@ const I18N_EN = {
   "选择文件": "Choose file",
   "选择文件夹": "Choose folder",
   "选择此文件夹": "Use this folder",
+  "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
+  "部分完成": "Partial",
   "配置": "Configure",
   "配置已保存": "Config saved",
   "采用": "Used",
@@ -1793,6 +1907,7 @@ const I18N_EN = {
   "高": "High",
   "高危 SQL 要二次确认": "Risky SQL needs a second confirmation",
   "高级选项（目录 · 自定义启动命令）": "Advanced (directories · custom start command)",
+  "高频动作": "Top actions",
   "默认库": "default DB",
   "（上一级）": "(up one level)",
   "（无表）": "(no tables)",
@@ -2000,7 +2115,8 @@ document.addEventListener('click', ev=>{
 function goto(panel){
   document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active', x.dataset.panel===panel));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('show', p.id==='panel-'+panel));
-  if(panel==='audit') loadAudit();   // 切进来才拉，避免每次启动都读一遍文件
+  // 切进来才拉，避免每次启动都读一遍文件（v2.7：审计面板同时拉看板统计）
+  if(panel==='audit'){ loadAudit(); loadStats(); }
 }
 document.querySelectorAll('.nav').forEach(n=>n.addEventListener('click',()=>goto(n.dataset.panel)));
 document.querySelectorAll('[data-goto]').forEach(c=>c.addEventListener('click',()=>goto(c.dataset.goto)));
@@ -2670,7 +2786,245 @@ function auditBind(){
     };
   }
   const sel = $('#audit-day'); if(sel) sel.onchange = loadAudit;
-  const rf = $('#audit-refresh'); if(rf) rf.onclick = loadAudit;
+  const rf = $('#audit-refresh'); if(rf) rf.onclick = ()=>{ loadAudit(); loadStats(); };
+  const sr = $('#st-refresh'); if(sr) sr.onclick = loadStats;
+  const sd = $('#st-days'); if(sd) sd.onchange = loadStats;
+}
+
+/* ---------- v2.7 统计看板：纯 SVG，不引图表库 ----------
+ *
+ * 「单文件零依赖」是本工具的硬约束，所以不用 Chart.js 之类。
+ * 数据全部来自 /api/stats（由 stats.go 从审计与轨迹实时算）。
+ *
+ * 三条口径纪律在渲染侧同样要守：
+ *  1. **无样本显式说明**，不画成 0
+ *  2. **分母不同的指标不共用一根轴**（任务结局只覆盖 14 天，token 同理）
+ *  3. **denied 不算失败**，图例单独一档
+ */
+
+/* stFmt 千分位；大数缩写（12.3k）——轴标签用，tooltip 用完整值 */
+function stFmt(n){
+  n = Number(n)||0;
+  if(Math.abs(n) >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'')+'M';
+  if(Math.abs(n) >= 1000)    return (n/1000).toFixed(1).replace(/\.0$/,'')+'k';
+  return String(n);
+}
+function stFull(n){ return (Number(n)||0).toLocaleString('en-US'); }
+
+/* stBars 画一组竖条。
+ * data: [{label, values:{k:v}, tip}]，keys: [{k,color,name}]
+ * 用 SVG 而不是 canvas：可缩放、能加<title> 悬浮提示、样式跟随 CSS 变量。 */
+function stBars(box, days, keys, opt){
+  opt = opt || {};
+  const el = typeof box === 'string' ? $(box) : box;
+  if(!el) return;
+  if(!days || !days.length){ el.innerHTML = '<div class="hint">'+esc(t('暂无数据'))+'</div>'; return; }
+
+  const W = 100, H = 100;                 // viewBox 单位
+  // padL 要够宽容纳 Y 轴语义：这里不画数值刻度（数值在 tooltip 与 KPI 里），
+  // 但**必须留出左边距**，否则第一根柱子会贴边甚至被 viewBox 裁掉。
+  // 用 preserveAspectRatio=none 横向拉伸时，viewBox 里的百分比是相对宽度算的，
+  // padL=2 相当于实际 2% 宽——太窄。
+  const padL = opt.padL==null ? 4 : opt.padL, padR = 2, padB = 5, padT = 3;
+  const iw = W - padL - padR, ih = H - padT - padB;
+
+  // 顶部留白按最大值留 12%，避免柱子顶到边
+  let max = 0;
+  days.forEach(d => keys.forEach(k => { const v = Number(d[k.k])||0; if(v>max) max=v; }));
+  if(max <= 0){
+    el.innerHTML = '<div class="hint">'+esc(t('区间内没有可统计的数据'))+'</div>';
+    return;
+  }
+  const top = max * 1.12;
+  const n = days.length;
+  const slot = iw / n;
+  const bw = Math.max(slot * 0.62, 0.35);
+
+  let bars = '', grid = '';
+  // 横向参考线：0 / 50% / 100%
+  [0, 0.5, 1].forEach(f => {
+    const y = padT + ih * (1 - f);
+    grid += '<line x1="'+padL+'" y1="'+y.toFixed(2)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(2)+
+            '" stroke="var(--line)" stroke-width="0.3" vector-effect="non-scaling-stroke"/>';
+  });
+
+  days.forEach((d, i) => {
+    const x = padL + slot * i + (slot - bw) / 2;
+    let stackY = padT + ih;
+    keys.forEach(k => {
+      const v = Number(d[k.k])||0;
+      if(v <= 0) return;
+      const h = (v / top) * ih;
+      stackY -= h;
+      bars += '<rect x="'+x.toFixed(2)+'" y="'+stackY.toFixed(2)+'" width="'+bw.toFixed(2)+
+              '" height="'+h.toFixed(2)+'" fill="'+k.color+'" rx="0.3">'+
+              '<title>'+esc(d.date)+' · '+esc(t(k.name))+': '+stFull(v)+'</title></rect>';
+    });
+  });
+
+  // X 轴标签：只标首、中、尾，避免挤成一团
+  let xlab = '';
+  const marks = n<=3 ? days.map((_,i)=>i)
+                     : [0, Math.floor(n/2), n-1];
+  marks.forEach(i => {
+    const d = days[i]; if(!d) return;
+    const x = padL + slot * i + slot / 2;
+    xlab += '<text x="'+x.toFixed(2)+'" y="'+(H-0.6)+'" font-size="2.4" fill="var(--muted)" '+
+            'text-anchor="middle">'+esc(d.date.slice(5))+'</text>';
+  });
+
+  el.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" '+
+    'style="width:100%;height:'+(opt.height||120)+'px;display:block" role="img">'+
+    grid + bars + xlab + '</svg>';
+}
+
+/* stHBar 横向条形图（用于主体分布、高频动作——标签长，横向更好读）*/
+function stHBar(box, items, color){
+  const el = typeof box === 'string' ? $(box) : box;
+  if(!el) return;
+  if(!items || !items.length){ el.innerHTML = '<div class="hint">'+esc(t('暂无数据'))+'</div>'; return; }
+  const max = Math.max.apply(null, items.map(i=>i.v)) || 1;
+  el.innerHTML = items.map(i => {
+    const pct = (i.v / max * 100).toFixed(1);
+    return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">'+
+      '<span style="width:104px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" '+
+      'title="'+esc(i.k)+'">'+esc(i.k)+'</span>'+
+      '<span style="flex:1;background:var(--off);border-radius:4px;height:9px;overflow:hidden">'+
+      '<i style="display:block;height:100%;width:'+pct+'%;background:'+(i.color||color)+';border-radius:4px"></i></span>'+
+      '<b style="width:52px;text-align:right;flex:none;font-variant-numeric:tabular-nums">'+stFull(i.v)+'</b>'+
+      '</div>';
+  }).join('');
+}
+
+async function loadStats(){
+  const box = $('#st-kpis');
+  if(!box) return;
+  const days = ($('#st-days') && $('#st-days').value) || '30';
+  let d = null;
+  try{ d = await (await fetch('/api/stats?days='+encodeURIComponent(days))).json(); }
+  catch(e){
+    box.innerHTML = '<div class="hint">'+esc(t('读取统计失败：{0}', e))+'</div>';
+    return;
+  }
+  const t2 = d.totals || {}, ds = d.days || [];
+
+  /* ---- KPI 卡 ---- */
+  const vr = t2.verify_rate_has_sample
+    ? {v: (t2.verify_rate*100).toFixed(1)+'%', cls:'', s: t('通过 {0} / {1} 次复验', stFull(t2.verify_ok), stFull(t2.verify_count))}
+    : {v: t('无样本'), cls:'none', s: t('区间内没有带复验结论的记录')};
+  const kpis = [
+    {k:t('操作总数'), v: stFull(t2.ops), cls:'', s: t('{0} 天有记录', t2.audit_days_available)},
+    {k:t('失败'), v: stFull(t2.fail), cls: t2.fail>0?'bad':'good', s: t('占比 {0}%', t2.ops?((t2.fail/t2.ops)*100).toFixed(1):'0')},
+    {k:t('被拦下'), v: stFull(t2.denied), cls:'', s: t('策略预期行为，不算失败')},
+    {k:t('复验通过率'), v: vr.v, cls: vr.cls, s: vr.s},
+    {k:t('任务数'), v: stFull(t2.traces), cls:'', s: t('成功 {0} · 部分 {1} · 失败 {2}',
+        stFull(t2.traces_success), stFull(t2.traces_partial), stFull(t2.traces_failed))},
+    {k:t('Token 消耗'), v: t2.token_samples? stFmt(t2.token_total): t('无数据'),
+     cls: t2.token_samples?'':'none',
+     s: t2.token_samples ? t('输入 {0} · 输出 {1}', stFmt(t2.token_prompt), stFmt(t2.token_completion))
+                         : t('v2.7 起才记录')},
+    {k:t('延迟 p50'), v: t2.latency_p50? stFull(t2.latency_p50)+' ms': t('无数据'),
+     cls: t2.latency_p50?'':'none', s: t('p90 {0} ms', stFull(t2.latency_p90))},
+  ];
+  box.innerHTML = kpis.map(x =>
+    '<div class="kpi '+x.cls+'"><div class="k">'+esc(x.k)+'</div>'+
+    '<div class="v">'+esc(x.v)+'</div><div class="s">'+esc(x.s)+'</div></div>').join('');
+
+  /* ---- 口径提醒（无样本必须说出来，不能画成 0）---- */
+  const notes = $('#st-notes');
+  const ns = d.notices || [];
+  if(notes){
+    if(ns.length){
+      notes.style.display='';
+      notes.innerHTML = ns.map(x=>'<li>'+esc(x)+'</li>').join('');
+    } else notes.style.display='none';
+  }
+
+  /* ---- 操作量与结果 ---- */
+  const RKEY = [
+    {k:'ok',       color:'var(--ok)',   name:'成功'},
+    {k:'fail',     color:'var(--err)',  name:'失败'},
+    {k:'denied',   color:'var(--warn)', name:'被拦下'},
+    {k:'started',  color:'var(--info)', name:'已启动'},
+  ];
+  stBars('#st-ops-chart', ds, RKEY, {height:130});
+  const stack = $('#st-ops-stack');
+  if(stack){
+    const tot = t2.ops || 1;
+    stack.innerHTML = RKEY.map(k =>
+      '<i style="width:'+((t2[k.k]||0)/tot*100).toFixed(2)+'%;background:'+k.color+'" '+
+      'title="'+esc(t(k.name))+': '+stFull(t2[k.k]||0)+'"></i>').join('');
+    // 图例后面的数字也更新
+    document.querySelectorAll('#panel-audit .lgnv').forEach((el,i)=>{
+      el.textContent = stFull(t2[RKEY[i].k]||0);
+    });
+  }
+  const tip = $('#st-ops-tip');
+  if(tip) tip.textContent = t('日均 {0} 次', (t2.ops/Math.max(1,t2.audit_days_available)).toFixed(0));
+
+  /* ---- 任务结局（注意：轨迹只保留 14 天，覆盖比上面短）---- */
+  const TKEY = [
+    {k:'traces_success', color:'var(--ok)',   name:'成功'},
+    {k:'traces_partial', color:'var(--warn)', name:'部分完成'},
+    {k:'traces_failed',  color:'var(--err)',  name:'失败'},
+    {k:'traces_aborted', color:'var(--dotoff)',name:'无结论'},
+  ];
+  stBars('#st-trace-chart', ds, TKEY, {height:100});
+  const tl = $('#st-trace-legend');
+  if(tl) tl.innerHTML = TKEY.map(k => {
+    const tot = t2.traces || 1;
+    return '<span><i style="background:'+k.color+'"></i>'+esc(t(k.name))+' '+
+           ((t2[k.k]||0)/tot*100).toFixed(0)+'%</span>';
+  }).join('');
+  const tt = $('#st-tr-tip');
+  if(tt){
+    // 「无结论」占比高时必须说清原因，否则看起来像新出了故障。
+    // 现实是：v2.7 之前 trace 的 outcome 恒为 aborted（一个从未赋值的死变量），
+    // 所以历史数据里几乎全是「无结论」——**它反映的是当时的缺陷，不是现在**。
+    const ab = t2.traces || 1;
+    const abPct = ((t2.traces_aborted||0) / ab * 100);
+    tt.textContent = (abPct > 50)
+      ? t('仅覆盖最近 {0} 天；「无结论」多为 v2.7 前的历史数据', t2.trace_retention_days||14)
+      : t('仅覆盖最近 {0} 天（轨迹保留期）', t2.trace_retention_days||14);
+    if(abPct > 50) tt.style.color = 'var(--muted)';
+  }
+
+  /* ---- Token（只有带 usage 的轨迹才计入）---- */
+  const stDays = ds.map(x => ({date:x.date, p:x.token_prompt, c:x.token_completion}));
+  const hasTk = t2.token_samples > 0;
+  if(hasTk){
+    stBars('#st-token-chart', stDays, [
+      {k:'p', color:'var(--brand)', name:'输入'},
+      {k:'c', color:'var(--brand2)', name:'输出'},
+    ], {height:100});
+    const tkl = $('#st-token-legend');
+    if(tkl) tkl.innerHTML =
+      '<span><i style="background:var(--brand)"></i>'+esc(t('输入'))+' '+stFmt(t2.token_prompt)+'</span>'+
+      '<span><i style="background:var(--brand2)"></i>'+esc(t('输出'))+' '+stFmt(t2.token_completion)+'</span>'+
+      (t2.token_has_cache ? '<span><i style="background:var(--info)"></i>'+esc(t('缓存命中'))+' '+
+        stFmt(t2.token_cache_hit)+'（'+(t2.token_prompt?((t2.token_cache_hit/t2.token_prompt)*100).toFixed(0):0)+'%）</span>' : '');
+    const tkt = $('#st-tk-tip');
+    if(tkt) tkt.textContent = t('{0} 个轨迹有记录', t2.token_samples);
+  } else {
+    const box2 = $('#st-token-chart');
+    if(box2) box2.innerHTML = '<div class="hint">'+esc(t('暂无数据'))+'</div>';
+    const tkl = $('#st-token-legend'); if(tkl) tkl.innerHTML='';
+    const tkt = $('#st-tk-tip');
+    if(tkt) tkt.textContent = t('usage 字段是 v2.7 才加的，此前的对话没有记录');
+  }
+
+  /* ---- 主体分布 ---- */
+  const ACTOR_NAME = {user:'用户', ai:'AI', guard:'守护', system:'系统'};
+  const ac = t2.by_actor || {};
+  stHBar('#st-actor-chart',
+    Object.keys(ac).sort((a,b)=>ac[b]-ac[a])
+      .map(k=>({k: t(ACTOR_NAME[k]||k), v: ac[k], color: k==='ai'?'var(--brand)':'var(--info)'})));
+
+  /* ---- 高频动作 Top 8 ---- */
+  const acts = t2.actions || {};
+  stHBar('#st-action-chart',
+    Object.keys(acts).sort((a,b)=>acts[b]-acts[a]).slice(0,8)
+      .map(k=>({k, v: acts[k], color:'var(--muted)'})));
 }
 
 /* ---------- 启动方式推断展示（v2.1） ---------- */

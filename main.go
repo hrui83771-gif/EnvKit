@@ -144,6 +144,7 @@ func main() {
 	http.HandleFunc("/api/metrics", handleMetrics)
 	http.HandleFunc("/api/diag", handleDiag)
 	http.HandleFunc("/api/audit", handleAudit)
+	http.HandleFunc("/api/stats", handleStats) // v2.7 审计统计看板（30 天时序）
 	http.HandleFunc("/api/lessons", handleLessons)
 	http.HandleFunc("/api/launch", handleLaunch)
 	http.HandleFunc("/api/runtime/state", handleRuntimeState)
