@@ -1040,6 +1040,36 @@ def _kill_pid(pid):
         return True   # 已经没了，视为成功
 
 
+def _kill_and_wait_port(pid, port, label):
+    """杀进程并**等端口真的释放**，返回是否成功。
+
+    ## 为什么必须等
+
+    踩过：`fake_listen` 只 taskkill 不等，run2 立刻注入时报
+    「端口 45311 已被占用（WinError 10048）」——
+    进程刚被杀、socket 还在 TIME_WAIT，下一轮注入就撞上它。
+
+    报告里那两行看起来像「AI 处理得不好」，
+    而真相是**上一个注入还没收干净**。
+
+    > 装置自己的收尾不彻底，会被记成被测对象的问题。
+    > 这类错最难查—— 因为它伪装成产品缺陷。
+    """
+    ok = _kill_pid(pid)
+    if not ok:
+        return False
+    if port:
+        for _ in range(30):        # 最多 6 秒
+            if _port_free(port):
+                break
+            time.sleep(0.2)
+        else:
+            print(f'  ! 端口 {port} 6 秒后仍被占（下一轮注入会失败）')
+            return False
+    print(f'  已终止{label} pid={pid} port={port}（端口已释放）')
+    return True
+
+
 def undo():
     if not STATE.exists():
         print('没有注入记录，无需撤销')
@@ -1050,13 +1080,11 @@ def undo():
         k = it.get('kind')
         try:
             if k == 'hold_port':
-                pid = it.get('pid')
-                if _kill_pid(pid):
+                if _kill_and_wait_port(it.get('pid'), it.get('port'), '占位进程'):
                     done += 1
-                    print(f'  已终止占位进程 pid={pid} port={it.get("port")}')
                 else:
                     failed += 1
-                    print(f'  ! 无法终止 pid={pid}')
+                    print(f'  ! 无法终止 pid={it.get("pid")}')
             elif k in ('corrupt_backup', 'unreadable_backup'):
                 p = Path(it['path'])
                 if p.exists():
@@ -1098,13 +1126,11 @@ def undo():
                     print(f'  ! 无法还原 stale_log_ok：{p} 不存在或未记录原长度')
             elif k == 'fake_listen':
                 # 杀掉我们造的占位进程 + 删脚本（它是我们造的垃圾，必须清理）
-                pid = it.get('pid')
-                if pid and _kill_pid(pid):
+                if _kill_and_wait_port(it.get('pid'), it.get('port'), '假监听者'):
                     done += 1
-                    print(f'  已终止假监听者 pid={pid} port={it.get("port")}')
                 else:
                     failed += 1
-                    print(f'  ! 无法终止 pid={pid}')
+                    print(f'  ! 无法终止 pid={it.get("pid")}')
                 sp = it.get('path')
                 if sp and Path(sp).exists():
                     try:
