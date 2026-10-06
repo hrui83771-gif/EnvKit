@@ -482,7 +482,24 @@ def inject_crash_on_next(state):
     ui, svc_port = base.get('ui_port'), base.get('port')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    # 先确认服务活着且没被武装过——重复注入会让判据失真
+    # **先查标记文件，再问端点**。
+    #
+    # 端点检查只能反映「当前运行的进程」的状态；
+    # 而标记文件是**跨进程存活**的（这正是它能测崩溃循环的原因）。
+    # 于是「服务已崩 → 端点不通 → 以为没武装」是真会发生的：
+    # 实测踩过——上一轮崩了之后标记文件留着，
+    # 下一轮建沙箱时新服务一起来就崩，`[4/5]` 直接失败。
+    #
+    # 所以这里**先扫文件**：它在就说明脏了，得先清。
+    _left = _rm_marker('crash_armed.marker', '崩溃')
+    if _left:
+        raise SystemExit(
+            f'发现上一轮遗留的崩溃标记文件：{_left}\n'
+            '**已替你清掉**（否则新建的沙箱服务一起来就崩，\n'
+            '  整轮评测会在「拉起被测服务」那一步就失败）。\n'
+            '重新跑一次即可。')
+
+    # 确认服务活着且没被武装过——重复注入会让判据失真
     try:
         if get(f'http://127.0.0.1:{svc_port}/crash-armed', opener).strip() == 'true':
             raise SystemExit(
@@ -829,6 +846,16 @@ def inject_hang_service(state):
     if not svc_port:
         raise SystemExit('取不到沙箱的被测端口')
 
+    # **先扫标记文件**（理由同 crash_on_next：它跨进程存活，
+    # 端点检查反映不到「上一轮遗留」的情况）
+    _left = _rm_marker('hang_armed.marker', '卡死')
+    if _left:
+        raise SystemExit(
+            f'发现上一轮遗留的卡死标记文件：{_left}\n'
+            '**已替你清掉**（否则新建的沙箱服务所有请求都会挂住，\n'
+            '  每次探活 90 秒 —— 评测会直接卡死）。\n'
+            '重新跑一次即可。')
+
     try:
         if get(f'http://127.0.0.1:{svc_port}/hang-armed').strip() == 'true':
             raise SystemExit(
@@ -869,6 +896,55 @@ INJECTORS = {
 
 
 # ---------- 撤销 ----------
+def _rm_marker(name, label):
+    """删掉 fixture 的标记文件（crash_armed.marker / hang_armed.marker）。
+
+    ## 为什么**必须直接删文件**，而不是只调 /disarm-xxx
+
+    fixture 的开关是**标记文件**（相对工作目录），不是进程内变量 ——
+    这正是它能测出「崩溃循环」的原因（跨进程存活）。
+
+    于是`/disarm-xxx` 只改「**当前运行的进程**读文件时的行为」，
+    **文件本身还在**。而下一轮建沙箱时 `backend_dir` 指向同一个目录，
+    新服务一起来就崩。
+
+    实测踩过：整轮评测在 `[4/5] 拉起被测服务` 就失败，
+    根因是上一轮遗留的 `crash_armed.marker`。
+    **装置自己留下的脏东西，让下一轮连「开始跑」都做不到。**
+
+    ## 扫哪些目录
+
+    标记文件落在**服务的 working directory**，也就是
+    `eval/fixtures/sandbox-backend/`（`go run` 的 cwd）。
+    沙箱目录也可能有一份（预编译 exe 在那里跑），
+    所以两处都扫。
+    """
+    dirs = [ROOT / 'eval' / 'fixtures' / 'sandbox-backend']
+    try:
+        import tempfile
+        for d in Path(tempfile.gettempdir()).glob('envkit-sandbox-*'):
+            dirs.append(d)
+    except Exception:
+        pass
+    dirs.append(ROOT)          # 以仓库根为 cwd 跑过的情况
+
+    hit = []
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for p in d.glob(name):
+            try:
+                p.unlink()
+                hit.append(str(p))
+            except OSError:
+                pass
+    if hit:
+        print(f'  已删除{label}标记文件：{", ".join(hit)}')
+    else:
+        print(f'  未找到{label}标记文件（name={name}，扫了 {len(dirs)} 个目录）')
+    return hit
+
+
 def _kill_pid(pid):
     """终止一个进程，跨平台。
 
@@ -922,16 +998,17 @@ def undo():
                 # **必须撤销**（理由同 crash_on_next）：
                 # 卡死开关武装在活着的服务上，不撤销的话
                 # 后面每一次探活都会挂 90 秒 —— 评测会直接卡死。
+                #
+                # **而且必须删标记文件** —— 理由见 _rm_marker 的注释。
+                _rm_marker('hang_armed.marker', '卡死')
                 port = it.get('port')
                 try:
                     get(f'http://127.0.0.1:{port}/disarm-hang')
-                    done += 1
                     print(f'  已取消卡死武装（端口 {port}）')
                 except Exception as e:
-                    # 端口不通 = 服务已经没了，开关随进程消失
-                    done += 1
-                    print(f'  卡死开关随进程一起消失（端口 {port} 不再响应：'
-                          f'{type(e).__name__}）—— 无需撤销')
+                    print(f'  端口 {port} 不再响应（{type(e).__name__}）'
+                          f'——标记文件已直接删除')
+                done += 1
             elif k == 'stale_log_ok':
                 # **截断回原长度**——不需要重写全文，伪造内容是追加在末尾的。
                 p = Path(it['path'])
@@ -966,39 +1043,45 @@ def undo():
                     except OSError:
                         pass
             elif k == 'crash_on_next':
-                # **必须撤销**（与 kill_service 相反）。
+                # **必须撤销，而且必须删标记文件**。
                 #
-                # 崩溃开关是**武装在活着的服务上**的：不撤销的话，
-                # 沙箱服务会一直处于「下一次探活就崩」，
-                # 后面每一次注入的判据都被污染 —— 恢复率会假得很低，
-                # 而原因只是上一次忘了关开关。
+                # ## 第一版只 disarm HTTP 端点 —— 留下了一个更坏的后果
                 #
-                # 注意：**已经崩掉的服务无法取消**（它已经死了）。
-                # 所以这里只报告，不报错 —— 崩了就是崩了，
-                # 恢复路径本来就该由 AI 走。
+                # 崩溃开关是**标记文件**（`crash_armed.marker`，相对工作目录），
+                # 而不是进程内变量 —— 这正是它能测出「崩溃循环」的原因。
+                # 但于是：`/disarm-crash` 只改**运行中进程**读文件时的行为，
+                # **文件本身还在**。
+                #
+                # 实测踩过：上一轮跑完，服务已崩→ disarm 请求连不上 →
+                # 「随进程一起消失，无需撤销」→ **标记文件留在 fixture 目录里**。
+                # 下一轮建沙箱时 backend_dir 指向同一个目录，
+                # 新服务一起来就崩 —— `[4/5]拉起被测服务` 直接失败，
+                # **整轮评测一次都没跑**。
+                #
+                # **开关随进程消失 ≠ 状态被清理。** 前者只对内存状态成立。
+                _rm_marker('crash_armed.marker', '崩溃')
                 port = it.get('port')
                 try:
                     get(f'http://127.0.0.1:{port}/disarm-crash')
-                    done += 1
                     print(f'  已取消崩溃武装（端口 {port}）')
                 except Exception as e:
-                    # 端口不通 = 服务已崩 = 崩溃开关随进程一起消失了
-                    done += 1
-                    print(f'  崩溃开关随进程一起消失（端口 {port} 不再响应：'
-                          f'{type(e).__name__}）—— 无需撤销')
+                    print(f'  端口 {port} 不再响应（{type(e).__name__}）'
+                          f'——标记文件已直接删除')
+                done += 1
             elif k == 'db_down':
                 # 改回去。**不还原会让沙箱后续所有注入都报「数据库连不上」**，
                 # 而那看起来像是新故障。
+                #
+                # 字段是 `db_name`（注入时写的那个）——
+                # 还原时若写成 `mysql_db` / `db`，就还原到了一个**不存在的键**，
+                # 真正的 `db_name` 还留着注入值。
                 import json as _json
                 p = Path(it['path'])
                 old_db = it.get('old_db')
                 if p.exists() and old_db:
                     cfg = _json.loads(p.read_text(encoding='utf-8'))
                     proj = cfg.get('projects') or {}
-                    if 'mysql_db' in proj:
-                        proj['mysql_db'] = old_db
-                    if 'db' in proj:
-                        proj['db'] = old_db
+                    proj['db_name'] = old_db
                     p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
                                  encoding='utf-8')
                     done += 1
