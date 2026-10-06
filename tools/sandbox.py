@@ -153,12 +153,38 @@ def build():
         'scripts': {'dev': 'vite --host 127.0.0.1'},
     }, indent=2), encoding='utf-8')
 
+    # **被测服务复制进沙箱，不要直接用仓库里的那份。**
+    #
+    # ## 为什么（实测踩过，而且踩得很重）
+    #
+    # 原先 `backend_dir` 直接指向 `ROOT/eval/fixtures/sandbox-backend`。
+    # 而崩溃/卡死开关是**标记文件**（`crash_armed.marker`，相对工作目录）——
+    # 于是标记文件被写进了**仓库里**。
+    #
+    # 上一轮评测崩在 `[4/5] 拉起被测服务`，日志明写：
+    #     [sandbox-backend] 崩溃开关已武装（crash_armed.marker 存在）
+    # `git clean` 删掉了它，**重跑时又被上一轮的后台进程重新创建**——
+    # 沙箱拆了，**仓库里的脏东西留着**，下一轮又崩。
+    #
+    # 于是现象是「清了一次没用，清完又坏」，
+    # 而报告里这看起来像「产品起不来」。
+    #
+    # **每个沙箱有自己的服务副本，标记文件就随沙箱一起销毁** ——
+    # 拆沙箱 = 清干净，不需要额外擦。
+    backend_src = ROOT / 'eval' / 'fixtures' / 'sandbox-backend'
+    backend = box / 'backend'
+    backend.mkdir(parents=True, exist_ok=True)
+    for f in backend_src.iterdir():
+        if f.is_file() and f.suffix in ('.go', '.mod', '.sum'):
+            # **只拷源码**：exe 与 .marker 都是上一轮的产物，不能带过来
+            shutil.copy2(f, backend / f.name)
+
     # 改配置：只换「会被动手的字段」，其余原样保留。
     # **ai 段整个复制**：里面是 DPAPI 加密的密文，
     # DPAPI 绑定的是用户账户不是路径，所以换个目录仍能解密。
     cfg['projects'] = {
         'frontend_dir': str(frontend),
-        'backend_dir': str(SANDBOX_BACKEND),
+        'backend_dir': str(backend),
         'mysql_host': '',
         'mysql_port': 0,
         'mysql_user': '',
@@ -186,7 +212,10 @@ def build():
         # **不留空**是因为注入器要靠它拿 token 打 /api/runtime/state——
         # 拿错实例的 token 会打到一个完全不同的环境上。
         'ui_port': None,
-        'backend_dir': str(SANDBOX_BACKEND),
+        # 沙箱内的服务副本路径（**不是仓库里的 fixture**）。
+        # 标记文件 crash_armed.marker / hang_armed.marker 写在服务的
+        # working directory，也就是这里 —— 拆沙箱即销毁。
+        'backend_dir': str(backend),
         # 备份目录也记进状态：注入器要靠它把备份类故障写进沙箱，
         # 而不是用户仓库。缺这个字段它会退回 ROOT/'backups'，
         # 于是"沙箱隔离"只隔离了服务进程，备份注入照样污染用户目录
@@ -206,11 +235,11 @@ def build():
     # 但首次 build 可能要十几秒，会让恢复耗时的数字失真。
     build_log = subprocess.run(
         ['go', 'build', '-o', str(box / 'sandbox-backend.exe'), '.'],
-        cwd=str(SANDBOX_BACKEND), capture_output=True)
+        cwd=str(backend), capture_output=True)   # cwd 用沙箱内的副本
     prebuilt = build_log.returncode == 0
 
     print(f'沙箱已建：{box}')
-    print(f'  backend   : {SANDBOX_BACKEND}')
+    print(f'  backend   : {backend}（沙箱内副本，拆沙箱即销毁）')
     print(f'  被测端口  : {SANDBOX_PORT}（已确认空闲）')
     print(f'  预编译    : {"成功" if prebuilt else "失败（EnvKit 启动时会自己 build）"}')
     if not prebuilt:
