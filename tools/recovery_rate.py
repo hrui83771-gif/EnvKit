@@ -695,20 +695,36 @@ def clear_marker_files():
 
     走 `--undo` 也行，但它会连带做别的清理；
     这里只需要「把开关关掉」这一件事，**职责单一更好推理**。
+
+    ## 用 pathlib 而不是 os.path
+
+    第一版写 `os.path.join` + `os.remove`，而 `os` **在本模块没导入**
+    → 复位时抛 NameError，**把整轮评测带崩**
+    （实测：fake_listen run2 就死在这儿）。
+
+    > 拿不准某个模块在不在，先 grep 一下 import 区。
+    > 凭记忆写 import 是这类崩的常见来源。
     """
-    import glob
     import tempfile
-    names = []
-    # 沙箱内的服务副本 + 仓库里的 fixture（老沙箱可能还在用后者）
-    patterns = [
-        os.path.join(tempfile.gettempdir(), 'envkit-sandbox-*', '*_armed.marker'),
-        str(ROOT / 'eval' / 'fixtures' / 'sandbox-backend' / '*_armed.marker'),
+    tmp = Path(tempfile.gettempdir())
+    dirs = [
+        # v2.7 布局：服务副本在 envkit-sandbox-*/backend/
+        tmp / 'envkit-sandbox-*' / 'backend',
+        # 更早的布局：标记直接在沙箱根目录
+        tmp / 'envkit-sandbox-*',
+        # 仓库里的 fixture（沙箱没起时的直接注入）
+        ROOT / 'eval' / 'fixtures' / 'sandbox-backend',
     ]
-    for pat in patterns:
-        for f in glob.glob(pat):
+    names = []
+    for d in dirs:
+        try:
+            hits = list(d.glob('*_armed.marker'))
+        except OSError:
+            continue
+        for p in hits:
             try:
-                os.remove(f)
-                names.append(os.path.basename(f))
+                p.unlink()
+                names.append(p.name)
             except OSError:
                 pass
     return names
