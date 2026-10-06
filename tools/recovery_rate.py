@@ -675,8 +675,51 @@ def apply_injection(kind):
 
 
 def clear_injections():
-    subprocess.run([sys.executable, str(ROOT / 'tools' / 'fault_inject.py'), '--undo'],
-                   capture_output=True)
+    """撤销所有注入，返回**没能清掉的东西**列表（空 = 清干净了）。
+
+    ## 为什么改成返回残留
+
+    原来返回 None，调用方（`recovery_sandbox`）也从不看结果——
+    于是「撤销其实没成功」这件事**完全不可见**。
+
+    实测踩过：`fake_listen` 的 run1 之后报
+    「端口 45311 已被占用（WinError 10048）」，
+    而 run1 的 AI **一次写操作都没调**——
+    端口上只可能是我们造的僵尸进程。
+    根因是 `--undo` 子进程**被中途打断**（安全层拦了删临时文件那一步），
+    `fault-inject-state.json` 留着，
+    下一轮注入读到旧记录，而端口又被占着。
+
+    > **清理动作失败必须能被发现。**
+    > 一个不报错的清理函数等于没有清理函数。
+    """
+    r = subprocess.run(
+        [sys.executable, str(ROOT / 'tools' / 'fault_inject.py'), '--undo'],
+        capture_output=True)
+    left = []
+    sp = ROOT / 'fault-inject-state.json'
+    if sp.exists():
+        # 状态文件还在 = 撤销没走完。读出来看看残留了什么。
+        try:
+            st = json.loads(sp.read_text(encoding='utf-8'))
+            items = st.get('items', [])
+            left = [it.get('kind') for it in items]
+            # **顺手把残留的占位进程杀掉**。
+            #
+            # 实测踩过：`--undo` 子进程被中途打断（安全层拦了删临时文件那步），
+            # 于是僵尸监听者还活着、端口还被占着，
+            # 下一轮注入报「端口已被占用」——
+            # **看起来像装置故障，实际是上一个注入没收干净**。
+            #
+            # 这里直接杀：state 里记的 pid 是**我们自己造的进程**
+            # （占位进程 / 假监听者），不是用户的东西。
+            for it in items:
+                if it.get('kind') in ('hold_port', 'fake_listen') and it.get('pid'):
+                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(it['pid'])],
+                                   capture_output=True)
+        except Exception:
+            left = ['(state 文件损坏)']
+    return left
 
 
 def clear_marker_files():

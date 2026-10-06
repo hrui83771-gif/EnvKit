@@ -419,7 +419,14 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                     inj, r + 1, f'采集失败：{str(e)[:300]}'))
                 continue
             finally:
-                rr.clear_injections()
+                # **撤销没清干净要说出来**。
+                # 静默返回 None 的话，「上一个注入还占着端口」这件事
+                # 会在下一轮变成「注入失败」——
+                # 而报告里那两行看起来像被测对象的问题。
+                _left = rr.clear_injections()
+                if _left:
+                    print(f'    ⚠撤销有残留：{_left}'
+                          f'（下一轮注入可能撞上上一轮的东西）')
 
             # 恢复类故障要等一会儿：AI 调 start_service 后服务要时间起来。
             # 这里不能用 rr.objective_health 的判据——它假设沙箱里有
