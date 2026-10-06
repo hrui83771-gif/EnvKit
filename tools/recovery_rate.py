@@ -679,6 +679,41 @@ def clear_injections():
                    capture_output=True)
 
 
+def clear_marker_files():
+    """清掉崩溃/卡死开关的标记文件，返回清掉的文件名列表。
+
+    ## 为什么需要它
+
+    「复位」的前提是「回到干净状态」——
+    **不复位就复位，只是让服务再崩一次。**
+
+    实测踩过：crash_on_next run1 把服务搞崩之后，
+    run2/run3 都报「复位失败：crash_after_start」，
+    而真正的原因是**崩溃开关还武装着**：
+    复位拉起来的新进程一起来就崩，于是「复位失败」，
+    于是 2/3 的样本消失。
+
+    走 `--undo` 也行，但它会连带做别的清理；
+    这里只需要「把开关关掉」这一件事，**职责单一更好推理**。
+    """
+    import glob
+    import tempfile
+    names = []
+    # 沙箱内的服务副本 + 仓库里的 fixture（老沙箱可能还在用后者）
+    patterns = [
+        os.path.join(tempfile.gettempdir(), 'envkit-sandbox-*', '*_armed.marker'),
+        str(ROOT / 'eval' / 'fixtures' / 'sandbox-backend' / '*_armed.marker'),
+    ]
+    for pat in patterns:
+        for f in glob.glob(pat):
+            try:
+                os.remove(f)
+                names.append(os.path.basename(f))
+            except OSError:
+                pass
+    return names
+
+
 # ---------- 六维判分 ----------
 def judge(inj, text, events, trace_info, health_after, health_fn=None):
     """判一次注入，返回六维各自的明细。

@@ -371,6 +371,19 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
             # 与 expect_autonomous 无关，只看「服务在不在」。
             if not sb.port_busy(sb.SANDBOX_PORT):
                 print('  （上一轮之后服务未恢复，先复位再注这一轮）')
+                # **复位之前必须先清标记文件**，否则复位起来的服务
+                # 一起来就崩 —— 于是「复位失败」，run2/run3 连着ERROR。
+                #
+                # 实测踩过：crash_on_next run1 把服务搞崩后，
+                # run2/run3 都报「复位失败：crash_after_start」——
+                # 而真正的原因是**崩溃开关还武装着**，
+                # 拉起来的新服务只是又崩一次。
+                #
+                # 「复位」的前提是「回到干净状态」，
+                # 不清开关那不叫复位，叫「再崩一次」。
+                _cleared = rr.clear_marker_files()
+                if _cleared:
+                    print(f'    已清除残留开关标记：{_cleared}')
                 ok2, d2 = sandbox_start_backend(ui, tok)
                 if ok2:
                     wait_backend_listening(ui, tok, sb.SANDBOX_PORT, timeout=60)
