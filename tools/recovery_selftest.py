@@ -18,6 +18,7 @@
 判据被改过一次，就有再被改坏的可能。这个自检把每条判据的
 「应该判过」与「不该判过」两侧都固定下来。
 """
+import re
 import sys
 from pathlib import Path
 
@@ -261,6 +262,72 @@ er = rr.error_row(BAD, 1, '注入失败')
 for k, _en, _cn, _q, _hb in rr.DIMS:
     check(er['verdicts'].get(k, {}).get('status') == 'ERROR',
           f'error_row 的 {k} 维度标 ERROR（采集失败≠产品缺陷）')
+
+# ===== v2.7 新增：注入表自身的元数据一致性 =====
+#
+# ## 为什么必须加这段
+#
+# 前面所有断言都在**手写的假数据**上跑，**从不读 `rr.INJECTIONS`**。
+# 后果是：注入定义写错了没有任何东西会红。已确认过一次真实风险——
+# 第一版把 db_down 的 `expect_autonomous` 写反过一次，
+# 若没有这道检查，可自主恢复的分母会静默地少一个。
+#
+# 这类「元数据检查」是评测装置的护栏：
+# **装置本身错了，报告看起来照样正常。**
+print('\n=== v2.7：注入表元数据一致性 ===')
+
+# 1. 每条注入的 kind 必须在注入器里真有实现
+_fi = __import__('fault_inject')
+for inj in rr.INJECTIONS:
+    k = inj['kind']
+    check(k in _fi.INJECTORS,
+          f'注入 {k} 在 fault_inject.INJECTORS 里有实现',
+          f'INJECTORS 只有 {sorted(_fi.INJECTORS)}')
+
+# 2. class 与 expect_autonomous 必须一致
+#    **这两者不一致的后果很隐蔽**：class 决定分母隔离，
+#    而 autonomous 与否决定 AI 该不该动手。搞反了会得出
+#    「它老老实实没动手」这种看似漂亮、实则测错东西的结论。
+for inj in rr.INJECTIONS:
+    k, cls, ea = inj['kind'], inj.get('class'), inj.get('expect_autonomous')
+    want = 'autonomous' if ea else 'safe_only'
+    check(cls == want,
+          f'注入 {k} 的 class 与 expect_autonomous 一致',
+          f'class={cls} expect_autonomous={ea}（应为 {want}）')
+
+# 3. forbidden_actions 里的名字必须是真实存在的 AI 工具
+#    （hold_port 的外部命令名除外——那条判据查的是回答文本，不是工具序列）
+_tools = set(re.findall(r'^\t"([a-z_]+)": \{$',
+                        (ROOT / 'ai_tools.go').read_text(encoding='utf-8'), re.M))
+_EXT = {'kill', 'taskkill', 'net stop', 'delete_process'}
+for inj in rr.INJECTIONS:
+    bad = [a for a in inj.get('forbidden_actions', [])
+           if a not in _tools and a not in _EXT]
+    check(not bad,
+          f"注入 {inj['kind']} 的 forbidden_actions 都是真实 AI 工具",
+          f'不存在的名字 {bad} —— 判据永不命中，等于没约束')
+
+# 4. 可自主恢复类必须为空禁列
+#    有禁列就自相矛盾：既期待它动手，又不许它动手。
+for inj in rr.INJECTIONS:
+    if inj.get('expect_autonomous'):
+        check(not inj.get('forbidden_actions'),
+              f"注入 {inj['kind']} 可自主恢复却带了 forbidden_actions（自相矛盾）",
+              f"{inj.get('forbidden_actions')}")
+
+# 5. ask 不能为空 —— 空问句会让模型无事可做，
+#    然后「它没动手」会被记成 NOT_TRIGGERED（看起来像模型谨慎，实则题是空的）
+for inj in rr.INJECTIONS:
+    check(bool((inj.get('ask') or '').strip()),
+          f"注入 {inj['kind']} 有 ask 问句")
+
+# 6. 可自主恢复类至少两类 ——
+#    **只有一类时，「自主恢复率」只被一种故障形态检验过**，
+#    那个分母撑不起结论（v2.5 就是这个状态）
+_auto = [i for i in rr.INJECTIONS if i.get('expect_autonomous')]
+check(len(_auto) >= 2,
+      '可自主恢复类注入至少 2 类（分母不能只由一种故障形态构成）',
+      f'当前 {len(_auto)} 类：{[i["kind"] for i in _auto]}')
 
 print()
 if FAILS:
