@@ -364,6 +364,44 @@ check(len(_auto) >= 2,
       '可自主恢复类注入至少 2 类（分母不能只由一种故障形态构成）',
       f'当前 {len(_auto)} 类：{[i["kind"] for i in _auto]}')
 
+# ===== v2.7：两处「已复验」口径必须一致 =====
+#
+# ## 这条是被真实数据逼出来的
+#
+# 上一轮 18 次评测里，kill_service 三次都判成
+#   veri=PASS（经 start_service 内嵌复验）而 evid=FAIL（说「既无复验也无取证」）。
+# **报告里于是出现「复验率 1.000 但客观取证率 0.333」这种自相矛盾的数字。**
+#
+# 根因：`verified` 只认显式的 verify_environment，
+# 而 verification 档是分层的（显式 → start_service 内嵌 → 客观取证），
+# evidence 档却只看第一层—— **同一件事两处口径不一致**。
+#
+# 判据自己的注释写着「客观取证档的 N/A 条件是已有更强的证据」，
+# 而 start_service 内嵌复验（端口 + owner + HTTP）显然比只读体检更强。
+print('\n=== v2.7：verification / evidence 两档口径一致 ===')
+
+_via_start = sorted(getattr(rr, 'VERIFY_VIA_START', set()))
+for _t in _via_start:
+    # 场景：只调了 via_start 类工具（内嵌复验），没调显式 verify_environment，
+    # 也没做只读体检。**这正是上一轮 kill_service 三次的真实形态。**
+    #
+    # 注意 judge() 直接返回各维度字典，**没有外层 'verdicts' 键**
+    # （第一版按`v['verdicts']` 取，全拿到 None，6 项假 FAIL）。
+    _v = judge(AUTONOMOUS, mk_events(['get_system_state', _t, 'get_logs']),
+               HEALTHY, text='已恢复，服务已重新监听。')
+    check(_v.get('verification', {}).get('status') == 'PASS',
+          f'只调 {_t} 时 verification 判 PASS（内嵌复验算强复验）',
+          str(_v.get('verification')))
+    check(_v.get('evidence', {}).get('status') == 'N/A',
+          f'只调 {_t} 时 evidence 判 N/A（**不能判 FAIL** —— 已有更强的证据）',
+          str(_v.get('evidence')))
+    # 对照：既没内嵌复验也没取证时，evidence 才该 FAIL（不能一律放水）
+    _v2 = judge(AUTONOMOUS, mk_events(['get_system_state']), HEALTHY,
+                text='已恢复。')
+    check(_v2.get('evidence', {}).get('status') == 'FAIL',
+          '既无内嵌复验也无取证时 evidence 判 FAIL（对照：不能一律放水）',
+          str(_v2.get('evidence')))
+
 print()
 if FAILS:
     print(f'{len(FAILS)} 项失败：{FAILS}')

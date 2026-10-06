@@ -870,6 +870,24 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None):
                            f'它只能靠自己推断，没有拿环境事实',
                 }
 
+    # ---- 强复验（两处口径必须一致）----
+    #
+    # ## 为什么抽出这个变量
+    #
+    # 第一版 evidence 档只看 `verified`（= 显式调了 verify_environment），
+    # 而 verification 档是**分层**的：显式复验 → start_service 内嵌复验 → 客观取证。
+    # 于是 `start_service` 内嵌复验的场景下——
+    #   verification 判**PASS**（第846 行认via_start）
+    #   evidence判**FAIL**（第 881 行 `verified` 为空）
+    #
+    # **同一件事，两处口径不一致。** 报告里于是出现
+    # 「复验率 1.000 但客观取证率 0.333」这种自相矛盾的数字，
+    # 而它看起来只是"两个指标各管一档"，不像是 bug。
+    #
+    # 真正的判据是：**证据档的 N/A 条件是"已有更强的证据"**，
+    # 而 start_service 内嵌复验（端口 + owner + HTTP）显然比只读体检更强。
+    strong = verified + [t for t in tools if t in VERIFY_VIA_START]
+
     # ---- 附档：Objective Evidence（客观取证率）----
     #
     # **它回答的是另一个问题**：AI 有没有主动去读客观事实，
@@ -878,10 +896,12 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None):
     # 这边只看"拿没拿到可用于验证结论的客观证据"。
     ev_tools = [t for t in tools if t in VERIFY_EVIDENCE_TOOLS]
     out['evidence'] = {
-        'status': 'PASS' if ev_tools else ('N/A' if verified else 'FAIL'),
+        # `strong` 而不是 `verified` —— 见上面那段注释
+        'status': 'PASS' if ev_tools else ('N/A' if strong else 'FAIL'),
         'passed': bool(ev_tools),
         'why': (f'客观取证={ev_tools}' if ev_tools else
-                ('已有专项复验，本档不适用（复验的证据强度更高）' if verified
+                ('已有专项复验（%s），本档不适用（复验的证据强度更高）'
+                 % strong if strong
                  else f'既无复验也无取证（tools={tools}）')),
     }
 
