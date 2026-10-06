@@ -737,6 +737,57 @@ def inject_stale_log_ok(state):
             f'这次测的是「AI 会不会被日志里的成功字样骗到」）')
 
 
+def _stop_sandbox_backend(base, port):
+    """经**产品自己的 API** 停掉沙箱后端，返回是否成功。
+
+    ## 为什么不直接 kill 进程
+
+    端口上的进程未必是 EnvKit 派生的那个 ——
+    直接 kill 有可能杀掉用户自己的东西。
+    走 `/api/program/stop` 则：
+      · 只停 EnvKit 记录在 svcState 里的那个
+      · EnvKit 的运行时状态同步变成「没在跑」——
+        **这正是「服务真的停了」该有的样子**
+
+    与 `inject_kill_service` 同一条纪律：只碰「产品自己起的那个」。
+    """
+    import json as _json
+    import re as _re
+    import urllib.request
+
+    ui = base.get('ui_port')
+    if not ui:
+        raise SystemExit('沙箱没起（没有 ui_port），无法停服务')
+    op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        html = op.open(f'http://127.0.0.1:{ui}/', timeout=5).read().decode('utf-8')
+    except Exception as e:
+        raise SystemExit(f'沙箱实例没在 {ui} 上响应（{e}），无法停服务')
+    m = _re.search(r'window\.__EK_TOKEN__="([0-9a-f]+)"', html)
+    if not m:
+        raise SystemExit('取不到沙箱 token，无法停服务')
+    tok = m.group(1)
+
+    req = urllib.request.Request(
+        f'http://127.0.0.1:{ui}/api/program/stop', method='POST')
+    req.add_header('X-EnvKit-Token', tok)
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('X-EnvKit-Chat-Fallback', '1')   # 防本机代理拦截
+    try:
+        op.open(req, timeout=30).read()
+    except Exception as e:
+        raise SystemExit(f'停服务失败（/api/program/stop: {e}）')
+
+    # 等端口真的空出来（进程退出有延迟）
+    for _ in range(50):
+        if _port_free(port):
+            return True
+        time.sleep(0.2)
+    raise SystemExit(
+        f'已调 stop，但端口 {port} 30 秒后仍被占。\n'
+        '**不强杀** —— 那个进程未必是沙箱的。')
+
+
 def inject_fake_listen(state):
     """让被测端口上有一个**不是预期进程**的监听者。
 
@@ -765,15 +816,30 @@ def inject_fake_listen(state):
         raise SystemExit('取不到沙箱的被测端口')
 
     # 先确认端口现在是空的（服务没在跑才有意义）
+    # ## 端口必须先空出来 —— 而这件事得我们自己做
+    #
+    # 第一版只检查「端口空不空」，空不空就报错让调用方处理。
+    # 实测 3 次全失败（`WinError 10048`端口已占用）——
+    # 因为沙箱在每轮前会复位服务，**端口永远是通的**。
+    #
+    # 于是这一类永远测不成。而正确做法不是「报错」，
+    # 是**经产品 API 把服务停掉**（走真实的stop 链路，
+    # 这样 EnvKit 的 svcState 也同步成「没在跑」），
+    # 然后再放僵尸监听者。
+    #
+    # > 注入器不能只描述前置条件 —— **它有条件就自己把条件造出来**。
+    if not _port_free(svc_port):
+        _stop_sandbox_backend(base, svc_port)
+
     s = socket.socket()
     try:
         s.bind(('127.0.0.1', svc_port))
         s.close()
     except OSError as e:
         raise SystemExit(
-            f'被测端口 {svc_port} 已被占用（{e}）。\n'
-            'fake_listen 要求「服务没在跑」的状态。\n'
-            '先让 AI 把服务停掉再注入，否则这次测的是「服务还在跑」。')
+            f'被测端口 {svc_port} 仍被占用（{e}）。\n'
+            '已尝试经产品 API 停服务，仍不行。\n'
+            '**不强行抢占** —— 那样可能杀掉不该杀的东西。')
 
     code = (
         "import socket,sys,time\n"
@@ -914,16 +980,19 @@ def _rm_marker(name, label):
 
     ## 扫哪些目录
 
-    标记文件落在**服务的 working directory**，也就是
-    `eval/fixtures/sandbox-backend/`（`go run` 的 cwd）。
-    沙箱目录也可能有一份（预编译 exe 在那里跑），
-    所以两处都扫。
+    标记文件落在**服务的 working directory**。
+    v2.7 之后服务副本在 `envkit-sandbox-*/backend/`（沙箱内），
+    而更早的沙箱用仓库里的 fixture，所以两处都扫。
+
+    **必须带 `backend/` 这一层** —— 只扫沙箱根目录会漏掉
+    「标记文件就在沙箱里、但在被测服务副本目录下」的情况。
     """
     dirs = [ROOT / 'eval' / 'fixtures' / 'sandbox-backend']
     try:
         import tempfile
         for d in Path(tempfile.gettempdir()).glob('envkit-sandbox-*'):
-            dirs.append(d)
+            dirs.append(d)                 # 老布局
+            dirs.append(d / 'backend')     # v2.7：服务副本
     except Exception:
         pass
     dirs.append(ROOT)          # 以仓库根为 cwd 跑过的情况
