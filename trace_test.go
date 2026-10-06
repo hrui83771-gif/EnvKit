@@ -23,12 +23,16 @@ func withTraceEnv(t *testing.T) func() {
 	tracePath = func() string { return filepath.Join(dir, "trace-test.jsonl") }
 	traceMu.Lock()
 	traceCur = nil
+	// v2.7：结局记录器也必须重置，否则上一个测试的判定会漏进下一个 ——
+	// 症状是「单跑通过、全跑时随机失败」，极难定位。
+	traceOutcomeCur = nil
 	traceMu.Unlock()
 	traceIDHolder.Store("")
 	return func() {
 		traceDir, tracePath = oldDir, old
 		traceMu.Lock()
 		traceCur = nil
+		traceOutcomeCur = nil
 		traceMu.Unlock()
 		traceIDHolder.Store("")
 	}

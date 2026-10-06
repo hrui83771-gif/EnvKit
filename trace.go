@@ -94,6 +94,112 @@ type Trace struct {
 	Outcome  string      `json:"outcome,omitempty"` // success | failed | aborted | partial
 	Verified bool        `json:"verified"`          // 是否有复验结论
 	Steps    []TraceStep `json:"steps"`
+
+	// Token 用量（v2.7 新增）。**此前磁盘上完全没有 token 数据** ——
+	// aiUsage 统计好后只走 SSE 发给前端就丢弃，导致「过去 30 天 token 消耗」
+	// 这类看板指标无源可算。这里落盘后才可统计。
+	//
+	// 用指针而非零值：没跑过的回合与跑了但上游没报 usage 要能区分开，
+	// 前者是「无数据」，后者是「上游不支持 usage 字段」。
+	Usage *TraceUsage `json:"usage,omitempty"`
+}
+
+// TraceUsage 一次 AI 回合的 token 用量。跨多轮工具调用累加。
+type TraceUsage struct {
+	Prompt     int64 `json:"prompt_tokens"`
+	Completion int64 `json:"completion_tokens"`
+	// Hit/Miss 是缓存细分，DeepSeek 专有；自定义服务商通常只有总量。
+	// HasCache=false 时这两个数无意义，看板必须分开显示而不是当 0。
+	Hit      int64 `json:"cache_hit,omitempty"`
+	Miss     int64 `json:"cache_miss,omitempty"`
+	HasCache bool  `json:"has_cache"`
+	Turns    int   `json:"turns,omitempty"` // 上游往返次数
+}
+
+// ===== outcome 判定 =====
+
+// 轨迹结局取值。
+const (
+	outSuccess = "success"
+	outFailed  = "failed"
+	outAborted = "aborted"
+	outPartial = "partial"
+)
+
+// traceOutcomeBox 让 AI 回合能把结局写回给 handleAIChat 的 defer。
+//
+// ## 为什么需要它
+//
+// `handleAIChat` 用 `defer endTrace(traceOutcome)` 收尾，而 `traceOutcome`
+// 在那里声明后**从未被赋值**——实测 305 条 trace 的 outcome 100% 是 `aborted`，
+// success / failed 只在测试代码里出现过。
+// 后果不是「字段不好看」，而是**任何依赖 outcome 的统计都恒等于同一个值**：
+// 恢复数字、成功��、失败率全部算不出来。
+//
+// 之所以一直没被发现：所有结局常量在测试里都被正确传入了，
+// **单测全绿，但生产路径一个都没走到**。
+type traceOutcomeBox struct {
+	mu      sync.Mutex
+	outcome string
+	tokens  int // 记了几次 usage 事件，用于统计上游往返
+	used    aiUsage
+	hasUse  bool
+}
+
+func (b *traceOutcomeBox) set(o string) {
+	b.mu.Lock()
+	if b.outcome == outAborted || b.outcome == "" {
+		// aborted 是默认值，只有「还没被明确判过」时才允许被覆盖。
+		// 不这样做的话：先判 failed 又判 success 的路径会被最后一个静默改写。
+		b.outcome = o
+	}
+	b.mu.Unlock()
+}
+
+func (b *traceOutcomeBox) get() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.outcome == "" {
+		return outAborted
+	}
+	return b.outcome
+}
+
+func (b *traceOutcomeBox) addUsage(u *aiUsage) {
+	if u == nil || (u.Prompt == 0 && u.Completion == 0) {
+		return
+	}
+	b.mu.Lock()
+	b.used.Prompt += u.Prompt
+	b.used.Completion += u.Completion
+	b.used.Hit += u.Hit
+	b.used.Miss += u.Miss
+	if u.HasCache {
+		b.used.HasCache = true
+	}
+	b.tokens++
+	b.hasUse = true
+	b.mu.Unlock()
+}
+
+func (b *traceOutcomeBox) usage() *TraceUsage {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.hasUse {
+		return nil
+	}
+	return &TraceUsage{
+		Prompt: b.used.Prompt, Completion: b.used.Completion,
+		Hit: b.used.Hit, Miss: b.used.Miss,
+		HasCache: b.used.HasCache, Turns: b.tokens,
+	}
+}
+
+// currentOutcomeBox 返回本回合的结局记录器；无任务时 nil。
+func currentOutcomeBox() *traceOutcomeBox {
+	traceMu.Lock()
+	defer traceMu.Unlock()
+	return traceOutcomeCur
 }
 
 // traceMaxSteps 单条轨迹的步数上限。超过后只记数不记内容——
@@ -109,6 +215,9 @@ var (
 	traceMu   sync.Mutex
 	traceCur  *Trace
 	traceFile *os.File
+	// traceOutcomeCur 本回合的结局记录器。v2.7 新增 ——
+	// 此前 handleAIChat 里的 traceOutcome 是死变量，结局恒为 aborted。
+	traceOutcomeCur *traceOutcomeBox
 )
 
 // beginTrace 开启一条任务轨迹，并把它设为当前任务。
@@ -124,22 +233,36 @@ func beginTrace(goal, actor string) string {
 	}
 	traceMu.Lock()
 	traceCur = tr
+	traceOutcomeCur = &traceOutcomeBox{}
 	traceMu.Unlock()
 	traceIDHolder.Store(id)
 	return id
 }
 
 // endTrace 收尾并落盘。outcome 取值见 Trace.Outcome。
+//
+// v2.7：outcome 会被**本回合实际发生的结局**覆盖（见 traceOutcomeBox.set），
+// 兜底仍是 aborted —— 「没结论」与「判定为中断」是两件事，不能混。
+// 同时把 token 用量挂到轨迹上。
 func endTrace(outcome string) {
 	traceMu.Lock()
 	tr := traceCur
 	traceCur = nil
+	box := traceOutcomeCur
+	traceOutcomeCur = nil
 	traceMu.Unlock()
 	if tr == nil {
 		return
 	}
 	traceIDHolder.Store("")
 	tr.Ended = time.Now().Format("2006-01-02 15:04:05.000")
+	// 本回合有明确判定就用它，否则用调用方给的（兜底 aborted）
+	if box != nil {
+		if got := box.get(); got != outAborted {
+			outcome = got
+		}
+		tr.Usage = box.usage()
+	}
 	tr.Outcome = outcome
 	for _, s := range tr.Steps {
 		if s.Phase == phVerify {

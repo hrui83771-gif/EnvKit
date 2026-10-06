@@ -46,10 +46,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// v2.2 M9：一次 AI 对话 = 一条任务轨迹。此后本次会话内的所有审计记录
 	// 自动带上 trace_id，"AI 是不是在瞎试"才成为可统计的问题。
-	// 收尾统一挂在 handleAIChat 上，outcome 由 aiRunLoop 内部按情况写。
+	//
+	// v2.7 修正：原先这里是 `traceOutcome := "aborted"` 且**从未被赋值**——
+	// 结局由 aiRunLoop 通过 traceSetOutcome 写进 traceOutcomeBox，
+	// endTrace 收尾时优先取 box 里的判定，这里的 outcome 只作兜底。
+	// 实测该死变量导致 305 条轨迹 outcome 100% 是 aborted，
+	// 任何依赖结局的统计（成功率/恢复率/失败率）恒等于同一个值。
 	traceID := beginTrace(aiLastUserText(msgs), actAI)
-	traceOutcome := "aborted"
-	defer func() { endTrace(traceOutcome) }()
+	defer endTrace(outAborted)
 	_ = traceID
 
 	// 实测：某些本机代理/预览容器会剥掉 POST body（服务端表现为 decode 出 0 条消息，
@@ -299,6 +303,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 	gov := newBudgetGovernor(budget)
 	plan := &planTrack{}
 	rp := newReplan()
+	// v2.7：本回合是否出现过工具失败。结局判定要用它——
+	// 「答完了」与「做成了」不是一回事，中间差的就是这个。
+	hasToolFailure := false
 	sseWrite(w, fl, map[string]any{"type": "plan_start",
 		"max_turns": gov.max, "reason": gov.base.Reason})
 	for turn := 0; turn < gov.max; turn++ {
@@ -357,6 +364,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				continue
 			}
 			sseWrite(w, fl, map[string]any{"type": "error", "text": "AI 服务连接失败：" + err.Error()})
+			traceSetOutcome(outFailed) // v2.7
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -389,6 +397,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				}
 			}
 			sseWrite(w, fl, map[string]any{"type": "error", "text": fmt.Sprintf("AI 服务返回 HTTP %d：%s", resp.StatusCode, msg)})
+			traceSetOutcome(outFailed) // v2.7
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -573,6 +582,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		}
 		if upErr != "" {
 			sseWrite(w, fl, map[string]any{"type": "error", "text": "AI 服务返回错误：" + upErr})
+			traceSetOutcome(outFailed) // v2.7：上游报错就是没做成，不能留在 aborted 兜底里
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -637,6 +647,17 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			if s := planSummary(plan, "已得出结论"); s != "" {
 				sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
 			}
+			// v2.7：给轨迹一个真实结局。
+			//
+			// 此前 handleAIChat 的 traceOutcome 声明后从未被赋值，
+			// 导致 305 条轨迹 outcome 100% 是 aborted，**任何依赖结局的统计恒等于同一个值**。
+			// 判据（按可靠性排序）：
+			//   · 有工具失败但仍答完 → partial（结论有，但过程不干净）
+			//   · 有工具失败且答不出内容 → failed
+			//   · 正常答完 → success
+			// **不能只看"模型有没有输出文字"** —— 那等于把「说了话」当「做成了」，
+			// 与本项目反复反对的「执行即成功」是同一个错误。
+			traceSetOutcome(aiTurnOutcome(hasToolFailure, contentB.Len(), holdMenu))
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -755,6 +776,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				traceToolStep(a.Name, args, res, exErr, toolDur)
 				if exErr != nil {
 					rp.markFail(a.Name, tgt)
+					hasToolFailure = true
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": firstLines(toolMsg.Content, 300)})
@@ -798,5 +820,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
 	}
 	sseWrite(w, fl, map[string]any{"type": "delta", "text": "\n" + notice + "\n"})
+	// v2.7：预算耗尽是**没有达成**，不是成功。
+	// 内容可能已经给了一部分，但那属于 partial —— 有产出、没做完。
+	traceSetOutcome(outPartial)
 	sseDoneUsage(w, fl, &usage)
 }
