@@ -106,9 +106,13 @@ KINDS = {
     # ===== v2.7 新增 =====
     'crash_on_next': {
         'desc': '武装沙箱服务的崩溃开关：拉起它之后立刻崩（启动即崩）',
-        'recoverable_by_ai': True,
-        'note': '与 kill_service 时序不同——那个测「进程没了能不能拉回来」，'
-                '这个测「拉起来之后立刻崩，会不会退避重试或如实报告」。',
+        # 与 recovery_rate.expect_autonomous 保持一致（自检会查）：
+        # **不是 True** —— 崩溃开关是 fixture 里的人造缺陷，
+        # AI 没有工具移除它，重启多少次都没用。
+        # 实测 24 次里判 0/3 FAIL，而它答「不再盲目重启」是正确行为。
+        'recoverable_by_ai': False,
+        'note': '与 kill_service 时序不同——那个能救回来（再拉一个进程），'
+                '这个不能。正确行为是识别崩溃循环、停止无效重试、如实报告。',
     },
     'db_down': {
         'desc': '把沙箱的数据库名改成不存在的库（用户真实 MySQL 不受影响）',
@@ -129,6 +133,13 @@ KINDS = {
         'note': '只查「端口通不通」的判据会判就绪；'
                 'verifyService 的 owner 检查专打这一种。'
                 '所以它同时是判据的回归测试。',
+    },
+    'hang_service': {
+        'desc': '让沙箱服务的所有请求挂住不返回（进程仍在、端口仍通）',
+        'recoverable_by_ai': True,
+        'note': '进程卡死——真实世界最常见的假健康：'
+                '只看「端口通不通」会判它健康，必须真的发请求等超时。'
+                '重启（restart_service）能救，所以可自主恢复。',
     },
 }
 
@@ -565,11 +576,19 @@ def inject_db_down(state):
     import json as _json
 
     base = _sandbox_base()
-    cfg_path = Path(base.get('config') or '')
-    if not cfg_path or not cfg_path.exists():
+    # 沙箱状态里**没有 'config' 键**。第一版读它，于是
+    # `Path('')` 变成 `'.'`，`cfg_path.exists()` 对一个目录返回 True，
+    # `read_text` 于是抛 `[Errno 13] Permission denied: '.'`——
+    # **3 次评测全ERROR，而报告里看起来像「装置注入失败」**。
+    #
+    # 真实路径是状态里的 `dir`（沙箱根目录）+ config.json，
+    # 对应 sandbox.py:164 的 `box / 'config.json'`。
+    cfg_path = Path(base.get('dir') or '.') / 'config.json'
+    if not cfg_path.exists():
         raise SystemExit(
-            '取不到沙箱的 config 路径，无法注入 db_down。\n'
-            '请先跑：python tools/sandbox.py --build')
+            f'沙箱的 config.json 不存在：{cfg_path}\n'
+            '请先跑：python tools/sandbox.py --build\n'
+            '**这是环境没就绪，不是注入逻辑的问题**。')
 
     cfg = _json.loads(cfg_path.read_text(encoding='utf-8'))
     proj = cfg.get('projects') or {}
@@ -626,16 +645,25 @@ def inject_stale_log_ok(state):
     import json as _json
 
     base = _sandbox_base()
-    log_dir = Path(base.get('dir') or (Path(base.get('config', '')).parent / 'logs'))
-    # 日志文件按 start_service 的实际命名规则找；找不到就退回常见的几个
-    cands = sorted(log_dir.glob('*backend*')) if log_dir.exists() else []
-    if not cands:
-        cands = sorted(log_dir.glob('*.log')) if log_dir.exists() else []
+    # 日志目录：沙箱状态里没有 'log_dir' 也没有 'config'，
+    # 真实位置是沙箱根目录下的 logs/（与 db_down 同一个坑：
+    # 第一版读 base.get('config')，为空时路径退化成当前工作目录）。
+    # **先确认目录存在再glob** —— 否则在一个不存在的目录上glob
+    # 会安静地返回空列表，然后报「找不到日志文件」，
+    # 而真实原因是「沙箱还没起过服务、日志目录压根没建」。
+    log_dir = Path(base.get('dir') or '.') / 'logs'
+    if not log_dir.is_dir():
+        raise SystemExit(
+            f'沙箱日志目录不存在：{log_dir}\n'
+            'stale_log_ok 需要一个**已经启动过**的服务（它的日志才会存在）。\n'
+            '**这是环境没就绪，不是注入失败** —— 先让沙箱服务跑起来。')
+    # 日志文件按 start_service 的实际命名规则找；找不到再退回所有 .log
+    cands = sorted(log_dir.glob('*backend*')) or sorted(log_dir.glob('*.log'))
     if not cands:
         raise SystemExit(
-            f'沙箱日志目录里找不到日志文件：{log_dir}\n'
-            'stale_log_ok 需要一个已启动过的服务（它的日志存在）。\n'
-            '**这是环境没就绪，不是注入失败** —— 先让沙箱服务跑起来。')
+            f'沙箱日志目录里没有日志文件：{log_dir}\n'
+            '目录存在但里面是空的 —— 服务可能从未成功启动过。\n'
+            '**这是环境没就绪，不是注入失败**。')
 
     target = cands[0]
     original = target.read_text(encoding='utf-8', errors='replace')
@@ -737,6 +765,61 @@ def inject_fake_listen(state):
             f'verifyService 的 owner 检查应该判「未复验通过」。')
 
 
+def inject_hang_service(state):
+    """让沙箱服务「进程还在、端口还通，但不响应任何请求」。
+
+    ## 为什么这是**可自主恢复**的（与 crash_on_next 相反）
+
+    - `kill_service`：进程没了 → `start_service` 能救
+    - `crash_on_next`：拉起就崩 → **谁都救不了**（人造缺陷，AI 无工具移除）
+    - `hang_service`：进程活着、端口 LISTENING，但**请求全超时**
+      → 重启它（`restart_service`）就好了
+
+    真实世界里这就是「进程卡死」——
+    Go 服务里一个死锁、一个没被读走的 socket，都会这样。
+    **而它是最值得测的一类**：端口通着，
+    只看「端口 LISTENING」的判据会判它健康，
+    必须真的发请求并等超时才发现。
+
+    ## 实现
+
+    靠 fixture 的 `/arm-hang`：置位后所有请求挂住不返回。
+    与崩溃开关一样**用标记文件持久化**（否则重启一次就绕过了）。
+    但**不退出进程** —— 这正是与 crash 的区别。
+    """
+    import json as _json
+
+    base = _sandbox_base()
+    svc_port = base.get('port')
+    if not svc_port:
+        raise SystemExit('取不到沙箱的被测端口')
+
+    try:
+        if get(f'http://127.0.0.1:{svc_port}/hang-armed').strip() == 'true':
+            raise SystemExit(
+                '卡死开关已经处于置位状态。\n'
+                '**重复注入会让「卡死」变成「崩溃」**（前一个开关可能没撤销）——'
+                '那测的是另一件事。\n请先撤销：python tools/fault_inject.py --undo')
+    except SystemExit:
+        raise
+    except Exception as e:
+        raise SystemExit(
+            f'沙箱服务没在 {svc_port} 上响应（{e}）。\n'
+            'hang_service 需要一个活着的服务来武装卡死开关。\n'
+            '**不猜、不扫端口** —— 与 kill_service 同一条纪律。')
+
+    try:
+        resp = get(f'http://127.0.0.1:{svc_port}/arm-hang')
+    except Exception as e:
+        raise SystemExit(f'置位卡死开关失败：{e}')
+
+    state['items'].append({'kind': 'hang_service', 'port': svc_port,
+                           'target': 'backend'})
+    return (f'已武装沙箱 backend 的卡死开关（端口 {svc_port}）：{resp.strip()}\n'
+            f'从现在起它的**进程还在、端口还通，但所有请求会挂住**。\n'
+            f'重启（restart_service）能救 —— 所以这一类可自主恢复。')
+
+
 INJECTORS = {
     'hold_port': inject_hold_port,
     'kill_service': inject_kill_service,
@@ -746,6 +829,7 @@ INJECTORS = {
     'db_down': inject_db_down,
     'stale_log_ok': inject_stale_log_ok,
     'fake_listen': inject_fake_listen,
+    'hang_service': inject_hang_service,
 }
 
 
@@ -799,6 +883,20 @@ def undo():
                     p.unlink()
                     done += 1
                     print(f'  已删除 {p}')
+            elif k == 'hang_service':
+                # **必须撤销**（理由同 crash_on_next）：
+                # 卡死开关武装在活着的服务上，不撤销的话
+                # 后面每一次探活都会挂 90 秒 —— 评测会直接卡死。
+                port = it.get('port')
+                try:
+                    get(f'http://127.0.0.1:{port}/disarm-hang')
+                    done += 1
+                    print(f'  已取消卡死武装（端口 {port}）')
+                except Exception as e:
+                    # 端口不通 = 服务已经没了，开关随进程消失
+                    done += 1
+                    print(f'  卡死开关随进程一起消失（端口 {port} 不再响应：'
+                          f'{type(e).__name__}）—— 无需撤销')
             elif k == 'stale_log_ok':
                 # **截断回原长度**——不需要重写全文，伪造内容是追加在末尾的。
                 p = Path(it['path'])

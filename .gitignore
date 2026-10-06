@@ -20,6 +20,10 @@ dist/
 # 而 `fault_inject.py` 会读它做撤销 —— 于是它会尝试 kill 一个
 # **与自己无关的进程**。这是评测装置能造成的最坏副作用。
 fault-inject-state.json
+# 注入器与沙箱的临时工作目录（放标记文件、占位脚本、备份注入产物）
+fault-tmp/
+# 仓库根目录、跑评测时临时产出的报告
+/sandbox-recovery-report.json
 #
 # **注意不要忽略 `*recovery-report*`** —— 那些是评测证据，
 # 必须留档（docs/eval/ 下已有四份基线报告在版本控制里）。
