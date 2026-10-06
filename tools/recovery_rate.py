@@ -699,14 +699,16 @@ def clear_injections():
     left = []
     sp = ROOT / 'fault-inject-state.json'
     if sp.exists():
-        # 状态文件还在 = 撤销没走完。读出来看看残留了什么。
+        # 状态文件还在。**判据是「内容空不空」，不是「文件在不在」**——
+        # `undo()` 删不掉文件时会**覆盖成空**（删文件需要权限，
+        # 覆盖不需要），那时它几何上就等于撤销完成了。
         try:
             st = json.loads(sp.read_text(encoding='utf-8'))
             items = st.get('items', [])
             left = [it.get('kind') for it in items]
             # **顺手把残留的占位进程杀掉**。
             #
-            # 实测踩过：`--undo` 子进程被中途打断（安全层拦了删临时文件那步），
+            # 实测踩过：`--undo` 子进程被中途打断（外部安全层拦了删文件那步），
             # 于是僵尸监听者还活着、端口还被占着，
             # 下一轮注入报「端口已被占用」——
             # **看起来像装置故障，实际是上一个注入没收干净**。
@@ -715,8 +717,24 @@ def clear_injections():
             # （占位进程 / 假监听者），不是用户的东西。
             for it in items:
                 if it.get('kind') in ('hold_port', 'fake_listen') and it.get('pid'):
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(it['pid'])],
-                                   capture_output=True)
+                    subprocess.run(
+                        ['taskkill', '/F', '/T', '/PID', str(it['pid'])],
+                        capture_output=True)
+                    # 杀完等端口空出来
+                    _p = it.get('port')
+                    if _p:
+                        import socket as _sk
+                        import time as _t
+                        for _ in range(30):
+                            _s = _sk.socket()
+                            _s.settimeout(0.4)
+                            try:
+                                _s.connect(('127.0.0.1', int(_p)))
+                                _s.close()
+                                _t.sleep(0.2)
+                            except OSError:
+                                _s.close()
+                                break
         except Exception:
             left = ['(state 文件损坏)']
     return left

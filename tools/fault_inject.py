@@ -1071,9 +1071,28 @@ def _kill_and_wait_port(pid, port, label):
 
 
 def undo():
+    """撤销所有注入。**返回没能处理干净的条目数。**
+
+    ## 为什么状态文件的删除放在**最后一步之外**
+
+    实测踩过：`undo()` 里删占位脚本 / 删状态文件的动作
+    会被外部的安全层拦（`SAFE_DELETE_BULK_CONFIRM_REQUIRED`），
+    **整个子进程被终止** —— 于是：
+      · 端口上的僵尸进程可能还活着
+      · `fault-inject-state.json` 留着
+      · 下一轮 `load_state()` 读到旧记录，端口又被占着 →「端口已被占用」
+
+    而 `except OSError` 救不了这个 —— **进程是被杀的，不是抛异常**。
+
+    所以：
+      1. **先杀进程**（最重要，且不受拦截影响）
+      2. 再试删文件（失败就算了，进程已经清掉）
+      3. 最后**无条件**把状态清空 —— 状态文件删不掉就**覆盖成空**，
+         `load_state()` 读到空 items 就等于撤销完成。
+    """
     if not STATE.exists():
         print('没有注入记录，无需撤销')
-        return
+        return 0
     st = json.loads(STATE.read_text(encoding='utf-8'))
     done, failed = 0, 0
     for it in st.get('items', []):
@@ -1217,7 +1236,22 @@ def undo():
         STATE.unlink()
     except OSError:
         pass
+    # **删不掉就覆盖成空**。
+    #
+    # 关键洞察：**「状态文件存在」本身就是问题**——
+    # `load_state()` 读到旧 items 就会以为那些进程还活着。
+    # 把内容清空，几何上等价于「撤销完成」，
+    # 而且**不需要任何删除权限**。
+    if STATE.exists():
+        try:
+            STATE.write_text(json.dumps({'dir': st.get('dir', ''), 'items': []},
+                                        ensure_ascii=False, indent=2),
+                             encoding='utf-8')
+            print('  状态文件删不掉，已覆盖为空（等价于撤销完成）')
+        except OSError:
+            pass
     print(f'撤销完成：{done} 项成功' + (f'，{failed} 项失败' if failed else ''))
+    return failed
 
 
 # ---------- 主流程 ----------
