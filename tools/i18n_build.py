@@ -4,6 +4,17 @@
 用法：python tools/i18n_build.py
 维护流程：加界面文案 → python tools/i18n_inventory.py 看新词 → 补进 tools/i18n_en.json → 跑本脚本 → 重新构建。
 """
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io
 import json
 import os

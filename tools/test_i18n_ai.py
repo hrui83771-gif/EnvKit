@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """验证界面语言传给助手后，助手是否用同一种语言回答（lang=en/zh）。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import codecs, io, json, re, subprocess, time, urllib.request
 
 BASE = "http://127.0.0.1:18765"

@@ -1,4 +1,15 @@
 # 端口占用诊断接口实测：起实例 → 占端口 → 扫描 → 428 确认流 → 结束进程 → 复扫 → 脚本校验 → 停进程
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, json, os, re, socket, subprocess, sys, time, urllib.request, urllib.error
 
 EXE = r"D:\BCGD\FarmTrace\envkit\EnvKit.exe"

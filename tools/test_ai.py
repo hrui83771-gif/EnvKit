@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """EnvKit AI 助手场景实测（curl 子进程版：绕开针对 python.exe 的连接重置）"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import json, subprocess, time, sys, glob, os, re, urllib.request, urllib.error
 
 BASE = 'http://127.0.0.1:18765'

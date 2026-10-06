@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """诊断：exe 能否在沙箱里启动 + 监听在哪个端口。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import socket, subprocess, time, sys
 
 EXE = r"D:\BCGD\FarmTrace\envkit\EnvKit.exe"

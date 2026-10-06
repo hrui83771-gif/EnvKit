@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """单独验证 /api/ai/explain：不应触发工具预检（带连接重置重试，规避本机对 python 的干扰）。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, json, os, re, subprocess, time, urllib.request
 
 EK = r"D:\BCGD\FarmTrace\envkit"

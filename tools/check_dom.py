@@ -1,4 +1,15 @@
 # 用 html.parser 检查 id="dbview" 是否落在注释/脚本等非 DOM 区域，以及重复 id
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, subprocess, time, urllib.request
 from html.parser import HTMLParser
 

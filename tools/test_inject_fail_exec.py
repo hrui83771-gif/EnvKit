@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """聚焦验证：注入 5 次额度，看统一重试链是否"注入失败 → 自动重试 → 真实执行成功"。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import os, re, io, time, subprocess, urllib.request
 
 EK = r"D:\BCGD\FarmTrace\envkit"

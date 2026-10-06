@@ -32,6 +32,18 @@ import os
 import socket
 import subprocess
 import sys
+
+# **stdout 显式设 UTF-8。**
+#
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 `print('  ⚠ …')` 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+# recovery_sandbox.py 实测踩过：评测一行都没跑就崩在这里。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import time
 from pathlib import Path
 

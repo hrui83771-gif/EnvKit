@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """针对本轮改动（共享 HTTP client / 统一重试 / 拆包 / 序号正则修复）的定点回归。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, json, os, re, subprocess, time, urllib.request, urllib.error
 
 EK = r"D:\BCGD\FarmTrace\envkit"

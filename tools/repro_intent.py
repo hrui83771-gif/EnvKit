@@ -3,6 +3,18 @@
 import json
 import re
 import sys
+
+# **stdout 显式设 UTF-8。**
+#
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 `print('  ⚠ …')` 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+# recovery_sandbox.py 实测踩过：评测一行都没跑就崩在这里。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import urllib.request
 
 # 本机调试：强制直连，绕过系统/环境代理（本机 Clash 等会劫持 127.0.0.1 请求返回 502）

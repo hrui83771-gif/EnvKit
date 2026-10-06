@@ -1,4 +1,15 @@
 # 抓取 EnvKit 实际吐出的页面，检查 dbview 相关元素与 2376 行内容
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import re, subprocess, time, urllib.request
 
 EXE = r"D:\BCGD\FarmTrace\envkit\EnvKit.exe"

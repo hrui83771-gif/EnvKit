@@ -1,6 +1,17 @@
 # -*- coding: utf-8 -*-
 """验证可疑点：POST /api/config 是否会把 AI 配置（base_url/api_key/model）整段抹掉。
 先备份 config.json，测完自动还原。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, json, os, re, shutil, subprocess, time, urllib.request
 
 EK = r"D:\BCGD\FarmTrace\envkit"

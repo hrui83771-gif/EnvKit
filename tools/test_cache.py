@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
 """v1.9.14 缓存命中率实测：启动实例 -> 抓 token -> 三轮真实对话 -> 解析 usage 事件 -> 停进程。"""
+import sys
+
+# **stdout 显式设 UTF-8。**
+# Windows 上 PowerShell / 重定向给的是 GBK，
+# 于是 print('  ⚠ …') 会抛 UnicodeEncodeError ——
+# 崩在评测中途，看起来像「装置坏了」，而它只是控制台编码。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import io, json, re, sys, time, subprocess, urllib.request
 
 BASE = "http://127.0.0.1:18765"

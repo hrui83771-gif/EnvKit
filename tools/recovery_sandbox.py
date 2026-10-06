@@ -46,6 +46,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
 
+# **stdout 必须显式设 UTF-8。**
+#
+# 踩过：Windows 上 PowerShell 给的是 GBK，于是
+#   print('  ⚠ 这会让 AI 真的执行写操作…')
+# 抛 UnicodeEncodeError —— 'gbk' codec can't encode character '\u26a0'。
+#
+# 后果不是「少打一个字」，而是**整个评测一行都没跑就崩了**：
+# 崩在 `[5/5] 跑注入` 之后的第一行，
+# 看起来像「装置有问题」，而它只是控制台编码。
+#
+# `recovery_selftest.py` 早就设了，这里漏了。
+# 凡是有非 ASCII 输出的评测脚本都要设 —— 换终端/重定向就会踩。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:      # 旧版 Python 或已被包装过
+    pass
+
 import ab_memory as ab          # noqa: E402
 import recovery_rate as rr      # noqa: E402
 import sandbox as sb            # noqa: E402
