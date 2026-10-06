@@ -14,6 +14,20 @@ state.json
 *.marker
 dist/
 
+# ---------- 评测装置的运行时状态（v2.7）----------
+# 注入器的 state 记着**活着的 pid**（占位进程 / 假监听者）。
+# 入库后别人 clone 下来会看到一个指向不存在的 pid 的状态文件，
+# 而 `fault_inject.py` 会读它做撤销 —— 于是它会尝试 kill 一个
+# **与自己无关的进程**。这是评测装置能造成的最坏副作用。
+fault-inject-state.json
+#
+# **注意不要忽略 `*recovery-report*`** —— 那些是评测证据，
+# 必须留档（docs/eval/ 下已有四份基线报告在版本控制里）。
+# 只有仓库根目录下、跑评测时临时产出的那几份不入库。
+/sandbox-recovery-report.json
+/recovery-rate-report.json
+/recovery-rate-report.md
+
 # ---------- 用户记忆（M1/M3）：本机数据，仓库只留空模板 ----------
 memories.json
 memories.json.bak

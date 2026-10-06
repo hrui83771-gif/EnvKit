@@ -284,6 +284,41 @@ for inj in rr.INJECTIONS:
           f'注入 {k} 在 fault_inject.INJECTORS 里有实现',
           f'INJECTORS 只有 {sorted(_fi.INJECTORS)}')
 
+# 1b. **反向也要查**：KINDS（元数据表）里的每一条都得有实现。
+#
+# ## 这条检查是被真实故障逼出来的
+#
+# 加 crash_on_next 与 db_down 之后，只改了 `INJECTORS`（实现表）
+# 而忘了`KINDS`（元数据表：desc / recoverable_by_ai / note）——
+# 而 argparse 的 `choices=sorted(KINDS)` 用的是**后者**。
+# 于是 18 次评测里 6 次注入失败，报错是 argparse 的 usage 消息，
+# 报告里记成「0 次结论、0 项未触发」——
+# **看起来像「它一次都没动手」，实际是「装置压根没注入成功」**。
+#
+# 两者必须一致，而**没有任何东西保证它们一致**。
+# 与 `traceOutcome` 死变量同源：同一个事实写在两处，只改了一处。
+_missing = [k for k in _fi.KINDS if k not in _fi.INJECTORS]
+check(not _missing,
+      'KINDS（元数据表）里的每一条都有实现',
+      f'KINDS 有实现缺失: {_missing} —— argparse 的 choices 用的是 KINDS，'
+      f'这些注入会报 usage 错误而不是真跑')
+_extra = [k for k in _fi.INJECTORS if k not in _fi.KINDS]
+check(not _extra,
+      'INJECTORS（实现表）里的每一条都有元数据',
+      f'INJECTORS 缺元数据: {_extra} —— 它们不会出现在 --list 与 argparse choices 里')
+
+# 1c. KINDS 的 recoverable_by_ai 必须与 recovery_rate 的 expect_autonomous 一致。
+#     两张表对「能不能自主恢复」判断不一致时，报告会出现
+#     「注入器说能恢复、判分器说不该动手」的自相矛盾。
+_ri = {i['kind']: i for i in rr.INJECTIONS}
+for _k, _meta in _fi.KINDS.items():
+    if _k not in _ri:
+        continue
+    check(bool(_meta.get('recoverable_by_ai')) == bool(_ri[_k].get('expect_autonomous')),
+          f'注入 {_k} 的 recoverable_by_ai 与 expect_autonomous 一致',
+          f"KINDS={_meta.get('recoverable_by_ai')} "
+          f"INJECTIONS={_ri[_k].get('expect_autonomous')}")
+
 # 2. class 与 expect_autonomous 必须一致
 #    **这两者不一致的后果很隐蔽**：class 决定分母隔离，
 #    而 autonomous 与否决定 AI 该不该动手。搞反了会得出
