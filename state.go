@@ -126,6 +126,21 @@ type SvcInfo struct {
 	URL     string `json:"url"`
 	PID     int    `json:"pid"`
 	Since   string `json:"since"`
+
+	// v2.7：把状态源的复验结论一并带出来。
+	//
+	// 此前 /api/health 的 services 只回 running/url/pid/since，
+	// **phase 与 verified 被兼容层丢掉了** ——于是前端只能按 running 上色，
+	// 端口被别人的服务占着、进程在但没复验也一样显示绿。
+	// 那等于把「执行不等于成功」在视觉上抹掉。
+	//
+	// 追加而不替换：旧字段原样保留，既有 CDP 测试与外部调用零影响。
+	Phase    ServicePhase `json:"phase,omitempty"`
+	Verified bool         `json:"verified"`
+	// LastVerify 是人类可读的复验结论，用于在卡上直接显示
+	// 「端口被其他进程占用」这类具体原因，而不是只显示一个颜色。
+	LastVerify string `json:"last_verify,omitempty"`
+	Restarts   int    `json:"restarts,omitempty"`
 }
 
 var (

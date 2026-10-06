@@ -87,9 +87,34 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     })`);
     check('i18n-has-verify', /Verify environment state/.test(i18nProbe), i18nProbe);
 
-    // ===== 4) 版本号确实是 rc（包重编的硬证据）=====
-    const ver = await evalJS(`(document.body.innerText.match(/2\\.0\\.0-[a-z]+/) || [''])[0]`);
-    check('page-version-is-rc', ver === '2.0.0-rc', 'got: ' + ver);
+    // ===== 4) 页面上的版本号与源码一致（防止"代码改了、包没重编"）=====
+    //
+    // **不要硬编码版本号，也不要从 exe 二进制里猜。** 两版都试过：
+    //   ·硬编码 `2.0.0-rc` —— 那是 v2.0 的值，版本一往前走断言永久失效。
+    //     实测它从 v2.0 之后一直红到现在（最后修改于8e782c5），
+    //     而所有人都在忽略它。**一个长期红的断言等于没有断言。**
+    //   · 从 exe 二进制里正则捞 —— 实测里面有 23 处 `2.x.y`、6 个不同版本
+    //     （含依赖里的 2.0.2 / 2.2.1），猜必然取错。
+    //
+    // 现在以 `main.go` 的 appVersion 常量为唯一真值来源 ——
+    // 它就是编译进二进制的那份，两边不一致就说明包没重编。
+    const fsMod = require('fs');
+    const srcVer = (() => {
+      try {
+        const m = fsMod.readFileSync(require('path').join(CWD, 'main.go'), 'utf8')
+          .match(/appVersion\s*=\s*"(\d+\.\d+\.\d+)"/);
+        return m ? m[1] : '';
+      } catch (e) { return ''; }
+    })();
+    // 直接看 **serve 出来的 HTML** 而不是 innerText ——
+    // 实测 innerText 里混着 `127.0.0` 这类串，用版本号正则去捞容易误匹配；
+    // 而 serve 出来的 HTML 里那行是确定的 `EnvKit</b> v2.6.0 · 2026-10-06`。
+    // 这也正是本断言真正要验的东西：**占位符有没有被替换成当前版本**。
+    const pageVer = (html.match(/EnvKit<\/b>\s*v([0-9]+\.[0-9]+\.[0-9]+)/) || [])[1] || '';
+    check('page-version-matches-source', !!srcVer && pageVer === srcVer,
+          'src=' + srcVer + ' page=' + pageVer);
+    check('no-unreplaced-version-placeholder', !html.includes('__APP_VERSION__'),
+          'serve 出的 HTML 里不该还有 __APP_VERSION__ 占位符');
 
     check('no-runtime-errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 

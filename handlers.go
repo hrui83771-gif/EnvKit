@@ -267,11 +267,23 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// healthServicesCompat 把 ServiceState 转回旧的 SvcInfo 形状。
+// healthServicesCompat 把 ServiceState 转成 SvcInfo。
+//
+// v2.7：**旧字段一个不少**（running/url/pid/since），同时补上
+// phase / verified / last_verify —— 前端要靠 verified 区分
+// 「跑着且验过」与「跑着但没验过」，只给 running 它无从判断。
 func healthServicesCompat(m map[string]ServiceState) map[string]SvcInfo {
 	out := map[string]SvcInfo{}
 	for k, s := range m {
-		info := SvcInfo{Running: s.Running, PID: s.PID, Since: s.Since}
+		info := SvcInfo{
+			Running:    s.Running,
+			PID:        s.PID,
+			Since:      s.Since,
+			Phase:      s.Phase,
+			Verified:   s.Verified,
+			LastVerify: s.LastVerify,
+			Restarts:   s.Restarts,
+		}
 		if s.Port > 0 {
 			info.URL = fmt.Sprintf("http://127.0.0.1:%d", s.Port)
 		}
