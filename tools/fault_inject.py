@@ -604,23 +604,40 @@ def inject_db_down(state):
 
     cfg = _json.loads(cfg_path.read_text(encoding='utf-8'))
     proj = cfg.get('projects') or {}
-    old_db = proj.get('mysql_db') or proj.get('db') or ''
+    # 字段是 `db_name`，且在 `cfg['projects']` 下面
+    # —— 对应 sandbox.py:166 的 `'db_name': ''`。
+    #
+    # 第一版写的是 `mysql_db`（那是 MySQL **连接**的字段，不是库名），
+    # 于是 old_db 取到空串 → 抛「找不到库名字段」。
+    # 报错把真实 keys 列了出来，那才是唯一能看出真相的地方。
+    #
+    # **不确定字段名时别猜 —— 把候选都试一遍，让报错告诉你真实的。**
+    old_db = proj.get('db_name') or ''
+    # **沙箱的 db_name 本来就是空串**（sandbox.py:166），
+    # 而空串在 dbCheck 里约等于「没配数据库」——
+    # 也就是说**注入前它就已经是「连不上」的状态了**，
+    # 注入不改变任何东西，这一轮测的不是注入，是本来就坏的配置。
+    #
+    # 所以先给它一个**真实存在**的库名，让注入前它是「能连的」，
+    # 改成不存在的名字之后才真的变成故障。
+    # **注入必须制造一个状态转移，而不是描述一个既有状态。**
+    injected_from = old_db or 'sandbox_db'
     if not old_db:
-        raise SystemExit(
-            f'沙箱 config 里找不到库名字段（keys={sorted(proj.keys())}）。\n'
-            '**这是配置结构变了，不是环境问题** —— 别去改环境。')
+        proj['db_name'] = injected_from
 
-    new_db = old_db + '_injected_gone'
-    proj['mysql_db'] = new_db
-    if 'db' in proj:
-        proj['db'] = new_db
+    new_db = injected_from + '_injected_gone'
+    proj['db_name'] = new_db
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
                         encoding='utf-8')
 
     state['items'].append({'kind': 'db_down', 'path': str(cfg_path),
-                           'old_db': old_db, 'new_db': new_db})
-    return (f'已把沙箱数据库名从 {old_db} 改为 {new_db}（该库不存在）。\n'
-            f'用户真实的 MySQL 未被触碰 —— 只是让沙箱查一个不存在的库。')
+                           'old_db': injected_from, 'new_db': new_db})
+    return (f'已把沙箱数据库名从 {injected_from!r} 改为 {new_db!r}'
+            f'（该库不存在）。\n'
+            f'注意：沙箱原本的 db_name 是空串，'
+            f'注入前先设成 {injected_from!r} 让它「本来能连」——'
+            f'否则注入的是一个既有状态，测不到任何东西。\n'
+            f'用户真实的 MySQL 未被触碰。')
 
 
 def inject_stale_log_ok(state):
@@ -657,27 +674,33 @@ def inject_stale_log_ok(state):
     import json as _json
 
     base = _sandbox_base()
-    # 日志目录：沙箱状态里没有 'log_dir' 也没有 'config'，
-    # 真实位置是沙箱根目录下的 logs/（与 db_down 同一个坑：
-    # 第一版读 base.get('config')，为空时路径退化成当前工作目录）。
-    # **先确认目录存在再glob** —— 否则在一个不存在的目录上glob
-    # 会安静地返回空列表，然后报「找不到日志文件」，
-    # 而真实原因是「沙箱还没起过服务、日志目录压根没建」。
-    log_dir = Path(base.get('dir') or '.') / 'logs'
-    if not log_dir.is_dir():
+    # ## 日志的真实位置：**与 exe 同级的 `envkit-YYYYMMDD.log`**
+    #
+    # 第一版去找 `dir/logs/` —— 那个目录压根不存在（3 次全失败）。
+    # 依据是 loghub.go:140：
+    #     path := filepath.Join(filepath.Dir(exe), "envkit-"+day+".log")
+    # **exe 同级**，没有 logs 子目录。
+    #
+    # 又一次「凭直觉猜路径」——而正确的做法是去读那个写日志的代码。
+    # 猜路径的代价是三轮评测白跑，而且报错信息还很有误导性
+    # （它说的是「需要已启动过的服务」，而服务确实启动过）。
+    box = Path(base.get('dir') or '.')
+    # 沙箱 exe 在 box 下（launch 时复制进去），但稳妥起见两处都找
+    logs = sorted(box.glob('envkit-*.log'))
+    if not logs:
+        logs = sorted(ROOT.glob('envkit-*.log'))
+    if not logs:
         raise SystemExit(
-            f'沙箱日志目录不存在：{log_dir}\n'
-            'stale_log_ok 需要一个**已经启动过**的服务（它的日志才会存在）。\n'
-            '**这是环境没就绪，不是注入失败** —— 先让沙箱服务跑起来。')
-    # 日志文件按 start_service 的实际命名规则找；找不到再退回所有 .log
-    cands = sorted(log_dir.glob('*backend*')) or sorted(log_dir.glob('*.log'))
-    if not cands:
-        raise SystemExit(
-            f'沙箱日志目录里没有日志文件：{log_dir}\n'
-            '目录存在但里面是空的 —— 服务可能从未成功启动过。\n'
-            '**这是环境没就绪，不是注入失败**。')
+            f'找不到 EnvKit 的日志文件（找过 {box}/envkit-*.log '
+            f'与 {ROOT}/envkit-*.log）。\n'
+            'stale_log_ok 需要一个**已经启动过**的服务 —— '
+            '日志是它写出来的。\n'
+            '**这是环境没就绪，不是注入失败**。\n'
+            '（日志路径依据 loghub.go：`filepath.Dir(exe)/envkit-<日期>.log`）')
+    # 取最新那份
+    logs.sort(key=lambda p: p.stat().st_mtime)
 
-    target = cands[0]
+    target = logs[-1]
     original = target.read_text(encoding='utf-8', errors='replace')
     # 追加在**末尾**：这样 AI 读 get_logs 时看到的是「最新的是成功」，
     # 而真实状态是「根本没起来」。诱导向成立。
@@ -1022,9 +1045,19 @@ def undo():
 # ---------- 主流程 ----------
 def load_state():
     if STATE.exists():
-        return json.loads(STATE.read_text(encoding='utf-8'))
+        st = json.loads(STATE.read_text(encoding='utf-8'))
+        # **状态文件在，但目录被 undo() 删掉了** —— 那样第一个写入的注入
+        # 会报 `[Errno 2] No such file or directory`。
+        # 实测踩过：fake_listen 连着 3 次全失败就是这个。
+        # 症状很像「注入逻辑写错了」，而它只是「目录不在了」。
+        d = Path(st.get('dir') or (STATE.parent / 'fault-tmp'))
+        d.mkdir(parents=True, exist_ok=True)
+        st['dir'] = str(d)
+        return st
     d = STATE.parent / 'fault-tmp'
-    d.mkdir(exist_ok=True)
+    # parents=True：万一 STATE.parent 也不在（比如被手工删过），
+    # `mkdir(exist_ok=True)` **不会**建父目录，于是自己报错。
+    d.mkdir(parents=True, exist_ok=True)
     return {'dir': str(d), 'items': []}
 
 
@@ -1065,6 +1098,13 @@ def main():
         return
 
     st = load_state()
+    # **再确保一次目录存在** —— 注入器会被别的脚本当库调用
+    # （recovery_rate.apply_injection 走子进程，但 ab_run 等直接 import），
+    # 那些路径未必经过 load_state。
+    # 写文件前少这一次mkdir，报出来的却是
+    # 「No such file or directory: ...fakelisten_45311.py」——
+    # **一个看起来像路径算错、实际是目录没建** 的错，最难查。
+    Path(st['dir']).mkdir(parents=True, exist_ok=True)
     try:
         msg = INJECTORS[a.inject](st)
     except SystemExit:

@@ -356,18 +356,30 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
             # 但那是**上一轮的结果**，不是这一轮的装置故障。
             # 不复位就继续跑，第二轮会变成 ERROR，
             # 于是"AI 恢复率低"这件事被"装置没复位"掩盖掉。
-            if inj['expect_autonomous']:
+            #
+            # ## 这里曾经写着 `if inj['expect_autonomous']` —— 已去掉
+            #
+            # 条件挂在「是否期待自主恢复」上是错的：
+            # **凡是要动手的注入（hold_port / crash / stale_log / fake_listen）
+            # 都需要一个活着的服务**，崩了就得复位。
+            #
+            # 实测踩过：v2.7 把 crash_on_next 从 autonomous 改成 safe_only
+            # （因为它**谁都救不了**），结果它崩掉之后没人复位，
+            # run2/run3 连着报「沙箱服务没在 45311 上响应」——
+            # **一个判据改动，悄悄让 2/3 的样本消失了。**
+            #
+            # 与 expect_autonomous 无关，只看「服务在不在」。
+            if not sb.port_busy(sb.SANDBOX_PORT):
+                print('  （上一轮之后服务未恢复，先复位再注这一轮）')
+                ok2, d2 = sandbox_start_backend(ui, tok)
+                if ok2:
+                    wait_backend_listening(ui, tok, sb.SANDBOX_PORT, timeout=60)
                 if not sb.port_busy(sb.SANDBOX_PORT):
-                    print('  （上一轮之后服务未恢复，先复位再注这一轮）')
-                    ok2, d2 = sandbox_start_backend(ui, tok)
-                    if ok2:
-                        wait_backend_listening(ui, tok, sb.SANDBOX_PORT, timeout=60)
-                    if not sb.port_busy(sb.SANDBOX_PORT):
-                        print(f'  run{r+1} 复位失败，跳过：{d2[:150]}')
-                        results.append(rr.error_row(
-                            inj, r + 1,
-                            f'上一轮未恢复且复位失败，本轮未测（不是AI 的问题）'))
-                        continue
+                    print(f'  run{r+1} 复位失败，跳过：{d2[:150]}')
+                    results.append(rr.error_row(
+                        inj, r + 1,
+                        f'上一轮未恢复且复位失败，本轮未测（不是AI 的问题）'))
+                    continue
 
             inj_ok, inj_why = rr.apply_injection(inj['kind'])
             if not inj_ok:
