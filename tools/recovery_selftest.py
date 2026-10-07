@@ -27,6 +27,10 @@ sys.path.insert(0, str(ROOT / 'tools'))
 sys.stdout.reconfigure(encoding='utf-8')
 
 import recovery_rate as rr   # noqa: E402
+# v2.9：要断言「空回答必须被当采集失败」，就得能直接调 `ab_memory` 的校验函数。
+# **导入它是有代价的**（它 import 了 tools 下其他模块），
+# 所以放在 recovery_rate 之后 —— 顺序错了会在 import 期就炸。
+import ab_memory as ab        # noqa: E402
 
 FAILS = []
 
@@ -706,6 +710,65 @@ check(_cn is not None and _cn['valid'] is False,
       'parse_verdict：中文值→ valid=False 且**不是 None**'
       '（None 会让判据退回词表、白白放行）',
       str(_cn))
+
+# ---- 空回答必须被当采集失败，不能算「模型没照做」----
+#
+# 实测（v2.9 全量）：`hang_service` run3 耗时 **0.5 秒**、
+# 只调了 `get_system_state`、`answer_head` **完全为空**。
+#
+# `_validate_response` 原来的条件是
+# `not text.strip() and not tool_seq(events)` ——
+# 只要有一个工具调用就放行，于是「调了只读工具却一个字没说」
+# 被当成有效响应，接着算成「模型该输出块却没输出」。
+#
+# **那是把采集失败算成产品缺陷** —— 下一次迭代会去改不存在的指令。
+_ev = []
+try:
+    ab._validate_response('', [{'type': 'tool_result',
+                                'tool': 'get_system_state',
+                                'result': 'ok'}])
+    check(False, '有工具调用但正文为空 → 必须报错（实测 0.5 秒那种空轮次）',
+          '没抛异常')
+except BaseException as e:
+    # **必须捕获 BaseException 而不是 Exception** ——
+    # SystemExit 不继承 Exception，用 `except Exception` 会被漏过去，
+    # 于是自检进程静默终止（FAIL 数 0、rc=1，极难定位）。
+    check(type(e) is RuntimeError,
+          '有工具调用但正文为空 → RuntimeError（不是 SystemExit，'
+          '那会终止整轮评测、白跑其余 32 次）',
+          type(e).__name__)
+
+# 反向：**别把这条写成「只要没工具就错」**。
+#
+# 有正文 + 无工具是完全正常的回答（模型直接答了，没调工具），
+# 第一版我写成 `ab._validate_response('后端端口在听', [])` 期望通过，
+# 结果它抛 `SystemExit`（「空响应」）把**整个自检进程**带停——
+# 后面的断言全没跑到，rc=1 而 FAIL 数是 0。
+#
+# **「断言写错」和「代码有 bug」在输出上很像：都不是绿。**
+# 区别在 FAIL 计数：断言写错时 FAIL=0 但 rc≠0。
+try:
+    ab._validate_response('后端端口在听',
+                          [{'type': 'tool_result',
+                            'tool': 'get_system_state', 'result': 'ok'}])
+    check(True, '有正文 + 有工具 → 正常通过（对照：不是「没块」就错）')
+except BaseException as e:
+    check(False, '有正文 + 有工具 → 正常通过',
+          '%s: %s' % (type(e).__name__, str(e)[:120]))
+
+# ---- 采集失败必须带 verdict_used 字段 ----
+#
+# 门禁的旧数据检查是 `'verdict_used' not in r`。
+# `error_row` 原本不写这两个字段，于是**每次采集失败都被误报成
+#「旧判据跑的」** —— 真正的旧数据反而被放过。
+_er = rr.error_row({'kind': 'x', 'class': 'safe_only',
+                    'expect_autonomous': False}, 1, '采集失败')
+check('verdict_used' in _er and 'verdict' in _er,
+      'error_row 带 verdict_used/verdict 字段'
+      '（否则会被门禁误报成旧格式）',
+      sorted(_er.keys()))
+check(_er.get('collect_error'),
+      'error_row 带 collect_error 标记（覆盖率靠它排除这种轮次）')
 
 # 连字符不该被截断（`\w` 只吃到 `un`）——
 # 合法值里本来没有连字符，但**静默截断**比报错更难查，所以钉住。

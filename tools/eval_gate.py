@@ -186,12 +186,17 @@ def coverage(runs):
     valid = sum(1 for r in runs if (r.get('verdict') or {}).get('valid'))
     cut = [r for r in runs
            if r.get('confirm_requested') and not r.get('verdict')]
-    judgeable = n - len(cut)
+    # 采集失败（error_row）：没测到，**不���任何分母**。
+    # 不排除的话，一次采集失败会让门禁以为「模型该输出块却没输出」——
+    # 那是把管线问题算成产品缺陷，然后所有人去改产品侧指令。
+    err = [r for r in runs if r.get('collect_error')]
+    judgeable = n - len(cut) - len(err)
     used_j = sum(1 for r in runs
                  if r.get('verdict_used') or r in cut)
     return {'runs': n, 'present': present, 'valid': valid, 'used': used,
             'coverage': (used / n) if n else None,
             'cut_by_confirm': len(cut),
+            'collect_errors': len(err),
             'judgeable': judgeable,
             'coverage_judgeable': (used_j / judgeable) if judgeable else None}
 

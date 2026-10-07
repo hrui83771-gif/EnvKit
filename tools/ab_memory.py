@@ -258,6 +258,34 @@ def _validate_response(text, events):
             f'这说明模型没被真正调用到，结果不能当数据用。\n'
             f'常见原因：本机代理拦截上游请求 / 模型配置不可用 / key 失效。')
 
+    #---- 「调了只读工具却一个字没说」也是无效响应 ----
+    #
+    # 踩过：`hang_service` run3 实测耗时 **0.5 秒**、只调了
+    # `get_system_state`、`answer_head` **完全为空** ——
+    # 也就是模型根本没生成出内容。
+    #
+    # 上面那条 `not tool_seq(events)` 拦不住它：
+    # 只要有一个工具调用就放行。而「有工具调用」在这里**没有意义** ——
+    # 判据评的是模型的**结论**，没有文字就没有结论。
+    #
+    # 不拦的后果：这一轮会被算成「模型该输出块却没输出」，
+    # 拉低结构块覆盖率，然后所有人去调产品侧指令——
+    # 而真相是**这一轮根本没跑**，该修的是采集侧。
+    if not text.strip():
+        kinds = [e.get('type') for e in events]
+        # **用普通异常而不是 SystemExit**。
+        #
+        # `run_injections` 里写着 `except SystemExit: raise` ——
+        # 用 SystemExit 会**终止整轮评测**，其余 32 次调用全白跑。
+        # 它要能被 `except Exception` 接住、变成一条 `error_row`
+        # （标记 ERROR 而不是 FAIL —— 采集失败≠产品缺陷）。
+        raise RuntimeError(
+            f'有 {len(kinds)} 个事件、其中 {len(tool_seq(events))} 个工具调用，'
+            f'但**正文完全为空**。事件类型：{kinds}。'
+            f'模型没有产出任何文字 → 没有结论可评。'
+            f'**这一轮不能算「模型没照做」**，那是把采集失败算成产品缺陷。'
+            f'常见原因：请求被中途掐断 / 模型只顾调工具没输出 / 上游返回空 completion。')
+
 
 def _pending_confirm(events):
     """返回 (tool, args) —— 最后一个未被回执的确认卡，没有则 None。

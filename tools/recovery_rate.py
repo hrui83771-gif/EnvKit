@@ -704,6 +704,19 @@ def error_row(inj, run_no, why):
         'trace_data_missing': True,
         'health_before': {}, 'health_after': {},
         'answer_head': '',
+        # ---- v2.9：采集失败也必须带上这两个字段 ----
+        #
+        # **不能靠"字段不存在"来区分新旧格式**——
+        # 门禁的 `stale_n` 检查用的是`'verdict_used' not in r`，
+        # 而 `error_row` 原本不写它，于是**每次采集失败都会被
+        # 误报成「旧判据跑的」**。
+        #
+        # 那样真正的旧数据反而被放过，而真正的问题被藏起来。
+        #
+        # 这里显式写`verdict=None` / `verdict_used=False`：
+        # 采集失败**不是**覆盖率分子，但它是**本轮格式**的一部分。
+        'verdict': None,
+        'verdict_used': False,
         'collect_error': why,
     }
 

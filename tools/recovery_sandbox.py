@@ -684,7 +684,15 @@ def rr_verdict_coverage(results):
     # **不是采集失败**（文本有内容），也不是模型不照做。
     cut = [r for r in results
            if r.get('confirm_requested') and not r.get('verdict')]
-    judgeable = n - len(cut)
+
+    # 采集失败（error_row）：**根本没测到**，不能进任何分母。
+    # ERROR 的语义是「没有结论」，不是「结论是不合格」。
+    #
+    # 不排除的话，一次采集失败会让覆盖率看起来像模型不照做——
+    # 那是把管线问题算成产品缺陷。
+    err = [r for r in results if r.get('collect_error')]
+
+    judgeable = n - len(cut) - len(err)
     used_j = sum(1 for r in results
                  if r.get('verdict_used') or r in cut)
 
@@ -694,20 +702,25 @@ def rr_verdict_coverage(results):
         'block_valid': valid,           # 块在且字段合法
         'used_by_judge': used,          # 判据实际走了结构化路径
         'coverage': ('%.3f' % (used / n)) if n else None,
-        # 下面三个是「把话说清楚」的口径
+        # 下面几个是「把话说清楚」的口径
         'cut_by_confirm': len(cut),         # 被确认卡掐断，块不可能在
+        'collect_errors': len(err),         # 采集失败，没测到
         'judgeable_runs': judgeable,        # 真正能要求模型输出块的轮次
         'coverage_judgeable': (
             '%.3f' % (used_j / judgeable)) if judgeable else None,
         'by_injection_cut': sorted({
             '%s run%s' % (r.get('injection'), r.get('run')) for r in cut
         }),
-        'note': ('used_by_judge/runs 含「被确认卡掐断」的轮次，'
+        'by_injection_error': sorted({
+            '%s run%s' % (r.get('injection'), r.get('run')) for r in err
+        }),
+        'note': ('used_by_judge/runs 含「被确认卡掐断」与「采集失败」的轮次，'
                  '所以它天然偏低；**coverage_judgeable 才是'
                  '「模型该输出块时有没有输出」**。'
                  '两者都要低才是真问题——前者低说明模型不照做'
                  '（改产品侧指令），后者低说明模型照做了但没机会'
-                 '（改确认卡的收尾，别去动判据）'),
+                 '（改确认卡的收尾，别去动判据）。'
+                 '采集失败不计入任何分母：**没测到 ≠ 测了不合格**。'),
     }
 
 
