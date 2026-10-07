@@ -920,7 +920,16 @@ def parse_verdict(text):
 
 # ---------- 六维判分 ----------
 def judge(inj, text, events, trace_info, health_after, health_fn=None):
-    """判一次注入，返回六维各自的明细。
+    """判一次注入，返回 `{dims: {...}, verdict: ..., verdict_used: ...}`。
+
+    ## 返回结构（v2.9 变过一次）
+
+    原来是**直接返回维度字典**，v2.9 加了顶层包装 ——
+    因为把 `verdict` 塞进维度字典会破坏它的形状约定
+    （`recovery_sandbox.py` 遍历 `verdicts.items()` 取 `v['status']`，
+    混进元信息直接 KeyError 崩掉）。
+
+    **维度与元信息分开，不靠下划线前缀这种约定。**
 
     **不再输出单一 success 布尔** —— 那是 v2.4 会骗人的根源。
     每个维度独立给 `passed` / `status` / `why`，
@@ -1349,7 +1358,34 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None):
                  else f'既无复验也无取证（tools={tools}）')),
     }
 
-    return out
+    # ---- v2.9：把解析出的结构块一并带出去 ----
+    #
+    # ## 为什么必须存
+    #
+    # 报告里只有 `answer_head`（**截断**的若干字），
+    # 而结构块在回答的**末尾** —— 于是读报告的人看到的是
+    # 「解析不到块」，而实际上判据读的是完整文本、块好好地在那里。
+    #
+    # 实测踩过：`slow_start` 三次的 `answer_head` 都解析为 `None`，
+    # 而 `why` 里明明写着「结构块 {...}」。
+    # **两个都是真的，但只有后者可信** ——
+    # 覆盖率恰恰是这次改造成立的前提（模型不输出块 → 判据全退回词表
+    # → 改造等于没做），它必须是报告里的一等公民。
+    #
+    # ## 为什么放**函数返回的顶层**而不是 `out`（verdicts）里
+    #
+    # 第一版塞进了 `out['_verdict']`，于是
+    # `recovery_sandbox.py:454` 那句遍历 verdicts 的打印**直接 KeyError崩了** ——
+    # `verdicts` 的每个值都是「一个维度」，它有自己的形状约定，
+    # **混入元信息就破坏了约定**。
+    #
+    # > 结构上把「维度」与「元信息」分开，
+    # > 而不是靠下划线前缀这种约定 —— **约定迟早会被忘**。
+    return {
+        'dims': out,
+        'verdict': verdict,
+        'verdict_used': bool(verdict and verdict['valid']),
+    }
 
 
 # ---------- 六维汇总 ----------

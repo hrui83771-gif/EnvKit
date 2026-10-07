@@ -439,8 +439,10 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 time.sleep(0.5)
             after = sandbox_health()
             tinfo = rr.human_intervention(since)
-            verdicts = rr.judge(inj, text, events, tinfo, after,
+            _jd = rr.judge(inj, text, events, tinfo, after,
                                 health_fn=sandbox_healthy)
+            verdicts = _jd['dims']
+            _verdict_meta = _jd
             used = ab.tool_seq(events)
             # 确认卡必须记录 —— 不记的话，"AI 没调 start_service" 有两种
             # 截然不同的原因，而报告里看起来一模一样：
@@ -461,6 +463,11 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 'expect_autonomous': inj['expect_autonomous'],
                 'run': r + 1, 'tools': used, 'seconds': round(dur, 1),
                 'verdicts': verdicts, 'trace_data_missing': tinfo is None,
+                # **结构块存在结果顶层，不塞进 verdicts** ——
+                # verdicts 的每个值都是「一个维度」，有形状约定，
+                # 混进元信息会破坏它（第一版塞进去导致遍历时 KeyError 崩掉）。
+                'verdict': _verdict_meta.get('verdict'),
+                'verdict_used': _verdict_meta.get('verdict_used'),
                 'health_before': before, 'health_after': after,
                 'confirm_requested': confirm,
                 'answer_head': text[:300],
@@ -564,6 +571,7 @@ def report_and_print(results, min_samples, only_kinds=False):
         'dimensions': dims,
         'by_injection': by_inj,
         'caveats': rr_dims_caveats(),
+        'verdict_coverage': rr_verdict_coverage(results),
         'results': results,
     }
 
@@ -600,6 +608,7 @@ def report_and_print(results, min_samples, only_kinds=False):
                 'dimensions': dims,
                 'by_injection': by_inj,
                 'caveats': rr_dims_caveats(),
+                'verdict_coverage': rr_verdict_coverage(sub),
                 'results': sub,
             }, ensure_ascii=False, indent=2), encoding='utf-8')
             print(f'本类数据：{p}')
@@ -607,6 +616,19 @@ def report_and_print(results, min_samples, only_kinds=False):
               '避免覆盖别人的数据）')
         print(f'（本次只跑了 {len(kinds)}/{len(rr.INJECTIONS)} 类，'
               f'各文件里的 dimensions 是这 {len(kinds)} 类的汇总，不是全量总账）')
+
+    # 结构块覆盖率：**印出来**，不要只埋在报告里。
+    #
+    # 判据已经改成「结构块优先」——
+    # 覆盖率低就意味着判据实际上在退回词表，
+    # **那这次改造就没生效**，而报告里容易被忽略。
+    _cov = rr_verdict_coverage(results)
+    print(f'\n结构块覆盖率（v2.9）：{_cov["used_by_judge"]}/{_cov["runs"]}'
+          f' = {_cov["coverage"]}'
+          f'（块出现 {_cov["block_present"]} 次、合法 {_cov["block_valid"]} 次）')
+    if _cov['runs'] and _cov['used_by_judge'] == 0:
+        print('  ⚠ **判据一次都没走结构化路径** —— 模型没照做。'
+              '该改产品侧的指令，不是改判据。')
     else:
         sb.REPORT = out_dir / 'sandbox-recovery-report.json'
         sb.REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
@@ -618,6 +640,39 @@ def report_and_print(results, min_samples, only_kinds=False):
                         encoding='utf-8')
         print(f'\n完整数据：{sb.REPORT}')
         print(f'带时间戳归档：{arch}')
+
+
+def rr_verdict_coverage(results):
+    """统计结构化结论块的覆盖率（v2.9）。
+
+    ## 为什么这个数字必须进报告
+
+    判据改成「结构块优先」之后，
+    **模型不输出块 → 判据全退回词表 → 这次改造等于没做**。
+    而报告里只有 `answer_head`（**截断**的），
+    结构块在回答末尾 —— 于是从报告**根本看不出覆盖率**。
+
+    实测踩过：`slow_start` 三次的 `answer_head` 都解析为 `None`，
+    而 `why` 里明明写着「结构块 {...}」。
+    **两个都是真的，但只有后者可信。**
+
+    所以判据把解析结果存进 `verdicts._verdict`，
+    这里直接统计 —— **覆盖率必须是报告里的一等公民**。
+    """
+    n = len(results)
+    used = sum(1 for r in results if r.get('verdict_used'))
+    present = sum(1 for r in results if r.get('verdict'))
+    valid = sum(1 for r in results
+                if (r.get('verdict') or {}).get('valid'))
+    return {
+        'runs': n,
+        'block_present': present,       # 块在（含非法值）
+        'block_valid': valid,           # 块在且字段合法
+        'used_by_judge': used,          # 判据实际走了结构化路径
+        'coverage': ('%.3f' % (used / n)) if n else None,
+        'note': ('used_by_judge/total 才是「判据走了结构化路径」的比例；'
+                 '它低说明模型没照做，需要改产品侧的指令而不是改判据'),
+    }
 
 
 def rr_dims_caveats():
