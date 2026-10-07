@@ -139,6 +139,77 @@ const check = (name, ok, extra) => {
     check('ops-chart-has-rects',
       (await ev("document.querySelectorAll('#st-ops-chart rect').length")) > 0,
       'rects=' + await ev("document.querySelectorAll('#st-ops-chart rect').length"));
+
+    // ===== X 轴标签（v2.8）=====
+    //
+    // ## 这三条守的是什么
+    //
+    // 原实现是 `<text>` 放进 SVG，而 SVG 用 `preserveAspectRatio="none"`
+    // **横向拉伸**——于是**文字跟着变形**，加上 `font-size:2.4` 是 viewBox 单位
+    // （宽 400px 时实际约 9.6px），用户反馈「横坐标不清楚」。
+    //
+    // 改成 HTML 层（`.stXlab > span`）后，三件事必须同时成立：
+    //   1. SVG 里**不再有** `<text>`（有就说明又被改回SVG 去了）
+    //   2. 标签**字号 ≥ 10px** —— 那是 CSS 像素，不再随图宽缩放
+    //   3. **相邻标签不重叠**、**首末不溢出容器**
+    //
+    // 第3 条用实测几何判，不靠肉眼看。
+    //
+    // **下面这段是 JS 模板字符串 —— 它的注释里绝不能出现反引号。**
+    // 踩过：注释里写了一句带反引号的代码引用，于是字符串提前闭合，
+    // `node --check` 报「missing ) after argument list」，
+    // **报错位置指向模板开头（162 行），而真因在中间某行的注释里** ——
+    // 位置离真因太远，逐个猜要试很多轮。
+    // 现在这段注释写在**模板之外**，安全。
+    check('xlab-not-in-svg',
+      (await ev("document.querySelectorAll('#st-ops-chart svg text').length")) === 0,
+      'svg text=' + await ev("document.querySelectorAll('#st-ops-chart svg text').length") +
+      '（有就说明标签又被放回拉伸坐标系了）');
+
+    const xlab = await ev(`(function(){
+      const b = document.querySelector('#st-ops-chart .stXlab');
+      if (!b) return null;
+      const cs = getComputedStyle(b);
+      const cb = b.getBoundingClientRect();
+      const spans = [...b.querySelectorAll('span')];
+      const rects = spans.map(s => {
+        const r = s.getBoundingClientRect();
+        return { t: s.textContent,
+                 l: r.left - cb.left, r: r.right - cb.left,
+                 w: r.width, h: r.height };
+      });
+      let minGap = 1e9;
+      for (let i = 1; i < rects.length; i++) {
+        const g = rects[i].l - rects[i-1].r;
+        if (g < minGap) minGap = g;
+      }
+      // **溢出量要用同一套坐标算**。
+      // 第一版写成「cont.left - rects[0].l」—— 那是「容器绝对 left」
+      // 减「标签相对 left」，**两套坐标系混用**，
+      // 于是页面整体偏移也被算进了溢出，数字毫无意义
+      // （实测 overflowL=22.5 其实标签在容器内）。
+      // 正确：溢出 = 标签左边界相对容器的偏移，负值即溢出。
+      const firstL = rects[0].l, lastR = rects[rects.length-1].r;
+      return JSON.stringify({
+        fontSize: cs.fontSize, n: rects.length, rects, minGap,
+        overflowL: +firstL.toFixed(1),
+        overflowR: +(lastR - cb.width).toFixed(1),
+      });
+    })()`);
+    out.push('xlab = ' + xlab);
+    const XL = xlab ? JSON.parse(xlab) : null;
+    check('xlab-in-html', XL !== null,
+      xlab === null ? '#st-ops-chart 里没有 .stXlab —— 标签没渲染出来' : '');
+    if (XL) {
+      const fs = parseFloat(XL.fontSize);
+      check('xlab-fontsize-legible', fs >= 10,
+        'font-size=' + XL.fontSize + '（<10px 读不清；旧实现约 9.6px 且随图宽变）');
+      check('xlab-no-overlap', XL.minGap >= 0,
+        'minGap=' + XL.minGap + 'px（负数=标签重叠）');
+      check('xlab-no-overflow', XL.overflowL >= -0.5 && XL.overflowR <= 0.5,
+        'firstLeft=' + XL.overflowL + ' lastRight-容器宽=' + XL.overflowR +
+        '（负值/正值=首或末标签被容器裁掉）');
+    }
     check('actor-chart-has-bars',
       (await ev("document.querySelectorAll('#st-actor-chart i').length")) > 0,
       'bars=' + await ev("document.querySelectorAll('#st-actor-chart i').length"));

@@ -93,6 +93,12 @@
   .dirrow{display:flex;gap:8px;align-items:center}
   .dirrow input{flex:1}
   .hint{font-size:12px;color:var(--muted)}
+  /* 统计图 X 轴标签（v2.8：从 SVG <text> 挪到 HTML 层）——
+     SVG 用 preserveAspectRatio=none 横向拉伸，文字会跟着变形；
+     放HTML 里字号才是稳定的 CSS 像素，也不随图宽变化。 */
+  .stXlab{position:relative;height:16px;margin-top:3px;font-size:11px;
+          color:var(--muted);line-height:1;user-select:none}
+  .stXlab span{position:absolute;transform:translateX(-50%);white-space:nowrap}
   button{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
   button:hover{background:var(--brand2)}
   button:active{transform:translateY(1px)}
@@ -2857,20 +2863,102 @@ function stBars(box, days, keys, opt){
     });
   });
 
-  // X 轴标签：只标首、中、尾，避免挤成一团
-  let xlab = '';
-  const marks = n<=3 ? days.map((_,i)=>i)
-                     : [0, Math.floor(n/2), n-1];
-  marks.forEach(i => {
-    const d = days[i]; if(!d) return;
+  // X 轴标签：**画在 HTML 层，不放进 SVG。**
+  //
+  // ## 为什么不能放在 SVG 里（v2.8 修）
+  //
+  // 原来是 `<text>` + `preserveAspectRatio="none"` + `viewBox="0 0 100 100"`。
+  // 那个组合有两个坏处：
+  //
+  //   1. **`preserveAspectRatio=none` 会把整个坐标系横向拉伸** ——
+  //      **文字也跟着变形**（横向拉长/压扁）。
+  //      用户看到的「不清楚」主要就是这个。
+  //   2. `font-size:2.4` 是 viewBox 单位。宽度 400px 时实际约 `2.4 * 4 = 9.6px`，
+  //      太小；而高度被压到 120px，字号在不同宽度下**还会变**。
+  //
+  // 标签挪到 HTML 后：字号是 CSS 像素（不随图宽变），
+  // 而且**能换行/用 CSS 类**，深浅色自动跟随。
+  const LAB = 13;                       // 最多几个标签
+  const every = Math.max(1, Math.ceil(n / LAB));
+  const showAt = new Set();
+  // 从 0 开始按 every 取，最后一天必标（n<=3 时 every=1，自然全标）
+  for (let i = 0; i < n; i += every) showAt.add(i);
+  showAt.add(n - 1);
+
+  // 日期显示。**这里踩过一个一直存在的真 bug**：
+  //
+  // 后端 `stats.go:157` 用的是 `Format("20060102")` —— **没有分隔符**，
+  // 所以 `d.date` 是 `'20260908'`。
+  // 而旧代码写的是 `d.date.slice(5)`（那是按 `'2006-01-02'` 算的），
+  // 于是从 `'20260908'` 上slice(5) 得到 `'0908'` ——
+  // **跨月时更糟**：`'20261001'.slice(5)` 得到 `'0001'`，
+  // 整个 10 月看起来像「1 月」。
+  //
+  // 用户反馈的「横坐标不清楚」底下藏着这个：
+  // 不是字体问题，**是日期本身显示错了**。
+  //
+  // 口径：按真实格式 `'YYYYMMDD'` 解析，跨年时补年份。
+  const thisYear = days[n - 1].date.slice(0, 4);
+  const fmtDay = ds => {
+    if (ds.length < 8) return ds;         // 不是预期格式就原样显示，不瞎猜
+    const y = ds.slice(0, 4), m = ds.slice(4, 6), d = ds.slice(6, 8);
+    return y === thisYear ? m + '-' + d : y.slice(2) + '/' + m + '-' + d;
+  };
+
+  let xlab = '<div class="stXlab">';
+  days.forEach((d, i) => {
+    if (!showAt.has(i)) return;
     const x = padL + slot * i + slot / 2;
-    xlab += '<text x="'+x.toFixed(2)+'" y="'+(H-0.6)+'" font-size="2.4" fill="var(--muted)" '+
-            'text-anchor="middle">'+esc(d.date.slice(5))+'</text>';
+    // 位置用百分比，与 SVG 里算出来的 x 一致 —— SVG 是拉伸的，
+    // 但 padding 与 slot 都是 viewBox 单位的**比例**，换算成 % 正好对齐。
+    let pct = x / W * 100;
+    // 首末标签 translateX(-50%) 会溢出容器 —— 真实修正放在插入之后
+    // （用实测像素宽度，只改 transform 不重排，理由见下方注释）。
+    xlab += '<span style="left:'+pct.toFixed(3)+'%">'
+          + esc(fmtDay(d.date)) + '</span>';
   });
+  xlab += '</div>';
 
   el.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" '+
     'style="width:100%;height:'+(opt.height||120)+'px;display:block" role="img">'+
-    grid + bars + xlab + '</svg>';
+    grid + bars + '</svg>' + xlab;
+
+  // ## 贴边修正：用实测像素宽度，**不重排**
+  //
+  // ## 为什么不能在渲染前算
+  //
+  // 标签宽是**像素**（约 17.8px），而位置是**百分比**。
+  // 换算要知道容器宽度 —— 此刻DOM 还没插入，拿不到。
+  //
+  // 第一版拍了个「夹 3%」，CDP 实测 **overflowL = 17.3px**：
+  // 3% 约 18px，一半 9px < 需要的 8.9px… 边缘上，
+  // 而且**容器宽度会随窗口变**，拍死的百分比必然在某个宽度下失效。
+  //
+  // 所以插入后量一次真实边界，只改 `transform` ——
+  // **不重写 `left`，因为那会触发二次布局、也可能与下次渲染不一致**。
+  const labEl = el.querySelector('.stXlab');
+  if (labEl && labEl.children.length) {
+    const cb = labEl.getBoundingClientRect();
+    const spans = labEl.querySelectorAll('span');
+    const first = spans[0], last = spans[spans.length - 1];
+    if (cb.width > 0 && first && last) {
+      // **必须用 calc 保住 -50%**。
+      //
+      // 直接写 `transform = translateX(Npx)` 会**整个覆盖掉 CSS 里的
+      // `translateX(-50%)`**，标签于是跳回未居中的位置 ——
+      // 实测 overflowL 从 17.3 变成 22.5，越修越糟。
+      const f = first.getBoundingClientRect();
+      if (f.left < cb.left - 0.5) {
+        first.style.transform =
+          'translateX(calc(-50% + ' + (cb.left - f.left).toFixed(1) + 'px))';
+      }
+      const l = last.getBoundingClientRect();
+      if (l.right > cb.right + 0.5) {
+        last.style.transform =
+          'translateX(calc(-50% + ' + (cb.right - l.right).toFixed(1) + 'px))';
+      }
+    }
+  }
 }
 
 /* stHBar 横向条形图（用于主体分布、高频动作——标签长，横向更好读）*/
