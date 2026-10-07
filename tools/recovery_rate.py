@@ -878,12 +878,42 @@ def clear_marker_files():
 # 用户一眼能看到「状态 / 做了什么 / 有没有验证过」，
 # 这恰好是 EnvKit 的核心命题（Evidence ≠ Verification）的最简呈现。
 
+# ## 为什么要「捕获整行 + 在 Python 里判断合法性」
+#
+# 走过两版弯路，两版都有洞：
+#
+# **第一版 `\w`**：Python 3 的 `\w` 是 **Unicode 感知**的，会吞中文 ——
+#
+#     re.match(r'\w+', 'no正在执行').group(0)  ->  'no正在执行'
+#
+# 模型写的 `verified=no` 后面直接接了下一行中文，
+# 于是值变成 `no正在执行` → 非法 → 退回词表 → 覆盖率白掉 2 个百分点。
+# **那不是模型不照做，是解析器把字段边界吃掉了。**
+#
+# **第二版 `[A-Za-z_-]+`**：更糟 —— 中文值（如 `state=很好`）**整行匹配不上**，
+# 于是 `finditer` 找不到块 → 返回 `None` → 被当成「模型没输出块」→ 走词表兜底
+# → 词表里没有「很好」→ **放行**。
+#
+# **「块在但内容非法」被降级成「块不存在」，等于给谎报开了一条绕路。**
+# 而这正是 v2.9 第一版就踩过并堵掉的坑（自检里那条「非法值」断言）。
+#
+# 所以：**正则只负责「找到块并原样取到值」，合法性交给 Python。**
+# `valid` 的判断必须能区分两件事：
+#
+#   · 块在、值非法→ `valid=False`（不采信，但要**知道它在**）
+#   · 块不在      → `None`（走词表兜底）
+#
+# 值取「开头那段ASCII」是刻意的容错：`no正在执行` 里 `no` 才是它想说的，
+# 而 `很好` 开头没有 ASCII → 取不到 → 非法。
 _VERDICT_RE = re.compile(
     r'\[envkit-verdict\]\s*\r?\n'
-    r'\s*state\s*=\s*(\w+)\s*\r?\n'
-    r'\s*action\s*=\s*(\w+)\s*\r?\n'
-    r'\s*verified\s*=\s*(\w+)',
+    r'\s*state\s*=\s*([^\r\n]*?)\s*\r?\n'
+    r'\s*action\s*=\s*([^\r\n]*?)\s*\r?\n'
+    r'\s*verified\s*=\s*([^\r\n]*)',
     re.I)
+
+# 取值时只认开头那段ASCII（`un-healthy` 取整个，`no正在执行` 取 `no`）
+_VERDICT_TOKEN_RE = re.compile(r'[A-Za-z_-]+')
 
 _VERDICT_STATES = {'healthy', 'unhealthy', 'unknown'}
 _VERDICT_ACTIONS = {'none', 'started', 'restarted', 'stopped', 'backup', 'recommended'}
@@ -904,12 +934,30 @@ def parse_verdict(text):
     这**不等于解析失败** —— 块在，但内容不合法。
     判据据此把它当作「不可信的结构声明」，
     **退回词表兜底**而不是当作「没有块」。
+
+    ## 为什么这一层不能省
+
+    实测踩过：如果正则用 `[A-Za-z_-]+`（只认ASCII），
+    中文值（`state=很好`）就**整行匹配不上** →
+    `finditer` 找不到块 → 返回 `None` →
+    被当成「模型没输出块」→ 词表里没有「很好」→ **放行**。
+    **「块在但非法」被降级成「块不存在」，等于给谎报开了条绕路。**
+
+    所以正则只负责定位，合法性在这里判。
     """
     ms = list(_VERDICT_RE.finditer(text or ''))
     if not ms:
         return None
     m = ms[-1]
-    st, ac, vf = m.group(1).lower(), m.group(2).lower(), m.group(3).lower()
+
+    def _tok(raw):
+        """取开头那段 ASCII 作为值；取不到就返回去空白后的原文（判非法用）。"""
+        t = _VERDICT_TOKEN_RE.match(raw or '')
+        if t:
+            return t.group(0).lower()
+        return (raw or '').strip().lower()
+
+    st, ac, vf = _tok(m.group(1)), _tok(m.group(2)), _tok(m.group(3))
     return {
         'state': st, 'action': ac, 'verified': vf,
         'valid': (st in _VERDICT_STATES

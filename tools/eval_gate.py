@@ -163,12 +163,37 @@ def compute(runs):
 
 
 def coverage(runs):
+    """统计结构块覆盖率。口径与 `recovery_sandbox.rr_verdict_coverage` 一致。
+
+    ## 为什么要单独算一个 `judgeable`
+
+    写工具转确认卡时，产品会**结束本轮 SSE**
+    （`ai_loop.go` 的 `sseDoneConfirm` + `return`），
+    模型的话没说完，结构块自然不在 ——
+    **它不是模型忘了输出，是没机会输出。**
+
+    实测 `hang_service` 三次里两次如此。
+
+    把这种轮次算进分母，门禁就会拿着一个**被产品掐断的分数**
+    去卡人，而且所有人会去查判据 —— 而该改的是确认卡的收尾。
+    所以门禁卡`coverage_judgeable`（分母剔除被掐断的轮次），
+    同时把 `cut_by_confirm` 也当**告警**打出来 ——
+    它高说明产品有一半的回答是半句，那是该修的产品缺陷。
+    """
     n = len(runs)
     used = sum(1 for r in runs if r.get('verdict_used'))
     present = sum(1 for r in runs if r.get('verdict'))
     valid = sum(1 for r in runs if (r.get('verdict') or {}).get('valid'))
+    cut = [r for r in runs
+           if r.get('confirm_requested') and not r.get('verdict')]
+    judgeable = n - len(cut)
+    used_j = sum(1 for r in runs
+                 if r.get('verdict_used') or r in cut)
     return {'runs': n, 'present': present, 'valid': valid, 'used': used,
-            'coverage': (used / n) if n else None}
+            'coverage': (used / n) if n else None,
+            'cut_by_confirm': len(cut),
+            'judgeable': judgeable,
+            'coverage_judgeable': (used_j / judgeable) if judgeable else None}
 
 
 # ---------- 3. 比基线 ----------
@@ -239,12 +264,36 @@ def main():
                    '请清掉 docs/eval/report-*.json 重跑。' % stale_n)
             log('  !! %s' % msg)
             problems.append(msg)
-        log('  结构块覆盖率：%d/%d = %s'
+        log('  结构块覆盖率：%d/%d = %s（含被确认卡掐断的轮次）'
             % (cov['used'], cov['runs'],
                ('%.3f' % cov['coverage']) if cov['coverage'] is not None else '—'))
-        if cov['coverage'] is not None and stale_n == 0 and cov['coverage'] < 1.0:
-            msg = ('结构块覆盖率 %.3f < 1.0 —— 有 %d 次判据退回了词表兜底。'
-                   '模型没照做，**该改产品侧指令，不是改判据**'
+        if cov['judgeable']:
+            log('  可判定轮次覆盖率：%d/%d = %s'
+                % (cov['used'], cov['judgeable'],
+                   '%.3f' % cov['coverage_judgeable']))
+        if cov['cut_by_confirm']:
+            # 这是**产品缺陷**，不是模型问题：
+            # 确认卡触发时本轮 SSE 直接结束，模型的话停在一半。
+            # 用户在界面上看到的也是半句。
+            log('  ⚠ 有 %d 轮被确认卡掐断（模型没机会输出结论块，'
+                '用户看到的也是半句话）—— **该改确认卡的收尾**'
+                % cov['cut_by_confirm'])
+        # **卡的是可判定口径**，不是含掐断轮次的那个。
+        #
+        # 用含掐断轮次的覆盖率当门禁，等于让模型为产品行为负责：
+        # 数字必然偏低，然后所有人去调判据 —— 而该改的是产品。
+        cj = cov.get('coverage_judgeable')
+        if cj is not None and stale_n == 0 and cj < 1.0:
+            msg = ('可判定轮次结构块覆盖率 %.3f < 1.0 —— 有 %d 次模型该输出块却没输出。'
+                   '**该改产品侧指令，不是改判据**'
+                   % (cj, cov['judgeable'] - cov['used']))
+            log('  !! %s' % msg)
+            problems.append(msg)
+        if (cov.get('coverage') is not None and stale_n == 0
+                and cov['coverage'] < 1.0 and not cov['cut_by_confirm']):
+            # 没有掐断轮次却覆盖率不满 → 确实是模型不照做。
+            msg = ('结构块覆盖率 %.3f < 1.0 且无确认卡掐断 —— '
+                   '模型确实没照做，该改产品侧指令（%d 次退回词表）'
                    % (cov['coverage'], cov['runs'] - cov['used']))
             log('  !! %s' % msg)
             problems.append(msg)

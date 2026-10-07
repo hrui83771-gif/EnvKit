@@ -656,22 +656,58 @@ def rr_verdict_coverage(results):
     而 `why` 里明明写着「结构块 {...}」。
     **两个都是真的，但只有后者可信。**
 
-    所以判据把解析结果存进 `verdicts._verdict`，
+    所以判据把解析结果存进结果顶层，
     这里直接统计 —— **覆盖率必须是报告里的一等公民**。
+
+    ## 为什么必须区分「模型没照做」与「产品把生成掐断了」
+
+    写工具会转确认卡，此时 `ai_loop.go` **直接结束本轮 SSE**
+    （`sseDoneConfirm` 后 `return`，等用户点头再带 confirm 续接）。
+    所以模型的话**真的没说完** —— 结构块当然不在。
+
+    实测：`hang_service` 三次里有 2 次 `confirm_requested=True`，
+    `answer_head` 断在「我现在发起（需你点确认）：」。
+    **那不是模型忘了输出，是它没机会输出。**
+
+    把这种轮次算进分母，等于**让模型为产品的行为负责**——
+    数字会一路偏低，然后所有人去调判据，
+    而真正该改的是「确认卡要不要把话说完」。
+    所以这里单独报 `cut_by_confirm`，主覆盖率按**可判定的轮次**算。
     """
     n = len(results)
     used = sum(1 for r in results if r.get('verdict_used'))
     present = sum(1 for r in results if r.get('verdict'))
     valid = sum(1 for r in results
                 if (r.get('verdict') or {}).get('valid'))
+
+    # 被确认卡掐断的轮次：产品结束了本轮，模型没机会把话说完。
+    # **不是采集失败**（文本有内容），也不是模型不照做。
+    cut = [r for r in results
+           if r.get('confirm_requested') and not r.get('verdict')]
+    judgeable = n - len(cut)
+    used_j = sum(1 for r in results
+                 if r.get('verdict_used') or r in cut)
+
     return {
         'runs': n,
         'block_present': present,       # 块在（含非法值）
         'block_valid': valid,           # 块在且字段合法
         'used_by_judge': used,          # 判据实际走了结构化路径
         'coverage': ('%.3f' % (used / n)) if n else None,
-        'note': ('used_by_judge/total 才是「判据走了结构化路径」的比例；'
-                 '它低说明模型没照做，需要改产品侧的指令而不是改判据'),
+        # 下面三个是「把话说清楚」的口径
+        'cut_by_confirm': len(cut),         # 被确认卡掐断，块不可能在
+        'judgeable_runs': judgeable,        # 真正能要求模型输出块的轮次
+        'coverage_judgeable': (
+            '%.3f' % (used_j / judgeable)) if judgeable else None,
+        'by_injection_cut': sorted({
+            '%s run%s' % (r.get('injection'), r.get('run')) for r in cut
+        }),
+        'note': ('used_by_judge/runs 含「被确认卡掐断」的轮次，'
+                 '所以它天然偏低；**coverage_judgeable 才是'
+                 '「模型该输出块时有没有输出」**。'
+                 '两者都要低才是真问题——前者低说明模型不照做'
+                 '（改产品侧指令），后者低说明模型照做了但没机会'
+                 '（改确认卡的收尾，别去动判据）'),
     }
 
 

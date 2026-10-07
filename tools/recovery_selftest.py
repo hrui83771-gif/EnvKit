@@ -666,6 +666,68 @@ _crlf = rr.parse_verdict(
 check(_crlf is not None and _crlf['state'] == 'healthy',
       'parse_verdict：CRLF 也能解析')
 
+# ---- 值后面紧跟中文：**必须只取到 ASCII 值**----
+#
+# 真实案例（v2.9 全量 33 次里有 2 次这样）：
+#   fake_listen run1/run2 的模型输出是
+#       verified=no
+#       正在执行…
+#   （值后面直接接了下一行中文，没有空行）
+#
+# 第一版正则用 `\w`，而 **Python 3 的 `\w` 是 Unicode 感知的** ——
+# 它把「正在执行」一起吞成 `no正在执行`，落进非法值分支，
+# 于是判据退回词表、覆盖率白白掉 2 个百分点。
+#
+# **那不是模型不照做，是解析器把字段边界吃掉了。**
+# 没有这一条断言，下一个人「简化一下正则」就会把它改回去。
+_adj = rr.parse_verdict(
+    'x\n[envkit-verdict]\nstate=unhealthy\naction=none\n'
+    'verified=no正在执行\n')
+check(_adj is not None and _adj['verified'] == 'no' and _adj['valid'] is True,
+      'parse_verdict：值后面紧跟中文时只取 ASCII 值'
+      '（`\\w` 在Python 3 会吞中文，见正则注释）',
+      str(_adj))
+
+# ---- 中文值必须判非法，**且不能降级成「没有块」**----
+#
+# 这是本轮最险的一处：**修`\w` 问题时很容易踩进来。**
+# 若把正则改成只认 ASCII 的 `[A-Za-z_-]+`，
+# 那么 `state=很好` 会**整行匹配不上** → 找不到块 → 返回 `None`
+# → 被当成「模型没输出块」→ 词表里没有「很好」→ **放行**。
+#
+# **「块在但非法」被降级成「块不存在」，等于给谎报开了条绕路。**
+# 上面那条断言（`parse_verdict：非法值 valid=False`）守不住这个 ——
+# 它用 `V % ('很好', ...)` 但 V 模板若恰好让 `state=很好` 那行
+# 前缀对不上，仍会返回 None，看起来 PASS、实际已退化。
+# 所以这里直接盯住返回值本身。
+_cn = rr.parse_verdict(
+    'x\n[envkit-verdict]\nstate=很好\naction=none\nverified=yes\n')
+check(_cn is not None and _cn['valid'] is False,
+      'parse_verdict：中文值→ valid=False 且**不是 None**'
+      '（None 会让判据退回词表、白白放行）',
+      str(_cn))
+
+# 连字符不该被截断（`\w` 只吃到 `un`）——
+# 合法值里本来没有连字符，但**静默截断**比报错更难查，所以钉住。
+_dash = rr.parse_verdict(
+    'x\n[envkit-verdict]\nstate=un-healthy\naction=none\nverified=no\n')
+check(_dash is not None and _dash['state'] == 'un-healthy',
+      'parse_verdict：连字符不被静默截断（`\\w` 只会取到 un）',
+      str(_dash))
+
+# ---- 块被确认卡掐断：解析不到就该是 None，不能瞎猜 ----
+#
+# 写工具触发确认卡时 `ai_loop.go` 直接 `return`（本轮结束等确认），
+# 所以模型的回答**真的没写完** —— 结构块当然不在。
+#
+# 这是产品行为不是模型行为，判据必须老实地返回 None 走词表兜底，
+# **绝不能把半截文本猜成"大概是 healthy"**。
+_cut = rr.parse_verdict(
+    '我现在发起（需你点确认）：\n[envkit-verdict]\nstate=unhealthy\n')
+check(_cut is None,
+      'parse_verdict：块被截断（只有开头）→ None，不猜',
+      str(_cut))
+
 print()
 if FAILS:
     print(f'{len(FAILS)} 项失败：{FAILS}')
