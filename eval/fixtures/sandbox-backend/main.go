@@ -80,6 +80,45 @@ const hangMarker = "hang_armed.marker"
 // 不能是无限——那样整个评测会卡死在那一次注入上。
 const hangTimeout = 90 * time.Second
 
+// slowMarker 是「慢启动」开关的持久化载体。
+//
+// ## 它与 hangMarker 的区别正是这一类注入的全部价值
+//
+// 卡死 = **永远不返回**；慢启动 = **会返回，但慢到探活超时**。
+//
+// 这两个在「只做一次快速探测」的判据眼里长得一模一样 ——
+// 都是「超时」。但真实世界的处置完全相反：
+//
+//	· 卡死 → 重启（restart_service）是正解
+//	· 慢启动 → **重启会更糟**（又是一次慢启动），
+//	  正确处置是「再等一会儿」或「查为什么慢」
+//
+// 判据若只问「有没有响应」，就会在慢启动上建议重启 ——
+// **一个会加重故障的建议，比不给建议更糟。**
+const slowMarker = "slow_armed.marker"
+
+// slowDelay 是被武装后每个请求的延迟。
+//
+// 取 3s：EnvKit 的 HTTP 探活超时约 1~2s，
+// 于是「慢」一定触发超时；而 3s 足够短，
+// 一轮评测跑三次注入不会累积成分钟级。
+//
+// **不用 30s**：那样会让「等一会儿就好」这条正确建议
+// 看起来也不可行，判据就分不清「该重启」和「该等」。
+const slowDelay = 3 * time.Second
+
+// dieOnceMarker 是「用完即退」开关。
+//
+// ## 为什么它比 crashMarker 难对付
+//
+// crashMarker 让服务**第一次请求就崩** —— 复验会失败，AI 立刻知道。
+// 而这个开关让服务**先好好响应一次**（复验真的通过），
+// **下一次请求才退出**。
+//
+// 于是 AI 手里握着一个**真实但已过期**的结论。
+// 测的是「结论有没有时效性」，而不是「复验准不准」。
+const dieOnceMarker = "die_once_armed.marker"
+
 func markerArmed(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -110,6 +149,43 @@ func hangArmed() bool { return markerArmed(hangMarker) }
 
 func setHangArmed(on bool) error { return setMarker(hangMarker, on) }
 
+// slowArmed 读慢启动标记。理由同 crashArmed / hangArmed：
+// **每次请求都读文件**，否则改一次变量就得重启进程。
+func slowArmed() bool { return markerArmed(slowMarker) }
+
+func setSlowArmed(on bool) error { return setMarker(slowMarker, on) }
+
+// dieOnceArmed 读「用完即退」开关。
+func dieOnceArmed() bool { return markerArmed(dieOnceMarker) }
+
+// dieOnceSpentMarker 记录「那一次已经用掉了」。
+//
+// ## 为什么需要单独一个文件
+//
+// 开关在 `dieOnceMarker`、已用标记在 `dieOnceSpentMarker`——
+// 因为**武装之后进程可能重启**（AI 会重启它），
+// 而「已用掉」这件事必须跨进程存活，
+// 否则重启一次它就又能"好一次"，于是变成无限循环。
+//
+// 与 crash / hang / slow 同一原则：**开关状态一律落文件**。
+const dieOnceSpentMarker = "die_once_spent.marker"
+
+func setDieOnceArmed(on bool) error { return setMarker(dieOnceMarker, on) }
+
+func markDieOnceSpent() error {
+	return os.WriteFile(dieOnceSpentMarker, []byte("spent\n"), 0600)
+}
+
+func dieOnceSpent() bool { return markerArmed(dieOnceSpentMarker) }
+
+func clearDieOnceSpent() error {
+	err := os.Remove(dieOnceSpentMarker)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	// 日志写到 stdout，让 EnvKit 的「程序启动」日志能捕捉到，
 	// AI 调 get_logs 时看得到真实输出（而不是空）。
@@ -126,6 +202,16 @@ func main() {
 		fmt.Fprintf(os.Stderr,
 			"[sandbox-backend] 卡死开关已武装（%s 存在）—— 所有请求将挂住 %s\n",
 			hangMarker, hangTimeout)
+	}
+	if slowArmed() {
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 慢启动开关已武装（%s 存在）—— 每个请求延迟 %s\n",
+			slowMarker, slowDelay)
+	}
+	if dieOnceArmed() {
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 「用完即退」开关已武装（%s 存在）—— 本次响应正常，下一个请求退出\n",
+			dieOnceMarker)
 	}
 
 	mux := http.NewServeMux()
@@ -166,10 +252,52 @@ func main() {
 		return false
 	}
 
+	// maybeSlow 让请求慢到探活超时，**但仍然会返回**。
+	//
+	// ## 与 maybeHang 的区别是这一类注入存在的全部理由
+	//
+	// 两者的症状都是「探活超时」，所以只做快速探测的判据分不出来。
+	// 但处置完全相反（见 slowMarker 的注释）。
+	maybeSlow := func() bool {
+		if slowArmed() {
+			fmt.Fprintf(os.Stderr,
+				"[sandbox-backend] 触发慢启动开关，延迟 %s 后返回（仍会响应）\n",
+				slowDelay)
+			time.Sleep(slowDelay)
+			return true
+		}
+		return false
+	}
+
+	// maybeDieOnce 让**第二次**请求触发退出，而第一次正常返回。
+	//
+	// 于是 AI 拿到的是一个**真实但已过期**的复验结论。
+	// 测的是「结论有没有时效性」，不是「复验准不准」。
+	maybeDieOnce := func() bool {
+		if !dieOnceArmed() {
+			return false
+		}
+		if dieOnceSpent() {
+			fmt.Fprintf(os.Stderr,
+				"[sandbox-backend] 触发「用完即退」开关，退出（上一次已正常响应过 —— 那个结论已过期）\n")
+			os.Exit(9)
+		}
+		// 第一次：标记已用，正常返回。
+		// **返回 false** —— 让调用方继续走正常响应逻辑。
+		if err := markDieOnceSpent(); err != nil {
+			fmt.Fprintf(os.Stderr,
+				"[sandbox-backend] 写已用标记失败: %v\n", err)
+		}
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 「用完即退」开关：本次正常响应，**下一次请求将退出**\n")
+		return false
+	}
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if maybeCrash() || maybeHang() {
+		if maybeCrash() || maybeHang() || maybeSlow() {
 			return
 		}
+		maybeDieOnce()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok")
 	})
@@ -233,10 +361,71 @@ func main() {
 		fmt.Fprintln(w, "disarmed")
 	})
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if maybeCrash() || maybeHang() {
+	// ---- 慢启动的三个端点 ----
+	//
+	// 与 hang 那三个一一对应，**但 /arm-slow 与 /disarm-slow 本身不延迟**——
+	// 否则注入器调 arm 就会被自己的请求挂住 3 秒。
+	mux.HandleFunc("/arm-slow", func(w http.ResponseWriter, r *http.Request) {
+		if err := setSlowArmed(true); err != nil {
+			http.Error(w, "置位失败: "+err.Error(), 500)
 			return
 		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "armed: every request will take %s (still responds)\n",
+			slowDelay)
+	})
+
+	mux.HandleFunc("/slow-armed", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "%v\n", slowArmed())
+	})
+
+	mux.HandleFunc("/disarm-slow", func(w http.ResponseWriter, r *http.Request) {
+		if err := setSlowArmed(false); err != nil {
+			http.Error(w, "取消失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "disarmed")
+	})
+
+	// ---- 「用完即退」的三个端点 ----
+	//
+	// **/arm-die-once 会顺带清掉「已用掉」标记**——
+	// 否则上一次注入留下的 spent 标记会让它「一装上就退」，
+	// 于是复验直接失败 —— 那测的是 crash，不是 ok_then_die。
+	mux.HandleFunc("/arm-die-once", func(w http.ResponseWriter, r *http.Request) {
+		if err := clearDieOnceSpent(); err != nil {
+			http.Error(w, "清除已用标记失败: "+err.Error(), 500)
+			return
+		}
+		if err := setDieOnceArmed(true); err != nil {
+			http.Error(w, "置位失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "armed: next request succeeds, the one after exits")
+	})
+
+	mux.HandleFunc("/die-once-armed", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "%v\n", dieOnceArmed())
+	})
+
+	mux.HandleFunc("/disarm-die-once", func(w http.ResponseWriter, r *http.Request) {
+		if err := setDieOnceArmed(false); err != nil {
+			http.Error(w, "取消失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "disarmed")
+	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if maybeCrash() || maybeHang() || maybeSlow() {
+			return
+		}
+		maybeDieOnce()
 		// 有响应体才能通过 httpProbe 的 HTTP 状态检查：
 		// verifyService 判就绪的条件是「端口 LISTENING + owner 匹配 + HTTP 有响应」，
 		// 返回 200 才能让复验真正通过（返回 404 也算有响应，但 200 更干净）。

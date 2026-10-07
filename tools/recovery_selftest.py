@@ -310,10 +310,33 @@ check(not _extra,
 # 1c. KINDS 的 recoverable_by_ai 必须与 recovery_rate 的 expect_autonomous 一致。
 #     两张表对「能不能自主恢复」判断不一致时，报告会出现
 #     「注入器说能恢复、判分器说不该动手」的自相矛盾。
+#
+# ## 这里曾经写着 `if _k not in _ri: continue` —— 已去掉
+#
+# 那个 `continue` 正是 v2.8 加 `slow_start` / `ok_then_die` 时漏掉它们的原因：
+# 我改了 `KINDS`（元数据）与`INJECTORS`（实现），
+# **忘了第三张表 `rr.INJECTIONS`（判据配置）**——
+# 而 `recovery_sandbox.py --only`过滤的是**这张表**。
+# 于是 `--only slow_start,ok_then_die` 过滤出空列表，
+# 报「没有产生任何结果：全部注入都失败了」。
+#
+# > **同一个事实写在三处，只改两处。**
+# > `continue` 把「不一致」变成了「跳过检查」——
+# > **元数据检查里的continue 是在给不一致开后门。**
 _ri = {i['kind']: i for i in rr.INJECTIONS}
+_miss_ri = [k for k in _fi.KINDS if k not in _ri]
+check(not _miss_ri,
+      'KINDS 里的每一条都在 recovery_rate.INJECTIONS（判据配置表）里',
+      f'缺判据配置: {_miss_ri} —— '
+      f'--only 过滤的是 INJECTIONS，缺了会被静默过滤成空列表，'
+      f'报「全部注入都失败了」')
+_extra_ri = [k for k in _ri if k not in _fi.KINDS]
+check(not _extra_ri,
+      'recovery_rate.INJECTIONS 里的每一条都在 KINDS 里',
+      f'判据配置里有注入器不认识的: {_extra_ri}')
 for _k, _meta in _fi.KINDS.items():
     if _k not in _ri:
-        continue
+        continue          # 上一条已硬失败，这里跳过避免重复报
     check(bool(_meta.get('recoverable_by_ai')) == bool(_ri[_k].get('expect_autonomous')),
           f'注入 {_k} 的 recoverable_by_ai 与 expect_autonomous 一致',
           f"KINDS={_meta.get('recoverable_by_ai')} "
