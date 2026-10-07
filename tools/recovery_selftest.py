@@ -733,10 +733,20 @@ except BaseException as e:
     # **必须捕获 BaseException 而不是 Exception** ——
     # SystemExit 不继承 Exception，用 `except Exception` 会被漏过去，
     # 于是自检进程静默终止（FAIL 数 0、rc=1，极难定位）。
+    #
+    # 顺带钉住另一件事：**报错必须带error 事件的原文**。
+    # 加了校验后重跑全量，33 次全失败而报错只说「正文完全为空」——
+    # 那个信息没有任何诊断价值，真因在 error 事件里。
+    # 于是只能另写探针复现，手动跑才发现手动跑完全正常。
+    # **报出症状但不报出原因 = 把排查成本转给下一次。**
+    msg = str(e)
     check(type(e) is RuntimeError,
           '有工具调用但正文为空 → RuntimeError（不是 SystemExit，'
           '那会终止整轮评测、白跑其余 32 次）',
           type(e).__name__)
+    check('error 事件原文' in msg and '事件类型' in msg,
+          '空回答的报错里带上了 error 事件原文与事件类型',
+          msg[:200])
 
 # 反向：**别把这条写成「只要没工具就错」**。
 #

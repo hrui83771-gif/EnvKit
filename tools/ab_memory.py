@@ -273,6 +273,19 @@ def _validate_response(text, events):
     # 而真相是**这一轮根本没跑**，该修的是采集侧。
     if not text.strip():
         kinds = [e.get('type') for e in events]
+        # ⚠️⚠️ **必须把 error 事件的原文带出来**。
+        #
+        # 这一条是我自己踩出来的教训：加了校验之后重跑全量，
+        # **33 次全部失败**，而报错只说「正文完全为空」。
+        # 那个信息**没有任何诊断价值** —— 真因在 `error` 事件里，
+        # 事件类型是 ['tool_result','plan_start','error','done']。
+        #
+        # 于是我只能另外写一个探针去复现，手动重跑才发现
+        # 手动跑完全正常（643 字正文 / 1558 事件）。
+        #
+        # **「报出症状但不报出原因」等于把排查成本转给了下一次。**
+        errs = [(e.get('text') or '')[:400]
+                for e in events if e.get('type') == 'error']
         # **用普通异常而不是 SystemExit**。
         #
         # `run_injections` 里写着 `except SystemExit: raise` ——
@@ -281,7 +294,9 @@ def _validate_response(text, events):
         # （标记 ERROR 而不是 FAIL —— 采集失败≠产品缺陷）。
         raise RuntimeError(
             f'有 {len(kinds)} 个事件、其中 {len(tool_seq(events))} 个工具调用，'
-            f'但**正文完全为空**。事件类型：{kinds}。'
+            f'但**正文完全为空**。\n'
+            f'事件类型：{kinds}\n'
+            f'**error 事件原文**：{errs or "（没有 error 事件）"}\n'
             f'模型没有产出任何文字 → 没有结论可评。'
             f'**这一轮不能算「模型没照做」**，那是把采集失败算成产品缺陷。'
             f'常见原因：请求被中途掐断 / 模型只顾调工具没输出 / 上游返回空 completion。')
