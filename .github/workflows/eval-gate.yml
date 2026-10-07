@@ -1,0 +1,106 @@
+name: eval-gate
+
+# 门禁的触发时机：**手动触发 + 打 tag 时**。
+#
+# ## 为什么不在每次 push 上跑全量评测
+#
+# 11 类 × 3 次 = 33 次**真实模型调用**，一次约 25~30 分钟，
+# 而 GitHub Actions 公开仓库每月只给 2000 分钟。
+# 每次 push 跑一遍，一天的额度就没了 —— 而额度耗尽后**门禁会静默失效**
+#（GitHub 会把 job 挂起，不报错）。
+#
+# > **静默失效的门禁比没有门禁更坏** ——
+# > 它给人"有保护"的错觉，实际早就没在跑。
+#
+# 所以：**手动触发跑全量（需要时），每次 push 只跑不需要模型的快速项**。
+on:
+  workflow_dispatch:
+    inputs:
+      set_baseline:
+        description: '拿当前结果当新基线（需人工确认基线可信）'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      # 只在这些文件变化时跑快速门禁 —— 它们是「能不能测」的依赖
+      - 'ai_tools.go'
+      - 'ai_loop.go'
+      - 'ai_sse.go'
+      - 'tools/recovery_*.py'
+      - 'tools/fault_inject.py'
+      - 'tools/eval_gate.py'
+      - 'tools/eval_baseline.json'
+      - 'eval/fixtures/sandbox-backend/**'
+
+concurrency:
+  group: eval-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 快速门禁：**不需要模型调用**，每次 push 都跑（几秒）
+      # 它守的是「判据装置本身没坏」——
+      # 元数据不一致会让新注入**静默失效**，而 Go 单测是绿的。
+      - name: 快速门禁（判分器自检）
+        run: python tools/recovery_selftest.py
+
+      - name: Go 单元测试
+        run: go test ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # 全量门禁：需要真实模型调用。
+      #**需要 secrets.MODEL_API_KEY** —— 没配就跳过而不是失败，
+      # 否则每个 PR 都会红，而「红」会被习惯成「正常」。
+      - name: 全量评测 + 门禁
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        env:
+          MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+        run: |
+          if [ -z "$MODEL_API_KEY" ]; then
+            echo "::warning title=跳过全量评测::未配置 MODEL_API_KEY。"
+            echo "判据装置的门禁已在上一步跑过。"
+            exit 0
+          fi
+          # 33 次调用 + 六维判分，一次约 25~30 分钟
+          python tools/recovery_sandbox.py --allow-writes --repeat 3 --min-samples 3
+
+          # 冻结基线要**显式传参**，不能用 `${{ a && b || c }}` ——
+          # GitHub Actions 没有三元表达式，那种写法在
+          # a 为假时会把 c 也取出来（|| 的语义），行为不可控。
+          - name: 冻结基线（仅手动勾选时）
+            if: github.event_name == 'workflow_dispatch' && inputs.set_baseline == 'true'
+            run: python tools/eval_gate.py --set-baseline
+
+          - name: 门禁判定
+            run: python tools/eval_gate.py
+
+      # 上传报告作为构件 —— 门禁失败了要能查「当时测出了什么」
+      - name: 上传评测报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: docs/eval/report-*.json
+          retention-days: 30
+          if-no-files-found: ignore
