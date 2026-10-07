@@ -70,18 +70,67 @@ jobs:
         run: go vet ./...
 
       # 全量门禁：需要真实模型调用。
-      #**需要 secrets.MODEL_API_KEY** —— 没配就跳过而不是失败，
-      # 否则每个 PR 都会红，而「红」会被习惯成「正常」。
+      #
+      # ## 为什么必须用 secret 而不是直接带 config.json
+      #
+      # 产品的 `config.json` 里 key 是 **DPAPI 密文**
+      # （`CryptProtectData`，**当前 Windows 用户作用域**）。
+      # CI runner 是另一个用户/另一台机器 → `dpapiUnprotect` 必然失败
+      # （`secrets_windows.go:65` 原话：「可能来自其他机器/用户」）。
+      #
+      # 好在 `dpapiUnprotect` 对**没有 `dpapi:` 前缀的值直接返回原文**，
+      # 所以**明文 key 是支持的**——由 workflow 从 secret 写进配置。
+      #
+      # ## 注意不要提交 config.json
+      #
+      # 它在 `.gitignore` 里；`git clean -fd` 也清不掉它。
+      # 但**同一 runner 上如果残留了别处的密文**，
+      # 上面那次写入会失败——所以先判断「能不能连上模型」而不是「文件存不存在」。
       - name: 全量评测 + 门禁
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         env:
           MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+          MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
         run: |
           if [ -z "$MODEL_API_KEY" ]; then
-            echo "::warning title=跳过全量评测::未配置 MODEL_API_KEY。"
-            echo "判据装置的门禁已在上一步跑过。"
+            echo "::warning title=跳过全量评测::未配置 secret MODEL_API_KEY。"
+            echo "判分器装置的门禁已在上一步跑过。"
             exit 0
           fi
+
+          # 把 key 写进配置。**用 python 而非 jq**：避免额外依赖，
+          # 且能保留 config.json 里的其他字段与结构。
+          python -c "
+          import json, os, pathlib
+          p = pathlib.Path('config.json')
+          cfg = json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
+          ai = cfg.setdefault('ai', {})
+          ai['enabled'] = True
+          ai['provider'] = 'deepseek'
+          ai['base_url'] = os.environ.get('MODEL_BASE_URL') or 'https://api.deepseek.com'
+          ai['api_key'] = os.environ['MODEL_API_KEY']   # 明文，无 dpapi: 前缀
+          ai['model'] = os.environ.get('MODEL_MODEL') or 'deepseek-flash'
+          p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('config.json 已写入（api_key 为明文，非 dpapi）')
+          "
+
+          # **先验能连上模型，再跑 33 次调用** ——
+          # 否则连不上时也要等 25 分钟才知道，白烧额度。
+          python -c "
+          import json, os, sys, urllib.request
+          cfg = json.load(open('config.json', encoding='utf-8'))
+          ai = cfg['ai']
+          req = urllib.request.Request(
+              ai['base_url'].rstrip('/') + '/models', method='GET')
+          req.add_header('Authorization', 'Bearer ' + ai['api_key'])
+          try:
+              urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=20).read()
+              print('模型可达：', ai['model'])
+          except Exception as e:
+              print('::error title=模型不可达::%s' % e)
+              sys.exit(1)
+          "
+
           # 33 次调用 + 六维判分，一次约 25~30 分钟
           python tools/recovery_sandbox.py --allow-writes --repeat 3 --min-samples 3
 
@@ -94,6 +143,29 @@ jobs:
 
           - name: 门禁判定
             run: python tools/eval_gate.py
+
+      # 无论成败都清掉 key —— runner 是临时的，但不清理会让
+      # 后续步骤（比如 upload-artifact）有机会把它打包进去。
+      #
+      # ## 为什么用 `run: |` 而不是 `run: "python -c \"...\""`
+      #
+      # 内嵌 Python 里全是 `if p.exists():` 这种带冒号的行，
+      # YAML 会把 `: ` 当成映射语法 —— 解析直接失败
+      # （报 `mapping values are not allowed here`，**行号指向 Python 那行**，
+      #看起来跟 YAML 毫无关系）。
+      # **报错位置离真因很远**，用 block scalar 就绕开了。
+      - name: 清除配置里的 key
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          python -c "
+          import json, pathlib
+          p = pathlib.Path('config.json')
+          if p.exists():
+              cfg = json.loads(p.read_text(encoding='utf-8'))
+              cfg.setdefault('ai', {})['api_key'] = ''
+              p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('config.json 里的 key 已清空')
+          "
 
       # 上传报告作为构件 —— 门禁失败了要能查「当时测出了什么」
       - name: 上传评测报告
