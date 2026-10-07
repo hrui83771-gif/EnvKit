@@ -167,6 +167,9 @@ def main():
     a = ap.parse_args()
 
     injections = rr.INJECTIONS
+    # `--only` 是否指定了类 —— 决定报告写「每类一个文件」还是「写总表」。
+    # 留着这个信息，别在过滤 injections 时把它丢掉（那样就分不清是哪种模式）。
+    only_kinds = bool(a.only)
     if a.only:
         ids = {x.strip() for x in a.only.split(',')}
         injections = [i for i in injections if i['kind'] in ids]
@@ -252,7 +255,7 @@ def main():
               '空数据写成 0.000 就是谎报。')
         return 1
 
-    report_and_print(results, a.min_samples)
+    report_and_print(results, a.min_samples, only_kinds=only_kinds)
     return 0
 
 
@@ -499,7 +502,19 @@ def sandbox_healthy(h):
     return bool(h.get('listening'))
 
 
-def report_and_print(results, min_samples):
+def report_and_print(results, min_samples, only_kinds=False):
+    """打印汇总并落盘。
+
+    ## `only_kinds` 为什么必须是参数而不是读全局
+
+    它定义在 `main()` 里。第一版我在 `main` 里赋值、
+    却在这个函数里直接用 —— `NameError` 直到跑完整轮评测才暴露
+    （`report_and_print` 在最后才被调用）。
+
+    > **跨函数用值就得传参。**
+    > 同理：写在 `main` 里、却被别处读取的变量，
+    > 编译器不会拦你，只会在最晚的时刻炸。
+    """
     dims = rr.aggregate(results)
     by_inj = {}
     for inj in rr.INJECTIONS:
@@ -551,10 +566,58 @@ def report_and_print(results, min_samples):
         'caveats': rr_dims_caveats(),
         'results': results,
     }
-    sb.REPORT = sb.ROOT / 'docs' / 'eval' / 'sandbox-recovery-report.json'
-    sb.REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
-                         encoding='utf-8')
-    print(f'\n完整数据：{sb.REPORT}')
+
+    # ## 按类分文件输出
+    #
+    # 原来只有一份 `sandbox-recovery-report.json`，**每次跑都覆盖**。
+    # 于是「分次采集」必然丢数据——
+    # v2.7 那轮为了绕开后台任务 10 分钟上限改成逐类跑，
+    # 结果留档的报告只剩最后一类（`total_runs = 3`），
+    # **九类的原始数据无法二次核对**（写总结文档时才暴露）。
+    #
+    # **逐类规避超时的做法，代价是丢掉了可复现性。**
+    # 而「数字能不能信」恰恰是那一轮的主题——
+    # 一份不能复现的数字，可信度天然打折。
+    #
+    # 现在：`--only` 指定了类就写 `report-<kind>.json`（**不覆盖总表**），
+    # 全量跑则照旧写总表并额外留一份带时间戳的归档。
+    kinds = sorted({r['injection'] for r in results if 'injection' in r})
+    out_dir = sb.ROOT / 'docs' / 'eval'
+    if only_kinds:
+        # 分次采集：每类一个文件，**绝不覆盖别人的**
+        for k in kinds:
+            p = out_dir / ('report-%s.json' % k)
+            sub = [r for r in results if r.get('injection') == k]
+            p.write_text(json.dumps({
+                'mode': 'sandbox',
+                'sandbox_port': sb.SANDBOX_PORT,
+                'min_samples': min_samples,
+                'total_runs': len(sub),
+                'injection': k,
+                # **本次采集的范围**。dimensions 是**本次跑的各类**的汇总，
+                # 不是九类的总账——写成显式字段，别让人误读成全量。
+                'scope': {'kinds': kinds, 'partial': len(kinds) < len(rr.INJECTIONS)},
+                'dimensions': dims,
+                'by_injection': by_inj,
+                'caveats': rr_dims_caveats(),
+                'results': sub,
+            }, ensure_ascii=False, indent=2), encoding='utf-8')
+            print(f'本类数据：{p}')
+        print('（分次采集：总表 sandbox-recovery-report.json 未改动，'
+              '避免覆盖别人的数据）')
+        print(f'（本次只跑了 {len(kinds)}/{len(rr.INJECTIONS)} 类，'
+              f'各文件里的 dimensions 是这 {len(kinds)} 类的汇总，不是全量总账）')
+    else:
+        sb.REPORT = out_dir / 'sandbox-recovery-report.json'
+        sb.REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
+                             encoding='utf-8')
+        # 带时间戳归档一份：全量跑的结果不该被下一次全量跑覆盖掉
+        stamp = time.strftime('%Y%m%d-%H%M%S')
+        arch = out_dir / ('sandbox-recovery-%s.json' % stamp)
+        arch.write_text(json.dumps(report, ensure_ascii=False, indent=2),
+                        encoding='utf-8')
+        print(f'\n完整数据：{sb.REPORT}')
+        print(f'带时间戳归档：{arch}')
 
 
 def rr_dims_caveats():

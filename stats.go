@@ -63,7 +63,11 @@ type DayStat struct {
 	TracesFailed  int64 `json:"traces_failed"`
 	TracesPartial int64 `json:"traces_partial"`
 	TracesAborted int64 `json:"traces_aborted"`
-	TracesWithUse int64 `json:"traces_with_usage"`
+	// **结局不可信**的轨迹数（v2.7 之前的历史数据，outcome 是死变量的产物）。
+	// 单列而不是塞进 aborted —— 混进去的话看板会显示「97% 中止」，
+	// 而真相是「97% 的数据当时根本没被采集」。
+	TracesOutcomeUnknown int64 `json:"traces_outcome_unknown"`
+	TracesWithUse        int64 `json:"traces_with_usage"`
 
 	// Token（**仅统计带 usage 的轨迹**）
 	TokenPrompt     int64 `json:"token_prompt"`
@@ -98,6 +102,9 @@ type Totals struct {
 	TracesFailed  int64 `json:"traces_failed"`
 	TracesPartial int64 `json:"traces_partial"`
 	TracesAborted int64 `json:"traces_aborted"`
+	// 结局不可信的历史轨迹（见 dayStats 同名字段注释）。
+	// 前端要**单独显示它**，而不是让它混进 aborted。
+	TracesOutcomeUnknown int64 `json:"traces_outcome_unknown"`
 
 	TokenTotal      int64 `json:"token_total"`
 	TokenPrompt     int64 `json:"token_prompt"`
@@ -240,19 +247,43 @@ func statsRange(days int) *StatsBoard {
 			ds := &dayStats[i]
 			ds.Traces++
 			b.Totals.Traces++
-			switch t.Outcome {
-			case outSuccess:
-				ds.TracesSuccess++
-				b.Totals.TracesSuccess++
-			case outFailed:
-				ds.TracesFailed++
-				b.Totals.TracesFailed++
-			case outPartial:
-				ds.TracesPartial++
-				b.Totals.TracesPartial++
-			default:
-				ds.TracesAborted++
-				b.Totals.TracesAborted++
+
+			// ## 结局统计只认「v2.7 之后」的轨迹
+			//
+			// v2.7 之前 `traceOutcome` 是死变量（声明后从未赋值），
+			// 于是 315 条历史轨迹的 outcome **100% 是 `aborted`**——
+			// 那不是「用户中途停止」，是装置坏掉。
+			//
+			// ## 划界靠 `Usage != nil`，不靠时间戳
+			//
+			// 时间戳会骗人（改系统时间、回放旧文件、跨版本迁移都会错），
+			// 而 `Usage` 是**同一次修复里一起补上的**——
+			// v2.7 之前的轨迹压根没有这个字段。
+			// 于是「有 usage 记录」= 「这条轨迹来自修好之后的代码」。
+			//
+			// > 用**数据可信度**划界，不用时间。
+			// > 修复留下的痕迹本身就是最好的分界线。
+			//
+			// 无 usage 的旧轨迹仍计入 Traces 总数（那是真实发生的调用），
+			// 只是不参与结局分类——**宁可少算，不可算错**。
+			if t.Usage == nil {
+				ds.TracesOutcomeUnknown++
+				b.Totals.TracesOutcomeUnknown++
+			} else {
+				switch t.Outcome {
+				case outSuccess:
+					ds.TracesSuccess++
+					b.Totals.TracesSuccess++
+				case outFailed:
+					ds.TracesFailed++
+					b.Totals.TracesFailed++
+				case outPartial:
+					ds.TracesPartial++
+					b.Totals.TracesPartial++
+				default:
+					ds.TracesAborted++
+					b.Totals.TracesAborted++
+				}
 			}
 			if t.Usage != nil {
 				ds.TracesWithUse++
