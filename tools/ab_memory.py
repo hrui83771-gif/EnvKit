@@ -272,13 +272,24 @@ def _validate_response(text, events):
     # 拉低结构块覆盖率，然后所有人去调产品侧指令——
     # 而真相是**这一轮根本没跑**，该修的是采集侧。
     if not text.strip():
-        kinds = [e.get('type') for e in events]
-        # ⚠️⚠️ **必须把 error 事件的原文带出来**。
+        # **事件类型必须去重，且报error 的原文。**
+        #
+        # 第一版直接打 `kinds = [e.get('type') for e in events]`，
+        # 结果一次失败就有 **619 个事件**、类型列表刷屏，
+        # 而 `error` 的原文排在 619 个类型之后 —— **恰好被截掉**。
+        #
+        # 实测（`hang_service` run2）：报错的 `collect_error` 前 300 字
+        # 全是 `'reasoning',` 的重复，诊断价值为零。
+        #
+        # **去重 + 按类型计数**：一行就能看出「有 error」，且不挤掉原文。
+        from collections import Counter as _C
+        kinds = ['%s×%d' % (t, n)
+                 for t, n in _C(e.get('type') for e in events).most_common()]
+        # ⚠️⚠️ **必须把 error 事件的原文放在最前面**。
         #
         # 这一条是我自己踩出来的教训：加了校验之后重跑全量，
         # **33 次全部失败**，而报错只说「正文完全为空」。
-        # 那个信息**没有任何诊断价值** —— 真因在 `error` 事件里，
-        # 事件类型是 ['tool_result','plan_start','error','done']。
+        # 那个信息**没有任何诊断价值** —— 真因在 `error` 事件里。
         #
         # 于是我只能另外写一个探针去复现，手动重跑才发现
         # 手动跑完全正常（643 字正文 / 1558 事件）。
@@ -293,10 +304,13 @@ def _validate_response(text, events):
         # 它要能被 `except Exception` 接住、变成一条 `error_row`
         # （标记 ERROR 而不是 FAIL —— 采集失败≠产品缺陷）。
         raise RuntimeError(
-            f'有 {len(kinds)} 个事件、其中 {len(tool_seq(events))} 个工具调用，'
+            #**原因放第一行** —— 报告只存 `collect_error` 的前 300 字，
+            # 前面写什么都会被看的人直接跳过，
+            # 而真正要看的 error 原文恰恰会因此被埋掉。
+            f'**error 事件原文**：{errs or "（没有 error 事件）"}\n'
+            f'有 {len(events)} 个事件、其中 {len(tool_seq(events))} 个工具调用，'
             f'但**正文完全为空**。\n'
             f'事件类型：{kinds}\n'
-            f'**error 事件原文**：{errs or "（没有 error 事件）"}\n'
             f'模型没有产出任何文字 → 没有结论可评。'
             f'**这一轮不能算「模型没照做」**，那是把采集失败算成产品缺陷。'
             f'常见原因：请求被中途掐断 / 模型只顾调工具没输出 / 上游返回空 completion。')

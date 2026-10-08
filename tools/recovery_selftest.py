@@ -744,9 +744,34 @@ except BaseException as e:
           '有工具调用但正文为空 → RuntimeError（不是 SystemExit，'
           '那会终止整轮评测、白跑其余 32 次）',
           type(e).__name__)
-    check('error 事件原文' in msg and '事件类型' in msg,
-          '空回答的报错里带上了 error 事件原文与事件类型',
-          msg[:200])
+    # **error 原文必须在第一行** ——
+    # 报告只存 `collect_error` 的前 300 字（`error_row` 里写死的
+    # `[:300]`），前面写什么都会被直接跳过。
+    #
+    # 实测踩过：事件类型列表不打去重，一次失败就 619 个事件、
+    # `'reasoning',` 刷屏，error 原文排在最后**恰好被截掉**。
+    #
+    # ⚠️ 这条断言要用**有 error 事件、且事件很多**的输入才能验到两件事。
+    # 第一版只喂了一个 `tool_result`，于是「去重」根本没被触发，
+    # 而「没有 error 事件」又被当成了去重失败 —— **断言写错了，不是代码。**
+    _many = ([{'type': 'tool_result', 'tool': 'get_system_state',
+               'result': 'ok'}]
+             + [{'type': 'reasoning', 'text': 'r' * 50} for _ in range(30)]
+             + [{'type': 'error', 'text': 'AI 上游超时（120s 无数据）'}])
+    try:
+        ab._validate_response('', _many)
+        check(False, '多事件 + 空正文 → 必须报错')
+    except BaseException as e2:
+        m2 = str(e2)
+        check(m2.startswith('**error 事件原文**：')
+              and 'AI 上游超时' in m2[:120],
+              'error 原文在第一行且内容完整（619 事件那次就是这样被埋掉的）',
+              m2[:150])
+        check('reasoning×30' in m2,
+              '事件类型按类型去重计数（30 个 reasoning 不能刷成 30 项）',
+              m2[:250])
+
+# 反向：**别把这条写成「只要没工具就错」**。
 
 # 反向：**别把这条写成「只要没工具就错」**。
 #
