@@ -829,33 +829,73 @@ func init() {
 		}, "required": []string{"target"}},
 		Execute: func(args map[string]any) (string, error) {
 			target, _ := args["target"].(string)
+			var r OpResult
 			switch target {
 			case "web", "backend":
 				wait := time.Duration(aiArgInt(args, "wait_secs", 0, 0, 180)) * time.Second
-				r := verifyService(target, wait)
+				r = verifyService(target, wait)
 				auditVerify(actAI, "verify_service", target, r)
-				return aiVerifyText(r), nil
 			case "db":
 				// v2.3 N3：静态检查（毫秒级）。它能把"文件完整但内容缺损"
 				// 这类现有三项判据查不出的问题报出来。
 				// **不自动做真实还原演练**：那要建库导数据、花几十秒，
 				// 不能因为"验证一次备份"就偷偷占用。用户要实测请走
 				// 「程序配置 → 恢复演练」，它会给出完整四步与结论。
-				r := verifyBackupStatic("")
+				r = verifyBackupStatic("")
 				auditVerify(actAI, "verify_backup", cfg.Projects.DBName, r)
-				return aiVerifyText(r), nil
 			case "chain":
 				growth := verifyChainGrowth
 				if s := aiArgInt(args, "wait_secs", 0, 0, 180); s > 0 {
 					growth = time.Duration(s) * time.Second
 				}
-				r := verifyChain(growth)
+				r = verifyChain(growth)
 				auditVerify(actAI, "verify_chain", cfg.Chain.SSHHost, r)
-				return aiVerifyText(r), nil
+			default:
+				return "", fmt.Errorf("target 必须是 web / backend / db / chain")
 			}
-			return "", fmt.Errorf("target 必须是 web / backend / db / chain")
+			// ---- v2.9：把结构化结果交给主循环，让它上界面 ----
+			//
+			// 以前只有 `aiVerifyText(r)` 那段文本 ——
+			// **用户看到的是模型对它的转述**，而不是复验本身。
+			// 现在主循环会读它、发一个 `verify_result` SSE 事件，
+			// 前端渲染成状态徽章。
+			//
+			// 用包级变量而不是返回值：工具签名是 `(string, error)`
+			// （整套工具体系都是这个形状，改它意味着改 24 个工具）。
+			// 消费点在同一次工具执行之后立刻取，不存在并发问题 ——
+			// SSE 是单连接的，而这里读的是「最近一次复验」。
+			lastVerify = r
+			return aiVerifyText(r), nil
 		},
 	}
+}
+
+// lastVerify 保存**最近一次** verify_environment 的结构化结果。
+//
+// # 为什么要用它，而不是给工具加返回值
+//
+// 工具签名是 `func(map[string]any) (string, error)` —— 24 个工具全是这个形状。
+// 为了把结构化结果上界面而改签名，意味着改 24 个工具加 24 处调用点，
+// **为一个展示需求付这么大的代价不值得**。
+//
+// # 为什么这样是安全的（别当成全局变量滥用）
+//
+// 消费点在**同一次工具执行之后立刻取走**（`ai_loop.go` 里
+// `aiTakeVerify()`），SSE 是单连接的、同一时刻只有一条 AI 回合在跑。
+// 所以「最近一次」就是「刚刚那次」。
+//
+// 用 `aiTakeVerify` 而不是直接读：读走即置零，
+// 避免「上一次的复验结果被下一次无关调用当成新的」。
+var lastVerify OpResult
+
+// aiTakeVerify 取走最近一次复验结果（取走即清空）。
+func aiTakeVerify() (OpResult, bool) {
+	r := lastVerify
+	if r.Msg == "" {
+		return OpResult{}, false
+	}
+	lastVerify = OpResult{}
+	return r, true
 }
 
 // aiVerifyText 把复验结果翻译成给模型的文本：结论 + 证据 + 明确的行为指引。

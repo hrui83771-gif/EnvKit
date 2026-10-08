@@ -723,6 +723,19 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// 而是"用户有机会点头"——两者的区别在归因时很关键：
 				// forbidden 说明规则太严，confirm 说明档位合适但用户没批。
 				tracePolicy(verdict, "pending")
+				// ---- v2.9：先把话说完，再弹卡 ----
+				//
+				// **用户是"基于结论"决定要不要点头的**，而模型的话在这里会被掐断。
+				// 实测（hang_service 三次里两次）：诊断完全正确，
+				// 却停在「我先发起重启」——**用户在界面上看到的也是半句话**。
+				//
+				// 顺序不能反：先看到结论 → 再决定要不要授权。
+				// 而确认后的那一段已经执行完了再说就晚了。
+				//
+				// 补答失败也不影响主流程（宁可半句，不要卡住整个回合）。
+				if !preflight {
+					aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
+				}
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
 					"text": aiToolCnName(a.Name, args)})
 				// 把未完成的 assistant 消息保留在本地 msgs（供确认后续接），并结束本次 SSE
@@ -780,6 +793,33 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
 				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": firstLines(toolMsg.Content, 300)})
+				// ---- v2.9：复验结果上界面 ----
+				//
+				// 以前用户看到的是**模型对复验结果的转述** ——
+				// 那正是「执行即成功」在展示层的重演：
+				// AI 说「已恢复正常」，而复验其实失败了。
+				//
+				// 现在把结构化结论自己发出去（ok/verified/msg/evidence），
+				// 由前端渲染成状态徽章。**徽章不依赖模型怎么描述。**
+				if a.Name == "verify_environment" {
+					if vr, ok := aiTakeVerify(); ok {
+						// **类名由 Go 侧算**：三态判定只有一份实现。
+						// 让 JS 自己判的话，两处会独立演化 ——
+						// 一处改了另一处没改，徽章就会显示错误状态，
+						// 而徽章的全部价值就是「它说验了就是真验了」。
+						sseWrite(w, fl, map[string]any{
+							"type":      "verify_result",
+							"ok":        vr.Ok,
+							"verified":  vr.Verified,
+							"target":    vr.Target,
+							"msg":       vr.Msg,
+							"err_kind":  vr.ErrKind,
+							"evidence":  vr.Evidence,
+							"cls":       aiVerifyBadgeClass(vr.Ok, vr.Verified),
+							"badge":     aiVerifyBadgeText(vr.Ok, vr.Verified),
+						})
+					}
+				}
 				// 提额判定放在**工具执行之后**：调用前不知道结果，
 				// 而"这一轮有没有换来新信息"正是要看结果才知道。
 				// 失败不计入 productive——失败那一轮没有推进认知。

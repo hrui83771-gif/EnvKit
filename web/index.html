@@ -367,6 +367,21 @@
   .ai-tool summary{cursor:pointer;list-style:none}
   .ai-tool summary::-webkit-details-marker{display:none}
   .ai-tool pre{margin:8px 0 0;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all;background:#0f1720;color:#d7e2ee;padding:8px;border-radius:6px}
+  /* v2.9 复验徽章：把「客观复验结果」直接摆在界面上。
+     以前用户只能看到模型对复验结果的**转述** —— 而转述可能说反。
+     三种状态各有颜色，失败与未复验必须一眼可辨：
+     ok/verified=通过；ok/verified=执行了但没复验；ok=false=未通过。 */
+  .ai-verify{align-self:center;max-width:92%;border-radius:8px;padding:7px 10px;font-size:12px;border:1px solid var(--line);background:var(--off);color:var(--muted)}
+  .ai-verify.is-ok{border-color:#2e7d4f;background:#0f2018;color:#8fdcb0}
+  .ai-verify.is-pending{border-color:#8a6d1f;background:#211b0d;color:#e8c976}
+  .ai-verify.is-bad{border-color:#a33;background:#24100f;color:#f0a9a4}
+  .ai-verify .v-head{display:flex;align-items:center;gap:8px;font-weight:600}
+  .ai-verify .v-badge{padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid currentColor;flex:none}
+  .ai-verify .v-msg{font-weight:400;color:inherit;opacity:.95}
+  .ai-verify details{margin-top:6px}
+  .ai-verify summary{cursor:pointer;list-style:none;font-size:11px;opacity:.85}
+  .ai-verify summary::-webkit-details-marker{display:none}
+  .ai-verify .v-ev{margin:6px 0 0;padding:6px 8px;border-radius:6px;background:#0f1720;color:#d7e2ee;white-space:pre-wrap;word-break:break-all;font-size:11px}
   .ai-stop{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:3px 10px;cursor:pointer}
   .ai-time{font-size:11px;color:var(--muted);margin-right:8px;letter-spacing:.5px;user-select:none}
   /* v2.3 N5 计划面板：进行中默认展开（用户要看到它在干什么），结束自动折叠 */
@@ -4719,6 +4734,61 @@ const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日�
   search_files:'搜索项目文件', read_file:'读取项目文件', verify_environment:'复验环境状态'};
 function aiToolName(name){ return t(AI_TOOL_CN[name] || name) + '（' + name + '）'; }
 
+// v2.9：把 verify_environment 的客观结果渲染成状态徽章。
+//
+// ## 为什么它不是「又一个tool_result」
+//
+// tool_result 展示的是**工具返回的文本**，而那段文本是写给模型读的指令
+// （「必须如实告诉用户还没确认成功」之类）。用户看到的是**模型对它的转述**——
+// 而转述可能说反。这正是「执行即成功」在展示层的重演。
+//
+// 徽章只认 SSE 里的 ok/verified 两个布尔值，
+// 所以 AI 说得再漂亮也改不了它的颜色。
+//
+//## 三态必须三色
+//
+//|状态 | 含义 | 为什么不能合并 |
+// |---|---|---|
+// | ok && verified | 真的恢复了 | — |
+// | ok && !verified | 动作执行了，但**没证据说恢复了** | 与「恢复成功」合并 = 白做 |
+// | !ok | 复验本身失败 | 与上面两种合并 = 又变成一句「已处理」 |
+function aiRenderVerify(ev){
+  // **cls 与 badge 由 Go 侧算好后传过来**（aiVerifyBadgeClass/Text）。
+  // 这里只做映射，不重新判断三态 —— 两处独立判断会各自演化，
+  // 然后徽章就开始显示错误状态，而它唯一的价值就是「它说验了就是真验了」。
+  // 兜底仍按 ok/verified 算，只是为了后端旧版本时不至于空白。
+  const cls = ev.cls || (function(){ const ok=!!ev.ok, vf=!!ev.verified;
+    return !ok ? 'is-bad' : (vf ? 'is-ok' : 'is-pending'); })();
+  // 徽章文案**必须走 t()** —— Go 侧传来的 badge 是中文，
+  // 而界面可能切到英文。直接显示会让英文界面里混进中文。
+  // 所以按三态重新查表，Go 侧的 badge 只作兜底。
+  const badge = t(!ev.ok ? '复验未通过' : (ev.verified ? '已复验通过' : '已执行·未确认'))
+    || ev.badge || '';
+  const d = document.createElement('div');
+  d.className = 'ai-verify ' + cls;
+  const head = document.createElement('div'); head.className = 'v-head';
+  const b = document.createElement('span'); b.className = 'v-badge'; b.textContent = badge;
+  head.appendChild(b);
+  const tgt = document.createElement('span'); tgt.textContent = aiToolName('verify_environment').replace(/（[^）]*）$/, '');
+  head.appendChild(tgt);
+  if(ev.msg){
+    const m = document.createElement('span'); m.className = 'v-msg'; m.textContent = ev.msg;
+    head.appendChild(m);
+  }
+  d.appendChild(head);
+  const evs = Array.isArray(ev.evidence) ? ev.evidence.filter(Boolean) : [];
+  if(evs.length){
+    const det = document.createElement('details');
+    const sm = document.createElement('summary'); sm.textContent = t('查看证据');
+    det.appendChild(sm);
+    const pre = document.createElement('pre'); pre.className = 'v-ev'; pre.textContent = evs.join('\n');
+    det.appendChild(pre);
+    d.appendChild(det);
+  }
+  $ai('ai-msgs').appendChild(d);
+  $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+}
+
 let aiCtrl = null;      // AbortController：手动"停止生成"用
 let aiPending = null;   // {asst, card}：待确认的写操作卡片。用户无视卡片直接发新消息时清理悬挂回合
 
@@ -4855,6 +4925,13 @@ async function aiConsume(path, body){
           d.appendChild(sm); d.appendChild(pre);
           $ai('ai-msgs').appendChild(d);
           $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+        } else if(ev.type === 'verify_result'){
+          // v2.9：客观复验结果直接上界面。
+          // **不用模型的话描述成败** —— 徽章只认 SSE 里的 ok/verified。
+          // 三态必须可辨：ok=false=未通过；ok=true&verified=false=已执行但没复验；
+          // 两者合并成一种颜色就等于把这个功能白做。
+          dropThink();
+          aiRenderVerify(ev);
         } else if(ev.type === 'confirm_request'){
           dropThink();
           // 助手 tool_calls 消息进历史（协议要求 tool 结果必须跟随）

@@ -669,5 +669,9 @@
   "：所有写操作需你在对话或助手徽标上确认才会执行；Key 经 DPAPI 加密，不进日志、不进 AI 上下文": ": every write action runs only after you confirm in the chat or on the assistant badge; the key is DPAPI-encrypted and never enters logs or the AI context",
   "：把脱敏诊断报告交给大模型，输出现状总结、问题定位与建议步骤": ": sends the sanitized diagnostic report to the LLM and returns a summary, likely causes and suggested steps",
   "：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告": ": connection test, one-step DB+table creation, one-click backup/restore (auto-retry), frontend npm install / backend go mod tidy, config import/export (sanitized sharing), environment diagnostic report",
-  "：自然语言查询日志与环境状态，执行数据库备份、组件检测、前后端启停 / 重启、清理进程、加 Defender 白名单（共 11 个工具）": ": ask about logs and environment status in plain language; run DB backups, component checks, service start/stop/restart, process cleanup and Defender exclusions (11 tools in total)"
+  "：自然语言查询日志与环境状态，执行数据库备份、组件检测、前后端启停 / 重启、清理进程、加 Defender 白名单（共 11 个工具）": ": ask about logs and environment status in plain language; run DB backups, component checks, service start/stop/restart, process cleanup and Defender exclusions (11 tools in total)",
+  "已复验通过": "Verified OK",
+  "已执行·未确认": "Executed, not confirmed",
+  "复验未通过": "Verification failed",
+  "查看证据": "View evidence"
 }
