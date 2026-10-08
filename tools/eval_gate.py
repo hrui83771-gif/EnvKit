@@ -196,14 +196,31 @@ def coverage(runs):
     err = [r for r in runs
            if r.get('collect_error') and not r.get('cut_by_confirm')]
     judgeable = n - len(cut) - len(err)
-    used_j = sum(1 for r in runs
-                 if r.get('verdict_used') or r in cut)
+    # 分子**只算真正走了结构化路径的**。
+    #
+    # ⚠️ 第一版写的是 `if r.get('verdict_used') or r in cut`
+    # —— 那把「被确认卡掐断」的轮次也算进分子，
+    # 而它们已经**从分母里剔掉了** → **比率可以大于 1**。
+    # 实测 hang_service 得到 coverage_judgeable = 1.500。
+    used_j = sum(1 for r in runs if r.get('verdict_used'))
+    used_j = sum(1 for r in runs if r.get('verdict_used'))
+    cj = (used_j / judgeable) if judgeable else None
+    # ---- 不变式：比率必须落在 [0, 1] ----
+    #
+    # 分子分母口径不一致时比率会 > 1（实测踩过 1.500：
+    # 掐断的轮次被算进分子却已从分母剔除）。
+    # **比率 > 1 一眼就能看出口径错了** —— 所以当场断言，
+    # 别让它悄悄写进报告，那会让基线失真。
+    if cj is not None and not (0.0 <= cj <= 1.0):
+        raise AssertionError(
+            'coverage_judgeable=%.3f 越界：分子 %d / 分母 %d'
+            % (cj, used_j, judgeable))
     return {'runs': n, 'present': present, 'valid': valid, 'used': used,
             'coverage': (used / n) if n else None,
             'cut_by_confirm': len(cut),
             'collect_errors': len(err),
             'judgeable': judgeable,
-            'coverage_judgeable': (used_j / judgeable) if judgeable else None}
+            'coverage_judgeable': cj}
 
 
 # ---------- 3. 比基线 ----------
