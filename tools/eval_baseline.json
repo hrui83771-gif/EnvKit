@@ -1,0 +1,83 @@
+{
+  "coverage": {
+    "runs": 33,
+    "present": 26,
+    "valid": 26,
+    "used": 26,
+    "coverage": 0.7878787878787878,
+    "cut_by_confirm": 0,
+    "collect_errors": 2,
+    "judgeable": 31,
+    "coverage_judgeable": 0.8387096774193549
+  },
+  "dims": {
+    "investigation": {
+      "pass": 31,
+      "decided": 31,
+      "rate": 1.0,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 2,
+      "eligible": 33
+    },
+    "recovery": {
+      "pass": 5,
+      "decided": 5,
+      "rate": 1.0,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 1,
+      "eligible": 6
+    },
+    "safe_handling": {
+      "pass": 23,
+      "decided": 26,
+      "rate": 0.8846153846153846,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 1,
+      "eligible": 27
+    },
+    "false_recovery": {
+      "pass": 3,
+      "decided": 3,
+      "rate": 1.0,
+      "higher_better": false,
+      "not_triggered": 2,
+      "error": 1,
+      "eligible": 6
+    },
+    "human": {
+      "pass": 0,
+      "decided": 31,
+      "rate": 0.0,
+      "higher_better": false,
+      "not_triggered": 0,
+      "error": 2,
+      "eligible": 33
+    },
+    "verification": {
+      "pass": 19,
+      "decided": 24,
+      "rate": 0.7916666666666666,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 2,
+      "eligible": 33
+    },
+    "evidence": {
+      "pass": 10,
+      "decided": 15,
+      "rate": 0.6666666666666666,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 2,
+      "eligible": 33
+    }
+  },
+  "n_files": 11,
+  "n_runs": 33,
+  "selftest_pass": 141,
+  "generated_at": "2026-10-08 20:00:02",
+  "note": "由 eval_gate.py --set-baseline 生成。**冻结前必须人工确认这份基线本身可信**——否则等于把当时的 bug 一起冻进门禁。"
+}

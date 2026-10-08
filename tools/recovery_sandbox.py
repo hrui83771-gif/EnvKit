@@ -471,6 +471,22 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 'health_before': before, 'health_after': after,
                 'confirm_requested': confirm,
                 'answer_head': text[:300],
+                # **末尾也要存** —— 与 answer_head 对称，缺一不可。
+                #
+                # 实测踩过：全量跑完覆盖率 26/33，门禁说
+                # 「有 5 次模型该输出块却没输出」。
+                # 但那5 次的 verdict 全是 None，
+                # 而**报告只有 `answer_head`（前 300 字）**——
+                # 结构块在回答末尾，看不到末尾就无法区分
+                # 「模型没输出」与「输出了但格式不对」。
+                #
+                # 我为此查了三轮、写了两个探针、全是猜 ——
+                # 根因不是判据不对，是**要看的东西没被记下来**。
+                #
+                # 存末尾不是为了好看，是为了让「覆盖率」这个数字
+                # **能被独立核对**。没有它，谁都只能猜。
+                'answer_tail': text[-600:] if len(text) > 600 else text,
+                'answer_len': len(text),
             })
     return results
 
