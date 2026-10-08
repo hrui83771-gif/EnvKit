@@ -43,7 +43,24 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
+
+// aiPreconfirmTimeout 补答的独立超时。
+//
+// ## 为什么不给它 aiTurnTimeout
+//
+// 补答是**锦上添花**，不是主流程的一部分。
+// 用主循环那个（秒级）超时意味着：上游思考慢一点，
+// 用户就要多等那么久才能看到确认卡 —— 而确认卡本身是等��就绪的东西。
+//
+// 实测踩过：run2/run3 的 `reasoning×1105` 说明模型思考了上千个片段，
+// 而正文一个字都没出。**没有这个上限，补答就把整个回合卡死了。**
+//
+// 25 秒的取舍：一段「现在是什么状态 / 为什么 / 做完会怎样」
+// 通常 600~900 字，DeepSeek-flash 这个量级 3~8 秒；
+// 25 秒给了三倍余量，而用户多等的上限被钉住了。
+const aiPreconfirmTimeout = 25 * time.Second
 
 // aiPreconfirmPrompt构造补答用的那句系统提示。
 //
@@ -135,7 +152,23 @@ func aiPreconfirmExplain(ctx context.Context, w http.ResponseWriter, fl http.Flu
 
 	payload := aiPayload(full, nil, acTurn.quirkRead(), -1, false)
 	b, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(),
+	// ---- 补答必须有独立超时 ----
+	//
+	// 踩过：`httpStream.Do(req)` 只有**连接**超时，
+	// **响应体读取没有任何时限** —— 上游开始流但不结束时，
+	// 下面的 Scanner 会一直阻塞。
+	//
+	// 实测 hang_service run2/run3 就是这样：
+	// `reasoning×1105` 说明模型思考了很久，而正文一个字都没出。
+	//
+	// 后果很严重：补答本该"失败就算了"，却把整个回合卡住，
+	// 用户看到的是**一直转圈**。
+	//
+	// 所以这里用独立的短超时（比主循环的 aiTurnTimeout 更短 ——
+	// 补答是锦上添花，不值得让用户等）。
+	pctx, pcancel := context.WithTimeout(ctx, aiPreconfirmTimeout)
+	defer pcancel()
+	req, err := http.NewRequestWithContext(pctx, "POST", acTurn.endpoint(),
 		strings.NewReader(string(b)))
 	if err != nil {
 		return false
