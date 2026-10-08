@@ -418,8 +418,28 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 # 采集出错必须显式标记，不能让它变成"0 工具所以 FAIL"——
                 # 那是把管线问题算成产品缺陷。
                 print(f'  run{r+1} 采集失败：{str(e)[:200]}')
-                results.append(rr.error_row(
-                    inj, r + 1, f'采集失败：{str(e)[:300]}'))
+                _row = rr.error_row(
+                    inj, r + 1, f'采集失败：{str(e)[:300]}')
+                # ---- 区分「被确认卡掐断」与「真的采集故障」 ----
+                #
+                # `ab.chat` 抛错时会把 events 挂在异常上（见 ab_memory）。
+                # **实测踩过**：一条采集失败的报告里事件类型是
+                # `['reasoning×934', ..., 'confirm_request×1', 'done×1']`
+                # —— 它是被确认卡掐断的（模型正要发写工具，SSE 结束），
+                # 而不是我原先以为的「上游故障」。
+                #
+                # 分不清这两者，就会「产品掐断」被记成「模型/上游问题」，
+                # 然后所有人去改错的地方。
+                _ev = getattr(e, 'events', None) or []
+                _confirm = any(x.get('type') == 'confirm_request'
+                               for x in _ev)
+                _row['confirm_requested'] = _confirm
+                _row['cut_by_confirm'] = _confirm
+                if _confirm:
+                    _row['collect_error'] = (
+                        '被确认卡掐断（模型正要发写工具，本轮 SSE 结束）'
+                        + str(e)[:240])
+                results.append(_row)
                 continue
             finally:
                 # **撤销没清干净要说出来**。
@@ -698,15 +718,28 @@ def rr_verdict_coverage(results):
 
     # 被确认卡掐断的轮次：产品结束了本轮，模型没机会把话说完。
     # **不是采集失败**（文本有内容），也不是模型不照做。
+    #
+    # `cut_by_confirm=True` 覆盖两种形态：
+    #   · 正常路径（有正文，卡在「请点确认执行」）
+    #   · 采集失败路径（模型一个字都没输出就被掐断，见 error_row 分支）
+    # **后者曾被误记成「上游故障」** —— 事件类型里明明写着
+    # `confirm_request×1`，分不清就会去改错的地方。
     cut = [r for r in results
-           if r.get('confirm_requested') and not r.get('verdict')]
+           if r.get('cut_by_confirm')
+           or (r.get('confirm_requested') and not r.get('verdict'))]
 
     # 采集失败（error_row）：**根本没测到**，不能进任何分母。
     # ERROR 的语义是「没有结论」，不是「结论是不合格」。
     #
     # 不排除的话，一次采集失败会让覆盖率看起来像模型不照做——
     # 那是把管线问题算成产品缺陷。
-    err = [r for r in results if r.get('collect_error')]
+    #
+    # ⚠️ **但被确认卡掐断的那次不算「采集失败」** ——
+    # 它是被产品掐断的，性质同`cut`。
+    # 不分开就会**同一个轮次被算进两个排除桶**，
+    # 分母被重复扣掉，coverage_judgeable 反而虚高。
+    err = [r for r in results
+           if r.get('collect_error') and not r.get('cut_by_confirm')]
 
     judgeable = n - len(cut) - len(err)
     used_j = sum(1 for r in results

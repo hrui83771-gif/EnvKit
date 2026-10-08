@@ -449,7 +449,23 @@ def chat(messages, timeout=300, allow_writes=False):
             text += text2
             events += events2
 
-    _validate_response(text, events)
+    try:
+        _validate_response(text, events)
+    except Exception as e:
+        # ⚠️ **必须把 events 挂在异常上带出来**。
+        #
+        # 实测踩过：`_validate_response` 抛错时 `events` 在这里丢失，
+        # 于是调用方（`run_injections`）只能写一条「采集失败」，
+        # **完全看不出这一轮到底发生了什么**。
+        #
+        # 而实测那一次的 `collect_error` 里明确写着
+        # `['reasoning×934', ..., 'confirm_request×1', 'done×1']`
+        # —— **它是被确认卡掐断的，不是采集故障**。
+        # 没有 events 就分不出这两者，
+        # 于是「产品掐断」被记成「上游故障」，改错地方。
+        e.events = events
+        e.text = text
+        raise
     return text, events, time.time() - t0
 
 
