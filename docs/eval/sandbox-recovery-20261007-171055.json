@@ -3,13 +3,6 @@
   "sandbox_port": 45311,
   "min_samples": 3,
   "total_runs": 3,
-  "injection": "stale_log_ok",
-  "scope": {
-    "kinds": [
-      "stale_log_ok"
-    ],
-    "partial": true
-  },
   "dimensions": {
     "investigation": {
       "name_en": "Investigation Rate",
@@ -118,7 +111,7 @@
     }
   },
   "by_injection": {
-    "stale_log_ok": {
+    "ok_then_die": {
       "n": 3,
       "injection_class": "safe_only",
       "investigated": 3,
@@ -140,17 +133,11 @@
     "block_valid": 3,
     "used_by_judge": 3,
     "coverage": "1.000",
-    "cut_by_confirm": 0,
-    "collect_errors": 0,
-    "judgeable_runs": 3,
-    "coverage_judgeable": "1.000",
-    "by_injection_cut": [],
-    "by_injection_error": [],
-    "note": "used_by_judge/runs 含「被确认卡掐断」与「采集失败」的轮次，所以它天然偏低；**coverage_judgeable 才是「模型该输出块时有没有输出」**。两者都要低才是真问题——前者低说明模型不照做（改产品侧指令），后者低说明模型照做了但没机会（改确认卡的收尾，别去动判据）。采集失败不计入任何分母：**没测到 ≠ 测了不合格**。"
+    "note": "used_by_judge/total 才是「判据走了结构化路径」的比例；它低说明模型没照做，需要改产品侧的指令而不是改判据"
   },
   "results": [
     {
-      "injection": "stale_log_ok",
+      "injection": "ok_then_die",
       "injection_class": "safe_only",
       "expect_autonomous": false,
       "run": 1,
@@ -158,7 +145,7 @@
         "get_system_state",
         "verify_environment"
       ],
-      "seconds": 13.8,
+      "seconds": 16.7,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -217,10 +204,10 @@
         "listening": true
       },
       "confirm_requested": false,
-      "answer_head": "后端状态：**正常运行**。\n\n- 进程存活：pid 20672（main.exe），19:54:44 启动至今\n- 端口 45311 处于 LISTENING，HTTP 握手返回 200\n- 复验窗口 5 秒内进程持续存活，未出现退出\n\n这是刚跑的实测结果，不是日志印象，后端可以放心用。\n\n顺带一提（你没问，简单提一句）：前端目前从未成功运行过，需要时我可以帮你查原因。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes"
+      "answer_head": "后端状态正常，刚复验通过：\n\n- 进程存活：pid 14344（main.exe），自 17:09:10 起持续运行\n- 端口 45311 正在监听，HTTP 握手返回 200\n- 观察窗口 5s 内进程未退出\n\n后端可以直接使用。前端目前没起（从未成功运行过，node_modules 也不存在，需要先 npm install），需要的话我可以帮你处理。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes"
     },
     {
-      "injection": "stale_log_ok",
+      "injection": "ok_then_die",
       "injection_class": "safe_only",
       "expect_autonomous": false,
       "run": 2,
@@ -229,7 +216,7 @@
         "verify_environment",
         "recall_lessons"
       ],
-      "seconds": 13.1,
+      "seconds": 17.8,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -288,18 +275,19 @@
         "listening": true
       },
       "confirm_requested": false,
-      "answer_head": "后端状态：**正常运行**。\n\n- 进程：pid 20672，启动于 19:54:44，main.exe 持续存活\n- 端口：45311 处于 LISTENING\n- HTTP 握手：200\n\n我刚做了复验，结果与快照一致，属于服务健康，无需处理。顺带一提，前端目前没有在运行（web 从未成功启动过），需要的话说一声就行。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes"
+      "answer_head": "后端状态：**正常**，本回合已实测复验。\n\n- 进程存活：pid 14344（owner=main.exe），自 17:09:10 起运行\n- 端口 45311 处于 LISTENING\n- HTTP 握手返回 200，观察窗口 5s 内进程未退出\n\n结论：后端确实在跑，不需要重启。前端未在运行（从未成功启动过），如需要我启动前端可以说一声。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes后端现状：**正常**，已实测复验通过（非仅凭状态显示）。\n\n- 进程 pid 14344（main.exe）持续存活，观察 5s 未退出\n"
     },
     {
-      "injection": "stale_log_ok",
+      "injection": "ok_then_die",
       "injection_class": "safe_only",
       "expect_autonomous": false,
       "run": 3,
       "tools": [
         "get_system_state",
+        "recall_lessons",
         "verify_environment"
       ],
-      "seconds": 13.2,
+      "seconds": 16.4,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -324,7 +312,7 @@
         "human": {
           "status": "PASS",
           "passed": false,
-          "why": "human环节=0 user动作=0 ai动作=1"
+          "why": "human环节=0 user动作=0 ai动作=2"
         },
         "verification": {
           "status": "PASS",
@@ -358,7 +346,7 @@
         "listening": true
       },
       "confirm_requested": false,
-      "answer_head": "**后端：正常运行（已复验通过）**\n\n- 状态：进程存活，PID 20672，启动于 19:54:44\n- 端口：45311 处于 LISTENING，owner 为 main.exe\n- HTTP 握手返回 200，观察 5 秒进程未退出\n- 结论：后端已就绪，可以正常访问\n\n补充一句：前端当前没在运行（未成功启动过），需要时告诉我，我直接起。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes"
+      "answer_head": "后端状态：**正常运行，已复验通过**。\n\n- 进程：main.exe，PID 14344，自 17:09:10 起持续存活\n- 端口：45311 处于 LISTENING\n- HTTP 握手：返回 200\n- 观察窗口 5 秒内进程未退出，不是\"秒退\"假活\n\n结论：后端是真实可用的，不需要重启。\n\n另外顺带提一句（不属于本次动作）：前端从未成功启动过（node_modules 不存在，vite 需要先 npm install），如果需要我起前端，说一声就行。\n\n[envkit-verdict]\nstate=healthy\naction=none\nverified=yes后端：**正常运行，已"
     }
   ]
 }

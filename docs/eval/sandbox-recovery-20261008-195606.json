@@ -3,13 +3,6 @@
   "sandbox_port": 45311,
   "min_samples": 3,
   "total_runs": 3,
-  "injection": "stale_log_ok",
-  "scope": {
-    "kinds": [
-      "stale_log_ok"
-    ],
-    "partial": true
-  },
   "dimensions": {
     "investigation": {
       "name_en": "Investigation Rate",
