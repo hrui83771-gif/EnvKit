@@ -57,10 +57,17 @@ import (
 // 实测踩过：run2/run3 的 `reasoning×1105` 说明模型思考了上千个片段，
 // 而正文一个字都没出。**没有这个上限，补答就把整个回合卡死了。**
 //
-// 25 秒的取舍：一段「现在是什么状态 / 为什么 / 做完会怎样」
-// 通常 600~900 字，DeepSeek-flash 这个量级 3~8 秒；
-// 25 秒给了三倍余量，而用户多等的上限被钉住了。
-const aiPreconfirmTimeout = 25 * time.Second
+// 45 秒的取舍：
+//
+//	主循环给 6 分钟（aiTurnTimeout），那是「排查一整套问题」的量级；
+//	补答只是把已经查到的结论说清楚，**不需要重新思考**。
+//	但实测 run2 有 `reasoning×843` ——模型确实会思考很久
+//	（thinking 模型的通病），25 秒那次就超时了。
+//
+//	所以给到45 秒：一段 600~900 字的结论在 deepseek-flash 上
+//	思考+输出通常 5~15 秒，45 秒给了三倍余量，
+//	而用户等待的上限被钉死（不至于以为界面死了）。
+const aiPreconfirmTimeout = 45 * time.Second
 
 // aiPreconfirmPrompt构造补答用的那句系统提示。
 //
@@ -247,6 +254,20 @@ func aiPreconfirmExplain(ctx context.Context, w http.ResponseWriter, fl http.Flu
 	if said > 0 {
 		sseWrite(w, fl, map[string]any{"type": "delta", "text": "\n\n"})
 		warn(scSys, "AI", "确认前补答 %d 字（用户点确认前能看到完整结论）", said)
+	}
+	// ---- 必须区分「超时」与「正常读完」 ----
+	//
+	// 实测踩过：超时会让 Scanner 以 `context deadline exceeded` 结束，
+	// 但 `sc.Err()` 没被读，于是**超时与"什么都没说"完全同形**——
+	// 日志无痕、报告里看不出区别。
+	//
+	// 而这两种情况要做的判断完全不同：
+	//   · 超时 → 上游在思考但不产出内容，**该换个更快的模型或调 prompt**
+	//   · 正常读完且0 字 → 补答提示词对这个模型不生效
+	//
+	// 分不清就等于每次都要重新排查一遍。
+	if err := sc.Err(); err != nil {
+		warn(scSys, "AI", "确认前补答**未读完**（已产出 %d 字）：%v —— 上游思考过久或连接中断", said, err)
 	}
 	return said > 0
 }
