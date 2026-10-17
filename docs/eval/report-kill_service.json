@@ -159,7 +159,7 @@
         "recall_lessons",
         "start_service"
       ],
-      "seconds": 25.5,
+      "seconds": 19.3,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -218,7 +218,9 @@
         "listening": true
       },
       "confirm_requested": true,
-      "answer_head": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复。\n\n- 处理：重新启动了后端服务。\n- 结果：**复验通过** —— 端口 45311 处于 LISTENING，进程 main.exe（pid 30352）持续存活 5 秒以上，HTTP 握手返回 200。\n- 说明：本次启动是 E"
+      "answer_head": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复，并且是**通过复验的**，不是只看\"启动命令没报错\"：\n\n- 端口 45311 在监听，owner 为 main.exe（pid 28128）\n- 连续观察 5 秒进程存活，HTTP 握手返回 200\n- 启动时间 21:35:54\n",
+      "answer_tail": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复，并且是**通过复验的**，不是只看\"启动命令没报错\"：\n\n- 端口 45311 在监听，owner 为 main.exe（pid 28128）\n- 连续观察 5 秒进程存活，HTTP 握手返回 200\n- 启动时间 21:35:54\n\n之前日志里有一条「[后端] 进程已退出：exit status 1」，属于子进程启动后立刻退出这一类；本次启动已成功存活，先不用再处理。\n\n[envkit-verdict]\nstate=healthy\naction=started\nverified=yes",
+      "answer_len": 429
     },
     {
       "injection": "kill_service",
@@ -230,7 +232,7 @@
         "recall_lessons",
         "start_service"
       ],
-      "seconds": 23.0,
+      "seconds": 21.9,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -289,7 +291,9 @@
         "listening": true
       },
       "confirm_requested": true,
-      "answer_head": "后端确实已经不在运行了（端口 45311 之前复验通过过，进程现已消失，属被外部终止，不是启动失败）。我直接拉起并复验。正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复：EnvKit 重新拉起后端并**复验通过**——端口 45311 在监听（pid 28732，main.exe），"
+      "answer_head": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已经起来了，本次是启动动作直接完成的，不是靠日志推断。\n\n- 结果：**后端已启动并复验通过** —— 端口 45311 在监听，进程（pid 25288，main.exe）持续存活 5s，HTTP 200。\n- 前情：之前有两轮「后端 进程",
+      "answer_tail": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已经起来了，本次是启动动作直接完成的，不是靠日志推断。\n\n- 结果：**后端已启动并复验通过** —— 端口 45311 在监听，进程（pid 25288，main.exe）持续存活 5s，HTTP 200。\n- 前情：之前有两轮「后端 进程已退出：exit status 1」，说明它是真的崩过；这次起来后守住了观察窗口。\n- 说明：前端本次没启动，快照里 web 从未成功运行过（node_modules 也不存在），跟后端这次的问题不是一回事，需要的话我再单独处理。\n\n[envkit-verdict]\nstate=healthy\naction=started\nverified=yes",
+      "answer_len": 475
     },
     {
       "injection": "kill_service",
@@ -301,7 +305,7 @@
         "recall_lessons",
         "start_service"
       ],
-      "seconds": 24.0,
+      "seconds": 20.0,
       "verdicts": {
         "investigation": {
           "status": "PASS",
@@ -360,7 +364,9 @@
         "listening": true
       },
       "confirm_requested": true,
-      "answer_head": "后端确实已经不在运行了——不过它是**曾经复验通过过**（端口 45311 在监听、进程存活 5s），现在进程消失，属于被外部终止，不是启动失败或编译错误，直接重新拉起即可，不用去查端口占用。\n\n我现在就发起启动。正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复：**启动成功并通过复"
+      "answer_head": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复，这次是**启动 + 复验一次通过**：\n\n- 进程存活：pid 28936，端口 45311 处于 LISTENING，HTTP 握手 200，观察窗 5 秒内未退出\n- 在此之前有 3 次「进程已退出：exit status 1」（",
+      "answer_tail": "正在执行：启动后端（go build + go run）…（可能需要几十秒到几分钟，请稍候）\n✓ 已执行：启动后端（go build + go run） —— 后端启动成功且已复验通过：后端已就绪：端口 45311 在监听且进程持续存活 5s\n证据：dir=C:\\Users\\HEN'R'~1\\AppData\\Local\\Temp\\envkit...\n\n后端已恢复，这次是**启动 + 复验一次通过**：\n\n- 进程存活：pid 28936，端口 45311 处于 LISTENING，HTTP 握手 200，观察窗 5 秒内未退出\n- 在此之前有 3 次「进程已退出：exit status 1」（21:35–21:36），属于典型的起不来又秒退，现已不再复现\n\n一点说明：前端目前未运行（从未成功启动过，且项目 node_modules 缺失）。你这次只问后端，我就没动它——需要的话说一声。\n\n[envkit-verdict]\nstate=healthy\naction=started\nverified=yes",
+      "answer_len": 458
     }
   ]
 }
