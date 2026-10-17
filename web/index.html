@@ -4858,10 +4858,19 @@ async function aiConsume(path, body){
     $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   };
   try{
-  think = document.createElement('div'); think.className = 'ai-think';
-  think.innerHTML = '<span>' + t('思考中') + '</span><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
-  $ai('ai-msgs').appendChild(think);
-  $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+  // 思考气泡的构造函数。**单独抽出来是因为它要能被重建** ——
+  // v2.3 起 `plan_start` 是服务端第一个事件，到达时就把气泡删了，
+  // 而 `reasoning` 片段在它之后才到，不重建的话那段尾部渲染是死代码。
+  // （v1.10.3 时 reasoning 能显示，正是因为没有 plan_start 抢删。）
+  const mkThink = ()=>{
+    if(think) return think;
+    think = document.createElement('div'); think.className = 'ai-think';
+    think.innerHTML = '<span>' + t('思考中') + '</span><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
+    $ai('ai-msgs').appendChild(think);
+    $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+    return think;
+  };
+  mkThink();
   const dropThink = ()=>{ if(think && think.parentNode){ think.remove(); think = null; } };
     aiCtrl = new AbortController();
     const resp = await fetch(path, {method:'POST', signal: aiCtrl.signal, headers:{'Content-Type':'application/json', 'X-EnvKit-Chat-Fallback': encodeURIComponent(JSON.stringify(fb))}, body: JSON.stringify(body)});
@@ -4894,11 +4903,16 @@ async function aiConsume(path, body){
           // 思考型模型的 reasoning_content 流：在"思考中"气泡里滚动展示尾部
           if(ev.text){
             rsnText += ev.text;
-            if(think){
-              if(!rsnEl){ rsnEl = document.createElement('div'); rsnEl.className = 'ai-think-txt'; think.appendChild(rsnEl); }
-              rsnEl.textContent = '…' + rsnText.slice(-140);
-              $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+            // 气泡可能已被 plan_start 删掉（它是服务端第一个事件，比
+            // reasoning 先到）——重建它，否则尾部展示永远是死代码。
+            mkThink();
+            // parentNode 检查：气泡删了再建之后，rsnEl 还指向已脱离 DOM 的
+            // 旧节点，只判 !rsnEl 会把文字写进一个看不见的元素里。
+            if(!rsnEl || rsnEl.parentNode !== think){
+              rsnEl = document.createElement('div'); rsnEl.className = 'ai-think-txt'; think.appendChild(rsnEl);
             }
+            rsnEl.textContent = '…' + rsnText.slice(-140);
+            $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
           }
         } else if(ev.type === 'tool_call'){
           dropThink();
