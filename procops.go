@@ -110,9 +110,10 @@ $out -join [char]10 | Out-File '` + strings.ReplaceAll(report, "'", "''") + `' -
 
 // aiCleanupProcesses 供 AI 工具与按钮共用的入口（带日志）
 func aiCleanupProcesses() (string, error) {
-	h, granted := beginTaskH("清理后台进程", true)
+	// v3.0 T1.2：清理动的是前后端两组资源，成组原子获取
+	h, granted := beginTaskHG("清理后台进程", []string{grpWeb, grpBackend}, true)
 	if !granted {
-		return "", fmt.Errorf("有任务正在执行，请稍候")
+		return "", fmt.Errorf("%s", busyReason("web+backend"))
 	}
 	defer h.Done()
 	fin := auditStart(actUser, "cleanup_processes", "web/backend", "")

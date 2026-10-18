@@ -399,7 +399,7 @@ func handleChainSSHTest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	h, granted := beginTaskH("SSH 连通测试", false) // 只读：可与其它只读任务并发
+	h, granted := beginTaskHG("SSH 连通测试", []string{grpChain}, false) // 只读：可与其它只读任务并发
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -448,7 +448,7 @@ func handleChainExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 远程命令属于写操作（可能启停链节点），必须独占；且要审计命令内容
-	h, granted := beginTaskH("远程执行命令", true)
+	h, granted := beginTaskHG("远程执行命令", []string{grpChain}, true)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -494,7 +494,7 @@ func handleChainCheck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	h, granted := beginTaskH("链端检测", false) // 只读：检测不应被排队等待（但要避开写任务）
+	h, granted := beginTaskHG("链端检测", []string{grpChain}, false) // 只读：检测不应被排队等待（但要避开同组写任务）
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -806,11 +806,15 @@ func handleChainStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "未配置目录或启动脚本", 400)
 		return
 	}
-	h, granted := beginTaskH("启动 "+body.Target, true)
+	h, granted := beginTaskHG("启动 "+body.Target, []string{grpChain}, true)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
 	}
+	// v3.0 T1.4：本机启动走 execStreamed（fgKey = "chain/chain"），
+	// 看门狗超时时能真正终止它；远程 SSH 启动时 fgKill 返回 false，
+	// terminate 会如实说"未注册可终止的子进程"而不是假装杀过。
+	h.SetKill(func() { fgKill(scChain + "/chain") })
 	go func() {
 		defer h.Done()
 		fin := auditStart(actUser, "chain_start", body.Target, dir+" :: "+script)
@@ -908,6 +912,11 @@ const guardDownNotifyAt = 3
 // ---------- 后台守护：定时轻量探测 + 宕机自动拉起 ----------
 // 与「一键检测」的自动恢复互补：无需人工点按钮，适合挂机场景。
 // 只做轻探测（SSH 本地端口 + WeBASE 端口），全量检测仍由用户手动触发，避免日志刷屏。
+//
+// v3.0 T1.2：从「看有没有任务在跑」的软避让改为**尝试 chain 资源组锁**。
+// 软避让的口径太粗——任何任务（哪怕在装 Go）都让守护整轮跳过；
+// 而真正该互斥的只有"动链端"的动作。组锁让守护与用户的手动链操作
+// 精确互斥，与 web/db 组的任务并行；拿不到锁时记 skip 原因而不是静默跳过。
 func startGuardLoop() {
 	if chainCfg().SSHHost == "" {
 		return
@@ -927,97 +936,104 @@ func startGuardLoop() {
 				first = true
 				continue
 			}
-			if currentTask() != "" {
-				continue // 有手动任务在跑，本轮跳过
-			}
-			// v2.0 P3：必须先分清「连不上」和「服务没跑」。
-			// 旧代码 `nodeUp, _ := sshLocalPortOpen(...)` 把 err 丢了，而连接失败时
-			// nodeUp 是零值 false —— 于是"虚拟机 IP 变了"被当成"节点宕机"，
-			// 每 30~300 秒重启一次 + 弹一次桌面通知，而 IP 不会自己变回来，无限循环。
-			// 恢复命令本身就靠 SSH 送达：连不上时重启毫无意义，必须直接跳过。
-			st := chainReach(c)
-			if st != reachOK {
-				guardDownCount++
-				first = true // 地址失效期间不做"首次恢复"
-				guardMark("skip_unreachable", reachHint(c, st), false)
-				warn(scChain, "守护", "链端不可达（%s），本轮不执行自动重启：%s", st, reachHint(c, st))
-				// 持续不可达时才升级提示一次，避免每次守护都刷屏
-				if guardDownCount == guardDownNotifyAt {
-					auditNow(actGuard, "chain_unreachable", c.SSHHost,
-						fmt.Sprintf("port %d unreachable", c.ChainPort), resFail, reachHint(c, st))
-					if c.ChainNotify {
-						notify("链端不可达", "后台守护连续 "+strconv.Itoa(guardDownCount)+" 次连不上链端，请检查虚拟机是否启动、IP 是否变化")
-					}
-				}
+			h, granted := beginTaskHG("链端守护巡检", []string{grpChain}, true)
+			if !granted {
+				guardMark("skip_busy", busyReason(grpChain), false)
 				continue
 			}
-			guardDownCount = 0
-			guardSetUnreachable(0)
+			// 整轮（探测+恢复+复验）持锁；continue 改 return——
+			// 闭包结束时统一 Done，不会漏放锁。
+			func() {
+				defer h.Done()
+				// v2.0 P3：必须先分清「连不上」和「服务没跑」。
+				// 旧代码 `nodeUp, _ := sshLocalPortOpen(...)` 把 err 丢了，而连接失败时
+				// nodeUp 是零值 false —— 于是"虚拟机 IP 变了"被当成"节点宕机"，
+				// 每 30~300 秒重启一次 + 弹一次桌面通知，而 IP 不会自己变回来，无限循环。
+				// 恢复命令本身就靠 SSH 送达：连不上时重启毫无意义，必须直接跳过。
+				st := chainReach(c)
+				if st != reachOK {
+					guardDownCount++
+					first = true // 地址失效期间不做"首次恢复"
+					guardMark("skip_unreachable", reachHint(c, st), false)
+					warn(scChain, "守护", "链端不可达（%s），本轮不执行自动重启：%s", st, reachHint(c, st))
+					// 持续不可达时才升级提示一次，避免每次守护都刷屏
+					if guardDownCount == guardDownNotifyAt {
+						auditNow(actGuard, "chain_unreachable", c.SSHHost,
+							fmt.Sprintf("port %d unreachable", c.ChainPort), resFail, reachHint(c, st))
+						if c.ChainNotify {
+							notify("链端不可达", "后台守护连续 "+strconv.Itoa(guardDownCount)+" 次连不上链端，请检查虚拟机是否启动、IP 是否变化")
+						}
+					}
+					return
+				}
+				guardDownCount = 0
+				guardSetUnreachable(0)
 
-			nodeUp, nodeErr := sshLocalPortOpen(c.ChainPort)
-			if nodeErr != nil {
-				// 主机可达但远程命令执行失败：不是"端口没监听"，不能判宕机
-				warn(scChain, "守护", "无法在链端执行探测命令（%v），本轮跳过自动重启", nodeErr)
-				continue
-			}
-			if !nodeUp {
-				warn(scChain, "守护", "定时检测发现节点未运行，自动重启链端与 WeBASE")
-				recordRecover()
-				// 守护是无人值守的自动动作，必须留痕：否则"链为什么被重启过"无从追溯
-				auditNow(actGuard, "chain_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.ChainPort), resStart, "守护检测触发")
-				if c.ChainNotify {
-					notify("链节点宕机", "后台守护检测到节点未运行，正在自动重启...")
+				nodeUp, nodeErr := sshLocalPortOpen(c.ChainPort)
+				if nodeErr != nil {
+					// 主机可达但远程命令执行失败：不是"端口没监听"，不能判宕机
+					warn(scChain, "守护", "无法在链端执行探测命令（%v），本轮跳过自动重启", nodeErr)
+					return
 				}
-				runChainStart("chain")
-				runChainStart("webase")
-				// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 共识推进）。
-				// 守护是无人值守的，复验结论就是"这次自动恢复到底成没成"的唯一凭据。
-				vr := verifyChain(verifyChainGrowth)
-				auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
-				if vr.Ok && vr.Verified {
-					guardMark("recover", vr.Msg, true)
-					ok(scChain, "守护", "链端已自动恢复并通过复验：%s", vr.String())
+				if !nodeUp {
+					warn(scChain, "守护", "定时检测发现节点未运行，自动重启链端与 WeBASE")
+					recordRecover()
+					// 守护是无人值守的自动动作，必须留痕：否则"链为什么被重启过"无从追溯
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.ChainPort), resStart, "守护检测触发")
 					if c.ChainNotify {
-						notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
+						notify("链节点宕机", "后台守护检测到节点未运行，正在自动重启...")
 					}
-				} else if vr.Ok {
-					guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
-					warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
-					if c.ChainNotify {
-						notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
+					runChainStart("chain")
+					runChainStart("webase")
+					// v2.0 P2 闭环：拉起脚本执行完 ≠ 链真的恢复了，必须复验（端口 + 节点进程 + 共识推进）。
+					// 守护是无人值守的，复验结论就是"这次自动恢复到底成没成"的唯一凭据。
+					vr := verifyChain(verifyChainGrowth)
+					auditVerify(actGuard, "chain_autorecover", c.SSHHost, vr)
+					if vr.Ok && vr.Verified {
+						guardMark("recover", vr.Msg, true)
+						ok(scChain, "守护", "链端已自动恢复并通过复验：%s", vr.String())
+						if c.ChainNotify {
+							notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
+						}
+					} else if vr.Ok {
+						guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
+						warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
+						auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
+						if c.ChainNotify {
+							notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
+						}
+					} else {
+						guardMark("recover", "自动恢复失败："+vr.Msg, false)
+						fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
+						auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
+						if c.ChainNotify {
+							notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
+						}
 					}
-				} else {
-					guardMark("recover", "自动恢复失败："+vr.Msg, false)
-					fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
-					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
-					if c.ChainNotify {
-						notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
-					}
-				}
-				first = false
-				continue
-			}
-			// 节点活着，只看 WeBASE
-			if wok, _ := tcpCheck(c.ChainHost, c.WebasePort); !wok {
-				warn(scChain, "守护", "WeBASE-Front 未响应，自动重启 WeBASE")
-				recordRecover()
-				guardMark("recover", "WeBASE-Front 未响应，已自动重启", true)
-				auditNow(actGuard, "webase_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.WebasePort), resStart, "守护检测触发")
-				if c.ChainNotify {
-					alertDispatch("WeBASE-Front 未响应", "后台守护正在自动重启 WeBASE...")
-				}
-				runChainStart("webase")
-			} else {
-				// 正常轮次也要记：否则用户在界面上看到"从未检测过"，
-				// 会以为守护没在跑——而它其实每轮都在跑。
-				// 这与"没消息不等于好消息"是同一个原则。
-				guardMark("ok", "链端与 WeBASE 均正常", true)
-				if first {
-					info(scChain, "守护", "后台守护已开启（每 %ds 检测一次），当前链端正常", interval)
 					first = false
+					return
 				}
-			}
+				// 节点活着，只看 WeBASE
+				if wok, _ := tcpCheck(c.ChainHost, c.WebasePort); !wok {
+					warn(scChain, "守护", "WeBASE-Front 未响应，自动重启 WeBASE")
+					recordRecover()
+					guardMark("recover", "WeBASE-Front 未响应，已自动重启", true)
+					auditNow(actGuard, "webase_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.WebasePort), resStart, "守护检测触发")
+					if c.ChainNotify {
+						alertDispatch("WeBASE-Front 未响应", "后台守护正在自动重启 WeBASE...")
+					}
+					runChainStart("webase")
+				} else {
+					// 正常轮次也要记：否则用户在界面上看到"从未检测过"，
+					// 会以为守护没在跑——而它其实每轮都在跑。
+					// 这与"没消息不等于好消息"是同一个原则。
+					guardMark("ok", "链端与 WeBASE 均正常", true)
+					if first {
+						info(scChain, "守护", "后台守护已开启（每 %ds 检测一次），当前链端正常", interval)
+						first = false
+					}
+				}
+			}()
 		}
 	}()
 }

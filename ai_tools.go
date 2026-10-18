@@ -88,6 +88,17 @@ func aiOpErr(what string, r OpResult) error {
 	return fmt.Errorf("%s失败[%s]：%s\n证据：%s", what, r.ErrKind, r.Msg, aiOpEvidence(r))
 }
 
+// rrRes OpResult → 审计结果值。
+// v3.0 T1.6 会把它升级成三态（resUnverified）；当前先二值：
+// 执行了记 ok，没执行记 fail——**未复验不在此处放大成失败**，
+// 复验结论由 auditVerify 那条记录单独说（两条记录各管一件事）。
+func rrRes(r OpResult) string {
+	if r.Ok {
+		return resOK
+	}
+	return resFail
+}
+
 // aiOpResultText 把一个 OpResult 翻译成给模型的结论文本，三态语义必须分开说：
 // 失败给 err_kind 与下一步；已复验给证据并允许确认完成；未复验要堵死"那就当它成功了"的脑补。
 func aiOpResultText(what string, r OpResult) string {
@@ -235,34 +246,43 @@ var aiToolRegistry = map[string]aiTool{
 						"不要猜脚本名——请按候选集选，或让用户在「程序配置」中指定。", s, cands)
 				}
 			}
-			switch svc {
-			case "all":
-				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
-				if !rb.Ok {
-					return "", aiOpErr("后端启动", rb)
-				}
-				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
-				if !rw.Ok {
-					// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
-					return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
-						rw.ErrKind, rw.Msg, aiOpEvidence(rw))
-				}
-				return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
-			case "web":
-				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
-				if !rw.Ok {
-					return "", aiOpErr("前端启动", rw)
-				}
-				return aiOpResultText("前端启动", rw), nil
-			case "backend":
-				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
-				if !rb.Ok {
-					return "", aiOpErr("后端启动", rb)
-				}
-				return aiOpResultText("后端启动", rb), nil
+		switch svc {
+		case "all":
+			// T1.2：all = 一次拿 backend+web 两组锁（原子获取，顺序固定防死锁），
+			// 停旧起新全程互斥；组间仍可与其他组的任务并行。
+			h, granted := beginTaskHG("启动前后端", []string{grpBackend, grpWeb}, true)
+			if !granted {
+				return "", fmt.Errorf("%s", busyReason("backend+web"))
 			}
-			return "", fmt.Errorf("service 必须是 web / backend / all")
-		},
+			defer h.Done()
+			rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+			if !rb.Ok {
+				h.SetResult(rb)
+				return "", aiOpErr("后端启动", rb)
+			}
+			rw := aiStartVerify("web", webStartTaskLocked("", script, actAI), verifyWaitWeb)
+			h.SetResult(rw)
+			if !rw.Ok {
+				// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
+				return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
+					rw.ErrKind, rw.Msg, aiOpEvidence(rw))
+			}
+			return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
+		case "web":
+			rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
+			if !rw.Ok {
+				return "", aiOpErr("前端启动", rw)
+			}
+			return aiOpResultText("前端启动", rw), nil
+		case "backend":
+			rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
+			if !rb.Ok {
+				return "", aiOpErr("后端启动", rb)
+			}
+			return aiOpResultText("后端启动", rb), nil
+		}
+		return "", fmt.Errorf("service 必须是 web / backend / all")
+	},
 	},
 	"stop_service": {
 		Desc: "停止前端或后端服务",
@@ -272,18 +292,42 @@ var aiToolRegistry = map[string]aiTool{
 		Write: true,
 		Execute: func(args map[string]any) (string, error) {
 			svc, _ := args["service"].(string)
+			// v3.0 T1.2：停服务也必须持资源组锁。
+			// 旧实现完全不锁——与并发的 start 竞态：stop 的 killTree 刚发出，
+			// start 已派生新进程，监控 goroutine 把"已退出"写到新进程头上。
+			// 同组互斥把这类竞态在结构上消掉。
+			groups, name := []string{grpWeb}, "停止前端"
 			switch svc {
-			case "web":
-				stopByKey(scStart, "web", "web-start")
 			case "backend":
-				stopByKey(scStart, "backend", "backend-start")
+				groups, name = []string{grpBackend}, "停止后端"
 			case "all":
-				stopByKey(scStart, "web", "web-start")
-				stopByKey(scStart, "backend", "backend-start")
+				groups, name = []string{grpBackend, grpWeb}, "停止前后端"
+			case "web":
 			default:
 				return "", fmt.Errorf("service 必须是 web/backend/all")
 			}
-			return "已发送停止信号", nil
+			h, granted := beginTaskHG(name, groups, true)
+			if !granted {
+				return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
+			}
+			defer h.Done()
+			// 写操作必须留痕（此前 AI 停服务不落审计，与按钮路径不一致）
+			fin := auditStart(actAI, "stop_service", svc, "")
+			switch svc {
+			case "web":
+				stopByKey(scStart, "web", "web-start")
+				svcReset("web")
+			case "backend":
+				stopByKey(scStart, "backend", "backend-start")
+				svcReset("backend")
+			case "all":
+				stopByKey(scStart, "web", "web-start")
+				stopByKey(scStart, "backend", "backend-start")
+				svcReset("web")
+				svcReset("backend")
+			}
+			fin(resOK, "")
+			return "已停止", nil
 		},
 	},
 	"restart_service": {
@@ -294,11 +338,31 @@ var aiToolRegistry = map[string]aiTool{
 		Write: true,
 		Execute: func(args map[string]any) (string, error) {
 			svc, _ := args["service"].(string)
+			// v3.0 T1.2：重启 = 停 + 起，两段之间不能有别人的动作插进来
+			//（旧实现 stopByKey 后裸调 webStartTask，中间空档里并发 stop
+			// 会把新进程的"已退出"写进旧监控 goroutine）。整段持组锁。
+			groups, name := []string{grpWeb}, "重启前端"
+			switch svc {
+			case "backend":
+				groups, name = []string{grpBackend}, "重启后端"
+			case "all":
+				groups, name = []string{grpBackend, grpWeb}, "重启前后端"
+			case "web":
+			default:
+				return "", fmt.Errorf("service 必须是 web/backend/all")
+			}
+			h, granted := beginTaskHG(name, groups, true)
+			if !granted {
+				return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
+			}
+			defer h.Done()
+			fin := auditStart(actAI, "restart_service", svc, "")
 			switch svc {
 			case "web":
 				stopByKey(scStart, "web", "web-start")
 				time.Sleep(2 * time.Second) // 等旧进程释放端口，避免新进程起在半死状态
-				rw := aiStartVerify("web", webStartTask("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+				fin(rrRes(rw), rw.Msg)
 				if !rw.Ok {
 					return "", aiOpErr("前端重启", rw)
 				}
@@ -306,7 +370,8 @@ var aiToolRegistry = map[string]aiTool{
 			case "backend":
 				stopByKey(scStart, "backend", "backend-start")
 				time.Sleep(2 * time.Second)
-				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+				fin(rrRes(rb), rb.Msg)
 				if !rb.Ok {
 					return "", aiOpErr("后端重启", rb)
 				}
@@ -315,11 +380,13 @@ var aiToolRegistry = map[string]aiTool{
 				stopByKey(scStart, "web", "web-start")
 				stopByKey(scStart, "backend", "backend-start")
 				time.Sleep(2 * time.Second)
-				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
 				if !rb.Ok {
+					fin(resFail, rb.Msg)
 					return "", aiOpErr("后端重启", rb)
 				}
-				rw := aiStartVerify("web", webStartTask("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+				fin(rrRes(rw), "backend ok; "+rw.Msg)
 				if !rw.Ok {
 					return "", fmt.Errorf("后端已重启，但前端重启失败[%s]：%s\n证据：%s",
 						rw.ErrKind, rw.Msg, aiOpEvidence(rw))
@@ -610,7 +677,7 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - 子进程"零输出秒退"通常是杀毒软件拦截，系统已有自动重试与 cmd /c 兜底；根治建议把 EnvKit 目录加入 Defender 白名单（apply_whitelist）。
    - MySQL 组件下载地址为动态解析（官方 CDN 只保留每个系列的最新版）。
    - 数据库连不上优先排查：MySQL 服务是否运行 → root 密码 → 3306 端口。
-7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist；**查业务数据→db_query / db_list**（只读，无需确认）。
+7. 意图 → 工具：启动前端→start_service(web)；启动后端→start_service(backend)；"起服务 / 启动前后端 / 把服务起来"→ start_service(all)（一次完成先后端再前端）；重启→restart_service（web/backend/all，先停后起一次确认）；停止→stop_service；备份→db_backup；检测组件→run_detection；看日志→get_logs（可指定 install/config/start/chain/sys）；诊断 / 报告→get_diag_report；白名单→apply_whitelist；**查业务数据→db_query / db_list**（只读，无需确认）；**查操作审计 / 操作记录 / "谁做了什么" / "守护恢复过吗"→get_audit_log**（只读，无需确认；审计就是界面上「操作审计」页那份数据）。
 7b. 链端（v2.3）：**EnvKit 具备链端自动恢复能力**，你不必让用户手动去重启节点。快照的 chain_guard 字段是守护状态的可读说明（get_chain_guard 拿完整版）：
    - 守护已开启且 auto_recover 已开 → 链端宕机会被**后台自动拉起并复验**。用户说"链挂了"时先查这个字段，如实告知"守护会在下一轮（约 N 秒内）自动拉起"，**不要让用户手动重启**。
    - 守护未开启 → 如实说"链端守护未开启，EnvKit 不会自动恢复"，并告诉用户可在「程序配置 → 链端」勾选。**不要谎称已在处理**。

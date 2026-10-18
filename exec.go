@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,6 +166,10 @@ func (w *lineWriter) emitLine() {
 }
 
 func execStreamed(scope, src, step, dir string, extra map[string]string, name string, args ...string) error {
+	// v3.0 T1.4：前台命令注册到"可按 key 杀"的注册表，任务看门狗超时时
+	// 能真正终止它——旧实现只放任务锁不杀子进程，go build 挂死后
+	// 锁放了、编译还在跑，之后任何人都拿不到 backend 组锁。
+	fgKey := scope + "/" + src
 	// 策略：零输出秒退 → 2s 后重试一次 → 仍零输出则改用 cmd /c 包装（见 retry.go）
 	_, err := runRetry(retryPolicy{
 		Attempts: 3,
@@ -172,6 +177,8 @@ func execStreamed(scope, src, step, dir string, extra map[string]string, name st
 		WrapLast: true,
 		Scope:    scope,
 		Tag:      step,
+		// 被看门狗杀掉之后绝不再重试：任务锁已释放，再跑一次等于无锁执行。
+		Abort: func() bool { return fgAborted(fgKey) },
 	}, func(wrap bool) (bool, error) {
 		ctx, cancel := cmdContext(15 * time.Minute)
 		defer cancel()
@@ -181,6 +188,8 @@ func execStreamed(scope, src, step, dir string, extra map[string]string, name st
 		w := &lineWriter{scope: scope, tag: step, svcKey: src}
 		cmd.Stdout = w
 		cmd.Stderr = w
+		fgRegister(fgKey, cmd, cancel)
+		defer fgUnregister(fgKey, cmd)
 		err := cmd.Run()
 		w.flush()
 		return w.hasOutput(), err
@@ -216,8 +225,19 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 	activeProcs[key] = cmd
 	delete(stoppingProcs, key) // 新进程与上一次停止无关，别让残留标记吞掉真实崩溃上报
 	procMu.Unlock()
+	// v3.0 T1.3：原地更新而不是整体替换 SvcInfo。旧写法
+	// `svcState[key] = &SvcInfo{...}` 会把 URL（端口线索，复验候选端口
+	// 的第一来源）连同 Phase 一起抹掉；且别的 goroutine 可能正持有
+	// 指向旧结构的指针，替换等于让它们读到快照之外的空气。
 	svcMu.Lock()
-	svcState[key] = &SvcInfo{Running: true, PID: cmd.Process.Pid, Since: time.Now().Format("15:04:05")}
+	s := svcState[key]
+	if s == nil {
+		s = &SvcInfo{}
+		svcState[key] = s
+	}
+	s.Running = true
+	s.PID = cmd.Process.Pid
+	s.Since = time.Now().Format("15:04:05")
 	svcMu.Unlock()
 	go func() {
 		for attempt := 0; ; attempt++ {
@@ -229,15 +249,13 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 			delete(stoppingProcs, key)
 			procMu.Unlock()
 			if manualStop {
-				procMu.Lock()
-				delete(activeProcs, key)
-				procMu.Unlock()
-				svcMu.Lock()
-				if s := svcState[key]; s != nil {
-					s.Running = false
-					s.PID = 0
-				}
-				svcMu.Unlock()
+				// v3.0 T1.3：带身份守卫的清理。旧实现无条件
+				// delete(activeProcs, key) + Running=false——这期间
+				// 若已起了新进程（restart 的停+起就在一个组锁内完成），
+				// 旧监控 goroutine 会把新进程的条目删掉、状态写成停止，
+				// 之后 stopByKey 找不到进程——"停不掉"。
+				procDropIfCurrent(key, cmd)
+				svcMarkStoppedIfCurrent(key, cmd)
 				setProg(progKey, false, false, "已停止")
 				infoS(scope, key, step, "进程已停止")
 				break
@@ -252,8 +270,12 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 					warnS(scope, key, step, "子进程无任何输出即秒退（疑似杀毒软件拦截），2 秒后自动重启...")
 					time.Sleep(2 * time.Second)
 				}
+				prev := cmd // spawn 失败时 cmd 已被换成没起来的那个：清理要按旧进程来
 				if serr := spawn(wrap); serr != nil {
 					failS(scope, key, step, "自动重启失败：%v", serr)
+					// 不清理就会留下死进程条目 + Running=true 的假状态
+					procDropIfCurrent(key, prev)
+					svcMarkStoppedIfCurrent(key, prev)
 					break
 				}
 				assignToJob(cmd.Process.Pid)
@@ -269,15 +291,8 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 				infoS(scope, key, step, "已自动重启（PID %d）", cmd.Process.Pid)
 				continue
 			}
-			procMu.Lock()
-			delete(activeProcs, key)
-			procMu.Unlock()
-			svcMu.Lock()
-			if s := svcState[key]; s != nil {
-				s.Running = false
-				s.PID = 0
-			}
-			svcMu.Unlock()
+			procDropIfCurrent(key, cmd)
+			svcMarkStoppedIfCurrent(key, cmd)
 			if err != nil {
 				setProg(progKey, false, false, "已退出（"+err.Error()+"）")
 				warnS(scope, key, step, "进程已退出：%v", err)
@@ -289,6 +304,98 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 		}
 	}()
 	return nil
+}
+
+// ---------- 进程条目的身份守卫（v3.0 T1.3，修 G3 的另一半） ----------
+//
+// 背景：监控 goroutine 在进程退出时无条件 delete(activeProcs, key) 并写
+// Running=false。但 Wait 返回是异步的——这期间完全可能已经起了新进程
+// （restart = 停+起，两段同组锁；自动重启也在循环里换进程）。
+// 旧监控 goroutine 醒来时按 key 删掉的其实是**新进程**的条目：
+// 之后 stopByKey 找不到进程，"停不掉"。
+//
+// 修法：删除/改写前先确认条目还是自己那一个。cmd 指针身份 + PID 双保险。
+
+// procDropIfCurrent 仅当 activeProcs[key] 仍是本 cmd 条目时才删除。
+func procDropIfCurrent(key string, cmd *exec.Cmd) {
+	procMu.Lock()
+	if cur, ok := activeProcs[key]; ok && cur == cmd {
+		delete(activeProcs, key)
+	}
+	procMu.Unlock()
+}
+
+// svcMarkStoppedIfCurrent 仅当 svcState 记的还是本进程（PID 相符）时才写"已停止"。
+// 旧进程善后不能把新进程的状态写成停止。
+func svcMarkStoppedIfCurrent(key string, cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	svcMu.Lock()
+	if s := svcState[key]; s != nil && s.PID == cmd.Process.Pid {
+		s.Running = false
+		s.PID = 0
+	}
+	svcMu.Unlock()
+}
+
+// ---------- 前台命令注册表（v3.0 T1.4，修 G4） ----------
+//
+// 任务看门狗超时时要能真正终止正在跑的前台命令（go build / 链启动脚本），
+// 而不是只把任务锁放掉。execStreamed 每次 attempt 注册当前命令；
+// 看门狗经 fgKill 杀它并打上 aborted 标记——重试循环看到标记立即收手，
+// 否则"杀了还重试"等于无锁继续执行（任务锁已经释放了）。
+
+type fgRec struct {
+	cmd     *exec.Cmd
+	cancel  context.CancelFunc
+	aborted bool
+}
+
+var (
+	fgMu  sync.Mutex
+	fgReg = map[string]*fgRec{}
+)
+
+func fgRegister(key string, cmd *exec.Cmd, cancel context.CancelFunc) {
+	fgMu.Lock()
+	fgReg[key] = &fgRec{cmd: cmd, cancel: cancel}
+	fgMu.Unlock()
+}
+
+func fgUnregister(key string, cmd *exec.Cmd) {
+	fgMu.Lock()
+	if r := fgReg[key]; r != nil && r.cmd == cmd {
+		delete(fgReg, key)
+	}
+	fgMu.Unlock()
+}
+
+// fgKill 终止 key 对应的前台命令；没有注册中的命令返回 false。
+// 先打 aborted 标记再杀：杀与重试检查之间存在竞态，标记保证
+// "杀了之后不会有新 attempt 起来"。
+func fgKill(key string) bool {
+	fgMu.Lock()
+	r := fgReg[key]
+	if r == nil {
+		fgMu.Unlock()
+		return false
+	}
+	r.aborted = true
+	cmd, cancel := r.cmd, r.cancel
+	fgMu.Unlock()
+	if cancel != nil {
+		cancel() // context 一取消，cmd.Run() 立即返回
+	}
+	killTree(cmd)
+	return true
+}
+
+func fgAborted(key string) bool {
+	fgMu.Lock()
+	defer fgMu.Unlock()
+	r := fgReg[key]
+	return r != nil && r.aborted
 }
 
 // 杀整棵进程树：go run 会派生 main.exe、npm 会派生 node，只杀直接子进程会留孤儿占端口

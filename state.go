@@ -174,6 +174,16 @@ var (
 //   · 独占任务（写操作）：同一时刻只允许一个，存在时连只读任务也拒绝；
 //   · 共享任务（只读操作）：可并发，但遇到独占任务时拒绝；
 //   · 每个任务可注册 kill 回调，看门狗超时时真正终止子进程，而不是只放锁。
+//
+// v3.0 T1.2：再加**资源组**维度。全局锁的粒度太粗——"启动前端"会把
+// "启动后端"一起挡掉，而两者本可并行；stop 服务则完全不走锁，
+// 与并发的 start 竞态（G2）。资源组规则：
+//   · 任务声明自己动的资源（web / backend / chain / db，见下方常量）；
+//   · 同组内：写任务互斥一切，读任务之间可并行；
+//   · 不同组之间互不冲突（start web 与 start backend 并行跑）；
+//   · 不声明组 = 全局任务（安装/升级/清杀软这类维护动作，与所有任务冲突）；
+//   · 一次动作可持多组（stop all = web+backend），**成组原子获取**，
+//     避免"拿着 web 等 backend"与别人"拿着 backend 等 web"对撮成死锁。
 
 type TaskHandle struct {
 	ID        int
@@ -181,6 +191,8 @@ type TaskHandle struct {
 	Exclusive bool
 	Since     time.Time
 	Timeout   time.Duration
+	// Groups 本次任务持有的资源组；空 = 全局任务（与所有任务冲突）。
+	Groups []string
 
 	killMu sync.Mutex
 	kill   func()
@@ -188,10 +200,24 @@ type TaskHandle struct {
 
 	// 操作结果：任务无论成功失败都写入，超时/watchdog 终止时写入 timeout 结果。
 	// 用途一是审计溯源，二是让未来基于句柄读取结果的代码有唯一真源。
-	resMu  sync.Mutex
-	result OpResult
-	resSet bool
+	resMu     sync.Mutex
+	result    OpResult
+	resSet    bool
+	resClosed bool // 句柄已关闭（Done/terminate）：迟到的 SetResult 不再覆盖结论
+	// TimeoutFact 超时核对钩子（v3.0 T1.4）：看门狗杀掉子进程后，由任务
+	// 注册的核对函数给出"实际状态"事实（已退出 / 仍在运行未复验）。
+	// 不猜——超时之后进程可能已经起来了，直接记"超时失败"是谎报；
+	// 而"可能起来了"这种第三种措辞不允许存在。
+	TimeoutFact func() string
 }
+
+// 资源组名。恢复事务按组互斥：组内写任务串行，组间并行。
+const (
+	grpWeb     = "web"
+	grpBackend = "backend"
+	grpChain   = "chain"
+	grpDB      = "db"
+)
 
 // SetKill 注册"超时即终止"回调（只对短命前台命令注册，长驻服务不注册）。
 func (h *TaskHandle) SetKill(fn func()) {
@@ -204,11 +230,18 @@ func (h *TaskHandle) SetKill(fn func()) {
 }
 
 // SetResult 记录本次任务的最终结果（后写覆盖前写，取最后一次有效结论）。
+// 例外：句柄已关闭（正常完成或被看门狗终止）之后迟到的写入一律忽略——
+// 否则被超时杀掉的任务会在 opStartXxx 返回后又把 timeout 结论覆盖成
+// "build_fail"，审计与调用方从此以为它只是编译失败。
 func (h *TaskHandle) SetResult(r OpResult) {
 	if h == nil {
 		return
 	}
 	h.resMu.Lock()
+	if h.resClosed {
+		h.resMu.Unlock()
+		return
+	}
 	h.result, h.resSet = r, true
 	h.resMu.Unlock()
 }
@@ -228,6 +261,9 @@ func (h *TaskHandle) Done() {
 	if h == nil {
 		return
 	}
+	h.resMu.Lock()
+	h.resClosed = true
+	h.resMu.Unlock()
 	h.killMu.Lock()
 	first := !h.done
 	h.kill, h.done = nil, true
@@ -262,11 +298,22 @@ func (h *TaskHandle) terminate() {
 	} else {
 		warn(scSys, "任务", "任务「%s」超时，已释放任务锁（该任务未注册可终止的子进程，请手动检查）", h.Name)
 	}
-	auditNow(actSys, "task_timeout", h.Name, "", resFail,
-		fmt.Sprintf("运行超过 %v 被看门狗终止", h.Timeout))
+	// v3.0 T1.4：超时后强制核对实际状态。"以为超时其实成功了"
+	// 在旧实现里只能靠下一次复验偶然发现。核对结论只允许两种事实：
+	// 已退出，或仍在运行未复验——不存在"可能起来了"这第三种。
+	fact := ""
+	if h.TimeoutFact != nil {
+		fact = h.TimeoutFact()
+	}
+	detail := fmt.Sprintf("运行超过 %v 被看门狗终止", h.Timeout)
+	timeoutMsg := fmt.Sprintf("任务「%s」运行超过 %v 被看门狗终止", h.Name, h.Timeout)
+	if fact != "" {
+		detail += "；超时核对：" + fact
+		timeoutMsg += "（核对：" + fact + "）"
+	}
+	auditNow(actSys, "task_timeout", h.Name, "", resFail, detail)
 	// 超时也是一种"未完成"：写进句柄结果，避免调用方把被杀掉的任务当成成功。
-	h.SetResult(opFail("task", h.Name, errKindTimeout,
-		fmt.Sprintf("任务「%s」运行超过 %v 被看门狗终止", h.Name, h.Timeout)))
+	h.SetResult(opFail("task", h.Name, errKindTimeout, timeoutMsg))
 	alertDispatch("EnvKit 任务超时",
 		fmt.Sprintf("任务「%s」运行超过 %v 被看门狗终止，请检查对应子进程。", h.Name, h.Timeout))
 	h.Done()
@@ -281,19 +328,71 @@ var (
 // taskWatchdogLimit 单个任务的默认最长存活时间。
 const taskWatchdogLimit = 15 * time.Minute
 
-// beginTaskH 申请任务。exclusive=true 为写操作（互斥一切），false 为只读（可并发）。
-func beginTaskH(name string, exclusive bool) (*TaskHandle, bool) {
+// taskGroupsConflict 两组资源 + 读写属性是否冲突。
+// 规则（与 TaskHandle 注释一致）：
+//   · 两个只读永不冲突；
+//   · 全局任务（groups 为空）与任何任务冲突；
+//   · 否则按组名相交判定。
+func taskGroupsConflict(a []string, aWrite bool, b []string, bWrite bool) bool {
+	if !aWrite && !bWrite {
+		return false
+	}
+	if len(a) == 0 || len(b) == 0 {
+		return true
+	}
+	for _, x := range a {
+		for _, y := range b {
+			if x == y {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// beginTaskHG 按资源组申请任务。groups 为空 = 全局任务（旧语义）。
+// 多组一次性原子判定：要么全拿到，要么全不拿——不存在"拿到一半"的中间态。
+func beginTaskHG(name string, groups []string, exclusive bool) (*TaskHandle, bool) {
 	busyMu.Lock()
 	defer busyMu.Unlock()
 	for _, t := range tasks {
-		if t.Exclusive || exclusive {
-			return nil, false // 有独占任务，或本次是独占任务且已有任何任务在跑
+		if taskGroupsConflict(t.Groups, t.Exclusive, groups, exclusive) {
+			return nil, false
 		}
 	}
 	nextTask++
-	h := &TaskHandle{ID: nextTask, Name: name, Exclusive: exclusive, Since: time.Now(), Timeout: taskWatchdogLimit}
+	h := &TaskHandle{
+		ID: nextTask, Name: name, Exclusive: exclusive,
+		Groups: append([]string(nil), groups...),
+		Since:  time.Now(), Timeout: taskWatchdogLimit,
+	}
 	tasks[h.ID] = h
 	return h, true
+}
+
+// beginTaskH 申请任务（全局锁语义：与所有任务互斥）。
+// 保留旧签名——安装/升级/白名单这类维护动作本就该全局互斥，
+// 逐处改成组锁反而稀释了它们的保护。
+func beginTaskH(name string, exclusive bool) (*TaskHandle, bool) {
+	return beginTaskHG(name, nil, exclusive)
+}
+
+// taskGroupsOf 任务持有的组（副本）；全局任务返回空。
+func (h *TaskHandle) taskGroupsOf() []string {
+	if h == nil {
+		return nil
+	}
+	return append([]string(nil), h.Groups...)
+}
+
+// busyReason 锁被拒时给人看的原因：当前谁在占着什么。
+// 只说"有任务正在执行"等于没说——用户需要知道该等哪个。
+func busyReason(want string) string {
+	names := activeTaskNames()
+	if len(names) == 0 {
+		return "有任务正在执行，请稍候"
+	}
+	return "有任务正在执行（" + strings.Join(names, " / ") + "），请稍候"
 }
 
 // beginTask 写操作任务（互斥）。

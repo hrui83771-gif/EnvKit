@@ -191,7 +191,7 @@ func handleDBTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 只读任务：不阻塞其它只读操作（如日志查看、诊断报告）
-	th, granted := beginTaskH("数据库连接检测", false)
+	th, granted := beginTaskHG("数据库连接检测", []string{grpDB}, false)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -246,7 +246,7 @@ func handleInitDB(w http.ResponseWriter, r *http.Request) {
 		cfgMu.Unlock()
 		saveExternalConfig(c)
 	}
-	h, granted := beginTaskH("建库并执行 SQL", true)
+	h, granted := beginTaskHG("建库并执行 SQL", []string{grpDB}, true)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -290,7 +290,7 @@ func handleMySQLCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	hh, granted := beginTaskH("建库", true)
+	hh, granted := beginTaskHG("建库", []string{grpDB}, true)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
@@ -364,7 +364,7 @@ func applySQLFlow(w http.ResponseWriter, path, db string, confirm, skipBackup bo
 		needConfirm(w, "apply_sql", db, confirmReason(lang, zh, en), len(risks) > 0)
 		return
 	}
-	h, granted := beginTaskH("执行 SQL", true)
+	h, granted := beginTaskHG("执行 SQL", []string{grpDB}, true)
 	if !granted {
 		if cleanup != nil {
 			cleanup()
@@ -621,6 +621,9 @@ func validScriptName(s string) bool {
 //
 // 返回 OpResult 而非 error：老实现里失败只写日志、外层一律 return nil，
 // 调用方（尤其 AI 工具）因此永远以为成功进而向用户谎报"已启动"。
+//
+// v3.0 T1.2：持 **web 资源组**锁——与启动/停止/重启前端互斥，
+// 但与后端任务并行（旧全局锁会把两者无谓地串起来）。
 func webStartTask(dir, script, actor string) OpResult {
 	if actor == "" {
 		actor = actUser
@@ -628,20 +631,91 @@ func webStartTask(dir, script, actor string) OpResult {
 	if dir == "" {
 		dir = cfg.Projects.FrontendDir
 	}
-	h, granted := beginTaskH("启动前端", true)
+	h, granted := beginTaskHG("启动前端", []string{grpWeb}, true)
 	if !granted {
-		return opFail("start_service", "web", errKindBusy, "有任务正在执行，请稍候")
+		return opFail("start_service", "web", errKindBusy, busyReason("web"))
 	}
-	done := make(chan struct{})
-	var res OpResult
-	go func() {
-		defer h.Done()
-		defer close(done)
-		res = opStartWeb(dir, script, actor)
-		h.SetResult(res)
-	}()
-	<-done
+	defer h.Done()
+	// v3.0 T1.4：看门狗超时时真正终止前台命令（web 启动没有前台命令，
+	// fgKill 会返回 false，terminate 据此说"未注册可终止的子进程"而不是撒谎）；
+	// 超时后先核对实际状态再记审计。
+	h.SetKill(func() { fgKill(scStart + "/web") })
+	h.TimeoutFact = func() string { return startTimeoutFact("web") }
+	res := opStartWeb(dir, script, actor)
+	h.SetResult(res)
 	return res
+}
+
+// webStartTaskLocked 启动前端执行体（调用方**已持 web 组锁**时用）。
+// restart_service(all) 这类"停+起必须一气呵成"的动作先自己拿锁，
+// 再走这个变体——否则内层 webStartTask 抢同一把锁只会拿到 errKindBusy。
+func webStartTaskLocked(dir, script, actor string) OpResult {
+	if dir == "" {
+		dir = cfg.Projects.FrontendDir
+	}
+	return opStartWeb(dir, script, actor)
+}
+
+// svcStartSkip 启动幂等前置（v3.0 T1.3，修 G3）。
+//
+// 旧实现不查状态直接派生，两个后果：
+//  1. 重复 start 产生孤儿进程（端口被旧的占着，新的起不来或起在错端口）；
+//  2. 旧监控 goroutine 退出时 delete(activeProcs, key)（exec.go）会把
+//     新进程的条目删掉，之后 stopByKey 找不到进程——"停不掉"。
+//
+// 规则（plan-v3.0 §2.4 幂等控制）：
+//   · Running && Verified → 返回"已在运行且复验通过"（ok+verified，不派生）；
+//   · Running && !Verified → 不重复派生，交回调用方走 Verify
+//     （"已执行但未证明恢复"是未知，不是成功——R3 三态不合并）；
+//   · 未 Running → 不跳过，正常派生。
+//
+// 第二档返回 opOK 而非 opVerified 是刻意的：调用方（按钮/AI）拿到它
+// 都会继续复验，复验不过就该 stop/restart，而不是再派生一个。
+func svcStartSkip(target string) (OpResult, bool) {
+	svcMu.Lock()
+	s := svcState[target]
+	var running bool
+	var pid int
+	if s != nil {
+		running, pid = s.Running, s.PID
+	}
+	svcMu.Unlock()
+	if !running {
+		return OpResult{}, false
+	}
+	if svcSnapshot(target).Verified {
+		return opVerified("start_service", target,
+			svcLabel(target)+"已在运行且复验通过，未重复启动",
+			fmt.Sprintf("pid=%d", pid),
+			"hint=需要重启请用 stop/restart，重复 start 不会派生新进程"), true
+	}
+	return opOK("start_service", target,
+		fmt.Sprintf("%s进程已在运行（PID %d），未重复启动；服务是否可用以复验结论为准", svcLabel(target), pid),
+		fmt.Sprintf("pid=%d", pid),
+		"hint=复验未通过时可用 restart_service 停旧起新，不要反复 start"), true
+}
+
+// startTimeoutFact 启动任务被看门狗超时终止后，强制核对实际状态（v3.0 T1.4，修 G4）。
+//
+// 旧实现超时只释放锁、不核对："以为超时其实成功了"只能靠下一次复验偶然发现。
+// 核对只用客观事实：进程在不在（svcAlive）、端口有没有在听、日志尾是什么。
+// 结论只允许两种——"已退出"或"仍在运行未复验"，不存在"可能起来了"这第三种：
+// 端口在听也只能说"未复验"，因为没过存活观察窗就不算恢复（R3）。
+func startTimeoutFact(target string) string {
+	label := svcLabel(target)
+	alive, pid := svcAlive(target)
+	note := ""
+	if tail := svcLogTail(target, 6); tail != "" {
+		note = "；日志尾：" + tail
+	}
+	if !alive {
+		return label + "已退出（超时核对：进程不存在，本次启动未成功）" + note
+	}
+	if port := firstListeningPort(svcPortsFn(target)); port > 0 {
+		return fmt.Sprintf("%s仍在运行未复验（超时核对：PID %d 在，端口 %d 在监听，但未经存活观察窗确认，不能算已恢复）",
+			label, pid, port)
+	}
+	return fmt.Sprintf("%s仍在运行未复验（超时核对：PID %d 在，候选端口均未监听）%s", label, pid, note)
 }
 
 // opStartWeb 前端启动执行体（任务协程内运行），返回结构化结果。
@@ -649,6 +723,12 @@ func webStartTask(dir, script, actor string) OpResult {
 func opStartWeb(dir, script, actor string) OpResult {
 	fin := auditStart(actor, "start_service", "web", script)
 	setProg("web-start", true, false, "启动中...")
+	// v3.0 T1.3 幂等前置（修 G3）：已在运行就不重复派生（见 svcStartSkip）。
+	if res, hit := svcStartSkip("web"); hit {
+		setProg("web-start", false, res.Verified, res.Msg)
+		fin(resOK, "幂等跳过："+res.Msg)
+		return res
+	}
 	if dir == "" {
 		setProg("web-start", false, false, "未指定前端目录")
 		failS(scStart, "web", "前端", "未指定前端目录")
@@ -763,6 +843,7 @@ func handleBackendStart(w http.ResponseWriter, r *http.Request) {
 
 // backendStartTask 构建并启动后端（供按钮与 AI 工具共用）；同步等待完成（含 go build）。
 // 返回 OpResult：go build 失败 / go run 派生失败都会显式返回失败，不再被吞掉。
+// v3.0 T1.2：持 **backend 资源组**锁（同 webStartTask 的理由）。
 func backendStartTask(dir, actor string) OpResult {
 	if actor == "" {
 		actor = actUser
@@ -770,26 +851,41 @@ func backendStartTask(dir, actor string) OpResult {
 	if dir == "" {
 		dir = cfg.Projects.BackendDir
 	}
-	h, granted := beginTaskH("构建并启动后端", true)
+	h, granted := beginTaskHG("构建并启动后端", []string{grpBackend}, true)
 	if !granted {
-		return opFail("start_service", "backend", errKindBusy, "有任务正在执行，请稍候")
+		return opFail("start_service", "backend", errKindBusy, busyReason("backend"))
 	}
-	done := make(chan struct{})
-	var res OpResult
-	go func() {
-		defer h.Done()
-		defer close(done)
-		res = opStartBackend(dir, actor)
-		h.SetResult(res)
-	}()
-	<-done
+	defer h.Done()
+	// v3.0 T1.4：go build 是这条路径上唯一的前台命令（execStreamed
+	// 以 "start/backend" 注册）。旧实现不注册 SetKill——看门狗超时只放锁，
+	// go build 挂死后锁放了、编译还在跑，之后谁都拿不到 backend 组锁。
+	h.SetKill(func() { fgKill(scStart + "/backend") })
+	h.TimeoutFact = func() string { return startTimeoutFact("backend") }
+	res := opStartBackend(dir, actor)
+	h.SetResult(res)
 	return res
+}
+
+// backendStartTaskLocked 后端启动执行体（调用方已持 backend 组锁时用）。
+func backendStartTaskLocked(dir, actor string) OpResult {
+	if dir == "" {
+		dir = cfg.Projects.BackendDir
+	}
+	return opStartBackend(dir, actor)
 }
 
 // opStartBackend 后端构建 + 启动执行体（任务协程内运行）。
 func opStartBackend(dir, actor string) OpResult {
 	fin := auditStart(actor, "start_service", "backend", "go build + go run")
 	setProg("backend-start", true, false, "构建并启动中...")
+	// v3.0 T1.3 幂等前置（修 G3）：已在运行就不重复派生。
+	// 后端连 go build 一起跳过——"改代码后想重新编译"用 restart_service，
+	// 它先停旧再起新，不存在半新半旧的中间态。
+	if res, hit := svcStartSkip("backend"); hit {
+		setProg("backend-start", false, res.Verified, res.Msg)
+		fin(resOK, "幂等跳过："+res.Msg)
+		return res
+	}
 	if dir == "" {
 		setProg("backend-start", false, false, "未指定后端目录")
 		failS(scStart, "backend", "后端", "未指定后端目录")

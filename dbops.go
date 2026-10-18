@@ -167,7 +167,7 @@ func dbBackupTask(actor string) OpResult {
 		actor = actUser
 	}
 	target := cfg.Projects.DBName
-	h, granted := beginTaskH("MySQL 备份", true)
+	h, granted := beginTaskHG("MySQL 备份", []string{grpDB}, true)
 	if !granted {
 		return opFail("db_backup", target, errKindBusy, "有任务正在执行，请稍候")
 	}
@@ -365,7 +365,7 @@ func dbDrillTask(actor string) error {
 	if actor == "" {
 		actor = actUser
 	}
-	h, granted := beginTaskH("恢复演练", true)
+	h, granted := beginTaskHG("恢复演练", []string{grpDB}, true)
 	if !granted {
 		return fmt.Errorf("有任务正在执行，请稍候")
 	}
@@ -509,7 +509,7 @@ func handleDBRestore(w http.ResponseWriter, r *http.Request) {
 				cfg.Projects.DBName, filepath.Base(file), float64(fi.Size())/1024)), true)
 		return
 	}
-	h, ok2 := beginTaskH("MySQL 还原", true)
+	h, ok2 := beginTaskHG("MySQL 还原", []string{grpDB}, true)
 	if !ok2 {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return

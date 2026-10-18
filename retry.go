@@ -26,6 +26,10 @@ type retryPolicy struct {
 	Tag      string        // 日志步骤名
 	Label    string        // 日志主语（如 "mysqldump"），默认"子进程"
 	AnyErr   bool          // true=任何错误都重试；false（默认）=只对"零输出"错误重试
+	// Abort 重试前检查；返回 true 时立即放弃后续尝试并交回上次结果。
+	// v3.0 T1.4：任务看门狗超时杀掉前台命令后必须靠它收手——
+	// 否则"杀了还重试"等于无锁继续执行（任务锁已经释放）。
+	Abort func() bool
 }
 
 // runRetry 按策略执行 attempt。attempt 每次拿到"是否包装"的标志，
@@ -47,6 +51,9 @@ func runRetry(p retryPolicy, attempt func(wrap bool) (bool, error)) (bool, error
 	)
 	for i := 0; i < p.Attempts; i++ {
 		if i > 0 {
+			if p.Abort != nil && p.Abort() {
+				return hasOut, err // 已被看门狗终止：不再重试（无锁执行比不执行更坏）
+			}
 			metRetry() // 重试率是"环境异常"的先行指标，进 /metrics
 			// 重试前告知原因与等待时间，避免用户以为"卡住没反应"
 			wrapNext := p.WrapLast && i == p.Attempts-1
