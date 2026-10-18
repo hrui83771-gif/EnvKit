@@ -100,23 +100,11 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	confirmed := false
 	if body.Confirm != nil {
 		confirmed = true
-		t, exists := aiToolRegistry[body.Confirm.Tool]
-		switch {
-		case !exists:
-			result = "错误：该工具不在白名单内"
-		case !body.Confirm.Approved:
-			result = "用户拒绝了该操作。请给出替代的手动操作步骤。"
-		default:
-			// 执行前先给可见反馈：go build / npm install / mysqldump 可能耗时 1~2 分钟，
-			// 期间一条输出都没有，用户会以为"点了确认没反应"而重复点击。
-			sseWrite(w, fl, map[string]any{"type": "delta", "text": "正在执行：" +
-				aiToolCnName(body.Confirm.Tool, body.Confirm.Args) + "…（可能需要几十秒到几分钟，请稍候）\n"})
-			if res, err := t.Execute(body.Confirm.Args); err != nil {
-				result = "执行出错：" + err.Error()
-			} else {
-				result = res
-			}
-		}
+		// T1.1：裁决（纯函数）+ 应用（审计/执行/SSE）分开——
+		// 授权依据、参数防篡改、闸门重过全在 aiConfirmGate 里，可单测。
+		d := aiConfirmGate(body.Confirm.Tool, body.Confirm.ToolCallID,
+			body.Confirm.Approved, body.Confirm.Args)
+		result = aiConfirmApply(w, fl, body.Confirm.Tool, d)
 		// 不合成 assistant(tool_calls)+tool（thinking 模型要求回传 reasoning_content，合成消息会 400），
 		// 改为剥掉该回合并用一条 user 消息把结果交给模型。
 		msgs = aiTrimLastToolTurn(msgs)
@@ -723,21 +711,24 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// 而是"用户有机会点头"——两者的区别在归因时很关键：
 				// forbidden 说明规则太严，confirm 说明档位合适但用户没批。
 				tracePolicy(verdict, "pending")
-				// ---- v2.9：先把话说完，再弹卡 ----
-				//
-				// **用户是"基于结论"决定要不要点头的**，而模型的话在这里会被掐断。
-				// 实测（hang_service 三次里两次）：诊断完全正确，
-				// 却停在「我先发起重启」——**用户在界面上看到的也是半句话**。
-				//
-				// 顺序不能反：先看到结论 → 再决定要不要授权。
-				// 而确认后的那一段已经执行完了再说就晚了。
-				//
-				// 补答失败也不影响主流程（宁可半句，不要卡住整个回合）。
-				if !preflight {
-					aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
-				}
-				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
-					"text": aiToolCnName(a.Name, args)})
+			// ---- v2.9：先把话说完，再弹卡 ----
+			//
+			// **用户是"基于结论"决定要不要点头的**，而模型的话在这里会被掐断。
+			// 实测（hang_service 三次里两次）：诊断完全正确，
+			// 却停在「我先发起重启」——**用户在界面上看到的也是半句话**。
+			//
+			// 顺序不能反：先看到结论 → 再决定要不要授权。
+			// 而确认后的那一段已经执行完了再说就晚了。
+			//
+			// 补答失败也不影响主流程（宁可半句，不要卡住整个回合）。
+			if !preflight {
+				aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
+			}
+			// T1.1：发卡即登记原始参数——确认回来时服务端按登记的副本执行，
+			// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 handleAIChat）。
+			aiRememberPending(a.ID, a.Name, args)
+			sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
+				"text": aiToolCnName(a.Name, args)})
 				// 把未完成的 assistant 消息保留在本地 msgs（供确认后续接），并结束本次 SSE
 				msgs[assistantIdx].ToolCalls = append(msgs[assistantIdx].ToolCalls, func() aiToolCall {
 					var t aiToolCall
