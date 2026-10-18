@@ -17,10 +17,12 @@ package main
 // 那时该由人来更新，而不是让测试偷偷改期望值。
 //
 // 它锁的是三条**结构性**规则，任何厂商都适用：
-//  1. 预设里不得出现**已知停用**的模型名（停用清单要显式写出并定期核���）
+//  1. 预设里不得出现**已知停用**的模型名（停用清单要显式写出并定期核实）
 //  2. 预设里的每个模型名都要能通过 JSON 往返（格式合法）
-//  3. 服务商必须带 Note——思考型厂商的「思考模式是请求参数不是模型」
-//     这类概念不说明，用户会以为下拉里少了模型
+//  3. 预设默认**不带** Note——2026-10-17 用户反馈「这句话不需要看」，
+//     DeepSeek 原带的「flash 是当前主力…」概念说明已删。将来若确需给某个
+//     服务商加说明，唯一的守卫是可翻译（TestProviderNoteIsTranslatable），
+//     不再是「必须带」。
 //
 // 另外提供一个**离线核实工具**给人工用：
 // 配好 key 后跑它可拉服务商真实列表并与预设对比，
@@ -57,21 +59,6 @@ func TestProviderPresetsNoRetiredModel(t *testing.T) {
 					"处置：从预设移除（真实可用名请查厂商文档或用「拉取模型列表」取真值）",
 					p.Name, m, why)
 			}
-		}
-	}
-}
-
-// TestProviderPresetsHaveNote 思考型厂商必须带说明。
-//
-// 不说明的后果很具体：DeepSeek 的 flash 一个模型覆盖思考与非思考两种模式，
-// 下拉里只有一个名字，用户会以为「不支持思考」而去找根本不存在的原因。
-func TestProviderPresetsHaveNote(t *testing.T) {
-	for _, p := range aiProviderPresets {
-		if len(p.Models) == 0 {
-			continue // custom 没有预设模型，不需要说明
-		}
-		if strings.TrimSpace(p.Note) == "" {
-			t.Errorf("服务商 %s 有预设模型但没有 Note", p.Name)
 		}
 	}
 }

@@ -20,6 +20,10 @@ func writeAuditFile(t *testing.T, dir, name, body string) {
 }
 
 // withAuditDir 把审计目录指向临时目录，避免污染用户真实的审计记录。
+// 收尾必须关审计文件句柄（closeAuditForTest）：t.TempDir() 在 Windows 上
+// 删不掉仍被打开的文件，句柄没关就报 "being used by another process"。
+// 只读用例碰不到这条，但会触发审计**写入**的用例（如 AI 工具调用留痕）会——
+// 2026-10-17 TestAiAuditExecute 实测踩到。
 func withAuditDir(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -28,7 +32,13 @@ func withAuditDir(t *testing.T, files map[string]string) string {
 	}
 	old := auditDir
 	auditDir = func() string { return dir }
-	t.Cleanup(func() { auditDir = old })
+	auditMu.Lock()
+	auditFile, auditFileAt = nil, ""
+	auditMu.Unlock()
+	t.Cleanup(func() {
+		closeAuditForTest()
+		auditDir = old
+	})
 	return dir
 }
 

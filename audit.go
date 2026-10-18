@@ -341,3 +341,148 @@ func auditSummary(n int) []string {
 	}
 	return out
 }
+
+// ---------- AI 工具：读操作审计 ----------
+
+// AI 一次能看多少条审计。与 db_query 同一思路：默认值够日常回答，
+// 硬上限防止模型要「全部」把上下文撑爆。
+const (
+	aiAuditMaxLines    = 100
+	aiAuditDefaultLine = 20
+)
+
+// aiAuditActorAlias 主体别名表。模型（或用户转述）可能给中文、大写、
+// 口语词；不折算的话筛出来是空结果，模型会以为「守护从来没干活过」——
+// **把「查不到」误会成「没发生过」比没有工具更坏**。
+var aiAuditActorAlias = map[string]string{
+	"user": actUser, "用户": actUser,
+	"ai": actAI, "助手": actAI,
+	"guard": actGuard, "守护": actGuard,
+	"system": actSys, "系统": actSys,
+}
+
+// aiAuditDay 把模型给的日期折算成 YYYYMMDD。
+// 接受 20261017 / 2026-10-17 / 2026/10/17，以及今天 / 昨天 这类口语词；
+// 认不出的必须报错——静默按「全部」处理会让模型以为查过了。
+func aiAuditDay(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "":
+		return "", nil // 空 = 跨天取最近（auditQuery 的口径）
+	case "today", "今天":
+		return time.Now().Format("20060102"), nil
+	case "yesterday", "昨天":
+		return time.Now().AddDate(0, 0, -1).Format("20060102"), nil
+	}
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, s)
+	if len(digits) != 8 {
+		return "", fmt.Errorf("日期无法识别：%q（用 YYYYMMDD，如 20261017；也接受 2026-10-17 / 今天 / 昨天；留空取最近）", s)
+	}
+	if _, err := time.Parse("20060102", digits); err != nil {
+		return "", fmt.Errorf("日期不存在：%q（用 YYYYMMDD，如 20261017）", s)
+	}
+	return digits, nil
+}
+
+func init() {
+	aiToolRegistry["get_audit_log"] = aiTool{
+		Desc: "读取操作审计记录——也就是界面上「操作审计」页的数据：谁、何时、做了什么、结果如何（含复验结论）。" +
+			"用于回答「最近做了哪些操作」「守护自动恢复过吗」「有没有失败的操作」「某天发生了什么」这类问题。" +
+			"只读，不会修改任何数据，因此无需你确认。" +
+			"注意：①day 留空=跨天取最近若干条，指定某天用 YYYYMMDD（也接受 2026-10-17 / 今天 / 昨天）；" +
+			"②actor 可只留 user(用户手动) / ai(助手执行) / guard(守护自动) / system(系统) 某一类；" +
+			"③审计只保留 30 天，更早的没有记录，别反复找。",
+		Schema: map[string]any{"type": "object", "properties": map[string]any{
+			"day":   map[string]any{"type": "string", "description": "哪一天：YYYYMMDD（如 20261017）、2026-10-17、今天/昨天。留空则跨天取最近若干条"},
+			"actor": map[string]any{"type": "string", "description": "操作主体：user=用户手动，ai=AI 助手执行，guard=守护自动恢复，system=系统。留空=全部"},
+			"lines": map[string]any{"type": "integer", "description": "最近多少条，默认 20，上限 100"},
+		}, "required": []string{}},
+		Execute: func(args map[string]any) (string, error) {
+			day, _ := args["day"].(string)
+			actor, _ := args["actor"].(string)
+			n := aiAuditDefaultLine
+			if v, ok := args["lines"].(float64); ok && v > 0 {
+				n = int(v)
+			}
+			if n > aiAuditMaxLines {
+				n = aiAuditMaxLines
+			}
+			d, err := aiAuditDay(day)
+			if err != nil {
+				return "", err
+			}
+			a := strings.ToLower(strings.TrimSpace(actor))
+			if a != "" {
+				mapped, ok := aiAuditActorAlias[a]
+				if !ok {
+					return "", fmt.Errorf("未知的操作主体：%q（可选 user / ai / guard / system，留空=全部）", actor)
+				}
+				a = mapped
+			}
+			// 查询本身也留痕（同 db_query 口径：AI 替用户查过什么要能回答）。
+			// 页面刷新不落审计是怕「看一眼」刷爆文件；工具调用有预算上限，量级不同。
+			fin := auditStart(actAI, "audit_query", "day="+d+" actor="+a, fmt.Sprintf("n=%d", n))
+			out, cnt := aiAuditText(d, a, n)
+			fin(resOK, fmt.Sprintf("返回 %d 条", cnt))
+			// 详情列可能带第三方输出与用户入参，按不可信数据包裹（配合系统提示词第 1 条）
+			return "<untrusted_data>\n" + out + "\n</untrusted_data>", nil
+		},
+	}
+}
+
+// aiAuditText 把审计记录整理成模型可读的紧凑文本，返回 (文本, 条数)。
+//
+// 为什么不让模型用 read_file 直接读 audit-*.jsonl：
+// ① 审计文件在 exe 同级，探索工具被限制在项目目录内，根本够不着；
+// ② JSONL 一行一个嵌套对象，模型逐行解析容易漏字段，还常拉回整个文件。
+// 这里按 auditQuery 的口径（新在前、可按天/主体筛）一条一行输出。
+//
+// 词汇与「操作审计」页保持一致：result 用原始值（ok/fail/denied/started），
+// 图例在头部给全——模型转述给用户时不会造出页面上不存在的词。
+func aiAuditText(day, actor string, n int) (string, int) {
+	if n <= 0 {
+		n = aiAuditDefaultLine
+	}
+	if n > aiAuditMaxLines {
+		n = aiAuditMaxLines
+	}
+	days := auditDays()
+	var b strings.Builder
+	if len(days) == 0 {
+		return "目前没有任何审计记录（审计随操作实时积累，只保留 30 天）。", 0
+	}
+	fmt.Fprintf(&b, "有审计记录的日期（新在前，只保留 30 天）：%s\n", strings.Join(days, "、"))
+	b.WriteString("图例：主体 user=用户手动 ai=助手执行 guard=守护自动 system=系统；" +
+		"结果 ok=成功 fail=失败 denied=被拦下 started=已启动\n")
+	es := auditQuery(day, actor, n)
+	if len(es) == 0 {
+		b.WriteString("该条件下没有记录。")
+		return b.String(), 0
+	}
+	fmt.Fprintf(&b, "以下是最新 %d 条（时间 | 主体 | 动作 | 目标 | 结果 | 详情/复验）：\n", len(es))
+	for _, e := range es {
+		line := e.Ts + " | " + e.Actor + " | " + e.Action
+		if e.Target != "" {
+			line += " | " + e.Target
+		}
+		line += " | " + e.Result
+		det := e.Detail
+		if e.Verify != "" {
+			if det != "" {
+				det += "；" + e.Verify
+			} else {
+				det = e.Verify
+			}
+		}
+		if det != "" {
+			line += " | " + det
+		}
+		b.WriteString(line + "\n")
+	}
+	return b.String(), len(es)
+}

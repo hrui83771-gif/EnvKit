@@ -32,7 +32,7 @@ import (
 func TestIntent_CheckBackupNotCreate(t *testing.T) {
 	checkAsks := []string{
 		"检查一下最近的备份文件，看看能不能用",
-		"检查一下最近的备份文��，看看能不能用",
+		"最近的备份文档还能打开吗",
 		"最近那份备份能真的还原吗？",
 		"最近那份备份看起来完整吗？",
 		"备份文件完整不完整，能不能还原",

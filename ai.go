@@ -166,8 +166,6 @@ var aiProviderPresets = []aiProviderPreset{
 	{
 		ID: "deepseek", Name: "DeepSeek", BaseURL: "https://api.deepseek.com",
 		Models: []string{"deepseek-flash", "deepseek-v4-pro"},
-		Note: "flash 是当前主力，思考与非思考由请求参数切换，不是两个模型；" +
-			"pro 更强也更贵。旧名 deepseek-chat / deepseek-reasoner 已停用。",
 	},
 	{"custom", "自定义", "", nil, ""},
 }

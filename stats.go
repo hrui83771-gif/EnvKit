@@ -360,10 +360,10 @@ func statsRange(days int) *StatsBoard {
 		b.Notices = append(b.Notices,
 			"token 无数据：轨迹里的 usage 字段是 v2.7 才加的，此前的对话没有记录")
 	}
-	if b.Totals.TraceDaysAvailable < b.Totals.AuditDaysAvailable {
-		b.Notices = append(b.Notices,
-			"轨迹只保留 14 天、审计保留 30 天，因此「任务结局」与「token」两行覆盖更短")
-	}
+	// 曾有一条「轨迹只保留 14 天、审计保留 30 天，因此『任务结局』与『token』两行覆盖更短」
+	// 的覆盖差异提醒。v2.7.1 起那两行就已不在界面上，这句话指向不存在的行；
+	// 用户反馈后于 2026-10-17 删除。TraceDaysAvailable 字段保留——
+	// KPI 副标题（「仅覆盖最近 N 天（轨迹保留期）」）还在用它。
 
 	b.Days = dayStats
 	return b

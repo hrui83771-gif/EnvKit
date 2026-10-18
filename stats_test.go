@@ -193,7 +193,7 @@ func TestStatsVerifyRateDenominator(t *testing.T) {
 
 	b := statsRange(30)
 	if b.Totals.VerifyCount != 2 {
-		t.Fatalf("有复验结论的操作应�� 2，实际 %d", b.Totals.VerifyCount)
+		t.Fatalf("有复验结论的操作应为 2，实际 %d", b.Totals.VerifyCount)
 	}
 	if b.Totals.VerifyOK != 1 {
 		t.Errorf("复验通过应为 1，实际 %d", b.Totals.VerifyOK)

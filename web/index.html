@@ -353,10 +353,15 @@
   .ai-msg.err{align-self:center;background:var(--errbg);color:var(--err);font-size:12px}
   .ai-msg code{background:var(--off);padding:1px 5px;border-radius:4px;font-family:Consolas,monospace;font-size:12px}
   .ai-msg pre{background:#0f1720;color:#d7e2ee;padding:9px;border-radius:8px;overflow-x:auto;white-space:pre}
-  .ai-wrap{position:relative;align-self:flex-start;max-width:92%}
-  .ai-wrap .copy{position:absolute;top:-6px;right:-6px;opacity:0;transition:.15s;background:var(--card);border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:11px;padding:2px 8px;cursor:pointer}
-  .ai-wrap:hover .copy{opacity:1}
-  .ai-wrap .copy.done{color:var(--ok);border-color:var(--ok)}
+  .ai-wrap{align-self:flex-start;max-width:92%}
+  /* 回合末尾小工具栏：时间 + 复制 + 重新提问。
+     **常驻不靠 hover** —— 悬浮出现的按钮在触屏和"看一眼时间"的场景下等于没有；
+     时间又是低频率信息，常驻一行比每次悬停才现形更好找。 */
+  .ai-tb{display:flex;align-items:center;gap:12px;margin:-3px 2px 0;font-size:11px;color:var(--muted);line-height:1.6}
+  .ai-tb-time{letter-spacing:.5px;user-select:none;white-space:nowrap}
+  .ai-tb-btn{background:none;border:none;padding:1px 3px;color:var(--muted);font-size:11px;cursor:pointer;border-radius:4px;line-height:1.4}
+  .ai-tb-btn:hover{color:var(--brand);background:var(--off)}
+  .ai-tb-btn.done{color:var(--ok)}
   .ai-think{align-self:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .ai-think-txt{display:block;width:100%;margin-top:6px;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:88px;overflow:hidden;line-height:1.5}
   .ai-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:aiblink 1.2s infinite}
@@ -383,7 +388,6 @@
   .ai-verify summary::-webkit-details-marker{display:none}
   .ai-verify .v-ev{margin:6px 0 0;padding:6px 8px;border-radius:6px;background:#0f1720;color:#d7e2ee;white-space:pre-wrap;word-break:break-all;font-size:11px}
   .ai-stop{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:3px 10px;cursor:pointer}
-  .ai-time{font-size:11px;color:var(--muted);margin-right:8px;letter-spacing:.5px;user-select:none}
   /* v2.3 N5 计划面板：进行中默认展开（用户要看到它在干什么），结束自动折叠 */
   .ai-plan{align-self:stretch;font-size:12px;color:var(--muted);background:var(--off);border-radius:8px;padding:6px 10px;margin:2px 0}
   .ai-plan summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:5px}
@@ -1080,7 +1084,7 @@
         <li><b>程序配置</b>：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告</li>
         <li><b>链端校验</b>：FISCO-BCOS v2 / WeBASE-Front 连通检测、内嵌 SSH 终端、远程目录浏览、区块高度 / 交易总数 / 客户端版本读取、节点进程健康、宕机自动重启（一键检测 / 后台守护）+ 桌面通知</li>
         <li><b>程序启动</b>：前后端一键启动（先后端、再前端）、访问地址自动解析、日志按来源分栏与 ANSI 清理、进程树管理（EnvKit 退出自动回收）、一键清理后台遗留进程</li>
-        <li><b>AI 助手</b>：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，11 个工具覆盖状态 / 日志 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密</li>
+        <li><b>AI 助手</b>：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，25 个工具覆盖状态 / 日志 / 审计 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密</li>
         <li><b>安全与可靠</b>：密码 DPAPI 加密存储、本机 API 令牌防 CSRF、单实例保护、配置原子写入 + 上一版备份、日志按日轮转与自动清理、panic 兜底与命令超时、杀软白名单一键排除 + 流氓软件深度清除</li>
       </ul>
       <h3 style="margin:14px 0 6px">免责声明</h3>
@@ -1292,12 +1296,10 @@ const I18N_EN = {
   "SQL 生效": "SQL apply",
   "SSH 连通": "SSH reachability",
   "Token 消耗": "Token usage",
-  "Token 用量": "Token usage",
   "W 目录": "W dir",
   "W 端口": "W port",
   "W 脚本": "W script",
   "WeBASE-Front 地址": "WeBASE-Front URL",
-  "flash 是当前主力，思考与非思考由请求参数切换，不是两个模型；pro 更强也更贵。旧名 deepseek-chat / deepseek-reasoner 已停用。": "flash is the current default; thinking / non-thinking is switched by a request parameter, not by a separate model. pro is stronger and costs more. The old names deepseek-chat / deepseek-reasoner are retired.",
   "https://api.deepseek.com 或完整 .../v1/chat/completions（都支持）": "https://api.deepseek.com or a full .../v1/chat/completions (both work)",
   "npm registry（Node 代理）": "npm registry (Node mirror)",
   "npm run 脚本名（可输入自定义）": "npm run script name (custom allowed)",
@@ -1356,7 +1358,6 @@ const I18N_EN = {
   "以管理员身份重启": "Restart as administrator",
   "任何项目都生效": "applies to all projects",
   "任务数": "Tasks",
-  "任务结局": "Task outcomes",
   "位置：": "Location: ",
   "低": "Low",
   "余额 {0} {1}": "Balance {0} {1}",
@@ -1479,6 +1480,7 @@ const I18N_EN = {
   "备份数据库": "back up database",
   "复制": "Copy",
   "复验反复失败": "Verification keeps failing",
+  "复验未通过": "Verification failed",
   "复验环境状态": "Verify environment state",
   "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
@@ -1541,6 +1543,7 @@ const I18N_EN = {
   "已启动": "Started",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
+  "已复验通过": "Verified OK",
   "已失效": "Stale",
   "已安装": "Installed",
   "已导出 {0}": "Exported {0}",
@@ -1549,6 +1552,7 @@ const I18N_EN = {
   "已归位 ✨": "Back home ✨",
   "已恢复上次的对话（{0} 条）": "Restored previous conversation ({0} messages)",
   "已打开": "Open",
+  "已执行·未确认": "Executed, not confirmed",
   "已拉取 {0} 个模型，已在「模型」下拉框中回填": "Fetched {0} models, filled into the Model dropdown",
   "已按安全规则拒绝：{0}": "Rejected by safety rules: {0}",
   "已收藏脚本 {0}": "Saved script {0}",
@@ -1695,6 +1699,7 @@ const I18N_EN = {
   "构建并启动": "Build & start",
   "查看日志": "View logs",
   "查看结果": "view result",
+  "查看证据": "View evidence",
   "查看项目目录": "List project directory",
   "查询中（探测官方最新版本，约几秒）...": "Checking the upstream latest version (a few seconds)…",
   "查询失败：{0}": "Query failed: {0}",
@@ -1903,6 +1908,7 @@ const I18N_EN = {
   "采用": "Used",
   "重启服务": "Restart service",
   "重新安装": "Reinstall",
+  "重新提问": "Ask again",
   "重新检测": "Re-check",
   "重新检测组件": "re-check components",
   "链主机": "Chain host",
@@ -1933,7 +1939,7 @@ const I18N_EN = {
   "：前后端一键启动（先后端、再前端）、访问地址自动解析、日志按来源分栏与 ANSI 清理、进程树管理（EnvKit 退出自动回收）、一键清理后台遗留进程": ": one-click frontend+backend start (backend first), automatic URL detection, per-source log panes with ANSI cleanup, process-tree management (auto-reclaimed on exit), one-click cleanup of leftover processes",
   "：右下角 3D 桌宠——对话时思考 / 干活动画，长任务外圈进度环，写操作挂确认徽标（不用开抽屉直接批），出错红标一键跳到日志，检测完成开心撒花 / 皱眉点名缺什么，拖 .sql 文件到它身上直接生效，右键可归位 / 隐藏 / 立即检测": ": a 3D pet at the bottom-right — thinking/working animations while chatting, a progress ring for long tasks, a confirm badge for write actions (approve without opening the drawer), a red badge that jumps to the log on error, happy/frowning expressions after detection, drop a .sql file onto it to apply it, right-click for home / hide / check",
   "：右下角悬浮球，可查询日志/环境状态，执行数据库备份、重新检测、前后端启停、加 Defender 白名单": ": floating ball at bottom-right; ask about logs/status, run DB backups, re-checks, service start/stop, add Defender exclusions",
-  "：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，11 个工具覆盖状态 / 日志 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密": ": a desktop assistant in the corner (task progress ring, write-action confirm badge, one-click jump to logs on error, drop a .sql file to apply it, expression feedback on detection); natural-language Q&A and report analysis with 11 tools covering status / logs / diagnostics / database / checks / service start-stop / whitelisting / cleanup — every write action requires confirmation; works with any OpenAI-compatible model, key encrypted with DPAPI",
+  "：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，25 个工具覆盖状态 / 日志 / 审计 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密": ": a desktop assistant in the corner (task progress ring, write-action confirm badge, one-click jump to logs on error, drop a .sql file to apply it, expression feedback on detection); natural-language Q&A and report analysis with 25 tools covering status / logs / audit / diagnostics / database / checks / service start-stop / whitelisting / cleanup — every write action requires confirmation; works with any OpenAI-compatible model, key encrypted with DPAPI",
   "：密码 DPAPI 加密存储、本机 API 令牌防 CSRF、单实例保护、配置原子写入 + 上一版备份、日志按日轮转与自动清理、panic 兜底与命令超时、杀软白名单一键排除 + 流氓软件深度清除": ": DPAPI-encrypted passwords, local API token against CSRF, single-instance protection, atomic config writes with previous-version backup, daily log rotation with auto-cleanup, panic guards and command timeouts, one-click AV whitelisting + deep PUA cleanup",
   "：所有写操作需你在对话中点击确认才会执行；Key 经 DPAPI 加密，不进日志、不进 AI 上下文": ": every write action runs only after you confirm in the chat; the key is DPAPI-encrypted and never enters logs or the AI context",
   "：所有写操作需你在对话或助手徽标上确认才会执行；Key 经 DPAPI 加密，不进日志、不进 AI 上下文": ": every write action runs only after you confirm in the chat or on the assistant badge; the key is DPAPI-encrypted and never enters logs or the AI context",
@@ -4540,35 +4546,87 @@ function petUsageRender(){
 aiBalanceRefresh();                                    // 进页面查一次余额（非 DeepSeek 静默降级）
 setInterval(aiBalanceRefresh, 10*60*1000);             // 每 10 分钟静默刷新
 
-/* 消息时间戳：气泡内左侧灰字 HH:MM。流式渲染每帧重建 innerHTML，时间必须一起重建；
-   ts 只认合法格式（本机生成/历史存档回读都过这关），别的数据一律不显示。 */
-function aiTsOk(s){ return typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s); }
-function aiNow(){ const d = new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
-function aiFill(d, text){
-  d.innerHTML = (d.dataset.ts ? '<span class="ai-time">'+d.dataset.ts+'</span>' : '') + aiMd(text);
+/* 消息时间戳：MM-DD HH:mm，挂在每轮回合末尾的小工具栏里。
+   原来那行气泡内左侧小灰字只有 HH:MM，用户反馈"看不清"——没有日期，
+   跨天和多日前的对话根本定位不到是哪个回合。时间配月日后放进工具栏，
+   "什么时候问的"和"复制/重新提问"放在一起，一眼找得到。
+   ts 只认合法格式（本机生成/历史存档回读都过这关）；旧档是 HH:MM 无日期，
+   也放行并按原样显示（不编日期）。 */
+function aiTsOk(s){ return typeof s === 'string' && /^(([01]\d|2[0-3]):[0-5]\d|(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d)$/.test(s); }
+function aiNow(){ const d = new Date(); return ('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+
+/* [envkit-verdict] 结论块是**给评测判据看的机器格式**（判据优先读它、词表降级兜底），
+   不是给用户看的——用户原话"用户不需要看到"。
+   **只在展示层剥**：SSE 原文、aiMessages 历史、localStorage 存档全部保持原样。
+   在 Go 侧或入历史前剥，都会让判据的 verdict 覆盖率归零——沙箱采集的就是 SSE 原文。
+   从第一次出现处切到文尾：块指令要求"块的三行之后不要再写别的内容"，
+   所以切到文尾永不误伤正文；流式中途记号没打完（'[envkit-ver'）也一并切掉，
+   免得半截记号在屏幕上闪一下。 */
+function aiStripVerdict(s){
+  // 守卫查公共前缀 '[envkit-ver'（完整记号与流式中途的半截都含它）——
+  // 查完整记号的话，半截记号在早退这里就被放行了，下面两行剥离永远不执行
+  if(typeof s !== 'string' || s.indexOf('[envkit-ver') < 0) return s;
+  return s.replace(/\[envkit-verdict\][\s\S]*$/, '').replace(/\[envkit-ver$/, '').replace(/\s+$/, '');
 }
-function aiAdd(cls, text, ts){
+function aiFill(d, text){
+  d.innerHTML = aiMd(aiStripVerdict(text));
+}
+function aiAdd(cls, text, ts, reask){
   const d = document.createElement('div');
   d.className = 'ai-msg ' + cls;
   if(aiTsOk(ts)) d.dataset.ts = ts;
   aiFill(d, text);
   if(cls === 'ai'){
-    d.dataset.raw = text || '';
+    // 复制给用户的也必须是剥干净的文本——结论块是调试信息，不进剪贴板
+    d.dataset.raw = aiStripVerdict(text || '');
     const w = document.createElement('div'); w.className = 'ai-wrap';
-    const c = document.createElement('button'); c.className = 'copy'; c.textContent = '复制';
-    c.onclick = ()=>{
-      const raw = d.dataset.raw || d.innerText;
-      navigator.clipboard.writeText(raw).then(()=>{ c.textContent='已复制'; c.classList.add('done');
-        setTimeout(()=>{ c.textContent='复制'; c.classList.remove('done'); }, 1600); })
-        .catch(()=>{ c.textContent='失败'; setTimeout(()=>{ c.textContent='复制'; }, 1600); });
-    };
-    w.appendChild(d); w.appendChild(c);
+    w.appendChild(d);
+    w.appendChild(aiToolbar(d, reask));
     $ai('ai-msgs').appendChild(w);
   } else {
     $ai('ai-msgs').appendChild(d);
   }
   $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   return d;
+}
+/* 回合末尾小工具栏：时间 + 复制 + 重新提问。
+   reask 是触发这一回合的那条用户原话；为空（如「解读诊断报告」这种无用户提问的回合）
+   就不放「重新提问」——没有可重问的问题，放一个按钮只会误导。 */
+function aiToolbar(d, reask){
+  const tb = document.createElement('div'); tb.className = 'ai-tb';
+  if(d.dataset.ts){
+    const tm = document.createElement('span'); tm.className = 'ai-tb-time'; tm.textContent = d.dataset.ts;
+    tb.appendChild(tm);
+  }
+  const c = document.createElement('button'); c.className = 'ai-tb-btn'; c.textContent = t('复制');
+  c.onclick = ()=>{
+    const raw = d.dataset.raw || d.innerText;
+    navigator.clipboard.writeText(raw).then(()=>{ c.textContent = t('已复制'); c.classList.add('done');
+      setTimeout(()=>{ c.textContent = t('复制'); c.classList.remove('done'); }, 1600); })
+      .catch(()=>{ c.textContent = t('失败'); setTimeout(()=>{ c.textContent = t('复制'); }, 1600); });
+  };
+  tb.appendChild(c);
+  if(reask){
+    const r = document.createElement('button'); r.className = 'ai-tb-btn'; r.textContent = t('重新提问');
+    r.onclick = ()=>{ if(aiBusy){ toast(t('助手正在忙，稍后再试')); return; } aiSendText(reask); };
+    tb.appendChild(r);
+  }
+  return tb;
+}
+/* 发送一段用户文本：发送按钮与「重新提问」共用。
+   抽成函数是因为重新提问要复刻发送的全套动作——剥悬挂确认卡、记时间戳、进历史、
+   起流式回合；两处各写一遍，迟早只改一处（确认卡悬挂那次事故就是这么来的）。 */
+async function aiSendText(tx){
+  if(aiBusy) return;
+  tx = String(tx || '').trim();
+  if(!tx) return;
+  // 用户无视确认卡片直接发新消息：把悬挂的 assistant(tool_calls) 从历史里剥掉，
+  // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
+  if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
+  const sendTs = aiNow();
+  aiAdd('user', tx, sendTs);
+  aiMessages.push({role:'user', content:tx, ts:sendTs});
+  await aiConsume('/api/ai/chat', {messages: aiMessages});
 }
 function aiMd(t){
   t = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -4649,9 +4707,9 @@ function aiApplyProvider(keepModel){
     else { const o = document.createElement('option'); o.value = current; o.textContent = current; sel.prepend(o); sel.value = current; }
   }
   if(!useSelect) $ai('ai_model_row').style.display = '';
-  // 服务商说明（如「思考模式是请求参数而非独立模型」）——
-// **不说明的话用户会以为下拉框里少了模型**，进而以为软件不支持。
-  // 走 t() 翻译：服务端直出中文会让英文界面露中文。
+  // 服务商说明（预设的 Note）——2026-10-17 起 DeepSeek 不再带说明：
+  // 用户反馈「这句话不需要看」。机制保留：哪个服务商确需说明就在后端加 Note，
+  // 走 t() 翻译（服务端直出中文会让英文界面露中文）；没有 Note 时整行隐藏。
   const hint = $ai('ai_provider_note');
   if(hint){
     const raw = (p && !custom && p.note) ? p.note : '';
@@ -4803,6 +4861,9 @@ async function aiConsume(path, body){
   const ms = body.messages || [];
   for(let i = ms.length - 1; i >= 0; i--){ if(ms[i] && ms[i].role === 'user'){ fb.last = String(ms[i].content || '').slice(0, 2000); break; } }
   let cur = null, curText = '', curTs = '';
+  // 触发本回合的那条用户原话——回合末尾工具栏的「重新提问」用它
+  let reaskText = '';
+  for(let i = aiMessages.length - 1; i >= 0; i--){ if(aiMessages[i] && aiMessages[i].role === 'user'){ reaskText = String(aiMessages[i].content || ''); break; } }
   let think = null, rsnText = '', rsnEl = null, renderQueued = false;
   // v2.3 N5：计划面板。同一轮里所有步骤归到一个可折叠块内，
   // 结束后自动收起——用户中途能看，收完不占屏。
@@ -4896,7 +4957,7 @@ async function aiConsume(path, body){
         let ev; try{ ev = JSON.parse(line.slice(6)); }catch(_){ continue; }
         if(ev.type === 'delta'){
           dropThink();
-          if(!cur){ cur = aiAdd('ai', '', aiNow()); curTs = cur.dataset.ts || ''; curText = ''; }
+          if(!cur){ cur = aiAdd('ai', '', aiNow(), reaskText); curTs = cur.dataset.ts || ''; curText = ''; }
           curText += ev.text;
           if(!renderQueued){ renderQueued = true; requestAnimationFrame(flushRender); }
         } else if(ev.type === 'reasoning'){
@@ -5043,12 +5104,8 @@ async function aiAnalyzeError(){
   if(!lines.length){ toast(t('最近的日志里没有发现错误')); return; }
   if(aiBusy){ toast(t('助手正在忙，稍后再试'), 'err'); return; }
   aiOpen();
-  if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
   const tx = t('我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：\n') + lines.join('\n');
-  const errTs = aiNow();
-  aiAdd('user', tx, errTs);
-  aiMessages.push({role:'user', content:tx, ts:errTs});
-  await aiConsume('/api/ai/chat', {messages: aiMessages});
+  await aiSendText(tx);
 }
 
 /* 诊断报告 AI 解读 */
