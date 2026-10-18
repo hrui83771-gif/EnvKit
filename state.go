@@ -99,10 +99,14 @@ type Config struct {
 // 两层分工见 txbudget.go：MaxActions 防"不同策略连环自动执行刷爆环境"，
 // MaxAttempts 防"同一服务反复失败反复重启"。零值 = 内置默认
 // （窗口 10 分钟 / 12 次 / per-target 3 次）。
+// BreakerAfter/BreakerCooldownSecs 是崩溃断路器（v3.0 T1.9，plan §3.2.3）：
+// 连续失败达限进熔断、冷静期后放行一次探针。零值 = 3 次 / 300 秒。
 type RecoveryConfig struct {
-	MaxActions  int `json:"max_actions,omitempty"`  // 窗口内恢复类动作上限，0 = 12
-	WindowSecs  int `json:"window_secs,omitempty"`  // 预算窗口秒数，0 = 600
-	MaxAttempts int `json:"max_attempts,omitempty"` // per-target 连续失败上限，0 = 3
+	MaxActions          int `json:"max_actions,omitempty"`            // 窗口内恢复类动作上限，0 = 12
+	WindowSecs          int `json:"window_secs,omitempty"`            // 预算窗口秒数，0 = 600
+	MaxAttempts         int `json:"max_attempts,omitempty"`           // per-target 连续失败上限，0 = 3
+	BreakerAfter        int `json:"breaker_after,omitempty"`          // 连续失败达限进熔断，0 = 3
+	BreakerCooldownSecs int `json:"breaker_cooldown_secs,omitempty"`  // 熔断冷静期秒数，0 = 300
 }
 
 type CheckResult struct {
@@ -154,6 +158,10 @@ type SvcInfo struct {
 	// 「端口被其他进程占用」这类具体原因，而不是只显示一个颜色。
 	LastVerify string `json:"last_verify,omitempty"`
 	Restarts   int    `json:"restarts,omitempty"`
+	// v3.0 T1.9：断路器熔断态（plan §3.2.3）。熔断中 = 自动重启被拒绝，
+	// /api/health 兼容层也带出来，旧前端不破、新前端可显示。
+	BreakerTripped    bool `json:"breaker_tripped,omitempty"`
+	BreakerRemainSecs int  `json:"breaker_remain_secs,omitempty"`
 }
 
 var (

@@ -61,6 +61,15 @@ type svcRuntimeRec struct {
 	Crashes   []CrashEvent
 	LastEvid  []string // 最近一次复验的证据
 	StartedAt string   // 本轮启动时间
+
+	// v3.0 T1.9：崩溃循环断路器（plan §3.2.3）。
+	// backoffSteps 原本只是建议表、无强制消费方——连续失败到限后 AI 照样
+	// 重启、守护照样拉、秒退照样重试，node0 segfault 反复离线就是这么来的。
+	// 现在达限即进熔断态：拒绝一切自动重启，出口只有三个——
+	// 人工复位 / 冷静期后一次探针 / 复验通过。
+	BreakerTripped   bool      // 熔断中
+	BreakerTrippedAt time.Time // 本次熔断起点（冷静期从这算）
+	BreakerHalfOpen  bool      // 冷静期已过、放行过探针（探针失败即再熔断）
 }
 
 // svcMaxCrashEvents 单服务保留的崩溃历史条数。
@@ -127,10 +136,157 @@ func svcAllRecords() map[string]svcRuntimeRec {
 	return out
 }
 
+// ===== 崩溃循环断路器（v3.0 T1.9，plan §3.2.3） =====
+//
+// 三态状态机（closed → open → half-open → closed/open）：
+//
+//	closed    正常。Restarts 未达限，自动重启受常规节制（txRecoveryGate）。
+//	open      熔断。连续失败达限进入：拒绝一切自动重启（AI/守护/秒退重试），
+//	          出口只有人工复位（svcBreakerReset）或冷静期自然结束。
+//	half-open 冷静期过后放行一次探针：Restarts 回退到限值-1，让这次重启
+//	          能过 txAttemptGate（否则"冷静期自然解除"是死代码——
+//	          txAttemptGate 看到 Restarts 仍达限会永远拒下去）。
+//	          探针复验通过 → closed；探针又崩 → 立即再熔断（冷静期重新起算）。
+//
+// 每次状态迁移都进审计 + 通知（svcBreakerEscalate）——熔断这个决定本身
+// 必须可追溯，否则"为什么重启被拒了"永远说不清。
+
+const (
+	breakerAfterDefault    = 3               // 连续失败达限进熔断（对齐 backoffSteps 第 3 档）
+	breakerCooldownDefault = 5 * time.Minute // 熔断冷静期
+)
+
+// breakerAfter 连续失败多少次进熔断（配置可覆盖，0 = 默认 3）。
+func breakerAfter() int {
+	cfgMu.Lock()
+	n := cfg.Recovery.BreakerAfter
+	cfgMu.Unlock()
+	if n <= 0 {
+		return breakerAfterDefault
+	}
+	return n
+}
+
+// breakerCooldown 熔断冷静期（配置可覆盖，0 = 默认 5 分钟）。
+func breakerCooldown() time.Duration {
+	cfgMu.Lock()
+	secs := cfg.Recovery.BreakerCooldownSecs
+	cfgMu.Unlock()
+	if secs <= 0 {
+		return breakerCooldownDefault
+	}
+	return time.Duration(secs) * time.Second
+}
+
+// svcBreakerNotify 断路器迁移的通知出口。抽成变量是为了单测能替换掉
+// 真实通知——升级链路本身也要可测（与 txOnRefuse 同一立场）。
+var svcBreakerNotify = func(title, why string) { alertDispatch(title, why) }
+
+// svcBreakerEscalate 状态迁移的落点：审计 + 日志 + 通知，三处都要留痕。
+func svcBreakerEscalate(target, action, result, why string) {
+	auditNow(actSys, action, target, "", result, why)
+	warn(scSys, "断路器", "%s：%s", target, why)
+	svcBreakerNotify("EnvKit 崩溃断路器", target+" "+why)
+}
+
+// svcBreakerGate 恢复类动作（重启）过断路器。拒绝时错误里说清三件事：
+// 现在什么态、还剩多久、怎么出去——否则调用方（AI/守护）只会看到一句
+// "被拒绝"，然后换个写法再试，那就白熔断了。
+func svcBreakerGate(target, kind string) error {
+	after, cooldown := breakerAfter(), breakerCooldown()
+	var transition string
+	var restarts int
+	var remain time.Duration
+
+	svcRT.Lock()
+	r := svcRecLocked(target)
+	now := time.Now()
+	restarts = r.Restarts
+	switch {
+	case !r.BreakerTripped && restarts >= after:
+		// 达限即熔断。这里也兜底一次：正常路径下 svcRecordCrash 在崩溃
+		// 当时就熔断了，走到这里说明限值被配置调小过，状态机要自己修正。
+		r.BreakerTripped, r.BreakerTrippedAt, r.BreakerHalfOpen = true, now, false
+		transition = "trip"
+	case r.BreakerTripped && now.Sub(r.BreakerTrippedAt) >= cooldown:
+		// 冷静期已过：放行一次探针。Restarts 回退到限值-1——
+		// 不清的话 txAttemptGate 会以"Restarts 仍达限"永远拒下去，
+		// "冷静期自然解除"就成了纸面出口。
+		r.BreakerTripped, r.BreakerHalfOpen = false, true
+		r.Restarts = after - 1
+		transition = "halfopen"
+	}
+	if r.BreakerTripped {
+		remain = cooldown - now.Sub(r.BreakerTrippedAt)
+		if remain < 0 {
+			remain = 0
+		}
+	}
+	svcRT.Unlock()
+
+	switch transition {
+	case "trip":
+		svcBreakerEscalate(target, "breaker_tripped", resFail, fmt.Sprintf(
+			"连续失败 %d 次达限（本次动作 %s），进入熔断态：拒绝一切自动重启，冷静期 %v 后放行一次探针，或人工复位",
+			restarts, kind, cooldown))
+		return fmt.Errorf("%s已进入熔断态（连续失败 %d 次）：拒绝自动重启——先看「程序启动」日志里的崩溃原因，%v 后放行一次探针重启，或人工复位断路器",
+			target, restarts, cooldown)
+	case "halfopen":
+		svcBreakerEscalate(target, "breaker_halfopen", resOK, fmt.Sprintf(
+			"熔断冷静期 %v 已过，放行一次探针重启（%s）：探针复验通过即解除熔断，再崩立即重新熔断", cooldown, kind))
+		return nil
+	}
+	if remain > 0 {
+		return fmt.Errorf("%s处于熔断态（剩余冷静期 %v）：拒绝自动重启——等待冷静期结束放行探针，或人工复位断路器",
+			target, remain.Round(time.Second))
+	}
+	return nil
+}
+
+// svcBreakerTripped 快速查询：是否处于熔断态（exec.go 秒退重试等
+// 不需要完整 gate 语义的点用；完整判定走 svcBreakerGate）。
+func svcBreakerTripped(target string) bool { return svcSnapshot(target).BreakerTripped }
+
+// svcBreakerStatus 断路器状态（诊断与单测）：熔断中 / 剩余冷静期 / 连续失败数。
+func svcBreakerStatus(target string) (tripped bool, remain time.Duration, restarts int) {
+	rec := svcSnapshot(target)
+	if !rec.BreakerTripped {
+		return false, 0, rec.Restarts
+	}
+	remain = breakerCooldown() - time.Since(rec.BreakerTrippedAt)
+	if remain < 0 {
+		remain = 0
+	}
+	return true, remain, rec.Restarts
+}
+
+// svcBreakerReset 人工复位断路器：清熔断态并清零连续失败计数。
+// 为什么连计数一起清：只清状态不清计数的话，下一次 gate 调用会因
+// "Restarts 仍达限"立刻再熔断——复位成了空操作（这个坑被
+// TestBreakerManualReset 抓到了）。出口必须是真出口。
+// 防滥用的设计在入口而非这里：本函数的调用方只有人工 HTTP 端点
+// （/api/program/breaker-reset），AI 工具表里没有 reset——AI 被熔断
+// 拒绝时该做的是升级给人，而不是自己拆保险。全局动作预算（窗口计数）
+// 不随复位清空，那一层防的是"整个环境被刷爆"，与人工复位无关。
+func svcBreakerReset(target string) {
+	var was bool
+	svcWith(target, func(r *svcRuntimeRec) {
+		was = r.BreakerTripped || r.BreakerHalfOpen
+		r.BreakerTripped, r.BreakerHalfOpen = false, false
+		r.Restarts = 0
+		r.Backoff = ""
+	})
+	if was {
+		svcBreakerEscalate(target, "breaker_reset", resOK, "人工复位断路器：熔断态解除、连续失败计数清零（全局动作预算不受影响）")
+	}
+}
+
 // ===== 崩溃记录 =====
 
 // svcRecordCrash 记一次崩溃（启动后退出 / 复验判失败）。
 func svcRecordCrash(target, errKind, why string, port int) {
+	var transition string
+	var restarts int
 	svcWith(target, func(r *svcRuntimeRec) {
 		r.Restarts++
 		r.LastErr = why
@@ -146,7 +302,22 @@ func svcRecordCrash(target, errKind, why string, port int) {
 		r.Verified = false
 		r.Conclusion = ""
 		r.ErrKind = errKind
+		// v3.0 T1.9：断路器。两种熔断时机：
+		//   · 探针又崩（half-open 期间）→ 立即再熔断，冷静期重新起算；
+		//   · 连续失败达限 → 在这里熔断，不等某个 gate 调用来发现
+		//     （verifyService 等路径直接记崩溃、不过 gate，"没被 gate
+		//     看到的崩溃"永远不进状态机的话，断路器就是个半聋的装置）。
+		restarts = r.Restarts
+		if (r.BreakerHalfOpen || restarts >= breakerAfter()) && !r.BreakerTripped {
+			r.BreakerTripped, r.BreakerTrippedAt, r.BreakerHalfOpen = true, time.Now(), false
+			transition = "trip"
+		}
 	})
+	if transition == "trip" {
+		svcBreakerEscalate(target, "breaker_tripped", resFail, fmt.Sprintf(
+			"连续失败 %d 次达限，进入熔断态：拒绝一切自动重启（AI/守护/秒退重试），冷静期 %v 后放行一次探针，或人工复位",
+			restarts, breakerCooldown()))
+	}
 }
 
 // backoffAdvice 按连续失败次数给出退避建议。
@@ -206,6 +377,7 @@ func svcForgetPort(target string) { svcWith(target, func(r *svcRuntimeRec) { r.P
 
 // svcRecordVerify 记录一次复验结论。
 func svcRecordVerify(target, conclusion, errKind string, ok bool) {
+	var transition string
 	svcWith(target, func(r *svcRuntimeRec) {
 		r.Verified = ok
 		r.Conclusion = conclusion
@@ -215,8 +387,19 @@ func svcRecordVerify(target, conclusion, errKind string, ok bool) {
 			r.Restarts = 0
 			r.LastErr = ""
 			r.Backoff = ""
+			// v3.0 T1.9：复验通过 = 服务真的活了，熔断态随之解除
+			//（含 half-open 探针成功）。计数清零与状态清零必须同时——
+			// 只清计数不清状态，熔断会挂到永远；只清状态不清计数，
+			// txAttemptGate 立刻再把它拒一次，两个机制说辞打架。
+			if r.BreakerTripped || r.BreakerHalfOpen {
+				r.BreakerTripped, r.BreakerHalfOpen = false, false
+				transition = "recover"
+			}
 		}
 	})
+	if transition == "recover" {
+		svcBreakerEscalate(target, "breaker_recovered", resOK, "复验通过，熔断解除：服务已客观恢复，连续失败计数清零")
+	}
 }
 
 // svcLastVerify 取最近一次复验结论。
@@ -242,6 +425,7 @@ func svcForgetVerify(target string) {
 
 // svcReset 停服务时调用：清掉该服务全部运行时记录。
 // 崩溃历史也一并清——服务停了就不再处于"崩溃中"，留着会误导。
+// 断路器状态随记录一起清：人工停服务本身就是一次显式复位。
 func svcReset(target string) {
 	svcRT.Lock()
 	delete(svcRT.m, target)

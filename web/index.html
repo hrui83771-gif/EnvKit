@@ -204,6 +204,10 @@
   .svcstate{margin-left:auto;color:var(--muted);font-size:12px}
   .svclink{display:block;margin-top:7px;padding:5px 9px;background:var(--info);color:#fff;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .svclink:hover{filter:brightness(1.06)}
+  /* 熔断行：红色左边条 + 说明 + 复位按钮。熔断是"产品在故意拒绝自动重启"，
+   * 必须和"服务没起来"在视觉上分开——否则用户只会看到红，不知道是谁拦的。 */
+  .brk-row{margin-top:7px;padding:6px 8px;border-left:3px solid var(--err);background:var(--errbg);border-radius:0 8px 8px 0}
+  .brk-row .brk-txt{display:block;font-size:11px;line-height:1.45;color:var(--text);opacity:.85;margin-bottom:5px}
   .metric{background:var(--soft);border:0;border-radius:8px;padding:12px}
   .metric .mv{font-size:20px;font-weight:600;color:var(--text);margin-top:3px;word-break:break-all;line-height:1.3}
   .nextrow{display:flex;justify-content:flex-end;margin-top:12px}
@@ -1029,10 +1033,16 @@
       <div class="svcitem">
         <div class="svcitem-top"><span class="dot" id="sd-web"></span><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
         <a class="svclink" id="sl-web" target="_blank" style="display:none"></a>
+        <div class="brk-row" id="brk-web" style="display:none">
+          <button class="mini" id="btn-brk-web" data-brk="web">复位断路器</button>
+        </div>
       </div>
       <div class="svcitem">
         <div class="svcitem-top"><span class="dot" id="sd-backend"></span><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
         <a class="svclink" id="sl-backend" target="_blank" style="display:none"></a>
+        <div class="brk-row" id="brk-backend" style="display:none">
+          <button class="mini" id="btn-brk-backend" data-brk="backend">复位断路器</button>
+        </div>
       </div>
       <div class="svcitem">
         <div class="svcitem-top"><span class="dot" id="sd-webase"></span><span>WeBASE-Front</span><span class="svcstate" id="su-webase">未检测</span></div>
@@ -1086,7 +1096,7 @@
         <li><b>环境安装</b>：Go / Node.js / MySQL 8 检测（版本 + 安装位置）、国内镜像下载（SHA256 校验 + 自动重试）、自动配置 GOPROXY 与 npm registry、演练安装、组件版本管理与一键升级</li>
         <li><b>程序配置</b>：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告</li>
         <li><b>链端校验</b>：FISCO-BCOS v2 / WeBASE-Front 连通检测、内嵌 SSH 终端、远程目录浏览、区块高度 / 交易总数 / 客户端版本读取、节点进程健康、宕机自动重启（一键检测 / 后台守护）+ 桌面通知</li>
-        <li><b>程序启动</b>：前后端一键启动（先后端、再前端）、访问地址自动解析、日志按来源分栏与 ANSI 清理、进程树管理（EnvKit 退出自动回收）、一键清理后台遗留进程</li>
+        <li><b>程序启动</b>：前后端一键启动（先后端、再前端）、访问地址自动解析、日志按来源分栏与 ANSI 清理、进程树管理（EnvKit 退出自动回收）、一键停止服务并报告端口占用（第三方进程只报告不结束）</li>
         <li><b>AI 助手</b>：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，25 个工具覆盖状态 / 日志 / 审计 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密</li>
         <li><b>安全与可靠</b>：密码 DPAPI 加密存储、本机 API 令牌防 CSRF、单实例保护、配置原子写入 + 上一版备份、日志按日轮转与自动清理、panic 兜底与命令超时、杀软白名单一键排除 + 流氓软件深度清除</li>
       </ul>
@@ -1481,6 +1491,7 @@ const I18N_EN = {
   "嗯？一直点我干嘛👀": "Hmm? Why keep poking me👀",
   "在呢~": "Here~",
   "备份数据库": "back up database",
+  "复位断路器": "Reset breaker",
   "复制": "Copy",
   "复验反复失败": "Verification keeps failing",
   "复验未通过": "Verification failed",
@@ -1540,11 +1551,12 @@ const I18N_EN = {
   "已保存（{0}），留空保留": "Saved ({0}), leave empty to keep",
   "已保存（配置）": "Saved",
   "已停止生成": "Generation stopped",
+  "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
+  "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
   "已加白名单": "Whitelisted",
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
   "已启动": "Started",
-  "未证明恢复": "Unverified",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
   "已复验通过": "Verified OK",
@@ -1587,6 +1599,7 @@ const I18N_EN = {
   "开始演练": "Start drill",
   "开始重装": "Reinstall",
   "归位": "Send home",
+  "当前不在熔断态，无需复位": "Not tripped — nothing to reset",
   "当前待处理": "Needs attention",
   "彩虹模式启动🌈": "Rainbow mode🌈",
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
@@ -1646,6 +1659,7 @@ const I18N_EN = {
   "数据浏览（只读）": "Data browser (read-only)",
   "整理中": "Tidying…",
   "断开": "Disconnect",
+  "断路器已复位，恢复接受自动重启": "Breaker reset — auto-restart will resume",
   "新发型+新勋章，好看吗✨": "New hair + new medal, like it✨",
   "无效端口号": "Invalid port number",
   "无结论": "No verdict",
@@ -3369,6 +3383,8 @@ async function pollHealth(){
   const lb=$('#sl-backend');
   if(b.running && b.url){ lb.style.display=''; lb.href=b.url; lb.textContent=t('打开 {0}', b.url); lb.title=b.url; }
   else { lb.style.display='none'; }
+  applyBreaker('web', w);
+  applyBreaker('backend', b);
   $('#btn-stop-all').disabled = !svcState.running;
   $('#db-test-msg').textContent = h.db.connected ? (h.db.Version||'') + (h.db.dbExists?' · 库已存在':' · 库不存在') : (h.db.msg||'');
   updateChain(h.chain);
@@ -3393,6 +3409,43 @@ async function pollHealth(){
 }
 
 /* ---------- 服务状态的呈现：running 与 verified 分开 ---------- */
+
+/* applyBreaker 熔断可见性 + 复位入口。
+ *
+ * 为什么必须单独显示：熔断时服务确实是"没起来"，但原因是**产品拦住了崩溃循环**，
+ * 不是启动失败。两者混成同一种红，用户只会反复点"启动"，而每一次都被断路器拒绝
+ * ——界面不把拒绝说出来，就等于让用户跟产品对着撞。
+ *
+ * 复位按钮必须有人工出口：冷静期只是节流，不是监狱。 */
+function applyBreaker(key, s){
+  const row = document.getElementById('brk-' + key);
+  if(!row) return;
+  if(!s || !s.breaker_tripped){ row.style.display='none'; return; }
+  row.style.display='';
+  let txt = document.querySelector('#brk-' + key + ' .brk-txt');
+  if(!txt){ txt = document.createElement('span'); txt.className='brk-txt'; row.insertBefore(txt, row.firstChild); }
+  const secs = s.breaker_remain_secs || 0;
+  txt.textContent = secs > 0
+    ? t('已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针', secs)
+    : t('已停止自动重启（连续失败达上限）');
+}
+
+/* 复位断路器：人工确认崩溃原因已处理后解除熔断。
+ * 必须 POST 到后端而不是本地改变量——否则界面说"已复位"而断路器还在拦，
+ * 那是界面在替产品撒谎。走统一的 post()，失败由它弹 toast。 */
+document.querySelectorAll('[data-brk]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const key = btn.getAttribute('data-brk');
+    btn.disabled = true;
+    const r = await post('/api/program/breaker-reset', {service:key});
+    if(r && r.ok){
+      let j = {}; try{ j = await r.json(); }catch(e){}
+      toast(j.reset ? t('断路器已复位，恢复接受自动重启') : t('当前不在熔断态，无需复位'), j.reset ? 'ok' : '');
+    }
+    btn.disabled = false;
+    pollHealth();
+  });
+});
 
 /* svcDotCls 单个服务的状态点颜色。
  * 绿 = 跑着**且验过**；黄 = 跑着但没验过（或在启动中）；红 = 失败；灰 = 停止。
@@ -3816,11 +3869,11 @@ $('#dbv-size').onchange = function(){ dbv.size = parseInt(this.value,10) || 50; 
   }
 }
 
-/* 清理后台进程：停止服务 + 结束项目目录下遗留进程 */
+/* 清理后台进程：停止 EnvKit 管理的服务 + 报告端口占用（v3.0 T1.9：不再结束第三方进程） */
 $('#btn-clean-proc').onclick = async ()=>{
   const go = await askConfirm('清理后台进程',
-    '将执行：\n· 停止 EnvKit 管理的前端 / 后端服务\n· 结束项目目录下遗留的 node / webpack / go run / main.exe 进程\n\n' +
-    '按项目目录精准匹配，不影响其它软件（如 Adobe、WorkBuddy）的 node 进程。\n完成后可重新启动服务。', '开始清理');
+    '将执行：\n· 停止 EnvKit 管理的前端 / 后端服务（只停 EnvKit 自己派生的进程树）\n· 等待端口真正释放，并报告仍被占用的端口与占用进程（PID）\n\n' +
+    '第三方进程只报告、不自动结束——误杀比杀不掉严重得多。确需结束，请在「端口诊断」里人工确认后处理。\n完成后可重新启动服务。', '开始');
   if(!go) return;
   try{ await post('/api/program/cleanup'); }catch(e){}
   setTimeout(()=>{ try{ pollState(); pollHealth(); pollProg(); }catch(e){} }, 2000);

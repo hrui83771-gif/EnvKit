@@ -262,6 +262,18 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 			}
 			// 静默秒退：疑似被杀毒软件拦截（真实错误一定有输出），自动重启
 			if attempt < maxRestarts && fastExit(err, w.hasOutput(), started, fastExitWindow) {
+				// v3.0 T1.9：秒退重试也是无人值守的自动重启，过同一道断路器。
+				// 漏了这条，"拒绝一切自动重启"就只掐了 AI 和守护——
+				// 秒退重试这条路还开着，熔断就是个半聋的装置。
+				// 走完整 gate 而非 svcBreakerTripped：冷静期过后这次重试
+				// 就是 half-open 探针，结果由复验结论分流（再崩即重新熔断）。
+				if berr := svcBreakerGate(key, "exec_fast_exit_retry"); berr != nil {
+					warnS(scope, key, step, "秒退自动重启被断路器拒绝：%v", berr)
+					procDropIfCurrent(key, cmd)
+					svcMarkStoppedIfCurrent(key, cmd)
+					setProg(progKey, false, false, "已退出（断路器熔断，未自动重启）")
+					break
+				}
 				wrap := attempt == maxRestarts-1
 				if wrap {
 					warnS(scope, key, step, "子进程仍无输出秒退，1 秒后改用 cmd /c 包装重启...")

@@ -121,7 +121,7 @@ var policyRules = map[string]policyRule{
 	"start_service":     {PolicyConfirm, false, "启动服务会占用端口并可能改动运行环境"},
 	"restart_service":   {PolicyConfirm, false, "重启服务会中断当前连接"},
 	"stop_service":      {PolicyConfirm, false, "停止服务会中断当前连接"},
-	"cleanup_processes": {PolicyConfirm, false, "结束进程会终止正在运行的任务"},
+	"cleanup_processes": {PolicyConfirm, false, "停止前后端服务会中断正在运行的任务；第三方进程只报告、不自动结束"},
 	"db_backup":         {PolicyConfirm, true, "备份会占用磁盘与数据库资源；仅在用户明确要求时执行"},
 	"apply_whitelist":   {PolicyConfirm, true, "修改系统安全设置会降低防护；仅在用户明确要求时执行"},
 	"manage_memories":   {PolicyConfirm, true, "记忆会长期影响 AI 行为；仅在用户明确要求时执行"},

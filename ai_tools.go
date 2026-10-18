@@ -389,34 +389,52 @@ var aiToolRegistry = map[string]aiTool{
 			}
 			fin := auditStart(actAI, "restart_service", svc, "")
 			switch svc {
-			case "web":
-				stopByKey(scStart, "web", "web-start")
-				time.Sleep(2 * time.Second) // 等旧进程释放端口，避免新进程起在半死状态
-				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+		case "web":
+			stopByKey(scStart, "web", "web-start")
+			// v3.0 T1.9：等端口真正释放再起新（旧实现盲等 2 秒——
+			// 进程杀了不等于端口立即可用，第三方占用更不会自己走）。
+			if why := restartWaitPorts("web"); why != "" {
+				fin(resFail, why)
+				return "", fmt.Errorf("前端未重启：%s", why)
+			}
+			rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
 				fin(rrRes(rw), rw.Msg)
 				if !rw.Ok {
 					return "", aiOpErr("前端重启", rw)
 				}
 				return aiOpResultText("前端重启", rw), nil
-			case "backend":
-				stopByKey(scStart, "backend", "backend-start")
-				time.Sleep(2 * time.Second)
-				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+		case "backend":
+			stopByKey(scStart, "backend", "backend-start")
+			if why := restartWaitPorts("backend"); why != "" {
+				fin(resFail, why)
+				return "", fmt.Errorf("后端未重启：%s", why)
+			}
+			rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
 				fin(rrRes(rb), rb.Msg)
 				if !rb.Ok {
 					return "", aiOpErr("后端重启", rb)
 				}
 				return aiOpResultText("后端重启", rb), nil
-			case "all":
-				stopByKey(scStart, "web", "web-start")
-				stopByKey(scStart, "backend", "backend-start")
-				time.Sleep(2 * time.Second)
-				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
-				if !rb.Ok {
-					fin(resFail, rb.Msg)
-					return "", aiOpErr("后端重启", rb)
-				}
-				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+		case "all":
+			stopByKey(scStart, "web", "web-start")
+			stopByKey(scStart, "backend", "backend-start")
+			// 先后端再前端。后端等端口释放时 web 的候选端口里可能还有
+			// backend 的进程名——restartWaitPorts 的 keepNames 会排除它们，
+			// 不会把活着的另一个服务误判成"没释放"。
+			if why := restartWaitPorts("backend"); why != "" {
+				fin(resFail, why)
+				return "", fmt.Errorf("后端未重启：%s", why)
+			}
+			rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+			if !rb.Ok {
+				fin(resFail, rb.Msg)
+				return "", aiOpErr("后端重启", rb)
+			}
+			if why := restartWaitPorts("web"); why != "" {
+				fin(resFail, "backend ok; "+why)
+				return "", fmt.Errorf("后端已重启，但前端未重启：%s", why)
+			}
+			rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
 				fin(rrRes(rw), "backend ok; "+rw.Msg)
 				if !rw.Ok {
 					return "", fmt.Errorf("后端已重启，但前端重启失败[%s]：%s\n证据：%s",
@@ -429,7 +447,7 @@ var aiToolRegistry = map[string]aiTool{
 		},
 	},
 	"cleanup_processes": {
-		Desc:   "清理后台进程：停止 EnvKit 管理的前后端服务，并结束项目目录下遗留的 node/webpack、go run/main.exe 等进程",
+		Desc:   "停止 EnvKit 管理的前后端服务，并报告端口被哪些进程占用。第三方进程只报告、不自动结束（误杀比杀不掉严重得多）；确需结束请让用户在「端口诊断」里人工确认后处理",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}},
 		Write:  true,
 		Execute: func(args map[string]any) (string, error) {

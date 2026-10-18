@@ -86,25 +86,6 @@ func TestReOfCaches(t *testing.T) {
 	}
 }
 
-// ---------- 路径变体 ----------
-
-func TestDirVariants(t *testing.T) {
-	if got := dirVariants("", "   "); len(got) != 0 {
-		t.Errorf("空目录应被忽略，实际 %v", got)
-	}
-	got := dirVariants(`D:\a\b`)
-	if len(got) != 2 || got[0] != `D:\a\b` || got[1] != `D:/a/b` {
-		t.Errorf("反斜杠路径变体不对：%v", got)
-	}
-	got = dirVariants(`D:/a/b/`)
-	if len(got) != 2 || got[0] != `D:/a/b` || got[1] != `D:\a\b` {
-		t.Errorf("正斜杠+尾斜杠变体不对：%v", got)
-	}
-	if got := dirVariants(`D:\a\b`, `D:/a/b`); len(got) != 2 {
-		t.Errorf("两个等价目录应去重为 2 个变体，实际 %v", got)
-	}
-}
-
 // ---------- 子进程重试策略（不真正起进程） ----------
 
 func TestRunRetryZeroOutputThenWrap(t *testing.T) {

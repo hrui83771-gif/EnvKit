@@ -1,139 +1,165 @@
+// procops.go —— 自有进程树停止 + 端口冲突安全处理（v3.0 T1.9，修 G7）
+//
+// 红线（plan §3.2.2，用户限定"自有进程树"）：
+//   · 只停 EnvKit 自己派生的服务（activeProcs 内的 web/backend，经 stopByKey
+//     走进程树 kill + Job Object 连带终止）；
+//   · 第三方占用只报告（owner 进程名 + PID），绝不杀。
+//
+// 已删除（G7 级风险，plan 倾向删除）：
+//   · 按项目目录 CommandLine 杀 node.exe/main.exe/go.exe 的 PowerShell 扫描——
+//     命令行里出现项目目录路径，不等于这个进程是 EnvKit 派生的（用户自己开的
+//     终端、别的 IDE、CI runner 都可能命中），误杀就是别人的数据丢失；
+//   · cleanupByTasklist 按进程名杀 main.exe/go.exe——同理会误杀任何同名
+//     第三方进程（go.exe 在开发机上太常见了）。
+// 人工结束第三方进程的入口保留在端口诊断（portscan.go handlePortKill）：
+// 有 PID 展示、有二次确认、有系统进程护栏、有审计——那才叫"人工处理"。
+
 package main
 
-// 后台进程清理：停止 EnvKit 管理的服务，并清掉项目目录下遗留的
-// node（webpack 开发服务器）/ main.exe（go run）/ go.exe 等后台进程。
-// 按项目目录精准匹配命令行，避免误杀其他软件（如 Adobe）的同名 node 进程。
-
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// dirVariants 展开项目目录的路径写法变体：Windows 命令行里可能是 D:\a\b 也可能是 D:/a/b，
-// 两种写法都要匹配（早期只匹配反斜杠，导致测试进程清不掉）；空串忽略，重复去掉。
-func dirVariants(dirs ...string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, d := range dirs {
-		d = strings.TrimSpace(strings.TrimRight(d, "\\/"))
-		if d == "" {
-			continue
+// cleanupProcesses 停止 EnvKit 管理的服务（只动自有进程树），并报告端口上的
+// 第三方占用（只报告，不杀）。返回 (停掉的服务数, 占用报告行, 错误)。
+func cleanupProcesses() (int, []string, error) {
+	stopped := 0
+	for _, key := range []string{"web", "backend"} {
+		procMu.Lock()
+		_, running := activeProcs[key]
+		procMu.Unlock()
+		if running {
+			stopByKey(scStart, key, key+"-start")
+			stopped++
 		}
-		for _, v := range []string{d, strings.ReplaceAll(d, "\\", "/"), strings.ReplaceAll(d, "/", "\\")} {
-			if !seen[v] {
-				seen[v] = true
-				out = append(out, v)
-			}
+	}
+	// 候选端口：前后端各自一锅（内置 {8080, 8888} 共享），去重后一把查。
+	ports := dedupInts(append(svcPortsFn("web"), svcPortsFn("backend")...))
+	// 停旧之后等端口真正释放（TIME_WAIT：进程杀了不等于端口立即可监听）。
+	// ownNames = 刚停掉的两类的进程名；keepNames 空——两个都停了，
+	// 没有"理应继续占着"的自己人。
+	own := append(svcExpectProcs("web"), svcExpectProcs("backend")...)
+	_, foreign := waitPortsFree(ports, 3*time.Second, own, nil)
+	var report []string
+	for _, o := range foreign {
+		report = append(report, fmt.Sprintf("端口 %d 被 %s（PID %d）占用", o.Port, nameOrUnknown(o.Name), o.PID))
+	}
+	return stopped, report, nil
+}
+
+func dedupInts(in []int) []int {
+	seen := map[int]bool{}
+	var out []int
+	for _, v := range in {
+		if v > 0 && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
 		}
 	}
 	return out
 }
 
-// cleanupProcesses 返回 (清掉的进程数, 明细, 错误)
-func cleanupProcesses() (int, []string, error) { // 1) 先停 EnvKit 自己管理的服务（走进程树 kill，最干净）
-	stopByKey(scStart, "web", "web-start")
-	stopByKey(scStart, "backend", "backend-start")
-	time.Sleep(700 * time.Millisecond)
-
-	// 路径变体：命令行里可能是 D:\a\b，也可能是 D:/a/b，统一都匹配
-	dirs := dirVariants(cfg.Projects.FrontendDir, cfg.Projects.BackendDir)
-	if len(dirs) == 0 {
-		return 0, nil, nil
-	}
-
-	// 2) 按项目目录找遗留进程并结束
-	report := filepath.Join(exeDir(), "_proc_clean.txt")
-	_ = os.Remove(report)
-	quoted := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		quoted = append(quoted, "'"+strings.ReplaceAll(d, "'", "''")+"'")
-	}
-	script := `$dirs = @(` + strings.Join(quoted, ",") + `)
-$out = New-Object System.Collections.ArrayList
-Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-  ($_.Name -in @('node.exe','main.exe','go.exe')) -and $_.CommandLine -and ($_.CommandLine -notlike '*.workbuddy*')
-} | ForEach-Object {
-  $c = $_.CommandLine.ToLower()
-  $hit = $false
-  foreach ($d in $dirs) { if ($d -ne '' -and $c.Contains($d.ToLower())) { $hit = $true } }
-  if ($hit) {
-    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; [void]$out.Add("killed|$($_.ProcessId)|$($_.Name)") }
-    catch { [void]$out.Add("failed|$($_.ProcessId)|$($_.Name)") }
-  }
-}
-$out -join [char]10 | Out-File '` + strings.ReplaceAll(report, "'", "''") + `' -Encoding ascii
-'ok'`
-
-	ctxPS, cancelPS := cmdContext(3 * time.Minute)
-	out, err := exec.CommandContext(ctxPS, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", psEncode(script)).CombinedOutput()
-	cancelPS()
-	if err != nil {
-		msg := firstLines(strings.TrimSpace(string(out)), 300)
-		// PowerShell/CIM 不可用（例如被安全策略禁用）时，退化为 tasklist + taskkill 兜底
-		warn(scStart, "清理", "PowerShell 扫描失败：%v %s", err, msg)
-		n, det := cleanupByTasklist()
-		return n, det, nil
-	}
-	b, err := os.ReadFile(report)
-	_ = os.Remove(report)
-	if err != nil {
-		return 0, nil, nil
-	}
-	var detail []string
-	for _, ln := range strings.Split(strings.TrimSpace(string(b)), "\n") {
-		ln = strings.TrimSpace(strings.TrimRight(ln, "\r"))
-		if ln == "" {
+// classifyOccupants 把候选端口上的 LISTENING 占用者分三类：
+//   dying   —— 自家旧进程还没死透（ownNames 命中）：要等它释放；
+//   keep    —— 另一个自有服务正活着占着（keepNames 命中）：共享候选端口里
+//             的正常情况，不等也不报（否则 backend 在跑时重启 web，
+//              web 候选里的 8888 会被当成"没释放"，重启永远超时）；
+//   foreign —— 第三方：只报告，不杀。
+// 名字查不到的占用者按"未知"放行——与 svcOwnerAcceptable 同一立场：
+// 查不到就下结论，冤枉一个好进程比漏报一个坏进程严重。
+func classifyOccupants(ports []int, ownNames, keepNames []string) (dying, foreign []portOcc) {
+	for _, o := range scanPortsOnce(ports) {
+		if o.State != "LISTENING" || strings.TrimSpace(o.Name) == "" {
 			continue
 		}
-		parts := strings.Split(ln, "|")
-		if len(parts) == 3 {
-			if parts[0] == "killed" {
-				detail = append(detail, fmt.Sprintf("%s (PID %s)", parts[2], parts[1]))
-			} else {
-				detail = append(detail, fmt.Sprintf("%s PID %s 结束失败", parts[2], parts[1]))
-			}
+		switch {
+		case matchProcName(o.Name, ownNames):
+			dying = append(dying, o)
+		case matchProcName(o.Name, keepNames):
+			// 另一个自有服务：正常占着，不管
+		default:
+			foreign = append(foreign, o)
 		}
 	}
-	killed := 0
-	for _, d := range detail {
-		if !strings.Contains(d, "结束失败") {
-			killed++
-		}
-	}
-	return killed, detail, nil
+	return dying, foreign
 }
 
-// aiCleanupProcesses 供 AI 工具与按钮共用的入口（带日志）
+// waitPortsFree 等端口真正释放（plan §3.2.2：等端口真释放，对齐 fault_inject
+// 踩过的 TIME_WAIT 坑——进程杀了不等于端口立即可用，盲目 sleep 只会得到
+// "新进程起在半死状态"，或者把第三方占用误判成自己没停干净）。
+// 返回 (自家旧进程是否已释放, 第三方占用列表)。ports 为空 = 无需等待。
+func waitPortsFree(ports []int, timeout time.Duration, ownNames, keepNames []string) (bool, []portOcc) {
+	if len(ports) == 0 {
+		return true, nil
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		dying, foreign := classifyOccupants(ports, ownNames, keepNames)
+		if len(dying) == 0 {
+			return true, foreign
+		}
+		if !time.Now().Before(deadline) {
+			return false, foreign // 旧进程没停透：不猜，让调用方报告
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// restartWaitPorts 重启前等自家旧进程释放端口（plan §3.2.2：组锁内先停旧、
+// 等端口真释放再起新）。返回空串 = 可以起新进程；非空 = 不起，并说清原因
+// （旧进程没停透 / 第三方占用及 owner）。第三方占用只报告——绝不杀，
+// 杀错进程比重启失败严重得多。
+func restartWaitPorts(key string) string {
+	other := "web"
+	if key == "web" {
+		other = "backend"
+	}
+	released, foreign := waitPortsFree(svcPortsFn(key), 10*time.Second, svcExpectProcs(key), svcExpectProcs(other))
+	if !released {
+		return "旧进程已停止但端口仍未释放（进程树可能没杀透，或端口处于 TIME_WAIT）：请稍候重试，或到「端口诊断」查看占用者"
+	}
+	if len(foreign) > 0 {
+		parts := make([]string, 0, len(foreign))
+		for _, o := range foreign {
+			parts = append(parts, fmt.Sprintf("端口 %d 被 %s（PID %d）占用", o.Port, nameOrUnknown(o.Name), o.PID))
+		}
+		return "端口被其他进程占用：" + strings.Join(parts, "；") +
+			"——第三方进程不自动结束，请人工确认后在「端口诊断」处理"
+	}
+	return ""
+}
+
+// aiCleanupProcesses 供 AI 工具与按钮共用的入口（带日志）。
+// v3.0 T1.9：语义从"清理进程"改为"停止 EnvKit 管理的服务 + 报告端口占用"，
+// 不再结束任何第三方进程——误杀比杀不掉严重得多（plan §3.2.2 红线）。
 func aiCleanupProcesses() (string, error) {
 	// v3.0 T1.2：清理动的是前后端两组资源，成组原子获取
-	h, granted := beginTaskHG("清理后台进程", []string{grpWeb, grpBackend}, true)
+	h, granted := beginTaskHG("停止前后端服务", []string{grpWeb, grpBackend}, true)
 	if !granted {
 		return "", fmt.Errorf("%s", busyReason("web+backend"))
 	}
 	defer h.Done()
 	fin := auditStart(actUser, "cleanup_processes", "web/backend", "")
-	info(scStart, "清理", "停止 EnvKit 管理的服务，并清理项目目录下的遗留进程...")
-	n, detail, err := cleanupProcesses()
+	info(scStart, "清理", "停止 EnvKit 管理的前后端服务，并检查端口占用...")
+	stopped, occupants, err := cleanupProcesses()
 	if err != nil {
 		fail(scStart, "清理", "%v", err)
 		fin(resFail, err.Error())
 		return "", err
 	}
-	fin(resOK, fmt.Sprintf("清理 %d 个", n))
-	for _, d := range detail {
-		info(scStart, "清理", "已结束 %s", d)
-	}
-	msg := fmt.Sprintf("已停止 EnvKit 管理的服务；清理项目遗留进程 %d 个", n)
-	if n == 0 {
-		msg = "已停止 EnvKit 管理的服务；未发现遗留进程"
+	fin(resOK, fmt.Sprintf("停 %d 个服务，%d 个端口被占用", stopped, len(occupants)))
+	msg := fmt.Sprintf("已停止 EnvKit 管理的前后端服务（%d 个在运行）", stopped)
+	if len(occupants) == 0 {
+		msg += "；候选端口均未被占用"
+	} else {
+		msg += "；" + strings.Join(occupants, "；") + "——第三方进程不自动结束，请人工确认后在「端口诊断」处理"
 	}
 	ok(scStart, "清理", "%s", msg)
-	return msg + "。端口 8080/8888 若仍被占用，请稍候片刻再启动。", nil
+	return msg, nil
 }
 
 func handleCleanupProcs(w http.ResponseWriter, r *http.Request) {
@@ -146,36 +172,29 @@ func handleCleanupProcs(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"started":true}`))
 }
 
-// cleanupByTasklist 兜底：主通道不可用时，按进程名清理 —— 只处理项目专有名字（main.exe / go.exe）。
-// 刻意不处理 node.exe：node 是通用运行时，按名字杀会误伤其它软件（如 Adobe Creative Cloud）。
-func cleanupByTasklist() (int, []string) {
-	var killed []string
-	for _, name := range []string{"main.exe", "go.exe"} {
-		out, err := exec.Command("tasklist", "/FI", "IMAGENAME eq "+name, "/FO", "CSV", "/NH").Output()
-		if err != nil {
-			continue
-		}
-		for _, ln := range strings.Split(string(out), "\n") {
-			ln = strings.TrimSpace(strings.Trim(ln, "\r"))
-			if ln == "" || !strings.Contains(ln, name) {
-				continue
-			}
-			fields := strings.Split(strings.Trim(ln, "\""), "\",\"")
-			if len(fields) < 2 {
-				continue
-			}
-			pid := strings.Trim(fields[1], "\" ")
-			if pid == "" {
-				continue
-			}
-			if err := exec.Command("taskkill", "/F", "/PID", pid).Run(); err == nil {
-				killed = append(killed, fmt.Sprintf("%s (PID %s)", name, pid))
-			}
-		}
+// handleBreakerReset POST：人工复位断路器（plan §3.2.3 的"人工复位"出口）。
+// 刻意不做成 AI 工具：AI 被熔断拒绝时该做的是升级给人，而不是自己拆保险——
+// 人工复位的入口只能是人点的按钮。服务名限定 web/backend（链端走
+// svcBreakerReset("chain") 由守护侧同一状态机覆盖，这里不开放）。
+func handleBreakerReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
 	}
-	if len(killed) == 0 {
-		info(scStart, "清理", "兜底清理未发现可结束的进程")
+	var body struct {
+		Service string `json:"service"`
 	}
-	warn(scStart, "清理", "兜底模式不处理 node.exe（避免误杀其它软件的 node）；若前端进程仍在，请改用「停止全部」或重启 EnvKit")
-	return len(killed), killed
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	svc := strings.TrimSpace(body.Service)
+	if svc != "web" && svc != "backend" {
+		http.Error(w, "service 必须是 web/backend", 400)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if tripped, _, _ := svcBreakerStatus(svc); !tripped {
+		_, _ = w.Write([]byte(`{"ok":true,"reset":false,"msg":"当前不在熔断态，无需复位"}`))
+		return
+	}
+	svcBreakerReset(svc)
+	_, _ = w.Write([]byte(`{"ok":true,"reset":true}`))
 }

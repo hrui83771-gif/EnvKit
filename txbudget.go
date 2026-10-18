@@ -133,10 +133,15 @@ func txAttemptGate(target string) error {
 }
 
 // txRecoveryGate 恢复动作入口的两层节制（AI 工具与守护循环共用）。
-// 顺序：先 per-target 上限（只读、免费），后全局预算（占额度）——
-// 反正要被上限拒的动作，不该消耗预算。
+// 顺序：先断路器（v3.0 T1.9，熔断态整个动作直接拒，且拒绝时升级），
+// 再 per-target 上限（只读、免费），后全局预算（占额度）——
+// 反正要被上限拒的动作，不该消耗预算；熔断中的环境，连"读计数决定
+// 要不要试"都不必做。
 func txRecoveryGate(kind string, targets ...string) error {
 	for _, t := range targets {
+		if err := svcBreakerGate(t, kind); err != nil {
+			return err
+		}
 		if err := txAttemptGate(t); err != nil {
 			return err
 		}

@@ -123,6 +123,7 @@ func main() {
 	http.HandleFunc("/api/ports/scan", handlePortScan)
 	http.HandleFunc("/api/ports/kill", handlePortKill)
 	http.HandleFunc("/api/program/cleanup", handleCleanupProcs)
+	http.HandleFunc("/api/program/breaker-reset", handleBreakerReset)
 	http.HandleFunc("/api/program/state", handleProgState)
 	http.HandleFunc("/api/program/db-backup", handleDBBackup)
 	http.HandleFunc("/api/program/db-restore", handleDBRestore)
