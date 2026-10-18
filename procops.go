@@ -64,11 +64,13 @@ func dedupInts(in []int) []int {
 }
 
 // classifyOccupants 把候选端口上的 LISTENING 占用者分三类：
-//   dying   —— 自家旧进程还没死透（ownNames 命中）：要等它释放；
-//   keep    —— 另一个自有服务正活着占着（keepNames 命中）：共享候选端口里
-//             的正常情况，不等也不报（否则 backend 在跑时重启 web，
-//              web 候选里的 8888 会被当成"没释放"，重启永远超时）；
-//   foreign —— 第三方：只报告，不杀。
+//
+//	dying   —— 自家旧进程还没死透（ownNames 命中）：要等它释放；
+//	keep    —— 另一个自有服务正活着占着（keepNames 命中）：共享候选端口里
+//	          的正常情况，不等也不报（否则 backend 在跑时重启 web，
+//	           web 候选里的 8888 会被当成"没释放"，重启永远超时）；
+//	foreign —— 第三方：只报告，不杀。
+//
 // 名字查不到的占用者按"未知"放行——与 svcOwnerAcceptable 同一立场：
 // 查不到就下结论，冤枉一个好进程比漏报一个坏进程严重。
 func classifyOccupants(ports []int, ownNames, keepNames []string) (dying, foreign []portOcc) {

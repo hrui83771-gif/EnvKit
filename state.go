@@ -102,11 +102,11 @@ type Config struct {
 // BreakerAfter/BreakerCooldownSecs 是崩溃断路器（v3.0 T1.9，plan §3.2.3）：
 // 连续失败达限进熔断、冷静期后放行一次探针。零值 = 3 次 / 300 秒。
 type RecoveryConfig struct {
-	MaxActions          int `json:"max_actions,omitempty"`            // 窗口内恢复类动作上限，0 = 12
-	WindowSecs          int `json:"window_secs,omitempty"`            // 预算窗口秒数，0 = 600
-	MaxAttempts         int `json:"max_attempts,omitempty"`           // per-target 连续失败上限，0 = 3
-	BreakerAfter        int `json:"breaker_after,omitempty"`          // 连续失败达限进熔断，0 = 3
-	BreakerCooldownSecs int `json:"breaker_cooldown_secs,omitempty"`  // 熔断冷静期秒数，0 = 300
+	MaxActions          int `json:"max_actions,omitempty"`           // 窗口内恢复类动作上限，0 = 12
+	WindowSecs          int `json:"window_secs,omitempty"`           // 预算窗口秒数，0 = 600
+	MaxAttempts         int `json:"max_attempts,omitempty"`          // per-target 连续失败上限，0 = 3
+	BreakerAfter        int `json:"breaker_after,omitempty"`         // 连续失败达限进熔断，0 = 3
+	BreakerCooldownSecs int `json:"breaker_cooldown_secs,omitempty"` // 熔断冷静期秒数，0 = 300
 }
 
 type CheckResult struct {

@@ -276,15 +276,15 @@ func healthServicesCompat(m map[string]ServiceState) map[string]SvcInfo {
 	out := map[string]SvcInfo{}
 	for k, s := range m {
 		info := SvcInfo{
-			Running:            s.Running,
-			PID:                s.PID,
-			Since:              s.Since,
-			Phase:              s.Phase,
-			Verified:           s.Verified,
-			LastVerify:         s.LastVerify,
-			Restarts:           s.Restarts,
-			BreakerTripped:     s.BreakerTripped,
-			BreakerRemainSecs:  s.BreakerRemainSecs,
+			Running:           s.Running,
+			PID:               s.PID,
+			Since:             s.Since,
+			Phase:             s.Phase,
+			Verified:          s.Verified,
+			LastVerify:        s.LastVerify,
+			Restarts:          s.Restarts,
+			BreakerTripped:    s.BreakerTripped,
+			BreakerRemainSecs: s.BreakerRemainSecs,
 		}
 		if s.Port > 0 {
 			info.URL = fmt.Sprintf("http://127.0.0.1:%d", s.Port)

@@ -74,8 +74,8 @@ type ServiceState struct {
 	// v3.0 T1.9：崩溃循环断路器状态（plan §3.2.3）。熔断中 = 自动重启
 	// 已被拒绝，前端要显示出来并给人工复位入口——否则用户看到的是
 	// "重启没反应"，而不知道是产品在故意拒绝。
-	BreakerTripped   bool `json:"breaker_tripped,omitempty"`
-	BreakerRemainSecs int `json:"breaker_remain_secs,omitempty"` // 剩余冷静期（秒）
+	BreakerTripped    bool `json:"breaker_tripped,omitempty"`
+	BreakerRemainSecs int  `json:"breaker_remain_secs,omitempty"` // 剩余冷静期（秒）
 }
 
 // Issue 状态中心要显示的核心：**哪里有问题、该怎么办**。
@@ -354,17 +354,17 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 			}
 			add(rtIssError, "service", what, act)
 		}
-	// v3.0 T1.9：熔断态单列。它和"启动失败"是两件事——失败是结果，
-	// 熔断是产品在故意拒绝继续自动重启。混成一条，用户会以为
-	// "重启坏了"，而看不到"是产品拦住了崩溃循环"。
-	if s.BreakerTripped {
-		wait := ""
-		if s.BreakerRemainSecs > 0 {
-			wait = fmt.Sprintf("；%d 秒后放行一次探针重启", s.BreakerRemainSecs)
+		// v3.0 T1.9：熔断态单列。它和"启动失败"是两件事——失败是结果，
+		// 熔断是产品在故意拒绝继续自动重启。混成一条，用户会以为
+		// "重启坏了"，而看不到"是产品拦住了崩溃循环"。
+		if s.BreakerTripped {
+			wait := ""
+			if s.BreakerRemainSecs > 0 {
+				wait = fmt.Sprintf("；%d 秒后放行一次探针重启", s.BreakerRemainSecs)
+			}
+			add(rtIssError, "service", name+"处于熔断态：自动重启已被拒绝（连续失败达限）",
+				"查看「程序启动」日志定位崩溃原因；处理后点服务卡片上的「复位断路器」，或等待冷静期自然解除"+wait)
 		}
-		add(rtIssError, "service", name+"处于熔断态：自动重启已被拒绝（连续失败达限）",
-			"查看「程序启动」日志定位崩溃原因；处理后点服务卡片上的「复位断路器」，或等待冷静期自然解除"+wait)
-	}
 	}
 
 	// ---- 数据库 ----
