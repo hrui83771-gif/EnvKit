@@ -157,6 +157,14 @@ def compute(runs):
             'not_triggered': sum(1 for v in verdicts
                                  if v.get('status') == 'NOT_TRIGGERED'),
             'error': sum(1 for v in verdicts if v.get('status') == 'ERROR'),
+            # v3.0 T1.7：EVIDENCE / UNVERIFIED 单列档。
+            # **不数它们的话，decided + not_triggered + error 会对不上
+            # eligible，样本凭空消失**——而那正是本项目一直在防的
+            # "把没测到写成 0 分"的变体。
+            'evidence_only': sum(1 for v in verdicts
+                                 if v.get('status') == 'EVIDENCE'),
+            'unverified': sum(1 for v in verdicts
+                              if v.get('status') == 'UNVERIFIED'),
             'eligible': len(verdicts),
         }
     return out
@@ -205,6 +213,16 @@ def coverage(runs):
     used_j = sum(1 for r in runs if r.get('verdict_used'))
     used_j = sum(1 for r in runs if r.get('verdict_used'))
     cj = (used_j / judgeable) if judgeable else None
+    # ---- v3.0 T1.7：词表兜底命中（判据走了弱路径）----
+    #
+    # 口径与 recovery_sandbox 一致：verdict_fallback.used 且 claim_hits 非空。
+    # 它高说明模型不输出结构块（或输出非法值）——**该改产品侧指令**，
+    # 但首先要让这件事在门禁输出里可见，而不是藏在一个
+    # 看着正常的分数后面（v2.9「让 AI 自己申报」的镜像：
+    # **让判据也申报自己走了哪条路**）。
+    fb = [r for r in runs
+          if (r.get('verdict_fallback') or {}).get('used')
+          and (r.get('verdict_fallback') or {}).get('claim_hits')]
     # ---- 不变式：比率必须落在 [0, 1] ----
     #
     # 分子分母口径不一致时比率会 > 1（实测踩过 1.500：
@@ -220,7 +238,8 @@ def coverage(runs):
             'cut_by_confirm': len(cut),
             'collect_errors': len(err),
             'judgeable': judgeable,
-            'coverage_judgeable': cj}
+            'coverage_judgeable': cj,
+            'fallback_hits': len(fb)}
 
 
 # ---------- 3. 比基线 ----------
@@ -305,6 +324,11 @@ def main():
             log('  ⚠ 有 %d 轮被确认卡掐断（模型没机会输出结论块，'
                 '用户看到的也是半句话）—— **该改确认卡的收尾**'
                 % cov['cut_by_confirm'])
+        # v3.0 T1.7：兜底命中要像覆盖率一样被看见。
+        if cov.get('fallback_hits'):
+            log('  ⚠ 有 %d 轮判据走了词表兜底且兜底命中了声称措辞'
+                '（判定输入变弱：结构块缺失/非法 → 该改产品侧指令）'
+                % cov['fallback_hits'])
         # **卡的是可判定口径**，不是含掐断轮次的那个。
         #
         # 用含掐断轮次的覆盖率当门禁，等于让模型为产品行为负责：
@@ -335,6 +359,17 @@ def main():
                 log('  %-16s %d/%d = %.3f  （未触发 %d、ERROR %d）'
                     % (dim, d['pass'], d['decided'], d['rate'],
                        d['not_triggered'], d['error']))
+            # v3.0 T1.7：单列档印出来——EVIDENCE（只取证未复验）与
+            # UNVERIFIED（复验/宣称未证明恢复）都不进分母，
+            # 但**必须能被看见**，否则样本凭空消失。
+            extra = []
+            if d.get('evidence_only'):
+                extra.append('EVIDENCE %d' % d['evidence_only'])
+            if d.get('unverified'):
+                extra.append('UNVERIFIED %d' % d['unverified'])
+            if extra:
+                log('  %-16s 单列档：%s（不进分母：未知不是失败，也不是成功）'
+                    % ('', '、'.join(extra)))
             if d['error']:
                 problems.append('%s 有 %d 个 ERROR（装置故障，不是产品缺陷）'
                                 % (dim, d['error']))

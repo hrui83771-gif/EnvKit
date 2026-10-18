@@ -459,8 +459,12 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 time.sleep(0.5)
             after = sandbox_health()
             tinfo = rr.human_intervention(since)
+            # v3.0 T1.7：系统复验结论（verify_result 事件）一起进判据——
+            # 判据的判定输入从"调了什么工具"升级为"系统客观结论是什么"。
+            verify_results = ab.verify_seq(events)
             _jd = rr.judge(inj, text, events, tinfo, after,
-                                health_fn=sandbox_healthy)
+                           health_fn=sandbox_healthy,
+                           verify_results=verify_results)
             verdicts = _jd['dims']
             _verdict_meta = _jd
             used = ab.tool_seq(events)
@@ -476,6 +480,17 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
             marks = ' '.join(f"{k[:4]}={v['status']}" for k, v in verdicts.items())
             if confirm:
                 marks += ' [弹确认卡]'
+            # v3.0 T1.7：把系统复验结论的形态也打出来。
+            # 判据从此有两条路（系统证据 / 词表兜底），
+            # **跑的时候就要能看出这一轮走的是哪条**——
+            # 否则"判据退化"要等看报告才发现。
+            if verify_results:
+                marks += (' [复验结论:' + ','.join(
+                    '%s=%s' % (v['target'] or '?',
+                               ('ok' if v['ok'] and v['verified']
+                                else ('fail' if (not v['ok'] or v['err_kind'])
+                                      else '未知')))
+                    for v in verify_results) + ']')
             print(f'  run{r+1}  {dur:.0f}s  工具={used}')
             print(f'       {marks}')
             results.append({
@@ -488,6 +503,12 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 # 混进元信息会破坏它（第一版塞进去导致遍历时 KeyError 崩掉）。
                 'verdict': _verdict_meta.get('verdict'),
                 'verdict_used': _verdict_meta.get('verdict_used'),
+                # v3.0 T1.7：判据自申报走了哪条路（系统证据还是词表兜底）。
+                # 与 verdict/verdict_used 同层——**元信息不与维度混放**。
+                'verdict_fallback': _verdict_meta.get('verdict_fallback'),
+                # 系统复验结论原文一并留档：报告里每个判定都要能被
+                # 独立核对——看不到它就无法复盘"为什么这轮判 PASS"。
+                'verify_results': verify_results,
                 'health_before': before, 'health_after': after,
                 'confirm_requested': confirm,
                 'answer_head': text[:300],
@@ -587,6 +608,11 @@ def report_and_print(results, min_samples, only_kinds=False):
         print(f'  {q}')
         print(f'  = {val}   （{d["pass"]}/{d["n_decided"]} 有结论，'
               f'另有 {d["not_triggered"]} 项未触发、{d["error"]} 项采集错误）')
+        # v3.0 T1.7：UNVERIFIED 单列档也要印出来——
+        # "复验/宣称未证明恢复"的样本不能从汇总里凭空消失。
+        if d.get('unverified'):
+            print(f'  ·其中 {d["unverified"]} 项复验/宣称未证明恢复'
+                  f'（单列 unverified 档：未知不是失败，也不是成功）')
         if d['no_sample']:
             print('  ⚠ 无样本：这个数字**不代表能力**')
 
@@ -599,6 +625,18 @@ def report_and_print(results, min_samples, only_kinds=False):
                  if v['injection_class'] == 'autonomous' else '')
               + warn)
 
+    # v3.0 T1.7：判据走了词表兜底且兜底命中了声称措辞的轮次数。
+    # 口径与 rr.main() 一致：used 且 claim_hits 非空。
+    # **这个数字高不是模型的问题，是产品指令的问题**（模型不输出结构块），
+    # 但它必须被看见——否则"判据退化"会藏在一个看着正常的分数后面。
+    fb_hits = sum(1 for r in results
+                  if (r.get('verdict_fallback') or {}).get('used')
+                  and (r.get('verdict_fallback') or {}).get('claim_hits'))
+    if fb_hits:
+        print(f'\n⚠ 有 {fb_hits}/{len(results)} 轮判据走了词表兜底且兜底'
+              f'命中了声称措辞（结构块缺失/非法 → 判定输入变弱，'
+              f'见各轮 verdict_fallback）')
+
     report = {
         'mode': 'sandbox',
         'sandbox_port': sb.SANDBOX_PORT,
@@ -608,6 +646,7 @@ def report_and_print(results, min_samples, only_kinds=False):
         'by_injection': by_inj,
         'caveats': rr_dims_caveats(),
         'verdict_coverage': rr_verdict_coverage(results),
+        'verdict_fallback_hits': fb_hits,
         'results': results,
     }
 
@@ -645,6 +684,11 @@ def report_and_print(results, min_samples, only_kinds=False):
                 'by_injection': by_inj,
                 'caveats': rr_dims_caveats(),
                 'verdict_coverage': rr_verdict_coverage(sub),
+                # v3.0 T1.7：本类的兜底命中数（门禁按文件汇总时用）。
+                'verdict_fallback_hits': sum(
+                    1 for r in sub
+                    if (r.get('verdict_fallback') or {}).get('used')
+                    and (r.get('verdict_fallback') or {}).get('claim_hits')),
                 'results': sub,
             }, ensure_ascii=False, indent=2), encoding='utf-8')
             print(f'本类数据：{p}')

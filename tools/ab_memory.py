@@ -485,6 +485,39 @@ def tool_seq(events):
     return out
 
 
+def verify_seq(events):
+    """本轮拿到的**结构化复验结论**（系统记录，不是模型自述）。
+
+    v3.0 T1.7（判据改造）新增。Go 侧每次执行 verify_environment 后会发一个
+    `verify_result` SSE 事件（ai_loop.go:801-811），字段：
+    ok / verified / target / msg / err_kind / evidence。
+
+    **这是判据能拿到的最强客观证据**——它由产品算好后推出来，
+    模型转述不了它（转述出现在回答文本里，不在事件流里）。
+    这正是 v2.9「让 AI 自己申报」的镜像：**让判据读系统的申报**。
+
+    与 tool_seq 的分工：
+      tool_seq  回答"它调了什么"（弱客观：调了复验工具 ≠ 复验通过）
+      verify_seq 回答"系统客观结论是什么"（ok/verified/err_kind 三态）
+
+    只读字段、不猜：没有 verify_result 事件就返回空列表——
+    "没复验"与"复验了但没拿到结论"由调用方结合 tool_seq 区分。
+    """
+    out = []
+    for e in events:
+        if e.get('type') != 'verify_result':
+            continue
+        out.append({
+            'target': str(e.get('target') or ''),
+            'ok': bool(e.get('ok')),
+            'verified': bool(e.get('verified')),
+            'err_kind': str(e.get('err_kind') or ''),
+            'evidence': [str(x) for x in (e.get('evidence') or [])],
+            'msg': str(e.get('msg') or '')[:200],
+        })
+    return out
+
+
 def explore_rounds(events):
     """探索轮数 = 探索类工具调用次数。
 
