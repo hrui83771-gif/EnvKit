@@ -963,6 +963,9 @@
           <span><i style="background:var(--err)"></i><span class="lgt">失败</span> <b class="lgnv">0</b></span>
           <span><i style="background:var(--warn)"></i><span class="lgt">被拦下</span> <b class="lgnv">0</b></span>
           <span><i style="background:var(--info)"></i><span class="lgt">已启动</span> <b class="lgnv">0</b></span>
+          <!-- v3.0 T1.6：Ok&&!Verified 单列——"执行了但没证明恢复"既不是成功
+               也不是失败，混进任何一档都是谎报。灰色=无结论，不是"问题"。 -->
+          <span><i style="background:var(--muted)"></i><span class="lgt">未证明恢复</span> <b class="lgnv">0</b></span>
         </div>
       </div>
 
@@ -1541,6 +1544,7 @@ const I18N_EN = {
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
   "已启动": "Started",
+  "未证明恢复": "Unverified",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
   "已复验通过": "Verified OK",
@@ -3062,6 +3066,9 @@ async function loadStats(){
     {k:'fail',     color:'var(--err)',  name:'失败'},
     {k:'denied',   color:'var(--warn)', name:'被拦下'},
     {k:'started',  color:'var(--info)', name:'已启动'},
+    // v3.0 T1.6：未证明恢复单列。它进分母（复验率的分母是"复验过次数"），
+    // 但不进"失败"——把"还没验到"画成失败，看板就在教人误读。
+    {k:'unverified', color:'var(--muted)', name:'未证明恢复'},
   ];
   stBars('#st-ops-chart', ds, RKEY, {height:130});
   const stack = $('#st-ops-stack');

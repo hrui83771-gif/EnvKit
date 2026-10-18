@@ -50,6 +50,7 @@ type DayStat struct {
 	Fail        int            `json:"fail"`         // fail
 	Denied      int            `json:"denied"`       // 被裁决器拦下（**预期行为，不算失败**）
 	Started     int            `json:"started"`      // 异步已启动
+	Unverified  int            `json:"unverified"`   // 执行了但未证明恢复（v3.0 T1.6：与 fail 分开）
 	ByActor     map[string]int `json:"by_actor"`     // 主体分布
 	ByResult    map[string]int `json:"by_result"`    // 结果分布
 	VerifyCount int            `json:"verify_count"` // 带了复验结论的操作数
@@ -85,6 +86,7 @@ type Totals struct {
 	Fail       int            `json:"fail"`
 	Denied     int            `json:"denied"`
 	Started    int            `json:"started"`
+	Unverified int            `json:"unverified"` // v3.0 T1.6：Ok&&!Verified，与 fail 分开
 	ByActor    map[string]int `json:"by_actor"`
 	Actions    map[string]int `json:"actions"` // Top N 动作
 	LatencyP50 int64          `json:"latency_p50"`
@@ -185,27 +187,30 @@ func statsRange(days int) *StatsBoard {
 			ds.Ops++
 			ds.ByActor[e.Actor]++
 			ds.ByResult[e.Result]++
-			switch e.Result {
-			case resOK:
-				ds.OK++
-			case resFail:
-				ds.Fail++
-			case resDenied:
-				ds.Denied++
-			case resStart:
-				ds.Started++
-			}
+		switch e.Result {
+		case resOK:
+			ds.OK++
+		case resFail:
+			ds.Fail++
+		case resDenied:
+			ds.Denied++
+		case resStart:
+			ds.Started++
+		case resUnverified:
+			ds.Unverified++
+		}
 			if e.Verify != "" {
 				ds.VerifyCount++
 				if strings.Contains(e.Verify, "已复验通过") || strings.Contains(e.Verify, "通过") {
 					ds.VerifyOK++
 				}
 			}
-			b.Totals.Ops++
-			b.Totals.OK += boolInt(e.Result == resOK)
-			b.Totals.Fail += boolInt(e.Result == resFail)
-			b.Totals.Denied += boolInt(e.Result == resDenied)
-			b.Totals.Started += boolInt(e.Result == resStart)
+		b.Totals.Ops++
+		b.Totals.OK += boolInt(e.Result == resOK)
+		b.Totals.Fail += boolInt(e.Result == resFail)
+		b.Totals.Denied += boolInt(e.Result == resDenied)
+		b.Totals.Started += boolInt(e.Result == resStart)
+		b.Totals.Unverified += boolInt(e.Result == resUnverified)
 			if e.Verify != "" {
 				b.Totals.VerifyCount++
 				if strings.Contains(e.Verify, "已复验通过") || strings.Contains(e.Verify, "通过") {

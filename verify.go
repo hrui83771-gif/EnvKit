@@ -797,11 +797,20 @@ func chainBlockNumber() (string, error) {
 // ================= 审计 =================
 
 // auditVerify 落一条复验结论（含完整证据链），让"验没验、验出什么"事后可追溯。
-// 复验通过才算 ok；未复验/复验失败一律 fail，避免审计里出现"恢复成功"的假象。
+// v3.0 T1.6（修 G11 前半）：三态落值，不再把 Ok&&!Verified 压成 fail——
+//   · Ok && Verified → ok（已用客观证据确认恢复）；
+//   · Ok && !Verified → unverified（执行了但没证明恢复，**不是失败**）；
+//   · !Ok → fail。
+// "执行了但未证明"与"失败"在审计里同形，会让读的人（和判据）把"还没验到"
+// 当成"没做成"——而这两件事的下一步完全相反：前者该继续等/继续验，
+// 后者该回滚或升级。这正是 plan-v3.0 R3（三态不合并）在审计侧的要求。
 func auditVerify(actor, action, target string, r OpResult) {
 	res := resFail
-	if r.Ok && r.Verified {
+	switch {
+	case r.Ok && r.Verified:
 		res = resOK
+	case r.Ok:
+		res = resUnverified
 	}
 	auditWrite(AuditEntry{
 		Ts:     time.Now().Format("2006-01-02 15:04:05.000"),

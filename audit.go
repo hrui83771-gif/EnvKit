@@ -29,7 +29,7 @@ type AuditEntry struct {
 	Action  string `json:"action"`             // 动作名，如 db_backup / apply_sql / config_save
 	Target  string `json:"target"`             // 目标对象，如库名、服务名、文件路径
 	Params  string `json:"params"`             // 入参摘要（已脱敏）
-	Result  string `json:"result"`             // ok | fail | denied | started
+	Result  string `json:"result"`             // ok | fail | denied | started | unverified（v3.0 T1.6）
 	Detail  string `json:"detail,omitempty"`   // 结果补充（已脱敏）
 	DurMs   int64  `json:"dur_ms,omitempty"`   // 耗时
 	Verify  string `json:"verify,omitempty"`   // 复验结论（v2.0 P2：执行之后有没有真的验过、验出什么）
@@ -46,10 +46,15 @@ const (
 
 // 结果取值
 const (
-	resOK     = "ok"
-	resFail   = "fail"
-	resDenied = "denied"
-	resStart  = "started"
+	resOK          = "ok"
+	resFail        = "fail"
+	resDenied      = "denied"
+	resStart       = "started"
+	// resUnverified（v3.0 T1.6，修 G11 前半）：执行了但没证明恢复。
+	// 与 fail 分开是硬需求——"还没验到"和"没做成"的下一步完全相反：
+	// 前者该继续等/继续验，后者该回滚或升级。审计里二者同形，
+	// 读的人（和判据）就会把"未证明"误读成"失败"。
+	resUnverified = "unverified"
 )
 
 var (
@@ -94,13 +99,67 @@ func auditWrite(e AuditEntry) {
 		}
 		f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			// 目录只读等场景：放弃落盘但留一条业务日志，避免静默丢失可观测性
-			warn(scSys, "审计", "审计文件无法写入（%v），本次操作未留痕", err)
+			// v3.0 T1.6（修 G11 后半）：目录只读/被替换等场景，放弃落盘
+			// 但必须可见。旧实现每次调用都 warn 一次（日志被刷爆）且从不
+			// 升级——"审计静默丢失"这件事本身成了不可观测事故。
+			auditFailNotice(fmt.Sprintf("审计文件无法写入（%v），本次操作未留痕：%s", err, p))
 			return
 		}
 		auditFile, auditDay, auditFileAt = f, day, p
 	}
-	_, _ = auditFile.WriteString(string(b) + "\n")
+	if _, werr := auditFile.WriteString(string(b) + "\n"); werr != nil {
+		// v3.0 T1.6：写失败（磁盘满/句柄失效）以前被 `_, _ =` 完全丢弃——
+		// "全程留痕"在磁盘满的那一刻悄悄变成幻觉，而没人知道。
+		auditFailNotice(fmt.Sprintf("审计写入失败（%v），本条记录丢失：%s", werr, auditPath()))
+	}
+}
+
+// ---------- 审计写入失败的可见化（v3.0 T1.6，修 G11 后半） ----------
+//
+// 旧实现两处静默：OpenFile 失败只 warn（且每次调用都 warn，日志被刷爆）；
+// WriteString 的错误被完全忽略——磁盘满/句柄失效时审计静默丢失，
+// "全程留痕"成了幻觉，而这件事本身无场景、无人知。
+// 现在：warn + 升级提示（alertDispatch），5 分钟冷却内只出一次；
+// **不阻断业务**——审计是观察者不是执行者，不能因为记不上账就把活停了
+//（plan-v3.0 负向场景"审计存储故障"的验收口径即此：业务不阻断 +
+// 有 warn 与升级提示，且审计缺失本身被记录为事故）。
+
+var (
+	auditFailMu   sync.Mutex
+	auditFailLast time.Time
+)
+
+const auditFailCooldown = 5 * time.Minute
+
+// auditFailEscalate 升级动作。抽成变量供单测替换（真实实现发通知）。
+//
+// ⚠️ 为什么真实实现放在 init() 里赋值而不是直接写在 var 初始化器上：
+// alertDispatch → sendWebhookAlert → auditStart → auditWrite → auditFailNotice
+// → auditFailEscalate 是一条静态环——直接写初始化器会被 Go 判
+// "initialization cycle"（编译不过）。放 init() 里赋值即可断环：
+// 初始化期它是空操作，而 init() 跑完才可能有任何业务调用它。
+var auditFailEscalate = func(why string) {}
+
+func init() {
+	auditFailEscalate = func(why string) {
+		alertDispatch("EnvKit 审计写入失败", why)
+	}
+}
+
+// auditFailNotice 审计写失败的统一出口：warn + 升级，冷却内只出一次。
+func auditFailNotice(why string) {
+	auditFailMu.Lock()
+	now := time.Now()
+	quiet := now.Sub(auditFailLast) < auditFailCooldown
+	if !quiet {
+		auditFailLast = now
+	}
+	auditFailMu.Unlock()
+	if quiet {
+		return // 冷却期内静默：审计写失败时每条操作都来一遍提醒就是刷爆
+	}
+	warn(scSys, "审计", "%s", why)
+	auditFailEscalate(why)
 }
 
 // auditNow 立即记录一条已完成的操作。
@@ -442,8 +501,8 @@ func init() {
 // ② JSONL 一行一个嵌套对象，模型逐行解析容易漏字段，还常拉回整个文件。
 // 这里按 auditQuery 的口径（新在前、可按天/主体筛）一条一行输出。
 //
-// 词汇与「操作审计」页保持一致：result 用原始值（ok/fail/denied/started），
-// 图例在头部给全——模型转述给用户时不会造出页面上不存在的词。
+// 词汇与「操作审计」页保持一致：result 用原始值（ok/fail/denied/started/
+// unverified），图例在头部给全——模型转述给用户时不会造出页面上不存在的词。
 func aiAuditText(day, actor string, n int) (string, int) {
 	if n <= 0 {
 		n = aiAuditDefaultLine
@@ -458,7 +517,7 @@ func aiAuditText(day, actor string, n int) (string, int) {
 	}
 	fmt.Fprintf(&b, "有审计记录的日期（新在前，只保留 30 天）：%s\n", strings.Join(days, "、"))
 	b.WriteString("图例：主体 user=用户手动 ai=助手执行 guard=守护自动 system=系统；" +
-		"结果 ok=成功 fail=失败 denied=被拦下 started=已启动\n")
+		"结果 ok=成功 fail=失败 denied=被拦下 started=已启动 unverified=执行了但未证明恢复\n")
 	es := auditQuery(day, actor, n)
 	if len(es) == 0 {
 		b.WriteString("该条件下没有记录。")
