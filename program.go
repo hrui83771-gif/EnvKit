@@ -664,10 +664,11 @@ func webStartTaskLocked(dir, script, actor string) OpResult {
 //     新进程的条目删掉，之后 stopByKey 找不到进程——"停不掉"。
 //
 // 规则（plan-v3.0 §2.4 幂等控制）：
-//   · Running && Verified → 返回"已在运行且复验通过"（ok+verified，不派生）；
-//   · Running && !Verified → 不重复派生，交回调用方走 Verify
-//     （"已执行但未证明恢复"是未知，不是成功——R3 三态不合并）；
-//   · 未 Running → 不跳过，正常派生。
+//
+//	· Running && Verified → 返回"已在运行且复验通过"（ok+verified，不派生）；
+//	· Running && !Verified → 不重复派生，交回调用方走 Verify
+//	  （"已执行但未证明恢复"是未知，不是成功——R3 三态不合并）；
+//	· 未 Running → 不跳过，正常派生。
 //
 // 第二档返回 opOK 而非 opVerified 是刻意的：调用方（按钮/AI）拿到它
 // 都会继续复验，复验不过就该 stop/restart，而不是再派生一个。

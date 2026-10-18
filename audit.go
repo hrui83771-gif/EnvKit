@@ -46,10 +46,10 @@ const (
 
 // 结果取值
 const (
-	resOK          = "ok"
-	resFail        = "fail"
-	resDenied      = "denied"
-	resStart       = "started"
+	resOK     = "ok"
+	resFail   = "fail"
+	resDenied = "denied"
+	resStart  = "started"
 	// resUnverified（v3.0 T1.6，修 G11 前半）：执行了但没证明恢复。
 	// 与 fail 分开是硬需求——"还没验到"和"没做成"的下一步完全相反：
 	// 前者该继续等/继续验，后者该回滚或升级。审计里二者同形，

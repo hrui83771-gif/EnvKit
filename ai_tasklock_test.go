@@ -16,11 +16,11 @@ import (
 
 func TestTaskGroupsConflict(t *testing.T) {
 	cases := []struct {
-		name       string
-		a          []string
-		aWrite     bool
-		b          []string
-		bWrite     bool
+		name         string
+		a            []string
+		aWrite       bool
+		b            []string
+		bWrite       bool
 		wantConflict bool
 	}{
 		{"两个只读同组不冲突", []string{grpWeb}, false, []string{grpWeb}, false, false},

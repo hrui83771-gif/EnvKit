@@ -187,30 +187,30 @@ func statsRange(days int) *StatsBoard {
 			ds.Ops++
 			ds.ByActor[e.Actor]++
 			ds.ByResult[e.Result]++
-		switch e.Result {
-		case resOK:
-			ds.OK++
-		case resFail:
-			ds.Fail++
-		case resDenied:
-			ds.Denied++
-		case resStart:
-			ds.Started++
-		case resUnverified:
-			ds.Unverified++
-		}
+			switch e.Result {
+			case resOK:
+				ds.OK++
+			case resFail:
+				ds.Fail++
+			case resDenied:
+				ds.Denied++
+			case resStart:
+				ds.Started++
+			case resUnverified:
+				ds.Unverified++
+			}
 			if e.Verify != "" {
 				ds.VerifyCount++
 				if strings.Contains(e.Verify, "已复验通过") || strings.Contains(e.Verify, "通过") {
 					ds.VerifyOK++
 				}
 			}
-		b.Totals.Ops++
-		b.Totals.OK += boolInt(e.Result == resOK)
-		b.Totals.Fail += boolInt(e.Result == resFail)
-		b.Totals.Denied += boolInt(e.Result == resDenied)
-		b.Totals.Started += boolInt(e.Result == resStart)
-		b.Totals.Unverified += boolInt(e.Result == resUnverified)
+			b.Totals.Ops++
+			b.Totals.OK += boolInt(e.Result == resOK)
+			b.Totals.Fail += boolInt(e.Result == resFail)
+			b.Totals.Denied += boolInt(e.Result == resDenied)
+			b.Totals.Started += boolInt(e.Result == resStart)
+			b.Totals.Unverified += boolInt(e.Result == resUnverified)
 			if e.Verify != "" {
 				b.Totals.VerifyCount++
 				if strings.Contains(e.Verify, "已复验通过") || strings.Contains(e.Verify, "通过") {

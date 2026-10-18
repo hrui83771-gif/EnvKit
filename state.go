@@ -98,7 +98,7 @@ type Config struct {
 // RecoveryConfig 恢复事务的两层节制参数（v3.0 T1.5，修 G5/G6）。
 // 两层分工见 txbudget.go：MaxActions 防"不同策略连环自动执行刷爆环境"，
 // MaxAttempts 防"同一服务反复失败反复重启"。零值 = 内置默认
-//（窗口 10 分钟 / 12 次 / per-target 3 次）。
+// （窗口 10 分钟 / 12 次 / per-target 3 次）。
 type RecoveryConfig struct {
 	MaxActions  int `json:"max_actions,omitempty"`  // 窗口内恢复类动作上限，0 = 12
 	WindowSecs  int `json:"window_secs,omitempty"`  // 预算窗口秒数，0 = 600
@@ -343,9 +343,10 @@ const taskWatchdogLimit = 15 * time.Minute
 
 // taskGroupsConflict 两组资源 + 读写属性是否冲突。
 // 规则（与 TaskHandle 注释一致）：
-//   · 两个只读永不冲突；
-//   · 全局任务（groups 为空）与任何任务冲突；
-//   · 否则按组名相交判定。
+//
+//	· 两个只读永不冲突；
+//	· 全局任务（groups 为空）与任何任务冲突；
+//	· 否则按组名相交判定。
 func taskGroupsConflict(a []string, aWrite bool, b []string, bWrite bool) bool {
 	if !aWrite && !bWrite {
 		return false

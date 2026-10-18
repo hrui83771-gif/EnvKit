@@ -234,27 +234,27 @@ var aiToolRegistry = map[string]aiTool{
 				"description": "可选。仅当快照 launch.web_all 里有多个候选时才填，且必须是其中的一个；留空由 EnvKit 自行选择"},
 		}, "required": []string{"service"}},
 		Write: true,
-	Execute: func(args map[string]any) (string, error) {
-		svc, _ := args["service"].(string)
-		script, _ := args["web_script"].(string)
-		if svc != "web" && svc != "backend" && svc != "all" {
-			return "", fmt.Errorf("service 必须是 web / backend / all")
-		}
-		// v3.0 T1.5：恢复动作入口的两层节制（plan-v3.0 §2.4，修 G5/G6）。
-		// per-target 上限防"同一服务反复失败反复重启"（Restarts 唯一事实源），
-		// 全局预算防"不同策略连环自动执行刷爆环境"。任一层拒绝即整体拒绝。
-		var targets []string
-		switch svc {
-		case "web":
-			targets = []string{grpWeb}
-		case "backend":
-			targets = []string{grpBackend}
-		default:
-			targets = []string{grpBackend, grpWeb}
-		}
-		if err := txRecoveryGate("start_service", targets...); err != nil {
-			return "", err
-		}
+		Execute: func(args map[string]any) (string, error) {
+			svc, _ := args["service"].(string)
+			script, _ := args["web_script"].(string)
+			if svc != "web" && svc != "backend" && svc != "all" {
+				return "", fmt.Errorf("service 必须是 web / backend / all")
+			}
+			// v3.0 T1.5：恢复动作入口的两层节制（plan-v3.0 §2.4，修 G5/G6）。
+			// per-target 上限防"同一服务反复失败反复重启"（Restarts 唯一事实源），
+			// 全局预算防"不同策略连环自动执行刷爆环境"。任一层拒绝即整体拒绝。
+			var targets []string
+			switch svc {
+			case "web":
+				targets = []string{grpWeb}
+			case "backend":
+				targets = []string{grpBackend}
+			default:
+				targets = []string{grpBackend, grpWeb}
+			}
+			if err := txRecoveryGate("start_service", targets...); err != nil {
+				return "", err
+			}
 			// 填了快照里没有的脚本名 → 立刻拒绝并说明，不去试。
 			// 试探本身就是风险：package.json 里可能有 deploy / migrate。
 			if s := strings.TrimSpace(script); s != "" {
@@ -272,43 +272,43 @@ var aiToolRegistry = map[string]aiTool{
 						"不要猜脚本名——请按候选集选，或让用户在「程序配置」中指定。", s, cands)
 				}
 			}
-		switch svc {
-		case "all":
-			// T1.2：all = 一次拿 backend+web 两组锁（原子获取，顺序固定防死锁），
-			// 停旧起新全程互斥；组间仍可与其他组的任务并行。
-			h, granted := beginTaskHG("启动前后端", []string{grpBackend, grpWeb}, true)
-			if !granted {
-				return "", fmt.Errorf("%s", busyReason("backend+web"))
+			switch svc {
+			case "all":
+				// T1.2：all = 一次拿 backend+web 两组锁（原子获取，顺序固定防死锁），
+				// 停旧起新全程互斥；组间仍可与其他组的任务并行。
+				h, granted := beginTaskHG("启动前后端", []string{grpBackend, grpWeb}, true)
+				if !granted {
+					return "", fmt.Errorf("%s", busyReason("backend+web"))
+				}
+				defer h.Done()
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+				if !rb.Ok {
+					h.SetResult(rb)
+					return "", aiOpErr("后端启动", rb)
+				}
+				rw := aiStartVerify("web", webStartTaskLocked("", script, actAI), verifyWaitWeb)
+				h.SetResult(rw)
+				if !rw.Ok {
+					// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
+					return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
+						rw.ErrKind, rw.Msg, aiOpEvidence(rw))
+				}
+				return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
+			case "web":
+				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
+				if !rw.Ok {
+					return "", aiOpErr("前端启动", rw)
+				}
+				return aiOpResultText("前端启动", rw), nil
+			case "backend":
+				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
+				if !rb.Ok {
+					return "", aiOpErr("后端启动", rb)
+				}
+				return aiOpResultText("后端启动", rb), nil
 			}
-			defer h.Done()
-			rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
-			if !rb.Ok {
-				h.SetResult(rb)
-				return "", aiOpErr("后端启动", rb)
-			}
-			rw := aiStartVerify("web", webStartTaskLocked("", script, actAI), verifyWaitWeb)
-			h.SetResult(rw)
-			if !rw.Ok {
-				// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
-				return "", fmt.Errorf("后端已启动，但前端启动失败[%s]：%s\n证据：%s",
-					rw.ErrKind, rw.Msg, aiOpEvidence(rw))
-			}
-			return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
-		case "web":
-			rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
-			if !rw.Ok {
-				return "", aiOpErr("前端启动", rw)
-			}
-			return aiOpResultText("前端启动", rw), nil
-		case "backend":
-			rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
-			if !rb.Ok {
-				return "", aiOpErr("后端启动", rb)
-			}
-			return aiOpResultText("后端启动", rb), nil
-		}
-		return "", fmt.Errorf("service 必须是 web / backend / all")
-	},
+			return "", fmt.Errorf("service 必须是 web / backend / all")
+		},
 	},
 	"stop_service": {
 		Desc: "停止前端或后端服务",
@@ -377,17 +377,17 @@ var aiToolRegistry = map[string]aiTool{
 			default:
 				return "", fmt.Errorf("service 必须是 web/backend/all")
 			}
-		h, granted := beginTaskHG(name, groups, true)
-		if !granted {
-			return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
-		}
-		defer h.Done()
-		// v3.0 T1.5：重启也是恢复类动作，过同一套两层节制
-		//（ groups 即目标清单：web/backend/all ）。
-		if err := txRecoveryGate("restart_service", groups...); err != nil {
-			return "", err
-		}
-		fin := auditStart(actAI, "restart_service", svc, "")
+			h, granted := beginTaskHG(name, groups, true)
+			if !granted {
+				return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
+			}
+			defer h.Done()
+			// v3.0 T1.5：重启也是恢复类动作，过同一套两层节制
+			//（ groups 即目标清单：web/backend/all ）。
+			if err := txRecoveryGate("restart_service", groups...); err != nil {
+				return "", err
+			}
+			fin := auditStart(actAI, "restart_service", svc, "")
 			switch svc {
 			case "web":
 				stopByKey(scStart, "web", "web-start")

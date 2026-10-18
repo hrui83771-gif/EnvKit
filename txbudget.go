@@ -8,12 +8,14 @@
 // 正是这个根因模式。
 //
 // 两层节制，分工明确：
-//   · per-target 尝试上限（txAttemptGate）：防"同一服务反复失败反复重启"。
-//     计数唯一事实源是 svcRecordCrash 累加的 Restarts（svcstate.go），
-//     复验通过即清零（svcRecordVerify 的 ok 分支）——不另建计数器，
-//     两个计数器迟早说辞打架。
-//   · 全局动作预算（txBudgetTake）：防"不同策略连环自动执行刷爆环境"。
-//     单位窗口内恢复类动作总数上限，超限整体熔断并升级。
+//
+//	· per-target 尝试上限（txAttemptGate）：防"同一服务反复失败反复重启"。
+//	  计数唯一事实源是 svcRecordCrash 累加的 Restarts（svcstate.go），
+//	  复验通过即清零（svcRecordVerify 的 ok 分支）——不另建计数器，
+//	  两个计数器迟早说辞打架。
+//	· 全局动作预算（txBudgetTake）：防"不同策略连环自动执行刷爆环境"。
+//	  单位窗口内恢复类动作总数上限，超限整体熔断并升级。
+//
 // 前者回答"这个服务还能再试一次吗"，后者回答"整个环境还能再动吗"。
 // 任一层拒绝即整体拒绝：恢复动作最怕的就是"每一层都觉得该别人负责"。
 package main

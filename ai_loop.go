@@ -711,24 +711,24 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// 而是"用户有机会点头"——两者的区别在归因时很关键：
 				// forbidden 说明规则太严，confirm 说明档位合适但用户没批。
 				tracePolicy(verdict, "pending")
-			// ---- v2.9：先把话说完，再弹卡 ----
-			//
-			// **用户是"基于结论"决定要不要点头的**，而模型的话在这里会被掐断。
-			// 实测（hang_service 三次里两次）：诊断完全正确，
-			// 却停在「我先发起重启」——**用户在界面上看到的也是半句话**。
-			//
-			// 顺序不能反：先看到结论 → 再决定要不要授权。
-			// 而确认后的那一段已经执行完了再说就晚了。
-			//
-			// 补答失败也不影响主流程（宁可半句，不要卡住整个回合）。
-			if !preflight {
-				aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
-			}
-			// T1.1：发卡即登记原始参数——确认回来时服务端按登记的副本执行，
-			// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 handleAIChat）。
-			aiRememberPending(a.ID, a.Name, args)
-			sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
-				"text": aiToolCnName(a.Name, args)})
+				// ---- v2.9：先把话说完，再弹卡 ----
+				//
+				// **用户是"基于结论"决定要不要点头的**，而模型的话在这里会被掐断。
+				// 实测（hang_service 三次里两次）：诊断完全正确，
+				// 却停在「我先发起重启」——**用户在界面上看到的也是半句话**。
+				//
+				// 顺序不能反：先看到结论 → 再决定要不要授权。
+				// 而确认后的那一段已经执行完了再说就晚了。
+				//
+				// 补答失败也不影响主流程（宁可半句，不要卡住整个回合）。
+				if !preflight {
+					aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
+				}
+				// T1.1：发卡即登记原始参数——确认回来时服务端按登记的副本执行，
+				// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 handleAIChat）。
+				aiRememberPending(a.ID, a.Name, args)
+				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
+					"text": aiToolCnName(a.Name, args)})
 				// 把未完成的 assistant 消息保留在本地 msgs（供确认后续接），并结束本次 SSE
 				msgs[assistantIdx].ToolCalls = append(msgs[assistantIdx].ToolCalls, func() aiToolCall {
 					var t aiToolCall
@@ -799,15 +799,15 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 						// 一处改了另一处没改，徽章就会显示错误状态，
 						// 而徽章的全部价值就是「它说验了就是真验了」。
 						sseWrite(w, fl, map[string]any{
-							"type":      "verify_result",
-							"ok":        vr.Ok,
-							"verified":  vr.Verified,
-							"target":    vr.Target,
-							"msg":       vr.Msg,
-							"err_kind":  vr.ErrKind,
-							"evidence":  vr.Evidence,
-							"cls":       aiVerifyBadgeClass(vr.Ok, vr.Verified),
-							"badge":     aiVerifyBadgeText(vr.Ok, vr.Verified),
+							"type":     "verify_result",
+							"ok":       vr.Ok,
+							"verified": vr.Verified,
+							"target":   vr.Target,
+							"msg":      vr.Msg,
+							"err_kind": vr.ErrKind,
+							"evidence": vr.Evidence,
+							"cls":      aiVerifyBadgeClass(vr.Ok, vr.Verified),
+							"badge":    aiVerifyBadgeText(vr.Ok, vr.Verified),
 						})
 					}
 				}

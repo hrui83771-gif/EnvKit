@@ -153,9 +153,8 @@ func aiPreconfirmExplain(ctx context.Context, w http.ResponseWriter, fl http.Flu
 	full = append(full, aiMsg{Role: "user", Content: aiPreconfirmPrompt(cnName)})
 	// taskHint 保持与主循环一致：不带它的话，同一个问题可能匹配到不同记忆
 	//（记忆注入走 taskHint，不一致会让缓存与记忆匹配都抖动）。
-	full = append(full, aiMsg{Role: "user", Content:
-		"（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" +
-			aiHealthSnapshotFor(aiTaskHint(msgs)) + "</env_state>"})
+	full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" +
+		aiHealthSnapshotFor(aiTaskHint(msgs)) + "</env_state>"})
 
 	payload := aiPayload(full, nil, acTurn.quirkRead(), -1, false)
 	b, _ := json.Marshal(payload)
@@ -218,7 +217,7 @@ func aiPreconfirmExplain(ctx context.Context, w http.ResponseWriter, fl http.Flu
 		var ev struct {
 			Choices []struct {
 				Delta struct {
-					Content   string `json:"content"`
+					Content          string `json:"content"`
 					ReasoningContent string `json:"reasoning_content"`
 				} `json:"delta"`
 			} `json:"choices"`
