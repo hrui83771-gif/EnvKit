@@ -87,9 +87,22 @@ type Config struct {
 	Components    []Component `json:"components"`
 	AI            *AIConfig   `json:"ai,omitempty"`
 	Alert         AlertConfig `json:"alerts"`
+	// Recovery 恢复事务的两层节制参数（v3.0 T1.5）。零值 = 内置默认
+	//（窗口 10 分钟 / 12 次 / per-target 3 次）。见 txbudget.go。
+	Recovery RecoveryConfig `json:"recovery,omitempty"`
 	// UpdateURL 自版本检查地址（返回 {"version":"x.y.z","notes":"..."} 的 JSON）。
 	// 留空 = 关闭检查。无公开发布渠道时保持为空即可。
 	UpdateURL string `json:"update_url"`
+}
+
+// RecoveryConfig 恢复事务的两层节制参数（v3.0 T1.5，修 G5/G6）。
+// 两层分工见 txbudget.go：MaxActions 防"不同策略连环自动执行刷爆环境"，
+// MaxAttempts 防"同一服务反复失败反复重启"。零值 = 内置默认
+//（窗口 10 分钟 / 12 次 / per-target 3 次）。
+type RecoveryConfig struct {
+	MaxActions  int `json:"max_actions,omitempty"`  // 窗口内恢复类动作上限，0 = 12
+	WindowSecs  int `json:"window_secs,omitempty"`  // 预算窗口秒数，0 = 600
+	MaxAttempts int `json:"max_attempts,omitempty"` // per-target 连续失败上限，0 = 3
 }
 
 type CheckResult struct {

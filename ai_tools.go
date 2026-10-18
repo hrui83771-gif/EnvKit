@@ -123,6 +123,14 @@ func aiStartVerify(target string, r OpResult, wait time.Duration) OpResult {
 	auditVerify(actAI, "verify_service", target, vr)
 	ev := append(append([]string{}, r.Evidence...), vr.Evidence...)
 	if !vr.Ok {
+		// v3.0 T1.5：启动尝试的硬失败要计入连续失败计数——重试上限的
+		// 唯一事实源是 svcRecordCrash 累加的 Restarts。verifyService
+		// 只对 errKindCrash 记 crash；spawn_fail / verify_fail 这类
+		// "起来了但没证明恢复"若不计数，同一件事崩 10 次也只算 0 次，
+		// 上限永远不触发。errKindCrash 已由 verifyService 记过，不重复记。
+		if vr.ErrKind != errKindCrash {
+			svcRecordCrash(target, vr.ErrKind, firstLines(vr.Msg, 120), 0)
+		}
 		// 进程已退出这类硬证据：启动实际上没成功，必须按失败上报并带 err_kind
 		return opFail(r.Action, r.Target, vr.ErrKind, r.Msg+"；"+vr.Msg, ev...)
 	}
@@ -226,9 +234,27 @@ var aiToolRegistry = map[string]aiTool{
 				"description": "可选。仅当快照 launch.web_all 里有多个候选时才填，且必须是其中的一个；留空由 EnvKit 自行选择"},
 		}, "required": []string{"service"}},
 		Write: true,
-		Execute: func(args map[string]any) (string, error) {
-			svc, _ := args["service"].(string)
-			script, _ := args["web_script"].(string)
+	Execute: func(args map[string]any) (string, error) {
+		svc, _ := args["service"].(string)
+		script, _ := args["web_script"].(string)
+		if svc != "web" && svc != "backend" && svc != "all" {
+			return "", fmt.Errorf("service 必须是 web / backend / all")
+		}
+		// v3.0 T1.5：恢复动作入口的两层节制（plan-v3.0 §2.4，修 G5/G6）。
+		// per-target 上限防"同一服务反复失败反复重启"（Restarts 唯一事实源），
+		// 全局预算防"不同策略连环自动执行刷爆环境"。任一层拒绝即整体拒绝。
+		var targets []string
+		switch svc {
+		case "web":
+			targets = []string{grpWeb}
+		case "backend":
+			targets = []string{grpBackend}
+		default:
+			targets = []string{grpBackend, grpWeb}
+		}
+		if err := txRecoveryGate("start_service", targets...); err != nil {
+			return "", err
+		}
 			// 填了快照里没有的脚本名 → 立刻拒绝并说明，不去试。
 			// 试探本身就是风险：package.json 里可能有 deploy / migrate。
 			if s := strings.TrimSpace(script); s != "" {
@@ -351,12 +377,17 @@ var aiToolRegistry = map[string]aiTool{
 			default:
 				return "", fmt.Errorf("service 必须是 web/backend/all")
 			}
-			h, granted := beginTaskHG(name, groups, true)
-			if !granted {
-				return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
-			}
-			defer h.Done()
-			fin := auditStart(actAI, "restart_service", svc, "")
+		h, granted := beginTaskHG(name, groups, true)
+		if !granted {
+			return "", fmt.Errorf("%s", busyReason(strings.Join(groups, "+")))
+		}
+		defer h.Done()
+		// v3.0 T1.5：重启也是恢复类动作，过同一套两层节制
+		//（ groups 即目标清单：web/backend/all ）。
+		if err := txRecoveryGate("restart_service", groups...); err != nil {
+			return "", err
+		}
+		fin := auditStart(actAI, "restart_service", svc, "")
 			switch svc {
 			case "web":
 				stopByKey(scStart, "web", "web-start")

@@ -975,8 +975,17 @@ func startGuardLoop() {
 					warn(scChain, "守护", "无法在链端执行探测命令（%v），本轮跳过自动重启", nodeErr)
 					return
 				}
-				if !nodeUp {
-					warn(scChain, "守护", "定时检测发现节点未运行，自动重启链端与 WeBASE")
+			if !nodeUp {
+				// v3.0 T1.5：无人值守的自动重启同样受两层节制。
+				// node0 segfault 反复离线的根因模式就是"崩了就重启、不限次数":
+				// 没有节制的自动重启会把环境刷爆，用户看到的是通知刷屏，
+				// 而真正的故障原因没人去看。超限即熔断升级。
+				if err := txRecoveryGate("chain_autorecover", "chain"); err != nil {
+					guardMark("budget_blocked", err.Error(), false)
+					warn(scChain, "守护", "自动重启被恢复节制拒绝：%v", err)
+					return
+				}
+				warn(scChain, "守护", "定时检测发现节点未运行，自动重启链端与 WeBASE")
 					recordRecover()
 					// 守护是无人值守的自动动作，必须留痕：否则"链为什么被重启过"无从追溯
 					auditNow(actGuard, "chain_autorecover", c.SSHHost, fmt.Sprintf("port %d down", c.ChainPort), resStart, "守护检测触发")
@@ -995,21 +1004,26 @@ func startGuardLoop() {
 						if c.ChainNotify {
 							notify("链端已恢复", "节点自动重启成功并通过复验："+vr.Msg)
 						}
-					} else if vr.Ok {
-						guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
-						warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
-						auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
-						if c.ChainNotify {
-							notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
-						}
-					} else {
-						guardMark("recover", "自动恢复失败："+vr.Msg, false)
-						fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
-						auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
-						if c.ChainNotify {
-							notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
-						}
+				} else if vr.Ok {
+					guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
+					warn(scChain, "守护", "链端已拉起但复验未完成：%s", vr.String())
+					// v3.0 T1.5：恢复尝试未证明成功也要计数——
+					// Restarts 是重试上限的唯一事实源，守护的失败不记，
+					// 上限就只掐 AI 不掐守护，那正是最该掐的那一个。
+					svcRecordCrash("chain", errKindVerifyFail, firstLines(vr.Msg, 120), 0)
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复未通过复验："+vr.String())
+					if c.ChainNotify {
+						notify("链端恢复待确认", "节点已拉起但复验未通过："+vr.Msg)
 					}
+				} else {
+					guardMark("recover", "自动恢复失败："+vr.Msg, false)
+					fail(scChain, "守护", "链端自动恢复失败：%s", vr.String())
+					svcRecordCrash("chain", vr.ErrKind, firstLines(vr.Msg, 120), 0)
+					auditNow(actGuard, "chain_autorecover", c.SSHHost, "chain+webase", resFail, "自动恢复失败："+vr.String())
+					if c.ChainNotify {
+						notify("链端恢复失败", "节点自动重启未成功，请打开 EnvKit 检查")
+					}
+				}
 					first = false
 					return
 				}
