@@ -90,7 +90,7 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。
 
 | 指标 | 值 |
 |---|---|
-| 单元测试 | **414** + 判分器自检 **141** 项，全绿 |
+| 单元测试 | **481** + 判分器自检 **196** 项，全绿 |
 | 真实审计 | **1,000** 条操作，其中模型发起 618 / 用户 370（v2.4 基线时点累计） |
 | 主动复验 | 50 次（服务 28 / 链端 15 / 备份 2 / 自动恢复 3）（v2.4 时点） |
 | 边界拒绝 | 14 次越界或敏感文件拒绝，模型未尝试绕过 |
@@ -160,7 +160,7 @@ SSE 原文与对话历史原样不动——判据读的就是原文，剥错了�
 
 ```bash
 go test ./...                              # 单元测试（481 项含子测试，0 FAIL）
-python tools/recovery_selftest.py          # 判分器自检（192 项，纯离线）
+python tools/recovery_selftest.py          # 判分器自检（196 条断言，纯离线）
 node tools/cdp_verify_test.js              # 浏览器回归（需先启动 EnvKit）
 python tools/e2e_agent_test.py             # 端到端 AI 行为验收（需配置模型 API Key）
 python tools/recovery_sandbox.py --allow-writes --repeat 3   # 七维故障恢复评测（11 类注入）

@@ -82,7 +82,13 @@ def run_selftest():
                        cwd=str(ROOT), capture_output=True)
     txt = (r.stdout or b'').decode('utf-8', 'replace')
     fails = [l.strip() for l in txt.splitlines() if l.strip().startswith('FAIL')]
-    n_pass = txt.count('PASS ')
+    # **按行数断言，不按"PASS 出现次数"。**
+    #
+    # 原来是 `txt.count('PASS ')`，而详情文字里也会出现 PASS
+    # （`空 target → UNVERIFIED（不是 PASS…）`）——
+    # 于是门禁报的条数比自检自己报的**多一条**，
+    # 两个数字都"看起来对"，对不上时根本分不清谁错了。
+    n_pass = sum(1 for l in txt.splitlines() if l.strip().startswith('PASS '))
     return {'rc': r.returncode, 'pass': n_pass, 'fails': fails,
             'stderr': (r.stderr or b'').decode('utf-8', 'replace')}
 
@@ -165,6 +171,10 @@ def compute(runs):
                                  if v.get('status') == 'EVIDENCE'),
             'unverified': sum(1 for v in verdicts
                               if v.get('status') == 'UNVERIFIED'),
+            # v3.0：被产品掐断（确认卡结束本轮）单列。
+            # 与 recovery_rate.aggregate() 同口径 —— 两处口径不一致，
+            # 报告与门禁就会各说一套，而人只会信其中一个。
+            'cut': sum(1 for v in verdicts if v.get('status') == 'CUT'),
             'eligible': len(verdicts),
         }
     return out

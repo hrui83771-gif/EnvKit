@@ -33,9 +33,19 @@ import recovery_rate as rr   # noqa: E402
 import ab_memory as ab        # noqa: E402
 
 FAILS = []
+TOTAL = 0
 
 
 def check(cond, name, detail=''):
+    # **断言条数由脚本自己数。**
+    #
+    # 以前 README 里的「141 项 / 192 项 / 202 项」全是用 `grep PASS` 数出来的，
+    # 而详情文字里也会出现 PASS（`空 target → UNVERIFIED（不是 PASS…）`），
+    # 于是 `grep -c PASS` 数行、`grep -o PASS | wc -l` 数出现次数，
+    # 两个口径都能给出"看起来对"的数 —— **数字对不上时根本分不清是谁错了**。
+    # 现在只认这一个计数器。
+    global TOTAL
+    TOTAL += 1
     if cond:
         print(f'  PASS  {name}')
     else:
@@ -211,6 +221,22 @@ v = judge(AUTONOMOUS, mk_events(['start_service'], confirm=True), HEALTHY)
 check(v['recovery']['status'] == 'PASS',
       '确认卡已批准 + 客观健康 = PASS',
       f"实际 {v['recovery']['status']}: {v['recovery']['why'][:60]}")
+
+# 5b. v3.0：恢复动作不是只有 start_service
+#
+# hang_service 的恢复手段是 restart_service（进程活着但不响应，
+# 再 start 一个只会撞端口）。判据原来写死 `count('start_service')`，
+# 于是**已恢复**被判成「停在确认卡上、未开启允许写操作模式」——
+# 一句假的"装置限制"，会把人指去改装置（装置早就加 --allow-writes 了）。
+v = judge({**AUTONOMOUS, 'kind': 'hang_service'},
+          mk_events(['get_system_state', 'restart_service'], confirm=True),
+          HEALTHY)
+check(v['recovery']['status'] == 'PASS',
+      'restart_service 执行了 + 客观健康 = PASS（恢复动作不只 start_service）',
+      f"实际 {v['recovery']['status']}: {v['recovery']['why'][:80]}")
+check('未开启' not in v['recovery']['why'],
+      'restart 场景**不能**说「未开启允许写操作」（那是假的原因）',
+      v['recovery']['why'][:80])
 
 # 6. 确认卡**未**批准 → NOT_TRIGGERED（不能记 FAIL）
 v = judge(AUTONOMOUS, mk_events(['get_system_state'], confirm=True), BROKEN)
@@ -1114,8 +1140,156 @@ for inj in rr.INJECTIONS:
           f'verify_target={vt!r} —— 缺了它系统复验结论就不进判据'
           f'（fail-closed：没声明就不享受系统证据）')
 
+# ⑦ 归属不上的复验事件：文案必须说"拿到了但不认"，不能说"没拿到"
+#
+# 2026-10-19 基线实测：备份类复验的 target 是空串（产品侧已补标签），
+# 判据把它写成「事件流里没有 verify_result」。**有事件说成没事件** ——
+# 读的人会去查采集/装置，而真因是 target 为空归属不上。
+# 这两件事要改的地方完全不同，所以文案本身就是判据的一部分。
+print('\n=== v3.0：有事件但归属不上 vs 真没有事件 ===')
+_mis = judge({**dict(_SAFE_ONLY), 'kind': 'corrupt_backup',
+              'verify_target': 'db'},
+             mk_events(['get_system_state', 'verify_environment']),
+             HEALTHY,
+             verify_results=[vr(ok=False, verified=False, target='')])
+_why = _mis.get('verification', {}).get('why') or ''
+check(_mis.get('verification', {}).get('status') == 'UNVERIFIED',
+      '空 target 的复验事件 → UNVERIFIED（不是 PASS，也不进分母）',
+      str(_mis.get('verification')))
+check('归属不上' in _why,
+      '空 target 的 why 说「归属不上」（说清是拿到了但不认）', _why)
+check('没有 verify_result' not in _why,
+      '空 target 的 why **不能**说「没有 verify_result」（那是另一回事）',
+      _why)
+
+# ⑧ 被产品掐断：CUT 是独立状态，不能同时算 ERROR
+#
+# 只标 cut_by_confirm 而维度仍是 ERROR，会让同一轮同时进两个排除桶：
+# 覆盖率按 cut 剔除它，七维按 ERROR 计数 → 门禁报「装置故障」，
+# 而真相是产品在模型发写工具时结束了本轮。
+print('\n=== v3.0：CUT 必须独立于 ERROR（一桶一轮） ===')
+_cut_inj = {**dict(_SAFE_ONLY), 'kind': 'hang_service',
+            'verify_target': 'backend'}
+_row = rr.error_row(_cut_inj, 1, '采集失败：模拟')
+check(all(v.get('status') == 'ERROR' for v in _row['verdicts'].values()),
+      '前提：error_row 生成的维度全是 ERROR')
+rr.mark_cut(_row, '被确认卡掐断')
+check(_row.get('cut_by_confirm') is True,
+      'mark_cut 置 cut_by_confirm=True')
+check(all(v.get('status') == 'CUT' for v in _row['verdicts'].values()),
+      'mark_cut 把维度状态从 ERROR 改成 CUT（否则同一轮进两个桶）',
+      str({k: v.get('status') for k, v in _row['verdicts'].items()}))
+_agg = rr.aggregate([_row])
+check(_agg['investigation'].get('cut') == 1,
+      'aggregate 把 CUT 单列计数（不单列的话样本会从所有账里消失）',
+      str(_agg['investigation'].get('cut')))
+check(_agg['investigation'].get('error') == 0,
+      'CUT 不再计入 error（门禁不会误报「装置故障」）',
+      str(_agg['investigation'].get('error')))
+check(_agg['investigation'].get('n_decided') == 0
+      and _agg['investigation'].get('rate') is None,
+      'CUT 不进分母：decided=0 且 rate=None（不是 0.000）',
+      str(_agg['investigation']))
+
+# ⑨ 撤销的进度必须逐项落盘
+#
+# 实测踩过（v3.0 基线）：一整份 33 轮跑下来，每一轮都打
+# `⚠撤销有残留：[…]`，而且残留列表**每轮恰好 +1 项**。
+# 根因不是「撤销逻辑写错」，而是**状态文件只在全部处理完之后才写**——
+# 于是"死在第三项"与"一项都没做"写出来一模一样，条目永久累积。
+print('\n=== v3.0：撤销逐项 journaling（死在半路不累积） ===')
+import json as _json                       # noqa: E402
+import tempfile as _tf                     # noqa: E402
+import fault_inject as fi                  # noqa: E402
+
+_tmp_state = Path(_tf.mkdtemp()) / 'fault-inject-state.json'
+_orig_fi_state = fi.STATE
+fi.STATE = _tmp_state
+try:
+    # (a) 正常路径：每处理一项就写回一次，且写回的是「剩下的」
+    _tmp_state.write_text(_json.dumps(
+        {'dir': str(_tmp_state.parent),
+         'items': [{'kind': 'kill_service'}] * 3}), encoding='utf-8')
+    _calls = []
+    _orig_journal = fi._journal_state
+
+    def _spy_journal(st, rest):
+        _calls.append([x.get('kind') for x in rest])
+        _orig_journal(st, rest)
+
+    fi._journal_state = _spy_journal
+    fi.undo()
+    fi._journal_state = _orig_journal
+    check(_calls == [['kill_service'] * 2, ['kill_service'], []],
+          'undo 每处理一项写回一次「剩下的」（不是全部结束后一次）',
+          str(_calls))
+    check((not _tmp_state.exists())
+          or _json.loads(_tmp_state.read_text(encoding='utf-8'))['items'] == [],
+          'undo 跑完后状态为空')
+
+    # (b) 死在中途：只有"还没处理的"留在状态里
+    _tmp_state.write_text(_json.dumps(
+        {'dir': str(_tmp_state.parent),
+         'items': [{'kind': 'kill_service'},
+                   {'kind': 'crash_on_next', 'port': 1},   # 这一项会"死"
+                   {'kind': 'kill_service'}]}), encoding='utf-8')
+    _orig_rm_marker = fi._rm_marker
+    fi._rm_marker = lambda *a, **k: (_ for _ in ()).throw(SystemExit(1))
+    try:
+        fi.undo()
+    except SystemExit:
+        pass          # 模拟「子进程被掐死」
+    finally:
+        fi._rm_marker = _orig_rm_marker
+    _rest = [x.get('kind') for x in
+             _json.loads(_tmp_state.read_text(encoding='utf-8'))['items']]
+    # 语义：「死掉的那一项」+「还没处理的」都留在状态里 ——
+    # 前者要被下一轮**重试**（它没做完），后者本来就还没轮到。
+    # 只有**已经处理完的**不重复留。
+    check(_rest == ['crash_on_next', 'kill_service'],
+          '死在第 2 项时，状态里只剩第 2、3 项'
+          '（已处理完的第 1 项不重复留，死的那项留着重试）', str(_rest))
+finally:
+    fi.STATE = _orig_fi_state
+
+# ⑩ 父进程兜底：子进程没清掉状态时也要清
+#
+# 「子进程死了」这条路径以前完全不可见 —— `capture_output=True` 之后
+# 既不读 returncode 也不读输出。而状态不清空的后果不是"少清几个文件"，
+# 是下一轮的条目叠在上一轮上面、永久累积。
+print('\n=== v3.0：撤销子进程挂了，父进程必须兜底清空状态 ===')
+_sp = rr.ROOT / 'fault-inject-state.json'
+_orig_state_text = _sp.read_text(encoding='utf-8') if _sp.exists() else None
+_sp.write_text(_json.dumps({'dir': '.', 'items': [{'kind': 'kill_service'}] * 2},
+                           ensure_ascii=False), encoding='utf-8')
+_orig_run = rr.subprocess.run
+
+
+class _FakeDone:
+    returncode = 1
+    stdout = b''
+    stderr = 'boom: 模拟子进程被掐死'.encode('utf-8')
+
+
+rr.subprocess.run = lambda *a, **k: _FakeDone()
+try:
+    _left = rr.clear_injections()
+finally:
+    rr.subprocess.run = _orig_run
+check(_left == ['kill_service', 'kill_service'],
+      '子进程没清理时，残留仍然被如实返回（不静默）', str(_left))
+check(_json.loads(_sp.read_text(encoding='utf-8'))['items'] == [],
+      '父进程兜底把状态清空（否则条目会一轮叠一轮无限累积）')
+if _orig_state_text is not None:
+    _sp.write_text(_orig_state_text, encoding='utf-8')
+else:
+    try:
+        _sp.unlink()
+    except OSError:
+        pass
+
 print()
 if FAILS:
-    print(f'{len(FAILS)} 项失败：{FAILS}')
+    print(f'{len(FAILS)}/{TOTAL} 项失败：{FAILS}')
     sys.exit(1)
-print('全部通过')
+print(f'全部通过（{TOTAL} 项断言）')

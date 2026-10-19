@@ -227,12 +227,23 @@ def verify_seeded(expected=1):
 # 而它作用于沙箱里的一次性服务（eval/fixtures/sandbox-backend，端口 45311），
 # 杀掉重起都不影响用户任何东西。
 #
+# v3.0 补：**按类追加**（`chat(extra_writes=…)`）。
+# `hang_service` 的恢复手段是 `restart_service`，而它不在这个全局白名单里——
+# 于是那一类 3 轮里 2 轮卡在确认卡上、被记成 CUT（无样本）。
+# 「声明可自主恢复、却禁掉恢复手段」的配置跑多少轮都只会得到无样本，
+# 所以由 `recovery_rate.INJECTIONS[*]['allowed_writes']` 按类声明所需工具。
+# **全局白名单不因此变宽**：不声明就不批。
+#
 # **绝不放** db_backup / db_restore / apply_whitelist / cleanup_processes
 # —— 那些碰用户真实数据与进程。
 AUTO_APPROVE_WHITELIST = {
     'start_service',    # 沙箱的一次性服务
     # restart_service 不放：它内部是 stop+start，沙箱里用 start_service 就够，
     # 多放一个就多一个能让模型在真实环境里乱叫的机会。
+    # ——v3.0 修正：hang_service **只能**靠 restart_service 救
+    #（进程活着但不响应，再 start 一个只会撞端口）。
+    # 所以它改由 `INJECTIONS[*]['allowed_writes']` 按类追加，
+    # 而不是塞进这个全局集合。
 }
 
 
@@ -396,10 +407,11 @@ def chat_once(messages, confirm=None, timeout=300):
     return text, events, time.time() - t0
 
 
-def chat(messages, timeout=300, allow_writes=False):
+def chat(messages, timeout=300, allow_writes=False, extra_writes=()):
     """发一轮对话，返回 (文本, 全部事件, 总耗时秒)。
 
-    allow_writes=True 时自动批准确认卡（**仅限 AUTO_APPROVE_WHITELIST**）。
+    allow_writes=True 时自动批准确认卡（**仅限 AUTO_APPROVE_WHITELIST**
+    加上 `extra_writes` 里按类声明的工具）。
 
     ## 为什么要这个开关
 
@@ -433,14 +445,18 @@ def chat(messages, timeout=300, allow_writes=False):
     text, events, _ = chat_once(messages, None, timeout)
 
     if allow_writes:
+        # 本轮的批准集合 = 全局白名单 ∪ 这一类声明的额外工具。
+        # **不声明就不批**：extra_writes 由 `INJECTIONS[*]['allowed_writes']` 来，
+        # 空集合时行为与 v2.x 完全一致。
+        _approved_tools = set(AUTO_APPROVE_WHITELIST) | set(extra_writes or ())
         # 最多连点 3 次：一次确认后模型可能又想第二个写操作
         for _ in range(3):
             pending = _pending_confirm(events)
             if not pending:
                 break
             tool, args, tid = pending
-            if tool not in AUTO_APPROVE_WHITELIST:
-                # 不在白名单：停在这里，如实记录。
+            if tool not in _approved_tools:
+                # 不在批准范围：停在这里，如实记录。
                 # **静默批准会让评测变成它自己也不信任的东西。**
                 break
             confirm = {'tool_call_id': tid, 'tool': tool,

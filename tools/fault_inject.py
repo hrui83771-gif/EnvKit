@@ -852,6 +852,21 @@ def inject_fake_listen(state):
     if not _port_free(svc_port):
         _stop_sandbox_backend(base, svc_port)
 
+    # **停完要等端口真的空出来。**
+    #
+    # 实测（v3.0 基线）：3 次里 1 次报
+    # 「进程起了但端口 45311 没被占住」——
+    # `_stop_sandbox_backend` 返回时旧进程可能还没走完 socket 的收尾，
+    # 于是占位脚本自己 bind 失败、立刻退出，
+    # 而我们的确认循环看到"端口还是空的"，就把它记成注入失败。
+    #
+    # 这一条最后落进报告是 **ERROR 桶**（装置故障），
+    # 而它真正的成因是"我们自己没等"，不是被测对象的问题。
+    for _ in range(50):                    # 最多 5 秒
+        if _port_free(svc_port):
+            break
+        time.sleep(0.1)
+
     s = socket.socket()
     try:
         s.bind(('127.0.0.1', svc_port))
@@ -882,19 +897,41 @@ def inject_fake_listen(state):
     )
     f = Path(state['dir']) / f'fakelisten_{svc_port}.py'
     f.write_text(code, encoding='utf-8')
-    proc = subprocess.Popen([sys.executable, str(f)],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(40):
-        time.sleep(0.1)
-        s2 = socket.socket()
+    # **占位进程的 stderr 不能丢。**
+    #
+    # 第一版写的是 DEVNULL，于是"它为什么没占住端口"完全不可见——
+    # 只能看到一个结果：注入失败。而排查时必须重新造一遍现场。
+    # 落盘成本几乎为零，换的是"失败自带原因"。
+    errlog = Path(state['dir']) / f'fakelisten_{svc_port}.err'
+    proc = None
+    for _attempt in range(2):              # 一次重试：第一次可能撞上端口收尾
+        errf = open(errlog, 'wb')
+        proc = subprocess.Popen([sys.executable, str(f)],
+                                stdout=subprocess.DEVNULL, stderr=errf)
+        errf.close()
+        for _ in range(40):
+            time.sleep(0.1)
+            s2 = socket.socket()
+            try:
+                s2.bind(('127.0.0.1', svc_port))
+                s2.close()
+            except OSError:
+                break          # 端口被占住了 = 成功
+        else:
+            proc.terminate()
+            proc = None
+            time.sleep(0.3)
+            continue
+        break
+    if proc is None:
         try:
-            s2.bind(('127.0.0.1', svc_port))
-            s2.close()
+            detail = errlog.read_text(encoding='utf-8', errors='replace')[-400:]
         except OSError:
-            break
-    else:
-        proc.terminate()
-        raise SystemExit(f'注入失败：进程起了但端口 {svc_port} 没被占住（已终止）')
+            detail = '(读不到 stderr)'
+        raise SystemExit(
+            f'注入失败：占位监听者没能占住端口 {svc_port}（已重试一次并终止）。\n'
+            f'它的 stderr：{detail.strip() or "(空)"}\n'
+            f'脚本：{f}')
 
     state['items'].append({'kind': 'fake_listen', 'port': svc_port,
                            'pid': proc.pid, 'path': str(f)})
@@ -1178,9 +1215,32 @@ def _rm_marker(name, label):
                 pass
     if hit:
         print(f'  已删除{label}标记文件：{", ".join(hit)}')
-    else:
+    elif os.environ.get('ENVKIT_UNDO_VERBOSE'):
+        # **默认不打印「未找到」。**
+        #
+        # 一份累积了几十条的状态文件会把撤销输出灌成 30 多行
+        # 「未找到XX标记文件（扫了 4 个目录）」—— 而这几行
+        # **不携带任何需要人动作的信息**（没找到 = 本来就没有）。
+        # 真正要看的只有两种：删掉了什么、以及还有什么没删掉。
+        # 噪音把后者淹掉，就等于没有报警。
         print(f'  未找到{label}标记文件（name={name}，扫了 {len(dirs)} 个目录）')
     return hit
+
+
+def _pid_alive(pid):
+    """进程还活着吗。`_kill_pid` 用它区分「杀失败」与「本来就没有」。"""
+    if not pid:
+        return False
+    if os.name == 'nt':
+        r = subprocess.run(['tasklist', '/FI', f'PID eq {pid}', '/NH'],
+                           capture_output=True)
+        # tasklist 输出是 GBK，但 pid 是 ASCII 数字，只在里面找数字串即可
+        return str(pid) in r.stdout.decode('gbk', 'replace')
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except OSError:
+        return False
 
 
 def _kill_pid(pid):
@@ -1200,7 +1260,20 @@ def _kill_pid(pid):
         # 只看 returncode，不解析输出。
         r = subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'],
                            capture_output=True)
-        return r.returncode == 0
+        if r.returncode == 0:
+            return True
+        # **「进程早就没了」不是失败。**
+        #
+        # 两个平台曾经的语义不一致：POSIX 分支把 ProcessLookupError 当成功
+        # （注释就写着"已经没了，视为成功"），Windows 分支却直接
+        # `return r.returncode == 0` —— 于是**同一个"已经清干净了"的状态，
+        # 在 Windows 上被记成失败**。
+        #
+        # v3.0 实测后果：一整份状态文件里 12 项报「无法终止 pid=xxx」，
+        # 全是几个小时前就跑完的占位进程。而 `undo()` 的失败计数
+        # 本该是"还有东西没收拾干净"的报警信号 ——
+        # 被这些假失败灌满之后，**真失败就看不见了**。
+        return not _pid_alive(pid)
     import signal
     try:
         os.kill(pid, signal.SIGTERM)
@@ -1239,6 +1312,29 @@ def _kill_and_wait_port(pid, port, label):
     return True
 
 
+def _journal_state(st, rest):
+    """把「还没撤销的条目」写回状态文件。
+
+    ## 为什么不是「循环结束再统一写」
+
+    因为循环**可能结束不了** —— 删文件那一步在有些环境里要人工确认，
+    非交互子进程直接被掐。而 `main()` 原本只在注入成功后统一写一次状态，
+    `undo()` 只在**全部处理完**之后清一次状态，
+    于是「死在第三项」与「一项都没做」写出来的状态文件一模一样。
+
+    实测后果：一整份基线跑完，残留列表**每轮 +1 项**，
+    堆到 30 多条、全是几小时前就跑完的、乃至指向已删除沙箱的条目。
+
+    > 一个只在"一切顺利"时才推进的进度记录，等于没有进度记录。
+    """
+    try:
+        STATE.write_text(json.dumps({'dir': st.get('dir', ''), 'items': rest},
+                                    ensure_ascii=False, indent=2),
+                         encoding='utf-8')
+    except OSError:
+        pass    # 写不进去也不能中断撤销本身
+
+
 def undo():
     """撤销所有注入。**返回没能处理干净的条目数。**
 
@@ -1258,13 +1354,34 @@ def undo():
       2. 再试删文件（失败就算了，进程已经清掉）
       3. 最后**无条件**把状态清空 —— 状态文件删不掉就**覆盖成空**，
          `load_state()` 读到空 items 就等于撤销完成。
+
+    ## ⚠ 「最后清空」只有在**能走到最后**时才成立
+
+    v3.0 实测踩过：一整份基线跑下来，每一轮都打
+    `⚠撤销有残留：[…]`，而且残留列表**每轮恰好 +1 项** ——
+    说明每次 `undo()` 都死在半路，一条都没清掉。
+
+    死因是第 2 步：删沙箱里的文件在某些环境里要人工确认，
+    非交互子进程直接被掐（`except OSError` 救不了，进程是被杀的）。
+    而「最后无条件清空」在第 3 步 —— **永远走不到**。
+
+    **状态文件的写回点也在最后**（`main()` 里统一写），
+    于是「死在半路」与「什么都没做」在状态文件上完全无法区分。
+    这就是它能无限累积的原因：每一轮的条目都叠在上一轮上面。
+
+    修法：**逐项 journaling** —— 每处理完一项，就把「还没处理的」
+    写回状态文件。死在半路最多丢一项的清理记录，不会累积。
+    再加上 `recovery_rate.clear_injections()` 的父进程兜底
+    （子进程死了也要把状态清空并**把原因打出来**），
+    这条链上任何一环挂掉都不会再变成"静默累积"。
     """
     if not STATE.exists():
         print('没有注入记录，无需撤销')
         return 0
     st = json.loads(STATE.read_text(encoding='utf-8'))
-    done, failed = 0, 0
-    for it in st.get('items', []):
+    items = list(st.get('items', []))
+    done, failed, skipped = 0, 0, 0
+    for idx, it in enumerate(items):
         k = it.get('kind')
         try:
             if k == 'hold_port':
@@ -1336,8 +1453,15 @@ def undo():
                         print(f'  ! {p.name} 当前 {len(raw)} 字节 < 记录的 {n}，'
                               f'疑似被其他进程改写，**不盲目截断**')
                 else:
-                    failed += 1
-                    print(f'  ! 无法还原 stale_log_ok：{p} 不存在或未记录原长度')
+                    # **沙箱已经拆了 = 这条记录本来就不用还原。**
+                    #
+                    # 原来记成 failed，于是一份跨了几个沙箱的状态文件
+                    # 会报出五六条「无法还原」，而它们指向的目录
+                    # 早在拆沙箱时就没了 —— 那不是失败，是**目标已经不存在**。
+                    # 判据：「文件不在」应当静默跳过；
+                    #       「文件在但改不动」才是失败。
+                    skipped += 1
+                    print(f'  - 跳过 stale_log_ok：{p.name} 已不存在（沙箱已拆）')
             elif k == 'fake_listen':
                 # 杀掉我们造的占位进程 + 删脚本（它是我们造的垃圾，必须清理）
                 if _kill_and_wait_port(it.get('pid'), it.get('port'), '假监听者'):
@@ -1349,6 +1473,13 @@ def undo():
                 if sp and Path(sp).exists():
                     try:
                         Path(sp).unlink()
+                    except OSError:
+                        pass
+                # 占位进程的 stderr 日志（见 inject_fake_listen）
+                sp_err = Path(sp).with_suffix('.err') if sp else None
+                if sp_err and sp_err.exists():
+                    try:
+                        sp_err.unlink()
                     except OSError:
                         pass
             elif k == 'crash_on_next':
@@ -1396,8 +1527,9 @@ def undo():
                     done += 1
                     print(f'  已还原沙箱数据库名 = {old_db}')
                 else:
-                    failed += 1
-                    print(f'  ! 无法还原 db_down：{p} 不存在或未记录原库名')
+                    skipped += 1
+                    print(f'  - 跳过 db_down：{p.parent.name}\\config.json 已不存在'
+                          f'（沙箱已拆）')
             elif k == 'kill_service':
                 # **刻意什么都不做。**
                 #
@@ -1407,16 +1539,62 @@ def undo():
                 #
                 # 这一点与 hold_port 相反：占位进程是我们造的垃圾，
                 # 必须清理；沙箱服务是**被测对象**，必须留着。
-                print(f'  kill_service 不做撤销：被测服务保持"已死"状态，'
-                      f'（拉起来是 AI 的活，undo 替它做就测不到自主恢复了）'
-                      f'  拆沙箱用 python tools/sandbox.py --destroy')
+                #
+                # **一行就够。** 这段解释原来的版本每次都整段打印出来，
+                # 而一份状态文件里 kill_service 往往有 3 条 ——
+                # 于是撤销输出里 9 行是同一句话，把
+                # 「已删除慢启动标记文件：…」这种真要看的行挤没了。
+                print(f'  kill_service：不拉起（拉起是 AI 的活）')
         except Exception as e:
             # 单项失败不能让整个撤销中断——中断会留下更脏的现场。
             failed += 1
             print(f'  !撤销{k} 失败：{e}')
-    # 清掉占位脚本
+        # **逐项 journaling。**
+        #
+        # 只把「还没处理的」写回去：死在半路时，已经处理过的条目
+        # 不会在下一轮被当成"还活着的东西"再清一遍，
+        # 更重要的是**不会累积**。
+        _journal_state(st, items[idx + 1:])
+    # ---- 状态文件收尾 ----
+    #
+    # journaling 之后，走到这里时文件内容**已经是空的**（`items: []`）。
+    # 所以「删掉它」不再是正确性需要，只是整洁需要 ——
+    # 而删除恰恰是唯一可能被安全层拦下、并连累整个子进程的一步
+    # （v3.0 冒烟实测：每轮都打 `撤销子进程异常退出 rc=1`，
+    #   真正的"失败"只是一个空文件没删掉）。
+    #
+    # **能省掉的赌注就省掉**：内容已空时不再尝试删除，
+    # 只把它当"空记录"留着；下一次 `load_state()` 读到的就是干净状态。
+    # 只有「还有条目」时才真的需要把文件覆盖成空（删不掉也没关系）。
+    if STATE.exists():
+        try:
+            _cur = json.loads(STATE.read_text(encoding='utf-8')).get('items') or []
+        except Exception:
+            _cur = None           # 读不出来 = 需要覆盖成空
+        if _cur:
+            try:
+                STATE.write_text(json.dumps(
+                    {'dir': st.get('dir', ''), 'items': []},
+                    ensure_ascii=False, indent=2), encoding='utf-8')
+                print('  ! 状态里仍有未处理的条目，已覆盖为空'
+                      '（不等价于清理成功，见上面的失败项）')
+            except OSError:
+                pass
+    print(f'撤销完成：{done} 项成功'
+          + (f'，{skipped} 项跳过（目标已随沙箱消失）' if skipped else '')
+          + (f'，{failed} 项失败' if failed else ''))
+    # ---- 最后：清掉占位脚本（**非必要收尾，放在总结之后**）----
+    #
+    # 顺序是刻意的。删文件是整条链上**唯一可能被外部策略拦下、
+    # 并且是"进程被杀"而不是"抛异常"** 的一步（`except OSError` 救不了）。
+    # 放在总结之前的话，一次被拦就会：
+    #   · 让 call 方看到 rc=1，误以为撤销失败
+    #   · 把已经打印出来的"N 项成功"截断
+    # 而它删的只是一个我们自己造的空壳脚本 —— 删不掉不影响正确性
+    # （占位进程已终止、端口已释放、状态已清空）。
+    # **影响正确性的步骤在前，能失败的收尾在最后。**
     d = Path(st.get('dir', ''))
-    if d.exists():
+    if d.is_dir():
         for f in d.glob('hold_*.py'):
             try:
                 f.unlink()
@@ -1427,25 +1605,6 @@ def undo():
                 d.rmdir()
         except OSError:
             pass
-    try:
-        STATE.unlink()
-    except OSError:
-        pass
-    # **删不掉就覆盖成空**。
-    #
-    # 关键洞察：**「状态文件存在」本身就是问题**——
-    # `load_state()` 读到旧 items 就会以为那些进程还活着。
-    # 把内容清空，几何上等价于「撤销完成」，
-    # 而且**不需要任何删除权限**。
-    if STATE.exists():
-        try:
-            STATE.write_text(json.dumps({'dir': st.get('dir', ''), 'items': []},
-                                        ensure_ascii=False, indent=2),
-                             encoding='utf-8')
-            print('  状态文件删不掉，已覆盖为空（等价于撤销完成）')
-        except OSError:
-            pass
-    print(f'撤销完成：{done} 项成功' + (f'，{failed} 项失败' if failed else ''))
     return failed
 
 
@@ -1458,6 +1617,13 @@ def load_state():
         # 实测踩过：fake_listen 连着 3 次全失败就是这个。
         # 症状很像「注入逻辑写错了」，而它只是「目录不在了」。
         d = Path(st.get('dir') or (STATE.parent / 'fault-tmp'))
+        # **`.` / 空串不是目录记录**，是"没记"。
+        #
+        # 踩过：手工/测试写入过 `{'dir': '.'}` 之后，注入器的落点
+        # 变成了仓库根 —— 占位脚本 `hold_*.py` 直接写进源码目录，
+        # 而它看起来完全正常（注入照样成功）。
+        if str(st.get('dir') or '').strip() in ('', '.'):
+            d = STATE.parent / 'fault-tmp'
         d.mkdir(parents=True, exist_ok=True)
         st['dir'] = str(d)
         return st

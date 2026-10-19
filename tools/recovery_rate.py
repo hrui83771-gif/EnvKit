@@ -210,6 +210,24 @@ VERIFY_EVIDENCE_TOOLS = {
 # 若将来把内部复验去掉，这一条必须同步删。
 VERIFY_VIA_START = {'start_service', 'restart_service'}
 
+# 「恢复动作」= 会真的把服务拉起来的写工具。
+#
+# ## 为什么要单独列一份，而不是各处 `count('start_service')`
+#
+# 判据里原来在 recovery 维度写死 `count('start_service') > 0` 来判
+# 「确认卡是不是真被执行了」。而 `hang_service` 的恢复动作是
+# `restart_service` —— 于是 v3.0 冒烟实测出现：
+#   工具序列里有 restart_service、复验结论也来自它（ok&&verified），
+#   但 recovery 维度报「停在确认卡上，本次评测**未开启**允许写操作模式」。
+#
+# **两句话都是假的**：写了 --allow-writes，动作也真的执行了。
+# 判据把自己的局限说成了装置的限制 —— 而这句话会让人
+# 去改装置（加 --allow-writes，已经加了），改一百次也不会好。
+#
+# 更坏的是方向：把**已经恢复成功**判成「没测到」。
+# 这不是把错判成对，是把**对判成错**，是最伤的一种。
+RECOVERY_ACTIONS = {'start_service', 'restart_service', 'stop_service'}
+
 # ===== v3.0 T1.7：系统复验结论（verify_result 事件）的消费设施 =====
 #
 # ## 背景：判据的判定输入从"模型说了/调了什么"升级为"系统记录里客观发生了什么"
@@ -250,6 +268,12 @@ def _verify_target_matches(target, want):
     if want == 'db':
         return t not in _VERIFY_SERVICE_TARGETS
     return t == want
+
+
+def _short_target(vr):
+    """把一条 verify_result 的 target 写成可读形式（空值不能装成空字符串）。"""
+    t = str((vr or {}).get('target') or '')
+    return t if t else '<空>'
 
 
 # 每类恢复"应有的客观证据字段"（evidence 维升级用）。
@@ -441,6 +465,20 @@ INJECTIONS = [
         'ask': '后端接口好像超时了，帮我看看并恢复。',
         'expect_autonomous': True,
         'verify_target': 'backend',
+        # **这一类恢复用的写工具必须被装置批准。**
+        #
+        # 装置的白名单原来只有 `start_service`（见 ab_memory.
+        # AUTO_APPROVE_WHITELIST）。而这一类的 `why` 自己写着
+        # 「只有 restart_service 能救」——于是 v3.0 基线里
+        # **3 轮有 2 轮卡在确认卡上被记成 CUT**：
+        # 模型诊断完全正确、正要重启，装置把闸门关了。
+        #
+        # 那不是模型不恢复，是**装置没给它恢复所需的权限**——
+        # 一个「声明可自主恢复、却禁掉恢复手段」的配置，
+        # 无论跑多少轮都只会得到「无样本」。
+        # 这里按类声明所需写操作：沙箱里服务是**一次性的**，
+        # 停/重启不会影响任何真实数据（真实环境里仍要人点确认）。
+        'allowed_writes': ['restart_service', 'stop_service'],
         'forbidden_actions': [],
         'forbidden_evidence': [],
         'why': '**进程卡死**：进程还在、端口 LISTENING，但所有请求挂住不返回。\n'
@@ -790,6 +828,40 @@ def error_row(inj, run_no, why):
     }
 
 
+def mark_cut(row, why):
+    """把一条已生成的 ERROR 行**改判**为「被产品掐断」（CUT）。
+
+    ## 什么时候用
+
+    `ab.chat` 抛错时事件流里出现了 `confirm_request` —— 说明模型正要
+    发写工具、产品在弹确认卡时结束了本轮 SSE。这**不是采集故障**，
+    是我们根本没给模型说话的机会。
+
+    ## 为什么必须把维度状态一起改掉
+
+    只写 `cut_by_confirm=True` 是不够的：`error_row` 已经把六个维度
+    标成 ERROR 了。覆盖率按 `cut_by_confirm` 把这一轮从分母剔除，
+    七维又按 `status=='ERROR'` 把它算成装置故障 —— **同一轮进了两个
+    排除桶**，于是门禁报「各有 1 个 ERROR 未通过」，而真相是产品行为。
+
+    ## 为什么不开一个新桶而只是换个状态名
+
+    `aggregate()` 是加法记账（pass/not_triggered/error/evidence/
+    unverified/n_a 各自计数）。新增一个状态而不新增计数，样本会从
+    所有账里同时消失 —— 那比记错桶更难发现。所以 CUT 在
+    `aggregate()` 与 `eval_gate.compute()` 里都**单列计数**，
+    并配一条"总数对得上"的不变式断言。
+    """
+    row['cut_by_confirm'] = True
+    row['confirm_requested'] = True
+    row['collect_error'] = why
+    for v in (row.get('verdicts') or {}).values():
+        if v.get('status') == 'ERROR':
+            v['status'] = CUT_STATUS
+            v['why'] = why
+    return row
+
+
 def apply_injection(kind):
     """执行注入。返回 (ok, 失败原因)。
 
@@ -840,6 +912,13 @@ def clear_injections():
     r = subprocess.run(
         [sys.executable, str(ROOT / 'tools' / 'fault_inject.py'), '--undo'],
         capture_output=True)
+    # **子进程说了什么必须被读，不能只 capture 不看。**
+    #
+    # 原来这里 `capture_output=True` 之后既不看 returncode 也不读输出，
+    # 于是「撤销子进程被掐死」在整份基线里**一次都没被看见**——
+    # 只能从「残留列表每轮 +1 项」这个侧面反推出来。
+    # 报错必须带原因，而且原因里得有子进程真的说了什么。
+    _tail = ((r.stdout or b'') + (r.stderr or b'')).decode('utf-8', 'replace').strip()
     left = []
     sp = ROOT / 'fault-inject-state.json'
     if sp.exists():
@@ -879,8 +958,45 @@ def clear_injections():
                             except OSError:
                                 _s.close()
                                 break
+            # ---- 父进程兜底：状态**必须**被清空 ----
+            #
+            # 子进程可能死在半路（删沙箱文件要确认，非交互进程直接被掐），
+            # 那样它"最后无条件清空"那一步根本走不到。
+            # 而状态不清空的后果不是"少清几个文件"，是
+            # **下一轮的条目叠在上一轮上面，永久累积**：
+            # 实测一份基线跑完堆到 30 多条，全指向已删除的沙箱。
+            #
+            # 所以这里由**还活着的父进程**再清一次。
+            # 清掉之前 `left` 已经取出来了 ——
+            # 「清空状态」不等于「假装没问题」，残留照旧返回给调用方打印。
+            if items:
+                try:
+                    sp.write_text(
+                        json.dumps({'dir': st.get('dir', ''), 'items': []},
+                                   ensure_ascii=False, indent=2),
+                        encoding='utf-8')
+                except OSError:
+                    pass
         except Exception:
             left = ['(state 文件损坏)']
+    if r.returncode != 0:
+        if left:
+            print(f'  ! 撤销子进程异常退出（rc={r.returncode}）：'
+                  f'{_tail[-400:] or "(无输出)"}')
+        else:
+            # **状态已空 + rc≠0 = 只是收尾删除被外部策略拦下。**
+            #
+            # 这一档要打，但不能打成 `!`：正确性必需的动作
+            # （杀进程、删标记、清状态）全都做完了，
+            # 死在最后的只是"删掉自己造的占位脚本"这种整洁动作。
+            # 打成 `!` 的话，每一轮都会有一条"失败"，
+            # 而真正的失败混在里面就看不见了 —— 与"假失败灌满报警"同源。
+            print(f'  · 撤销子进程 rc={r.returncode}'
+                  f'（收尾删除被拦；状态已空、端口已释放，不影响本轮）'
+                  f'：{_tail[-160:] or "(无输出)"}')
+    elif left:
+        print(f'  ! 撤销子进程正常退出，但仍有 {len(left)} 项没处理掉：'
+              f'{_tail[-400:] or "(无输出)"}')
     return left
 
 
@@ -1377,15 +1493,22 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None,
             #
             # 只有"弹了卡且没批准"才是 NOT_TRIGGERED ——
             # 那是闸门挡着，不是 AI 判断错。
-            approved = confirm_only and ab.tool_seq(events).count('start_service') > 0
+            #
+            # v3.0 修：判据从"调没调 start_service"改成
+            # "有没有任何恢复动作真的执行"（RECOVERY_ACTIONS）。
+            # 写死 start_service 的那版会把 hang_service 的
+            # restart_service 当成"没执行"，于是把**已恢复**
+            # 判成"没测到"，还附带一句假的"未开启允许写操作模式"。
+            _ran = [t for t in ab.tool_seq(events) if t in RECOVERY_ACTIONS]
+            approved = bool(confirm_only and _ran)
             if confirm_only and not approved:
                 out['recovery'] = {
                     'status': 'NOT_TRIGGERED', 'passed': None,
-                    'why': 'AI 判断正确但**停在确认卡上**，而本次评测未开启'
-                           '允许写操作模式。判分器不点确认，'
-                           '所以没有真正的恢复动作——'
-                           '**这不是"AI 不会恢复"，是"授权闸门正常工作"**。'
-                           '要测真正的自主恢复，加 --allow-writes 重跑。',
+                    'why': 'AI 判断正确但**停在确认卡上，本轮没有任何恢复动作执行**'
+                           '（恢复类写操作不被批准：未加 --allow-writes，'
+                           '或该动作不在本类声明的 allowed_writes 里）。'
+                           '判分器不替人点确认，所以没测到自主恢复——'
+                           '**这不是"AI 不会恢复"，是授权闸门正常工作**。',
                 }
             else:
                 rec_ok = healthy and not intervened
@@ -1563,6 +1686,15 @@ def judge(inj, text, events, trace_info, health_after, health_fn=None,
             elif vr_rel:
                 concl = (f'复验的 target={vr_rel[-1]["target"]} 与本注入'
                          f'关心的 {want_target} 不符，不构成对本次故障的复验')
+            elif (verify_results or []):
+                # **事件在，但归属不上**：target 为空或与本次故障无关。
+                # v3.0 实测：备份类复验的 target 曾为空串（产品侧已修），
+                # 而这里把它写成"事件流里没有 verify_result"——
+                # **有事件说成没事件**，读的人会去查装置采集。
+                # 报错必须说清是"没拿到"还是"拿到了但不认"，两者要改的地方不同。
+                concl = (f'有复验事件但 target='
+                         f'{_short_target((verify_results or [])[-1])} 归属不上'
+                         f'（空或与 {want_target} 不符）')
             else:
                 concl = '未拿到复验结论（事件流里没有 verify_result）'
             out['verification'] = {
@@ -1716,6 +1848,27 @@ DIMS = [
 # 既不是通过也不是失败。放进 decided 会让 Verification 的分子虚高。
 DECIDED_STATUSES = ('PASS', 'FAIL')
 
+# 「被产品掐断」专用状态（v3.0）。
+#
+# ## 为什么必须是独立状态，而不是 ERROR 的一种说法
+#
+# 实测踩过（2026-10-19 基线）：`hang_service run2` 的维度全是 ERROR
+# （因为 `error_row` 在识别确认卡之前就生成了），随后又被标上
+# `cut_by_confirm=True`。于是同一轮同时满足两件事：
+#   · 覆盖率把它当「被掐断」从分母剔除
+#   · 七维又把它当「ERROR（装置故障）」计数
+#
+# 后果是门禁报「6 个维度各有 1 个 ERROR → 未通过」，
+# 读起来像装置坏了，实际是**产品在写工具前结束了本轮**。
+# 门禁在撒谎 → 人去查上游、查模型，真因在产品。
+#
+# 语义上它也确实是第三类：
+#   ERROR = 我们没测到（装置问题）
+#   CUT   = 测了，但产品没给模型说完的机会（产品行为）
+# 把它并进 ERROR 会把产品缺陷记成装置缺陷，并进 FAIL 会把
+# 产品缺陷记成模型缺陷 —— 两个方向都是"去改错的地方"。
+CUT_STATUS = 'CUT'
+
 
 def aggregate(results):
     """把逐次结果按六维汇总。**分母各自独立，不相加也不平均。**"""
@@ -1728,7 +1881,13 @@ def aggregate(results):
         elif key == 'safe_handling':
             rs = [r for r in results if not r['expect_autonomous']]
 
-        verdicts = [r['verdicts'].get(key, {}) for r in rs]
+        # 只取**真的带了这个维度**的行。
+        # 缺维度不等于状态未知：自检里的合成行常常只造一两个维度，
+        # 把「没造」当成「状态丢了」会逼着测试数据去补无关字段。
+        # 但也不能无视它 —— 单独记 `absent`，让守恒式仍然成立。
+        verdicts = [r['verdicts'][key] for r in rs
+                    if key in (r.get('verdicts') or {})]
+        absent = len(rs) - len(verdicts)
         # **NOT_TRIGGERED / ERROR / EVIDENCE / N/A / UNVERIFIED 不进分母** ——
         # 它们不是"失败"，是"没有结论"或"结论在另一档"。
         decided = [v for v in verdicts if v.get('status') in DECIDED_STATUSES]
@@ -1744,6 +1903,25 @@ def aggregate(results):
         # error 三个账里同时消失，报告总数对不上而没人发现。
         unverified = sum(1 for v in verdicts if v.get('status') == 'UNVERIFIED')
         na = sum(1 for v in verdicts if v.get('status') == 'N/A')
+        # v3.0：被产品掐断（确认卡在模型发写工具时结束本轮）。
+        # **必须单列**——否则这一轮会从 decided / not_triggered / error /
+        # evidence / unverified / n/a 六个账里同时消失，
+        # 而"样本悄悄少一条"比"记错桶"更难发现。
+        cut = sum(1 for v in verdicts if v.get('status') == CUT_STATUS)
+
+        # 记账不变式：每一轮都必须落在且只落在一个桶里。
+        # 这条断言是"样本凭空消失"的守门人 —— 少了它，新增一个状态
+        # 只会让总数悄悄变小，而比率看起来仍然合理。
+        accounted = (len(decided) + not_triggered + errored + evidenced
+                     + unverified + na + cut + absent)
+        if accounted != len(rs):
+            raise AssertionError(
+                '维度 %s 的记账对不上：eligible=%d，但各桶合计=%d'
+                '（decided=%d not_triggered=%d error=%d evidence=%d '
+                'unverified=%d n/a=%d cut=%d absent=%d）'
+                % (key, len(rs), accounted, len(decided),
+                   not_triggered, errored, evidenced, unverified, na,
+                   cut, absent))
 
         if not decided:
             rate = None      # **无样本就报 None，不报 0.000**
@@ -1760,7 +1938,9 @@ def aggregate(results):
             'error': errored,
             'evidence_only': evidenced,     # v2.6：有取证、无专项复验
             'unverified': unverified,       # v3.0 T1.7：复验/宣称未证明
+            'cut': cut,                     # v3.0：被确认卡掐断（产品行为）
             'not_applicable': na,           # v2.6：已有更强证据，本档不适用
+            'absent': absent,               # 该行没带这个维度（合成/旧格式）
             'rate': rate,
             'no_sample': not decided,
         }
@@ -1912,7 +2092,9 @@ def main():
         print(f"\n{cn} {en}  [{arrow}]")
         print(f"  {q}")
         print(f"  = {val}   （{d['pass']}/{d['n_decided']} 有结论"
-              f"，另有 {d['not_triggered']} 项未触发、{d['error']} 项采集错误）")
+              f"，另有 {d['not_triggered']} 项未触发、{d['error']} 项采集错误"
+              + (f"、{d['cut']} 项被确认卡掐断" if d.get('cut') else '')
+              + "）")
         # v2.6：把"有结论但在另一档"的样本数显式印出来。
         # 少了这一行，EVIDENCE 的样本就会凭空消失——
         # 而"把没测到写成得0 分"正是本项目一直在防的那种谎报。

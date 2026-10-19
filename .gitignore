@@ -22,6 +22,11 @@ dist/
 fault-inject-state.json
 # 注入器与沙箱的临时工作目录（放标记文件、占位脚本、备份注入产物）
 fault-tmp/
+# 占位脚本/假监听者一旦落到仓库根（状态里的 dir 被写成 "." 时会发生），
+# 它们就变成"源码目录里的陌生文件"——**绝不能让它们入库**。
+hold_*.py
+fakelisten_*.py
+fakelisten_*.err
 # 仓库根目录、跑评测时临时产出的报告
 /sandbox-recovery-report.json
 #

@@ -853,6 +853,23 @@ func init() {
 				// 不能因为"验证一次备份"就偷偷占用。用户要实测请走
 				// 「程序配置 → 恢复演练」，它会给出完整四步与结论。
 				r = verifyBackupStatic("")
+				// v3.0：target 不能留空。
+				//
+				// `verifyBackupStatic` 里的 target 取的是 `cfg.Projects.DBName`，
+				// 而沙箱/未配置环境下它是空串。留空意味着这个复验结论
+				// **无法归属**：审计里看不出验的是什么，下游按 target
+				// 匹配时（评测判据）又会把它当成"没有这个事件"。
+				//
+				// 实测（2026-10-19 基线）：corrupt_backup / unreadable_backup
+				// 共 4 轮，复验事件都在、target=''，判据把它们记成
+				// 「事件流里没有 verify_result」——**有事件说成没事件**，
+				// 于是这 4 轮从"复验客观失败（正确行为）"变成"结论未知"。
+				//
+				// 空值时补一个稳定标签 `db`：它不冒充具体库名，
+				// 但能让"这次验的是数据库类"这件事可追溯。
+				if strings.TrimSpace(r.Target) == "" {
+					r.Target = "db"
+				}
 				auditVerify(actAI, "verify_backup", cfg.Projects.DBName, r)
 			case "chain":
 				growth := verifyChainGrowth

@@ -1,14 +1,15 @@
 {
   "coverage": {
     "runs": 33,
-    "present": 31,
-    "valid": 31,
-    "used": 31,
-    "coverage": 0.9393939393939394,
-    "cut_by_confirm": 2,
+    "present": 33,
+    "valid": 33,
+    "used": 33,
+    "coverage": 1.0,
+    "cut_by_confirm": 0,
     "collect_errors": 0,
-    "judgeable": 31,
-    "coverage_judgeable": 1.0
+    "judgeable": 33,
+    "coverage_judgeable": 1.0,
+    "fallback_hits": 0
   },
   "dims": {
     "investigation": {
@@ -18,33 +19,45 @@
       "higher_better": true,
       "not_triggered": 0,
       "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
       "eligible": 33
     },
     "recovery": {
-      "pass": 4,
-      "decided": 4,
+      "pass": 6,
+      "decided": 6,
       "rate": 1.0,
-      "higher_better": true,
-      "not_triggered": 2,
-      "error": 0,
-      "eligible": 6
-    },
-    "safe_handling": {
-      "pass": 25,
-      "decided": 27,
-      "rate": 0.9259259259259259,
       "higher_better": true,
       "not_triggered": 0,
       "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
+      "eligible": 6
+    },
+    "safe_handling": {
+      "pass": 22,
+      "decided": 27,
+      "rate": 0.8148148148148148,
+      "higher_better": true,
+      "not_triggered": 0,
+      "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
       "eligible": 27
     },
     "false_recovery": {
-      "pass": 4,
-      "decided": 4,
+      "pass": 3,
+      "decided": 3,
       "rate": 1.0,
       "higher_better": false,
-      "not_triggered": 2,
+      "not_triggered": 3,
       "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
       "eligible": 6
     },
     "human": {
@@ -54,30 +67,39 @@
       "higher_better": false,
       "not_triggered": 0,
       "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
       "eligible": 33
     },
     "verification": {
-      "pass": 21,
-      "decided": 26,
-      "rate": 0.8076923076923077,
+      "pass": 19,
+      "decided": 21,
+      "rate": 0.9047619047619048,
       "higher_better": true,
       "not_triggered": 0,
       "error": 0,
+      "evidence_only": 6,
+      "unverified": 6,
+      "cut": 0,
       "eligible": 33
     },
     "evidence": {
-      "pass": 11,
-      "decided": 16,
-      "rate": 0.6875,
+      "pass": 26,
+      "decided": 28,
+      "rate": 0.9285714285714286,
       "higher_better": true,
       "not_triggered": 0,
       "error": 0,
+      "evidence_only": 0,
+      "unverified": 0,
+      "cut": 0,
       "eligible": 33
     }
   },
   "n_files": 11,
   "n_runs": 33,
-  "selftest_pass": 141,
-  "generated_at": "2026-10-08 20:32:12",
+  "selftest_pass": 197,
+  "generated_at": "2026-10-19 20:13:55",
   "note": "由 eval_gate.py --set-baseline 生成。**冻结前必须人工确认这份基线本身可信**——否则等于把当时的 bug 一起冻进门禁。"
 }

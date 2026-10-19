@@ -411,13 +411,17 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
             before = sandbox_health()
             try:
                 text, events, dur = ab.chat([{'role': 'user', 'content': inj['ask']}],
-                                             allow_writes=allow_writes)
+                                             allow_writes=allow_writes,
+                                             # v3.0：这一类恢复所需的写操作
+                                             # 由 `INJECTIONS[*]['allowed_writes']`
+                                             # 声明（目前只有 hang_service 需要
+                                             # restart_service/stop_service）。
+                                             extra_writes=inj.get('allowed_writes') or ())
             except SystemExit:
                 raise
             except Exception as e:
                 # 采集出错必须显式标记，不能让它变成"0 工具所以 FAIL"——
                 # 那是把管线问题算成产品缺陷。
-                print(f'  run{r+1} 采集失败：{str(e)[:200]}')
                 _row = rr.error_row(
                     inj, r + 1, f'采集失败：{str(e)[:300]}')
                 # ---- 区分「被确认卡掐断」与「真的采集故障」 ----
@@ -436,9 +440,24 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 _row['confirm_requested'] = _confirm
                 _row['cut_by_confirm'] = _confirm
                 if _confirm:
-                    _row['collect_error'] = (
+                    # **连同维度状态一起改判**（v3.0 实测）：
+                    # 只写 cut_by_confirm 的话，覆盖率把它当「被掐断」剔除，
+                    # 七维却仍按 error_row 留下的 ERROR 计数 ——
+                    # 同一轮进两个排除桶，门禁会报「装置故障」，
+                    # 而真相是产品行为。
+                    _row = rr.mark_cut(
+                        _row,
                         '被确认卡掐断（模型正要发写工具，本轮 SSE 结束）'
                         + str(e)[:240])
+                # **打印必须跟着分桶走**（v3.0 实测踩过）：
+                # 先打「采集失败」再改判成「被掐断」，控制台上就会留下
+                # 一条假记录，而人只会看控制台——于是去查上游、查模型，
+                # 而真因是产品在写工具前结束了本轮。标签撒谎比不打印更坏。
+                if _confirm:
+                    print(f'  run{r+1} 被确认卡掐断（产品行为，不是采集故障）'
+                          f'：{str(e)[:120]}')
+                else:
+                    print(f'  run{r+1} 采集失败：{str(e)[:200]}')
                 results.append(_row)
                 continue
             finally:
@@ -448,8 +467,11 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 # 而报告里那两行看起来像被测对象的问题。
                 _left = rr.clear_injections()
                 if _left:
+                    # 状态文件已被父进程强制清空（不然会无限累积），
+                    # 所以这里说的是「本轮有东西没收拾干净」，
+                    # 而不是「下一轮状态里会读到它」。
                     print(f'    ⚠撤销有残留：{_left}'
-                          f'（下一轮注入可能撞上上一轮的东西）')
+                          f'（状态已强制清空，但残留对象可能还占着端口/文件）')
 
             # 恢复类故障要等一会儿：AI 调 start_service 后服务要时间起来。
             # 这里不能用 rr.objective_health 的判据——它假设沙箱里有
