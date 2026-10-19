@@ -997,6 +997,7 @@
         <button class="mini" id="audit-f-ai">AI</button>
         <button class="mini" id="audit-f-guard">守护</button>
         <button class="mini" id="audit-f-system">系统</button>
+        <button class="mini" id="audit-f-shadow">影子</button>
         <span style="flex:1"></span>
         <select id="audit-day" style="font-size:12px;border:1px solid var(--line);border-radius:8px;padding:3px 6px;background:var(--card);color:var(--text)"></select>
         <button class="mini" id="audit-refresh">刷新</button>
@@ -1639,6 +1640,7 @@ const I18N_EN = {
   "换个项目后自动失效": "goes stale after switching project",
   "搜索项目文件": "Search project files",
   "操作主体": "By actor",
+  "影子": "Shadow",
   "操作失败：": "Operation failed: ",
   "操作审计": "Audit log",
   "操作总数": "Total operations",
@@ -2760,7 +2762,7 @@ $('#btn-reinstall').onclick = async ()=>{ if(await askConfirm('重新安装','�
 /* ---------- 健康状态 ---------- */
 function chip(id, cls, text){ const el=$('#'+id); el.className='chip '+cls; el.textContent=text; }
 /* ---------- 操作审计：把审计流从"只有文件"变成页面上能看 ---------- */
-const AUDIT_ACTOR = {user:'用户', ai:'AI', guard:'守护', system:'系统'};
+const AUDIT_ACTOR = {user:'用户', ai:'AI', guard:'守护', system:'系统', shadow:'影子'};
 let auditActor = '';
 let auditDays = [];
 
@@ -2815,7 +2817,7 @@ async function loadAudit(){
 }
 
 function auditBind(){
-  const map = {'audit-f-all':'', 'audit-f-user':'user', 'audit-f-ai':'ai', 'audit-f-guard':'guard', 'audit-f-system':'system'};
+  const map = {'audit-f-all':'', 'audit-f-user':'user', 'audit-f-ai':'ai', 'audit-f-guard':'guard', 'audit-f-system':'system', 'audit-f-shadow':'shadow'};
   for(const id in map){
     const b = $('#'+id); if(!b) continue;
     b.onclick = ()=>{
@@ -3113,7 +3115,7 @@ async function loadStats(){
    */
 
   /* ---- 主体分布 ---- */
-  const ACTOR_NAME = {user:'用户', ai:'AI', guard:'守护', system:'系统'};
+  const ACTOR_NAME = {user:'用户', ai:'AI', guard:'守护', system:'系统', shadow:'影子'};
   const ac = t2.by_actor || {};
   stHBar('#st-actor-chart',
     Object.keys(ac).sort((a,b)=>ac[b]-ac[a])

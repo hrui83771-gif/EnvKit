@@ -53,6 +53,14 @@ type RecoveryStrategy struct {
 	AutoApproved bool   `json:"auto_approved,omitempty"`
 	ApprovedBy   string `json:"approved_by,omitempty"`
 	ApprovedAt   string `json:"approved_at,omitempty"`
+
+	// Grandfathered 显式标注"这个审批不来自影子晋升路线"：
+	// 它来自基线既有行为或代码评审，由人明确作证。
+	// 没有这个标注时，守护循环还要求连续 N 次影子通过作为证据
+	// （shadowEvidenceOK）——签名不等于证据。这个标注是**逃逸口
+	// 不是免审批**：strategyValidate 强制它也必须带审批三字段，
+	// 且它会出现在代码评审与静态检查的视野里。
+	Grandfathered bool `json:"grandfathered,omitempty"`
 }
 
 // 前置检查项（plan §4.5 precheck）。字符串常量而不是裸字符串，
@@ -160,9 +168,12 @@ var defaultStrategies = []RecoveryStrategy{
 		// 链端守护自动重启在 eccd3ba/b3c69af 两版基线上都在跑，
 		// T2.6 把它迁进拓扑模型时若悄悄降级成"只影子不执行"，
 		// 就是一次没有人会发现的行为回退。
-		AutoApproved: true,
-		ApprovedBy:   "v3.0.1 基线既有行为（链端守护自动重启），T2.6 迁入拓扑模型时保留",
-		ApprovedAt:   "2026-10-19",
+		// Grandfathered：这个审批来自基线而非影子晋升路线（T2.8），
+		// 显式标注而不是隐含——逃逸口必须看得见。
+		AutoApproved:  true,
+		Grandfathered: true,
+		ApprovedBy:    "v3.0.1 基线既有行为（链端守护自动重启），T2.6 迁入拓扑模型时保留",
+		ApprovedAt:    "2026-10-19",
 	},
 }
 
@@ -276,6 +287,13 @@ func strategyValidate(s RecoveryStrategy) []string {
 			bad = append(bad, fmt.Sprintf("策略 %s 标了 auto_approved 却缺 approved_by/approved_at——"+
 				"自动执行必须留审批人与时间", s.Name))
 		}
+	}
+	// Grandfathered 是逃逸口不是免审批（T2.8）：标了它就必须同样带审批三字段。
+	// 否则"基线既有"会沦为一块没有审批人的免批金牌。
+	if s.Grandfathered && (!s.AutoApproved ||
+		strings.TrimSpace(s.ApprovedBy) == "" || strings.TrimSpace(s.ApprovedAt) == "") {
+		bad = append(bad, fmt.Sprintf("策略 %s 标了 grandfathered 却缺审批三字段——"+
+			"grandfathered 标注的是审批来源（基线/评审），不是免审批", s.Name))
 	}
 	return bad
 }

@@ -19,6 +19,7 @@
 | 七维指标 | 基线实测 ±容差 | 防止某次改动悄悄把某维打穿 |
 | 每类样本数 | ≥ 3 | 样本不足的数字**不能当结论** |
 | ERROR 数 | 恒为 0 | ERROR 是装置故障，不是产品缺陷 |
+| 影子记录聚合 | 无（收集位，不是门禁） | 影子流是晋升证据（plan §4.4），评测跑完收拢成 `docs/eval/shadow-*.json`。**缺记录不判失败**——沙箱没有链配置，守护循环本就不跑；空报告比没有报告更坏，所以没有新记录就不生成文件 |
 
 ## 阈值为什么不拍脑袋
 
@@ -42,6 +43,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -295,6 +297,72 @@ def save_baseline(snap):
     log('基线已写入 %s' % BASELINE)
 
 
+# ---------- 影子记录聚合（v3.0 T2.8） ----------
+
+def _shadow_already_collected():
+    """已收拢进 docs/eval/shadow-*.json 的源文件名集合。
+
+    按文件名去重而不是收完删源文件：聚合是收集动作，不是清理动作——
+    删掉产品运行期的证据流来"防止重复计数"，是把书烧了免记账。
+    """
+    names = set()
+    for p in REPORT_DIR.glob('shadow-*.json'):
+        try:
+            d = json.loads(p.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        names.update(d.get('source_files') or [])
+    return names
+
+
+def collect_shadow_records():
+    """把 shadow-*.jsonl（产品侧 shadow.go 写在 exe 同目录）聚合为
+    docs/eval/shadow-<stamp>.json。
+
+    **没有新记录就返回 None，不生成文件**：空报告比没有报告更坏——
+    它看起来像"评估过，零通过"。缺记录在这里是预期（沙箱没有链配置，
+    守护循环不跑），所以这一步是收集位，不是门禁。
+    """
+    done = _shadow_already_collected()
+    files = [p for p in sorted(ROOT.glob('shadow-*.jsonl'))
+             if p.name not in done]
+    if not files:
+        return None
+    recs = []
+    for p in files:
+        try:
+            text = p.read_text(encoding='utf-8')
+        except Exception:
+            continue
+        for ln in text.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                recs.append(json.loads(ln))
+            except Exception:
+                continue  # 写一半被杀的半行跳过，不猜内容
+    if not recs:
+        return None
+    out = {
+        'generated_at': time.strftime('%Y%m%d-%H%M%S'),
+        'source_files': [p.name for p in files],
+        'total': len(recs),
+        'passed': sum(1 for r in recs if r.get('pass')),
+        'by_strategy': {},
+        'records': recs,
+    }
+    for r in recs:
+        k = r.get('strategy') or '?'
+        b = out['by_strategy'].setdefault(k, {'total': 0, 'passed': 0})
+        b['total'] += 1
+        if r.get('pass'):
+            b['passed'] += 1
+    p = REPORT_DIR / ('shadow-%s.json' % out['generated_at'])
+    p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
+    return out
+
+
 # ---------- 主 ----------
 def main():
     ap = argparse.ArgumentParser()
@@ -312,7 +380,7 @@ def main():
 
     # ---- 1. 自检 ----
     log('')
-    log('[1/4] 判分器自检')
+    log('[1/5] 判分器自检')
     st = run_selftest()
     log('  PASS=%d  硬FAIL=%d' % (st['pass'], len(st['fails'])))
     problems = []
@@ -328,7 +396,7 @@ def main():
     # 放在自检之后、跑数之前：**行为变化之前闸门就得在位**。
     # T2.6 要改守护循环，那正是 R5 最容易被破坏的时刻。
     log('')
-    log('[2/4] R5 拓扑独立性静态检查')
+    log('[2/5] R5 拓扑独立性静态检查')
     r5 = run_r5_static()
     if r5['rc'] != 0 or r5['fails']:
         problems.append('R5 拓扑独立性被破坏（%d 处）' % len(r5['fails']))
@@ -337,9 +405,23 @@ def main():
     else:
         log('  核心文件无拓扑依赖；抽象层不含具体实现')
 
-    # ---- 2. 报告 ----
+    # ---- 2b. 影子记录聚合 ----
+    # 收集位不是门禁：没有记录不判失败（沙箱无链配置，守护循环不跑）。
     log('')
-    log('[3/4] 评测报告')
+    log('[3/5] 影子记录聚合（T2.8 影子模式）')
+    sh = collect_shadow_records()
+    if sh is None:
+        log('  没有新的影子记录（shadow-*.jsonl）——守护循环未在沙箱里跑过，属预期')
+    else:
+        log('  聚合 %d 条（通过 %d）→ docs/eval/shadow-%s.json'
+            % (sh['total'], sh['passed'], sh['generated_at']))
+        for k, v in sorted(sh['by_strategy'].items()):
+            log('    %-18s %d 条，通过 %d' % (k, v['total'], v['passed']))
+        log('  注意：通过 = 计划可生成且前置检查可过；**影子从不执行，通过不是恢复成功**')
+
+    # ---- 3. 报告 ----
+    log('')
+    log('[4/5] 评测报告')
     n_files, runs = load_reports()
     if not runs:
         log('  !! 没有 report-<kind>.json —— '
@@ -423,9 +505,9 @@ def main():
                 problems.append('%s 有 %d 个 ERROR（装置故障，不是产品缺陷）'
                                 % (dim, d['error']))
 
-    # ---- 3. 比基线 ----
+    # ---- 4. 比基线 ----
     log('')
-    log('[4/4] 与基线比较')
+    log('[5/5] 与基线比较')
     snap = {'coverage': coverage(runs) if runs else None,
             'dims': compute(runs) if runs else {},
             'n_files': n_files, 'n_runs': len(runs) if runs else 0,

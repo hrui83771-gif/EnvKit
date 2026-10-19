@@ -117,6 +117,19 @@ func txBudgetUsed() int {
 	return n
 }
 
+// txBudgetRemain 窗口内剩余预算（只读，不占额度）。
+// 影子事务（T2.8）要评估"若执行，预算这关过不过"——
+// 直接调 txBudgetTake 会真的吃掉一个额度，而影子根本不执行。
+// 评估和动作必须分开记账，否则"只看不试"也会把环境试爆。
+func txBudgetRemain() int {
+	_, maxActions := txBudgetConf()
+	remain := maxActions - txBudgetUsed()
+	if remain < 0 {
+		return 0
+	}
+	return remain
+}
+
 // txAttemptGate per-target 尝试上限：连续失败（Restarts）已达上限即拒绝。
 // Restarts 由 svcRecordCrash 累加、复验通过时清零——唯一事实源，
 // 这里只读不写。max_attempts<=0 用默认 3。

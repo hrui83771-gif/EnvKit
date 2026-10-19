@@ -46,6 +46,10 @@ type guardStatus struct {
 	LastOK       bool   `json:"last_ok"`
 	RecoverCount int    `json:"recover_count"` // 本次运行期内的自动恢复次数
 	SkipCount    int    `json:"skip_count"`    // 因不可达而跳过的次数
+	// ShadowCount（v3.0 T2.8）本次运行期内影子评估次数。
+	// 与 RecoverCount 分开：影子评估是"发现异常但策略未晋升"，
+	// 把两者混在一个计数里，就看不出"到底是恢复了还是只记录了"。
+	ShadowCount int `json:"shadow_count"`
 	// LastUnreachable 连续不可达次数。持续不为 0 是需要用户看的信号：
 	// 地址失效时守护不会（也不该）尝试恢复，只能提示人去处理。
 	LastUnreachable int `json:"last_unreachable"`
@@ -71,6 +75,9 @@ func guardMark(action, detail string, ok bool) {
 	case "skip_unreachable":
 		guardRec.SkipCount++
 		guardRec.LastUnreachable++
+	case "shadow":
+		// v3.0 T2.8：影子评估。不计入恢复——它没执行任何动作。
+		guardRec.ShadowCount++
 	}
 }
 
@@ -119,6 +126,13 @@ func guardSnapshot() guardStatus {
 	}
 	if s.LastAction == "recover" {
 		s.Note = fmt.Sprintf("链端守护在跑：最近一次检测发现链端异常并已自动恢复（%s）", s.LastDetail)
+		return s
+	}
+	if s.LastAction == "shadow" {
+		// v3.0 T2.8：影子评估。**不能说"检测正常"**——最近一轮恰恰
+		// 是发现了异常才评估的，只是策略未晋升没有执行。把异常说成
+		// 正常就是谎报，而守护状态卡的职责恰好是替用户盯着它。
+		s.Note = fmt.Sprintf("后台守护在跑：最近一轮发现异常，但恢复策略未获晋升，只做了影子评估（未执行任何动作）。本次运行已影子评估 %d 次", s.ShadowCount)
 		return s
 	}
 	s.Note = fmt.Sprintf("链端守护在跑（每 %d 秒一轮），最近一轮检测正常", s.IntervalSec)
@@ -170,7 +184,7 @@ func handleGuardStatus(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	writeJSON(w, map[string]any{"status": s, "recent": acts})
+	writeJSON(w, map[string]any{"status": s, "recent": acts, "shadow": shadowStatusForAPI()})
 }
 
 func init() {

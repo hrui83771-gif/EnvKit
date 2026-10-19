@@ -42,6 +42,9 @@ const (
 	actAI    = "ai"
 	actGuard = "guard"
 	actSys   = "system"
+	// actShadow（v3.0 T2.8）：影子评估。只记录不执行——
+	// Observe→Plan 走完就在 Execute 前停止，留"若执行会做什么"的痕。
+	actShadow = "shadow"
 )
 
 // 结果取值
@@ -418,6 +421,9 @@ var aiAuditActorAlias = map[string]string{
 	"ai": actAI, "助手": actAI,
 	"guard": actGuard, "守护": actGuard,
 	"system": actSys, "系统": actSys,
+	// v3.0 T2.8：影子评估。**必须能按主体筛出来**——
+	// 晋升评审的第一手材料就是这些记录，筛不到等于没有。
+	"shadow": actShadow, "影子": actShadow,
 }
 
 // aiAuditDay 把模型给的日期折算成 YYYYMMDD。
@@ -454,7 +460,7 @@ func init() {
 			"用于回答「最近做了哪些操作」「守护自动恢复过吗」「有没有失败的操作」「某天发生了什么」这类问题。" +
 			"只读，不会修改任何数据，因此无需你确认。" +
 			"注意：①day 留空=跨天取最近若干条，指定某天用 YYYYMMDD（也接受 2026-10-17 / 今天 / 昨天）；" +
-			"②actor 可只留 user(用户手动) / ai(助手执行) / guard(守护自动) / system(系统) 某一类；" +
+			"②actor 可只留 user(用户手动) / ai(助手执行) / guard(守护自动) / system(系统) / shadow(影子评估，只记录不执行) 某一类；" +
 			"③审计只保留 30 天，更早的没有记录，别反复找。",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"day":   map[string]any{"type": "string", "description": "哪一天：YYYYMMDD（如 20261017）、2026-10-17、今天/昨天。留空则跨天取最近若干条"},
@@ -516,7 +522,7 @@ func aiAuditText(day, actor string, n int) (string, int) {
 		return "目前没有任何审计记录（审计随操作实时积累，只保留 30 天）。", 0
 	}
 	fmt.Fprintf(&b, "有审计记录的日期（新在前，只保留 30 天）：%s\n", strings.Join(days, "、"))
-	b.WriteString("图例：主体 user=用户手动 ai=助手执行 guard=守护自动 system=系统；" +
+	b.WriteString("图例：主体 user=用户手动 ai=助手执行 guard=守护自动 system=系统 shadow=影子评估（只记录不执行）；" +
 		"结果 ok=成功 fail=失败 denied=被拦下 started=已启动 unverified=执行了但未证明恢复\n")
 	es := auditQuery(day, actor, n)
 	if len(es) == 0 {

@@ -163,6 +163,7 @@ func main() {
 	startGuardLoop()
 	cleanupOldLogs()
 	cleanupOldAudits()
+	cleanupOldShadows() // v3.0 T2.8：影子流与审计同保留策略
 	loadPersistedState()
 	startStatePersister()
 	// 启动后异步检查杀软白名单，未加则提示（点击顶部按钮一键加入）

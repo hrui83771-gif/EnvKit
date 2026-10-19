@@ -204,19 +204,19 @@ func guardOne(svc Service, all []Service, failed map[string]Observation, first b
 		return
 	}
 
-	// 未晋升的策略只记录不执行（plan §4.4 的最小版，完整影子事务在 T2.8）。
+	// ---- 影子事务（T2.8，plan §4.4）----
+	//
+	// 未晋升的策略（或已签名但缺影子证据的策略）走完整影子事务：
+	// Observe→Plan 走完，在 Execute 前停止，记录"若执行会做什么、
+	// 预期复验规范、评估结论"进审计（actor=shadow）与 shadow-<day>.jsonl。
 	//
 	// **这不是可选的礼貌，是边界**：一个没有审批人的自动恢复动作，
 	// 出了事没有人可追溯。已晋升的照旧自动执行——restart_chain 在
 	// v3.0.1 基线里就是这么跑的，把它改成影子会是行为回退，
-	// 所以它带着审批记录（见 strategy.go）。
-	if !strategyAutoExecutable(strat) {
-		guardMark("shadow", svc.Label+"：策略未晋升，仅记录不执行", false)
-		auditNow(actGuard, action, target,
-			fmt.Sprintf("%s 未响应（%s）", svc.Label, obs.ErrKind), resFail,
-			"影子评估：策略未获人工晋升，守护不自动执行")
-		warn(scSys, "守护", "%s 需要恢复，但策略 %s 未晋升为可自动执行，本轮只记录",
-			svc.Label, strat.Name)
+	// 所以它带着 grandfathered 审批记录（见 strategy.go / shadow.go）。
+	approved := strategyAutoExecutable(strat)
+	if !approved || !shadowEvidenceOK(strat) {
+		guardShadowTx(svc, strat, obs, approved)
 		return
 	}
 
@@ -276,6 +276,51 @@ func guardOne(svc Service, all []Service, failed map[string]Observation, first b
 			alertDispatch(svc.Label+"恢复失败", "自动重启未成功，请打开 EnvKit 检查")
 		}
 	}
+}
+
+// guardShadowTx 影子事务（T2.8，plan §4.4）：
+// 走完 Observe→Plan（含风险分级与前置检查），**在 Execute 前停止**。
+//
+// approved 传入 strategyAutoExecutable 的结论，只为了一种情况：
+// 策略已有人工审批签名但缺连续影子证据（且没标 grandfathered）——
+// 签名不等于证据，同样只走影子，但结论里要点明"差的是证据不是签字"，
+// 否则用户会以为还缺一次审批，去改本来已经签过的东西。
+//
+// 记录三处各司其职：审计（actor=shadow，给人翻）、shadow-<day>.jsonl
+// （给聚合报告与晋升计数）、guardMark（给守护状态卡）。
+func guardShadowTx(svc Service, strat RecoveryStrategy, obs Observation, approved bool) {
+	target := svc.Guard.auditTargetOf(svc.ID)
+	_, rec, _, hasAdapter := adapterFor(svc.Adapter)
+	if !hasAdapter {
+		return // guardOne 已查过，纯防御
+	}
+
+	// 规划。Plan 是纯函数（只从配置模板拼命令，无执行入口，R1），
+	// 所以影子事务调它是安全的——**本函数没有任何 Execute 调用点**，
+	// 这一点由 shadow_test.go 读源码断言（能验证的边界不靠自觉）。
+	plan, planErr := rec.Plan(svc, Action{Kind: "restart", Why: obs.ErrKind})
+
+	// 前置检查：只读不消费（见 shadowPrechecks 注释）。
+	lines, bad := shadowPrechecks(svc, strat)
+
+	shadowRec := shadowRecordOf(svc, strat, obs, plan, planErr, lines, bad)
+	shadowEmit(shadowRec)
+
+	// 已签名但缺证据：结论里补一句，指明缺的是影子证据不是审批。
+	detail := shadowAuditDetail(shadowRec)
+	if approved && !shadowEvidenceOK(strat) {
+		detail += fmt.Sprintf("；另：已有审批签名但连续影子通过仅 %d/%d，按缺一不可规则不自动执行",
+			shadowPassesOf(strat.Name), shadowPassNeed)
+	}
+	result := resFail
+	if shadowRec.Pass {
+		result = resOK
+	}
+	auditNow(actShadow, "shadow_eval", target,
+		fmt.Sprintf("%s 未响应（%s）", svc.Label, obs.ErrKind), result, detail)
+	guardMark("shadow", shadowMarkDetail(shadowRec), false)
+	warn(scSys, "守护", "%s 需要恢复，但策略 %s 未晋升为可自动执行（连续影子通过 %d/%d），本轮只做影子评估不执行：%s",
+		svc.Label, strat.Name, shadowPassesOf(strat.Name), shadowPassNeed, shadowRec.Conclusion)
 }
 
 // isCommonCause 探针结论是否属于"共同原因"（多个 service 会同时中招的上游故障）。
