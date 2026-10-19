@@ -288,9 +288,12 @@ func legacyCfg() Config {
 			DBName:      "farm",
 		},
 		Chain: ChainConfig{
-			SSHHost:    "10.0.0.9",
-			ChainPort:  20200,
-			WebasePort: 5002,
+			SSHHost:        "10.0.0.9",
+			ChainPort:      20200,
+			WebasePort:     5002,
+			ChainGuard:     true,
+			ChainGuardSecs: 300,
+			ChainNotify:    true,
 		},
 	}
 }

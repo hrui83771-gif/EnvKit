@@ -72,8 +72,64 @@ type Service struct {
 	// 该 service 只在报告里出现，守护循环不碰它。
 	Recovery string `json:"recovery,omitempty"`
 
+	// Guard 守护循环驱动这个 service 时需要的拓扑无关参数。
+	// **这三个字段存在的理由是"保住基线审计条目"**：守护巡检要写审计，
+	// 而审计里的动作名与目标在 v3.0.1 基线里是固定值。把它们提成配置，
+	// 核心循环就不需要知道"链端的审计叫 chain_autorecover"（R5）。
+	Guard GuardSpec `json:"guard,omitempty"`
+
 	// Verify 独立复验规范（plan §4.5 的 verify_spec）。
 	Verify VerifySpec `json:"verify"`
+}
+
+// GuardSpec 守护循环的驱动参数（拓扑无关）。
+type GuardSpec struct {
+	// Group 资源组名（组锁用）。空 = 用 service id 当组名。
+	// 守护与用户的手动操作按组互斥：动链端的动作才需要和链端任务互斥。
+	Group string `json:"group,omitempty"`
+
+	// AuditAction 审计动作名。空 = "<id>_autorecover"。
+	// 显式配置的理由：链端基线里的动作名是 chain_autorecover / webase_autorecover，
+	// 与"<id>_autorecover"约定一致；但将来若有服务的约定不同，改配置即可，
+	// 不必在核心循环里加分支。
+	AuditAction string `json:"audit_action,omitempty"`
+
+	// AuditTarget 审计目标。空 = service id。
+	// 链端基线的目标是 SSH 主机（用户认这个），所以旧字段推导时显式填上。
+	AuditTarget string `json:"audit_target,omitempty"`
+
+	// IntervalSecs 巡检间隔（秒，最小 30）。0 = 用全局默认。
+	// 为什么是 per-service 而不是全局：不同 service 的合理巡检频率不同
+	// （链节点 30s，数据库可以 5 分钟）。旧代码只有一个 ChainGuardSecs，
+	// 那是因为它只守护一种东西。
+	IntervalSecs int `json:"interval_secs,omitempty"`
+
+	// Notify 恢复时是否弹桌面通知。
+	Notify bool `json:"notify,omitempty"`
+}
+
+// auditActionOf 审计动作名：显式配置优先，否则 "<id>_autorecover"。
+func (g GuardSpec) auditActionOf(svcID string) string {
+	if a := strings.TrimSpace(g.AuditAction); a != "" {
+		return a
+	}
+	return svcID + "_autorecover"
+}
+
+// groupOf 资源组名：显式配置优先，否则用 service id。
+func (g GuardSpec) groupOf(svcID string) string {
+	if g := strings.TrimSpace(g.Group); g != "" {
+		return g
+	}
+	return svcID
+}
+
+// auditTargetOf 审计目标：显式配置优先，否则 service id。
+func (g GuardSpec) auditTargetOf(svcID string) string {
+	if t := strings.TrimSpace(g.AuditTarget); t != "" {
+		return t
+	}
+	return svcID
 }
 
 // ProbeKind 探针种类。
@@ -238,6 +294,12 @@ func servicesFromLegacy(c Config) []Service {
 	// chain / webase：远程链端。**只在配了 SSH 主机时推导**——
 	// 与 startGuardLoop 的开头判断一致（没有 SSH 主机就没有链端可守护）。
 	if strings.TrimSpace(c.Chain.SSHHost) != "" {
+		guard := GuardSpec{
+			Group:        grpChain,
+			AuditTarget:  c.Chain.SSHHost,
+			IntervalSecs: c.Chain.ChainGuardSecs,
+			Notify:       c.Chain.ChainNotify,
+		}
 		svcs = append(svcs, Service{
 			ID:       "chain",
 			Label:    "链节点",
@@ -245,6 +307,7 @@ func servicesFromLegacy(c Config) []Service {
 			RiskTier: RiskLow,
 			Probe:    ProbeSpec{Kind: ProbePort, Port: c.Chain.ChainPort, Timeout: 10},
 			Recovery: "restart_chain",
+			Guard:    guard,
 			Verify: VerifySpec{
 				Target:   "chain",
 				Evidence: []string{"port", "node_proc", "block_height"},
@@ -258,6 +321,7 @@ func servicesFromLegacy(c Config) []Service {
 			RiskTier:  RiskLow,
 			Probe:     ProbeSpec{Kind: ProbePort, Port: c.Chain.WebasePort, Timeout: 10},
 			Recovery:  "restart_chain",
+			Guard:     guard, // 同一组：与旧循环一致，整轮持链端组锁
 			Verify:    VerifySpec{Target: "webase", Evidence: []string{"port"}, WaitSecs: 30},
 			DependsOn: []string{"chain"}, // WeBASE 依赖链节点：链全宕时不各自恢复
 		})

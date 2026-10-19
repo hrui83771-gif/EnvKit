@@ -161,15 +161,36 @@ var coreTopologyFreeFiles = []string{
 	"verify.go",    // 证据：三态复验
 	"opresult.go",  // 证据：三态载体
 	"audit.go",     // 证据：审计流
+	"guard.go",     // 事务：拓扑无关巡检循环（T2.6）
 	"correlate.go", // 指标/关联：跨节点事件关联（T2.7）
 }
 
 // topologySymbols 拓扑相关的标识符。核心文件引用其中任何一个，
 // 就说明它在按拓扑分支行事。
+//
+// **刻意不含 `adapterFor`**：注册表查找正是核心循环保持拓扑无关的**机制**——
+// 循环通过它拿到适配器，而不是自己 `if adapter == "ssh_chain"`。
+// 把它列进禁用名单会让 R5 永不可满足（循环总得从某处拿到适配器），
+// 而一条永不可满足的规则等于没有规则，还会诱导人把检查改松。
+//
+// **也不含 verifyChain / chainReach / svcPortsFn / dbBackupTask 等实现函数名**：
+// 那些是既有实现的本体，plan §4.1 说它们"退化为第一批适配器"——
+// 在适配器完全收编之前，它们就在原来的文件里。把它们列为违规，
+// 等于断言一件对当前代码为假的事（踩过：2026-10-19 扩充过一次，
+// 结果 8 处误报，其中 verify.go 4 处、opresult.go 1 处）。
 var topologySymbols = []string{
 	"LocalProcAdapter", "DBAdapter", "SSHChainAdapter",
-	"adapterFor", "AdapterLocal", "AdapterDB", "AdapterSSHChain",
+	"AdapterLocal", "AdapterDB", "AdapterSSHChain",
 	"sshChainTargets", "localProcTargets",
+}
+
+// topologyBranchPatterns 真正的"按拓扑分支"模式。
+// 符号名单管"引用了具体适配器"，这里管"拿拓扑名当判断条件"——
+// 后者哪怕不引用适配器类型也成立（比如 `if svc.Adapter == "db"`）。
+var topologyBranchPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\.Adapter\s*==`),
+	regexp.MustCompile(`adapter\s*==\s*"`),
+	regexp.MustCompile(`switch\s+\w*[Aa]dapter`),
 }
 
 // TestCoreFilesHaveNoTopologyDependency R5 的客观检查。
@@ -191,6 +212,12 @@ func TestCoreFilesHaveNoTopologyDependency(t *testing.T) {
 			if strings.Contains(s, sym) {
 				t.Errorf("%s 出现拓扑符号 %s —— 恢复事务核心不得依赖具体拓扑（R5）。"+
 					"拓扑相关代码应放在 topo_*.go / topology.go", f, sym)
+			}
+		}
+		for _, rx := range topologyBranchPatterns {
+			if m := rx.FindString(s); m != "" {
+				t.Errorf("%s 出现按拓扑分支的写法 %q —— 新拓扑只能经配置与适配器接入，"+
+					"不允许在核心里判 adapter（R5 / plan §4.2）", f, m)
 			}
 		}
 	}

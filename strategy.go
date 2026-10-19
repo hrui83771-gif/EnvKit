@@ -156,6 +156,13 @@ var defaultStrategies = []RecoveryStrategy{
 			WaitSecs: 60,
 		},
 		Compensate: "重启前记录远程节点进程与区块高度；失败则保持停止并升级人工，不重复强杀",
+		// 审批记录：这不是新批的，是**把 v3.0.1 基线里既有的行为记下来**。
+		// 链端守护自动重启在 eccd3ba/b3c69af 两版基线上都在跑，
+		// T2.6 把它迁进拓扑模型时若悄悄降级成"只影子不执行"，
+		// 就是一次没有人会发现的行为回退。
+		AutoApproved: true,
+		ApprovedBy:   "v3.0.1 基线既有行为（链端守护自动重启），T2.6 迁入拓扑模型时保留",
+		ApprovedAt:   "2026-10-19",
 	},
 }
 
@@ -198,6 +205,26 @@ func knownPrecheck(p string) bool {
 		return true
 	}
 	return false
+}
+
+// strategyAutoExecutable 策略当前是否允许**无人值守自动执行**。
+//
+// 条件（plan §4.4 晋升规则）：low 档 + 已获人工晋升。
+// 人工晋升 = auto_approved 且带审批人与时间，三个字段缺一不可
+// （strategyValidate 已强制；这里再判一次是因为"校验过"是一次性事实，
+//
+//	而"现在能不能自动跑"是每次都要问的问题）。
+//
+// 默认全部不自动：表里只有 restart_chain 带审批记录，因为它在 v3.0.1
+// 基线里就是这么跑的（链端守护自动重启）。**把既有的生产行为记成已晋升，
+// 比把它降级成影子更诚实**——后者会造成一次无声的行为回退。
+func strategyAutoExecutable(s RecoveryStrategy) bool {
+	if s.RiskTier != RiskLow {
+		return false // high 档永远过人闸，与有没有审批无关
+	}
+	return s.AutoApproved &&
+		strings.TrimSpace(s.ApprovedBy) != "" &&
+		strings.TrimSpace(s.ApprovedAt) != ""
 }
 
 // strategyValidate 单条策略的齐备性校验（plan §4.5：六字段必须齐备）。
