@@ -508,6 +508,10 @@ def verify_seq(events):
         if e.get('type') != 'verify_result':
             continue
         out.append({
+            # v3.0 T1.7：结论由哪次动作产生（verify_environment /
+            # start_service / restart_service）。没有它，报告里只能看到
+            # 「系统说 ok」，看不出是"专项复验"还是"启动即复验"。
+            'tool': str(e.get('tool') or ''),
             'target': str(e.get('target') or ''),
             'ok': bool(e.get('ok')),
             'verified': bool(e.get('verified')),

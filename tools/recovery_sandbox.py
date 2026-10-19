@@ -293,7 +293,7 @@ def ab_exe_ok():
     exe = ROOT / 'EnvKit_ab.exe'
     if not exe.exists():
         return False
-    srcs = [p for p in ROOT.glob('*.go') if p.name != '*_test.go']
+    srcs = [p for p in ROOT.glob('*.go') if not p.name.endswith('_test.go')]
     if not srcs:
         return True
     newest = max(p.stat().st_mtime for p in srcs)
@@ -316,7 +316,7 @@ def ab_exe_hint():
                 '  构建成 EnvKit.exe 会被当成"exe 不存在"，'
                 '而更糟的情况是仓库里已有一个旧的 EnvKit_ab.exe，'
                 '于是**静默测旧版本**。')
-    srcs = [p for p in ROOT.glob('*.go') if p.name != '*_test.go']
+    srcs = [p for p in ROOT.glob('*.go') if not p.name.endswith('_test.go')]
     if srcs:
         newest = max(srcs, key=lambda p: p.stat().st_mtime)
         age = exe.stat().st_mtime

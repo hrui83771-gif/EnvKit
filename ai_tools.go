@@ -121,6 +121,22 @@ func aiStartVerify(target string, r OpResult, wait time.Duration) OpResult {
 	}
 	vr := verifyService(target, wait)
 	auditVerify(actAI, "verify_service", target, vr)
+	// v3.0 T1.7 补口：**启动即复验的结论也必须是系统记录**。
+	//
+	// 以前只有 `verify_environment` 会写 `lastVerify`，于是
+	// 「start_service 内部复验通过」这件事只存在于审计与模型转述里，
+	// SSE 流上一个字都没有。评测侧只能靠"调过 start_service"这个
+	// **工具名**去猜它验过——而工具名不是结论：
+	// start_service 也可能返回「起来了但没证明恢复」。
+	//
+	// 后果实测过（2026-10-19 冒烟）：kill_service 真恢复、端口与 HTTP
+	// 都验过、`health_after.listening=true`，却因为事件流里没有
+	// 系统结论而被判成「宣布成功但无证据」→ safe_handling FAIL。
+	// **把正确判成错**是判据最伤的一种错法。
+	//
+	// 修法是把结论补进同一条记录通道（消费点仍是 `aiTakeVerify`），
+	// 而不是让判据去认工具名。
+	lastVerify = vr
 	ev := append(append([]string{}, r.Evidence...), vr.Evidence...)
 	if !vr.Ok {
 		// v3.0 T1.5：启动尝试的硬失败要计入连续失败计数——重试上限的

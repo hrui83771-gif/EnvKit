@@ -881,7 +881,18 @@ func init() {
 	}
 }
 
-// lastVerify 保存**最近一次** verify_environment 的结构化结果。
+// lastVerify 保存**最近一次**复验结论的结构化结果。
+//
+// # 谁来写
+//
+// 两条路都写：
+//  1. `verify_environment` 工具（显式专项复验，见本文件上方 `lastVerify = r`）；
+//  2. `aiStartVerify`（`start_service` / `restart_service` 的启动即复验）。
+//
+// v3.0 T1.7 之前只有第 1 条路写。第 2 条路的结论只进了审计与模型转述，
+// 于是「调过 start_service」成了唯一可观测信号——那是**工具名**，
+// 不是**结论**（start_service 同样可能返回"起来了但没证明恢复"）。
+// 判据若靠它，等于把「动作」当「结果」。
 //
 // # 为什么要用它，而不是给工具加返回值
 //
@@ -907,6 +918,34 @@ func aiTakeVerify() (OpResult, bool) {
 	}
 	lastVerify = OpResult{}
 	return r, true
+}
+
+// aiVerifyEvent 把复验结论打包成 `verify_result` SSE 事件载荷。
+//
+// # 为什么单独抽成函数
+//
+// 这段载荷是**判据唯一的系统证据来源**：评测侧 `ab_memory.verify_seq`
+// 只认这个事件，`recovery_rate.judge` 的 `sys_backed` 又只看它的
+// `ok && verified`。把它写在 `sseWrite(...)` 的实参里，就意味着一件事
+// ——**没有任何测试能验证字段是否齐全**，只能靠"改完跑一轮评测看看"。
+//
+// 抽出来之后可以用单测钉住三件事：
+//  1. 三个必填字段（ok / verified / target）不会在某次重构里消失；
+//  2. `tool` 记录结论由哪次动作产生（专项复验 vs 启动即复验）；
+//  3. `cls` / `badge` 由 Go 侧按三态算好——**前端不许自己判**（红线 R3）。
+func aiVerifyEvent(tool string, vr OpResult) map[string]any {
+	return map[string]any{
+		"type":     "verify_result",
+		"tool":     tool,
+		"ok":       vr.Ok,
+		"verified": vr.Verified,
+		"target":   vr.Target,
+		"msg":      vr.Msg,
+		"err_kind": vr.ErrKind,
+		"evidence": vr.Evidence,
+		"cls":      aiVerifyBadgeClass(vr.Ok, vr.Verified),
+		"badge":    aiVerifyBadgeText(vr.Ok, vr.Verified),
+	}
 }
 
 // aiVerifyText 把复验结果翻译成给模型的文本：结论 + 证据 + 明确的行为指引。

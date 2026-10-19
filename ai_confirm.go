@@ -256,7 +256,28 @@ func aiConfirmApply(w http.ResponseWriter, fl http.Flusher, tool string, d aiCon
 		aiToolCnName(tool, d.Args) + "…（可能需要几十秒到几分钟，请稍候）\n"})
 	// **按服务端登记的副本执行**：哈希一致之外的双保险——
 	// 回传参数与登记参数哪怕逐字节相等，也不走客户端那份。
-	if out, err := aiToolRegistry[tool].Execute(d.Args); err != nil {
+	out, err := aiToolRegistry[tool].Execute(d.Args)
+	// ---- v3.0 T1.7：确认续跑这条路的复验结论也要发事件 ----
+	//
+	// 写工具（start_service / restart_service / db_backup …）**全部**
+	// 经这里执行，而主循环那段 `aiTakeVerify()` 发射只在**非写工具**
+	// 的分支里跑得到。于是这一整条路径的复验结论：
+	//
+	//   审计里**有**（aiStartVerify 会 auditVerify）
+	//   SSE 流里**没有**
+	//
+	// 后果实测（2026-10-19 冒烟）：kill_service 真恢复、
+	// `health_after.listening=true`、产品内部也复验通过，
+	// 但判据只看得到「模型宣布恢复」→ 判成假愈 → safe_handling FAIL。
+	// **真恢复被记成谎报**，比漏报更伤。
+	//
+	// 放在这里而不是让评测去认"调过 start_service"：
+	// 工具名是动作，不是结论——同一个 start_service 也可能返回
+	// 「起来了但没证明恢复」。判据必须读结论。
+	if vr, ok := aiTakeVerify(); ok {
+		sseWrite(w, fl, aiVerifyEvent(tool, vr))
+	}
+	if err != nil {
 		return "执行出错：" + err.Error()
 	} else {
 		return out

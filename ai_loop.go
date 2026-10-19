@@ -792,24 +792,19 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				//
 				// 现在把结构化结论自己发出去（ok/verified/msg/evidence），
 				// 由前端渲染成状态徽章。**徽章不依赖模型怎么描述。**
-				if a.Name == "verify_environment" {
-					if vr, ok := aiTakeVerify(); ok {
-						// **类名由 Go 侧算**：三态判定只有一份实现。
-						// 让 JS 自己判的话，两处会独立演化 ——
-						// 一处改了另一处没改，徽章就会显示错误状态，
-						// 而徽章的全部价值就是「它说验了就是真验了」。
-						sseWrite(w, fl, map[string]any{
-							"type":     "verify_result",
-							"ok":       vr.Ok,
-							"verified": vr.Verified,
-							"target":   vr.Target,
-							"msg":      vr.Msg,
-							"err_kind": vr.ErrKind,
-							"evidence": vr.Evidence,
-							"cls":      aiVerifyBadgeClass(vr.Ok, vr.Verified),
-							"badge":    aiVerifyBadgeText(vr.Ok, vr.Verified),
-						})
-					}
+				//
+				// v3.0 T1.7：条件从「工具是 verify_environment」放宽为
+				// 「这次执行产生了复验结论」。原因只有一个：
+				// **判据要读系统记录，那系统就得把结论记全**。
+				// 启动即复验（start_service / restart_service）也是复验，
+				// 不记录它，判据就只能靠工具名猜——那是把动作当结果。
+				// 多发的 `tool` 字段让下游能分辨结论是哪次动作产生的。
+				if vr, ok := aiTakeVerify(); ok {
+					// **类名由 Go 侧算**：三态判定只有一份实现。
+					// 让 JS 自己判的话，两处会独立演化 ——
+					// 一处改了另一处没改，徽章就会显示错误状态，
+					// 而徽章的全部价值就是「它说验了就是真验了」。
+					sseWrite(w, fl, aiVerifyEvent(a.Name, vr))
 				}
 				// 提额判定放在**工具执行之后**：调用前不知道结果，
 				// 而"这一轮有没有换来新信息"正是要看结果才知道。
