@@ -11,6 +11,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------- 审计条目与基线逐字对齐 ----------
@@ -124,54 +125,122 @@ func TestIsCommonCause(t *testing.T) {
 	}
 }
 
-// TestDependencyUnhealthySuppressesCascade 依赖不健康时本级被抑制。
-// 四节点全宕时各发起一个恢复事务会把环境刷爆，而且后几个必然失败
-// （它们的前置正是第一个要修的东西）。
-func TestDependencyUnhealthySuppressesCascade(t *testing.T) {
-	all := []Service{serviceByIDMust(t, servicesFromLegacy(legacyCfg()), "chain"),
-		serviceByIDMust(t, servicesFromLegacy(legacyCfg()), "webase")}
-	webase := all[1]
+// ---------- 跨节点事件关联（T2.7） ----------
 
-	// 链不健康 → webase 被抑制
-	dep, blocked := dependencyUnhealthy(webase, all, map[string]bool{"chain": true})
-	if !blocked || dep != "chain" {
-		t.Errorf("链不健康时应抑制 webase，实际 blocked=%v dep=%q", blocked, dep)
+func obs(id, errKind string) Observation {
+	return Observation{Service: id, Healthy: errKind == "", ErrKind: errKind}
+}
+
+// TestCorrelateHostLevelCommonCause ≥2 个 service 报不可达 → 全部压制。
+// 这不是"两个服务各自坏了"，是"到这台主机的路出了问题"；
+// 恢复命令本身就靠这条路送达，发起任何恢复都无效。
+func TestCorrelateHostLevelCommonCause(t *testing.T) {
+	svcs := servicesFromLegacy(legacyCfg())
+	r := correlate(svcs, map[string]Observation{
+		"chain":  obs("chain", "unreachable"),
+		"webase": obs("webase", "unreachable"),
+	})
+	if !r.Suppressed {
+		t.Fatal("两个 service 同时不可达时应整体压制")
 	}
-	// 链健康 → webase 不被抑制
-	if _, blocked := dependencyUnhealthy(webase, all,
-		map[string]bool{"chain": false}); blocked {
-		t.Error("链健康时不该抑制 webase")
+	if len(r.Affected) != 2 {
+		t.Errorf("受影响应为 2 个，实际 %v", r.Affected)
 	}
-	// 没有依赖的 service 永不被抑制
-	chain := all[0]
-	if _, blocked := dependencyUnhealthy(chain, all,
-		map[string]bool{"chain": true}); blocked {
-		t.Error("没有 depends_on 的 service 不该被抑制")
+	if !strings.Contains(r.Reason, "共同原因") {
+		t.Errorf("原因应说明是共同原因，实际 %q", r.Reason)
 	}
 }
 
-// TestDependencySuppressionYieldsBaselineAuditShape 依赖抑制的审计形状。
-// 链宕时旧代码只写 chain_autorecover（webase 的重启被裹在里面）；
-// 新循环单独走 webase 但会被抑制——**净效果一致**，且多出的那条
-// cascade_suppressed 记录正是 plan §4.3 要求的"压制决定本身要可审计"。
-func TestDependencySuppressionYieldsBaselineAuditShape(t *testing.T) {
+// TestCorrelateSingleUnreachableIsNotSuppressed 只有一个 service 不可达时
+// **不整体压制**——那是它自己的故障（比如它自己崩了导致探测不到），
+// 该恢复。把单点故障也判成共同原因，会让所有真故障都不被恢复。
+func TestCorrelateSingleUnreachableIsNotSuppressed(t *testing.T) {
 	svcs := servicesFromLegacy(legacyCfg())
-	unhealthy := map[string]bool{}
-	// 第一轮：链探针不健康
-	unhealthy["chain"] = true
-	dep, blocked := dependencyUnhealthy(
-		serviceByIDMust(t, svcs, "webase"), svcs, unhealthy)
-	if !blocked {
-		t.Fatal("链不健康时 webase 应被抑制")
+	r := correlate(svcs, map[string]Observation{"chain": obs("chain", "unreachable")})
+	if r.Suppressed {
+		t.Error("单个 service 不可达不该整体压制")
 	}
-	audit := "webase_autorecover"
-	target := "10.0.0.9"
-	args := "依赖 " + dep + " 不健康，本级不恢复"
-	if !strings.Contains(args, "chain") {
-		t.Errorf("审计参数应点名被抑制的上游，实际 %q", args)
+}
+
+// TestCorrelateDependencyAttribution A 依赖 B 且两者都失败 → B 是上游，
+// A 只记录"受影响"。四节点全宕时各发起一个恢复事务会把环境刷爆，
+// 而且后几个必然失败（它们的前置正是第一个要修的东西）。
+func TestCorrelateDependencyAttribution(t *testing.T) {
+	svcs := servicesFromLegacy(legacyCfg())
+	r := correlate(svcs, map[string]Observation{
+		"chain":  obs("chain", "not_listening"),
+		"webase": obs("webase", "not_listening"),
+	})
+	if r.Upstream != "chain" {
+		t.Errorf("上游应为 chain，实际 %q", r.Upstream)
 	}
-	_ = audit
-	_ = target
+	if len(r.Affected) != 1 || r.Affected[0] != "webase" {
+		t.Errorf("受影响应为 [webase]，实际 %v", r.Affected)
+	}
+	if !strings.Contains(r.Reason, "chain") {
+		t.Errorf("原因应点名上游，实际 %q", r.Reason)
+	}
+}
+
+// TestCorrelateIndependentFailuresNotSuppressed 两个互不依赖的 service
+// 各自失败 → 不压制、不归因，各自处理。
+func TestCorrelateIndependentFailuresNotSuppressed(t *testing.T) {
+	svcs := []Service{
+		{ID: "a", Probe: ProbeSpec{Kind: ProbePort, Port: 1}},
+		{ID: "b", Probe: ProbeSpec{Kind: ProbePort, Port: 2}},
+	}
+	r := correlate(svcs, map[string]Observation{
+		"a": obs("a", "not_listening"),
+		"b": obs("b", "not_listening"),
+	})
+	if r.Suppressed || r.Upstream != "" {
+		t.Errorf("独立失败不该被压制或归因，实际 %+v", r)
+	}
+}
+
+// TestCorrelateEmpty 没有失败时不该压制任何东西。
+// （空集合被判成"共同原因"会让守护永远不恢复——空转的抑制比没有抑制更坏。）
+func TestCorrelateEmpty(t *testing.T) {
+	r := correlate(servicesFromLegacy(legacyCfg()), map[string]Observation{})
+	if r.Suppressed || r.Upstream != "" {
+		t.Errorf("无失败时不该压制，实际 %+v", r)
+	}
+}
+
+// TestReverseDeps 反向依赖表由 DependsOn 建索引——
+// "谁是上游"是配置说了算，不是代码里写死的。
+func TestReverseDeps(t *testing.T) {
+	svcs := servicesFromLegacy(legacyCfg())
+	rev := reverseDeps(svcs)
+	if len(rev["chain"]) != 1 || rev["chain"][0] != "webase" {
+		t.Errorf("chain 的下游应为 [webase]，实际 %v", rev["chain"])
+	}
+	if len(rev["webase"]) != 0 {
+		t.Errorf("webase 没有下游，实际 %v", rev["webase"])
+	}
+}
+
+// TestCorrelationWindowDiscardsStaleEntries 过期条目必须丢弃。
+// 窗无限累积的话，基于陈旧数据的关联比不关联更坏——
+// 它会压制掉本该发生的恢复（把相隔十分钟的两次独立故障误判成一次）。
+func TestCorrelationWindowDiscardsStaleEntries(t *testing.T) {
+	w := newCorrelationWindow(10 * time.Millisecond)
+	w.add(obs("chain", "not_listening"))
+	time.Sleep(30 * time.Millisecond)
+	w.add(obs("webase", "not_listening"))
+	f := w.failed()
+	if len(f) != 1 || f["webase"].Service != "webase" {
+		t.Errorf("过期条目应被丢弃，只剩 webase，实际 %v", f)
+	}
+}
+
+func TestCorrelationWindowReset(t *testing.T) {
+	w := newCorrelationWindow(time.Minute)
+	w.add(obs("chain", "not_listening"))
+	w.reset()
+	if len(w.failed()) != 0 {
+		t.Error("reset 后窗应为空")
+	}
 }
 
 // ---------- 影子边界 ----------

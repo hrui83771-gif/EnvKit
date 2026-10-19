@@ -46,10 +46,19 @@ func startGuardLoopTopo() {
 				first = true
 				continue
 			}
-			// 本轮所有 service 的探针结论，供依赖抑制判断用（plan §4.3 最小版）
-			unhealthy := map[string]bool{}
+			// 本轮所有 service 的探针结论，供关联判断用。
+			//
+			// **必须先探完再恢复**：关联器要的是"同一时间窗内多个 service
+			// 都失败了"，边探边恢复的话，处理 webase 时链端的结论可能还没进表——
+			// 那时关联必然漏判，而漏判的方向是"各自恢复"，正是要防的那件事。
+			failed := map[string]Observation{}
 			for i := range svcs {
-				guardOne(svcs[i], svcs, unhealthy, first)
+				if obs := guardProbe(svcs[i]); !obs.Healthy {
+					failed[svcs[i].ID] = obs
+				}
+			}
+			for i := range svcs {
+				guardOne(svcs[i], svcs, failed, first)
 			}
 			first = false
 		}
@@ -119,11 +128,11 @@ func guardedServices(svcs []Service) []Service {
 
 // guardOne 巡检并（必要时）恢复单个 service。
 //
-// unhealthy 是本轮已探过的不健康 service 集合，用于依赖抑制：
+// failed 是本轮已探过的不健康 service 探针结论，供关联器归因：
 // 依赖不健康时本级不恢复——否则链全宕时会发起两个恢复事务，
 // 而第二个必然失败（它的前置就是第一个要修的东西）。
-func guardOne(svc Service, all []Service, unhealthy map[string]bool, first bool) {
-	probe, rec, ver, hasAdapter := adapterFor(svc.Adapter)
+func guardOne(svc Service, all []Service, failed map[string]Observation, first bool) {
+	_, rec, ver, hasAdapter := adapterFor(svc.Adapter)
 	if !hasAdapter {
 		warn(scSys, "守护", "service %s 的适配器 %s 未注册，跳过", svc.ID, svc.Adapter)
 		return
@@ -145,16 +154,14 @@ func guardOne(svc Service, all []Service, unhealthy map[string]bool, first bool)
 	}
 	defer h.Done()
 
-	obs := probe.Observe(svc)
+	obs := guardProbe(svc)
 	if obs.Healthy {
-		unhealthy[svc.ID] = false
 		if first {
 			info(scSys, "守护", "后台守护已开启，当前%s正常", svc.Label)
 		}
 		guardMark("ok", svc.Label+"正常", true)
 		return
 	}
-	unhealthy[svc.ID] = true
 
 	// 共同原因（SSH 不可达 / 凭据被拒 / 探测不到）：**不发起恢复**。
 	// 恢复命令本身就靠 SSH 送达，连不上时重启毫无意义；
@@ -167,13 +174,27 @@ func guardOne(svc Service, all []Service, unhealthy map[string]bool, first bool)
 		return
 	}
 
-	// 依赖抑制（plan §4.3 最小版，完整关联在 T2.7）：
-	// 依赖不健康时本级只记录"受影响"，不各自恢复。
-	if dep, blocked := dependencyUnhealthy(svc, all, unhealthy); blocked {
-		guardMark("cascade_suppressed", dep, false)
+	// ---- 跨节点事件关联（T2.7，plan §4.3）----
+	//
+	// 探到的失败先过关联器，再决定要不要恢复。**压制决定本身要可审计**——
+	// 只压制不记录，等于把"我们决定不救"藏起来；而出问题时，
+	// 最该查的恰恰是这些没发生的动作。
+	corr := correlate(all, failed)
+	if corr.Suppressed {
+		guardMark("cascade_suppressed", corr.Reason, false)
 		auditNow(actGuard, action, target,
-			fmt.Sprintf("依赖 %s 不健康，本级不恢复", dep), resFail,
-			"上游故障未恢复前不级联恢复")
+			fmt.Sprintf("%s 探针失败（%s）", svc.Label, obs.ErrKind), resFail,
+			"关联压制："+corr.Reason)
+		warn(scSys, "守护", "%s：%s", svc.Label, corr.Reason)
+		return
+	}
+	if corr.Upstream != "" && corr.Upstream != svc.ID {
+		// 本 service 是受影响的下游：只记录，不各自恢复
+		guardMark("cascade_suppressed",
+			fmt.Sprintf("上游 %s 未恢复，本级仅记录", corr.Upstream), false)
+		auditNow(actGuard, action, target,
+			fmt.Sprintf("%s 探针失败（%s）", svc.Label, obs.ErrKind), resFail,
+			fmt.Sprintf("关联压制：上游 %s 同时失败，本级不级联恢复", corr.Upstream))
 		return
 	}
 
@@ -269,20 +290,27 @@ func isCommonCause(errKind string) bool {
 	return false
 }
 
-// dependencyUnhealthy 依赖里是否有不健康的。返回 (依赖 id, 是否被抑制)。
-//
-// 为什么需要：四节点全宕时如果每个 service 各发起一个恢复事务，
-// 会把环境刷爆，而且后三个必然失败（它们的前置正是第一个要修的东西）。
-// 这是 plan §4.3 跨节点事件关联的**最小可用版**——
-// 完整版（时间窗 + 共同依赖归因 + cascade_suppressed 报告）在 T2.7。
-func dependencyUnhealthy(svc Service, all []Service, unhealthy map[string]bool) (string, bool) {
-	for _, dep := range svc.DependsOn {
-		if unhealthy[dep] {
-			return dep, true
-		}
-	}
-	return "", false
-}
-
 // portStr 端口转字符串（探针证据用）。
 func portStr(p int) string { return strconv.Itoa(p) }
+
+// guardProbe 探一个 service，把异常收敛成 Observation 而不是 panic。
+// 探针是只读采集，理论上不该崩；但适配器里的 SSH/DB 调用会碰外部系统，
+// 一次探测崩掉整个守护循环是不可接受的（无人值守场景下没人重启它）。
+func guardProbe(svc Service) (obs Observation) {
+	defer func() {
+		if r := recover(); r != nil {
+			obs = Observation{Service: svc.ID, Healthy: false,
+				ErrKind:  "probe_panic",
+				Evidence: []string{fmt.Sprintf("探针崩溃：%v", r)},
+				At:       time.Now()}
+		}
+	}()
+	probe, _, _, ok := adapterFor(svc.Adapter)
+	if !ok {
+		return Observation{Service: svc.ID, Healthy: false,
+			ErrKind:  errKindBadConfig,
+			Evidence: []string{"适配器未注册：" + svc.Adapter},
+			At:       time.Now()}
+	}
+	return probe.Observe(svc)
+}
