@@ -276,6 +276,28 @@ func effectiveServices(c Config) ([]Service, []string) {
 	return svcs, validateServices(svcs)
 }
 
+// ---------- 适配器注册表 ----------
+
+// adapterFor 按名字取适配器。三个内置适配器见 topo_local.go / topo_db.go /
+// topo_chain.go。
+//
+// 新增拓扑 = 在这里加一行 + 一个适配器实现，**不需要在事务/裁决/证据/指标
+// 任何核心文件里加分支**（R5，T2.9 静态检查把关）。
+func adapterFor(name string) (Probe, Recoverer, Verifier, bool) {
+	switch name {
+	case AdapterLocal:
+		a := LocalProcAdapter{}
+		return a, a, a, true
+	case AdapterDB:
+		a := DBAdapter{}
+		return a, a, a, true
+	case AdapterSSHChain:
+		a := SSHChainAdapter{}
+		return a, a, a, true
+	}
+	return nil, nil, nil, false
+}
+
 // ---------- 纯函数：校验与查表（无 IO，可单测） ----------
 
 // knownAdapter 适配器是否已注册。
