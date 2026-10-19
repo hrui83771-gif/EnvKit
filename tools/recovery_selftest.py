@@ -511,6 +511,98 @@ for _k, _meta in _fi.KINDS.items():
           f"KINDS={_meta.get('recoverable_by_ai')} "
           f"INJECTIONS={_ri[_k].get('expect_autonomous')}")
 
+# 1d. **第四张表：产品侧恢复策略**（T2.9，plan §4.5）。
+#
+#     前三表都在 Python 侧，第四张表在 Go 侧（strategy_map.go）。
+#     为什么必须跨语言对：判据可以测一个**产品里根本不存在的策略**——
+#     那时分数照样漂亮，但它证明的不是"产品会恢复"，
+#     是"判据自己跑通了"。这正是本项目最反对的那类观测值。
+#
+#     分工：Go 侧验"映射指向的策略真实存在"（TestInjectionToStrategyPointsAtRealStrategies）
+#     与"正则能反解出同一张表"（TestStrategyMapIsRegexParseable）；
+#     这里验"映射的键是真实注入类别，且每个自主恢复类别都有策略或带理由的豁免"。
+#
+#     正则必须与 strategy_map_test.go 里的**逐字相同**——那边先红，这边才不会空转。
+_SMAP_SRC = (ROOT / 'strategy_map.go').read_text(encoding='utf-8')
+
+
+def _block(src, start, end='}'):
+    i = src.find(start)
+    if i < 0:
+        return ''
+    rest = src[i + len(start):]
+    j = rest.find(end)
+    return rest[:j] if j >= 0 else ''
+
+
+_SMAP_BLOCK = _block(_SMAP_SRC, 'var injectionToStrategy = map[string]string{')
+_EXEMPT_BLOCK = _block(_SMAP_SRC, 'var injectionWithoutStrategy = map[string]string{')
+# `\r?` 必须与 Go 侧（strategy_map_test.go）逐字一致。
+# 理由见那边的注释：Python 的 read_text 会归一化行尾，Go 的 ReadFile 不会，
+# 少了 `\r?` 时一旦有人用 Python 脚本改过 strategy_map.go，
+# Go 侧会解出 0 条而这边照样全绿——四表断言静默空转。
+_RE_MAP = re.compile(r'(?m)^\t"([a-z_]+)":\s+"([a-z_]+)",\r?$')
+_RE_EXEMPT = re.compile(r'(?m)^\t"([a-z_]+)":\s+"([^"]+)",\r?$')
+
+_smap = dict(_RE_MAP.findall(_SMAP_BLOCK))
+_exempt = dict(_RE_EXEMPT.findall(_EXEMPT_BLOCK))
+
+check(len(_smap) > 0,
+      '能从 strategy_map.go 解出注入→策略映射（第四张表）',
+      f'正则只匹配到 {len(_smap)} 条。若刚改过该文件的格式，'
+      f'Go 侧 TestStrategyMapIsRegexParseable 应该先红——'
+      f'它没红就说明两边正则不一致，四表断言正在空转')
+check(len(_exempt) > 0,
+      '能从 strategy_map.go 解出豁免表',
+      f'正则只匹配到 {len(_exempt)} 条')
+
+# 键必须是真实注入类别（否则是在给一个不存在的场景配策略）
+_bad_keys = [k for k in _smap if k not in _fi.KINDS]
+check(not _bad_keys,
+      '注入→策略映射的键都是真实注入类别',
+      f'映射里有 KINDS 不认识的: {_bad_keys} —— '
+      f'给不存在的场景配策略，等于给幽灵功能做保障')
+_bad_ex = [k for k in _exempt if k not in _fi.KINDS]
+check(not _bad_ex,
+      '豁免表的键都是真实注入类别',
+      f'豁免表里有 KINDS 不认识的: {_bad_ex}')
+
+# 同一个类别不能既配策略又被豁免（冲突时没人知道该信哪边）
+_both = sorted(set(_smap) & set(_exempt))
+check(not _both,
+      '没有类别同时出现在映射表与豁免表',
+      f'两边都写了: {_both}')
+
+# **本条是第四张表的全部意义**：每个"AI 应当自主恢复"的注入类别，
+# 产品侧必须有策略，或有一条带理由的豁免。
+# 缺了就是"判据在测一个产品里不存在的恢复能力"。
+_uncovered = []
+for _k, _meta in _fi.KINDS.items():
+    if not _meta.get('recoverable_by_ai'):
+        continue
+    if _k in _smap:
+        continue
+    if _k in _exempt and len(_exempt[_k].strip()) >= 8:
+        continue
+    _uncovered.append(_k)
+check(not _uncovered,
+      '每个可自主恢复的注入类别都有产品侧策略（或带理由的豁免）',
+      f'没有策略也没有豁免: {_uncovered} —— '
+      f'判据会去测一个产品里不存在的恢复能力，'
+      f'分数漂亮但证明的不是"产品会恢复"')
+
+# 豁免理由不能太短："忘了配"和"刻意不配"在表里都表现为一行缺失
+_short = [k for k, v in _exempt.items() if len(v.strip()) < 8]
+check(not _short,
+      '每条豁免都带足够长的理由',
+      f'理由过短，分不清是设计还是遗漏: {_short}')
+
+# 反向：映射里出现的每个策略名，格式必须合法（真值由 Go 侧验）
+_bad_strat = [v for v in _smap.values() if not re.match(r'^[a-z_]+$', v)]
+check(not _bad_strat,
+      '映射里的策略名都是合法标识符',
+      f'非法策略名: {_bad_strat}')
+
 # 2. class 与 expect_autonomous 必须一致
 #    **这两者不一致的后果很隐蔽**：class 决定分母隔离，
 #    而 autonomous 与否决定 AI 该不该动手。搞反了会得出

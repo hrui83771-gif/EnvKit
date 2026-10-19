@@ -93,6 +93,32 @@ def run_selftest():
             'stderr': (r.stderr or b'').decode('utf-8', 'replace')}
 
 
+# ---------- 1b. R5 拓扑独立性静态检查 ----------
+
+# R5（plan §六）：恢复事务核心文件（事务/裁决/证据/指标）不得出现拓扑名。
+# 权威实现在 Go 侧（strategy_map_test.go 的 TestCoreFilesHaveNoTopologyDependency），
+# 这里只是把它接进门禁——**不在这里重复一份文件清单**，
+# 重复的清单必然漂移，而漂移的方向永远是"检查越来越松"。
+R5_TEST = 'TestCoreFilesHaveNoTopologyDependency|TestTopologyFileHasNoAdapterImplementations'
+
+
+def run_r5_static():
+    """跑 R5 拓扑独立性静态检查（委托 Go 测试）。
+
+    为什么门禁要管这件事：R5 被破坏时**没有任何功能测试会红**——
+    核心文件里多一个 `if adapter == "ssh_chain"` 分支，行为测试全绿，
+    但"新拓扑接不进来"这件事已经发生了。只有静态检查能看见它。
+    """
+    r = subprocess.run(['go', 'test', './...', '-count=1',
+                        '-run', R5_TEST],
+                       cwd=str(ROOT), capture_output=True)
+    txt = ((r.stdout or b'') + (r.stderr or b'')).decode('utf-8', 'replace')
+    fails = [l.strip() for l in txt.splitlines()
+             if l.strip().startswith('FAIL') or '出现拓扑符号' in l
+             or '抽象层只放词汇' in l]
+    return {'rc': r.returncode, 'fails': fails, 'out': txt}
+
+
 # ---------- 2. 读报告 ----------
 def load_reports():
     """读所有 `report-<kind>.json`，算七维比率与结构块覆盖率。
@@ -286,7 +312,7 @@ def main():
 
     # ---- 1. 自检 ----
     log('')
-    log('[1/3] 判分器自检')
+    log('[1/4] 判分器自检')
     st = run_selftest()
     log('  PASS=%d  硬FAIL=%d' % (st['pass'], len(st['fails'])))
     problems = []
@@ -298,9 +324,22 @@ def main():
         log('  stderr（前 300 字）: %s' % st['stderr'].strip()[:300])
         problems.append('自检进程有 stderr（可能崩了）')
 
+    # ---- 1b. R5 拓扑独立性静态检查 ----
+    # 放在自检之后、跑数之前：**行为变化之前闸门就得在位**。
+    # T2.6 要改守护循环，那正是 R5 最容易被破坏的时刻。
+    log('')
+    log('[2/4] R5 拓扑独立性静态检查')
+    r5 = run_r5_static()
+    if r5['rc'] != 0 or r5['fails']:
+        problems.append('R5 拓扑独立性被破坏（%d 处）' % len(r5['fails']))
+        for l in r5['fails'][:10]:
+            log('    %s' % l[:200])
+    else:
+        log('  核心文件无拓扑依赖；抽象层不含具体实现')
+
     # ---- 2. 报告 ----
     log('')
-    log('[2/3] 评测报告')
+    log('[3/4] 评测报告')
     n_files, runs = load_reports()
     if not runs:
         log('  !! 没有 report-<kind>.json —— '
@@ -386,7 +425,7 @@ def main():
 
     # ---- 3. 比基线 ----
     log('')
-    log('[3/3] 与基线比较')
+    log('[4/4] 与基线比较')
     snap = {'coverage': coverage(runs) if runs else None,
             'dims': compute(runs) if runs else {},
             'n_files': n_files, 'n_runs': len(runs) if runs else 0,
