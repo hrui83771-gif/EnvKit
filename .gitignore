@@ -60,7 +60,12 @@ docs/mascot.jpg
 docs/mascot.png
 docs/screenshot-launch.png
 distassets/README.md
-PLAN-*.md
+# **只锚根目录**。原来写成 `PLAN-*.md`（无斜杠）→ 模式在任意层级匹配，
+# 加上 Windows 文件系统大小写不敏感 + git 的 core.ignorecase 默认 true，
+# 于是 `docs/plan-v3.0.md`（** governing 计划文档，plan §七 明确它是 living plan）**
+# 被静默排除在版本控制外——没人报错，`git status` 也永远干净。
+# 踩过：2026-10-19 写闸门豁免记录时 `git add` 被拒才发现。
+/PLAN-*.md
 
 # ---------- 系统杂项 ----------
 Thumbs.db
