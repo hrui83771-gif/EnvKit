@@ -84,9 +84,14 @@ type Config struct {
 	MySQL         MySQLConfig `json:"mysql"`
 	Projects      Projects    `json:"projects"`
 	Chain         ChainConfig `json:"chain"`
-	Components    []Component `json:"components"`
-	AI            *AIConfig   `json:"ai,omitempty"`
-	Alert         AlertConfig `json:"alerts"`
+	// Services 拓扑服务清单（v3.0 第二阶段 T2.1，plan §4.1）。
+	// **空 = 未启用拓扑模型**，此时按旧 Projects/Chain 扁平字段推导出等价清单
+	// （servicesFromLegacy），行为与 v3.0.1 完全一致。
+	// 非空 = 守护循环与 AI 恢复都按这份清单走，适配器由每项的 adapter 指定。
+	Services   []Service   `json:"services,omitempty"`
+	Components []Component `json:"components"`
+	AI         *AIConfig   `json:"ai,omitempty"`
+	Alert      AlertConfig `json:"alerts"`
 	// Recovery 恢复事务的两层节制参数（v3.0 T1.5）。零值 = 内置默认
 	//（窗口 10 分钟 / 12 次 / per-target 3 次）。见 txbudget.go。
 	Recovery RecoveryConfig `json:"recovery,omitempty"`
