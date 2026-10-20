@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnvKit v3.1 水彩原型 — 设计原型，非产品代码</title>
+<style>
+:root{
+  --paper:#faf8f5; --paper2:#f0ebe3;
+  --ink:#3a3a3a; --ink2:#4a6fa5; --ink3:#6b6b66;
+  --hair:rgba(74,111,165,.20);
+  --peach:#e8a87c; --teal:#85cdca; --rose:#c38d94; --sand:#d4a373;
+  --ok:#78a082; --warn:#c9a84c; --bad:#b4788c;
+  --shs:0 2px 10px rgba(74,111,165,.10);
+  --shm:0 4px 20px rgba(74,111,165,.12);
+  --shl:0 8px 30px rgba(74,111,165,.15);
+  --bloom:0 10px 40px rgba(74,111,165,.35);
+  --serif:Georgia,"Times New Roman","Songti SC","SimSun",serif;
+  --sans:-apple-system,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --ease:cubic-bezier(.45,0,.25,1);
+}
+[data-theme="night"]{
+  --paper:#1c2333; --paper2:#232c40;
+  --ink:#e9e5dc; --ink2:#9db8dc; --ink3:#98a0b3;
+  --hair:rgba(157,184,220,.22);
+  --shs:0 2px 10px rgba(8,12,24,.35);
+  --shm:0 4px 20px rgba(8,12,24,.40);
+  --shl:0 8px 30px rgba(8,12,24,.45);
+  --bloom:0 10px 40px rgba(120,150,200,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--sans);color:var(--ink);background:var(--paper);
+  transition:background .5s var(--ease),color .5s var(--ease);
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+}
+.bloom{position:fixed;border-radius:50%;filter:blur(70px);pointer-events:none;z-index:0;transition:opacity .5s var(--ease)}
+.b1{width:420px;height:420px;background:var(--peach);opacity:.16;top:-120px;left:-100px}
+.b2{width:380px;height:380px;background:var(--teal);opacity:.14;bottom:-140px;right:-80px}
+.b3{width:260px;height:260px;background:var(--rose);opacity:.10;top:34%;right:12%}
+[data-theme="night"] .b1,[data-theme="night"] .b2,[data-theme="night"] .b3{opacity:.07}
+.wrap{position:relative;z-index:1;max-width:940px;margin:0 auto;padding:26px 22px 90px}
+
+.topbar{display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--paper);border:1px solid var(--hair);border-radius:999px;padding:4px;box-shadow:var(--shs)}
+.seg button{border:0;background:transparent;padding:8px 26px;border-radius:999px;font-family:var(--serif);font-size:14px;color:var(--ink2);cursor:pointer;transition:all .5s var(--ease)}
+.seg button.on{background:rgba(74,111,165,.85);color:#fff;box-shadow:var(--shs)}
+.seg button:not(.on):hover{box-shadow:var(--bloom)}
+.spacer{flex:1}
+.toggle{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--hair);background:var(--paper);border-radius:999px;padding:7px 16px;font-size:12px;color:var(--ink2);cursor:pointer;box-shadow:var(--shs);font-family:var(--sans);transition:all .5s var(--ease)}
+.toggle:hover{box-shadow:var(--bloom)}
+.toggle .knob{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 4px rgba(201,168,76,.18);transition:all .5s var(--ease)}
+[data-theme="night"] .toggle .knob{background:var(--ink2);box-shadow:0 0 0 4px rgba(157,184,220,.18)}
+
+h1{font-family:var(--serif);font-weight:400;font-size:28px;letter-spacing:.02em}
+h1 em{font-style:italic}
+.sub{font-size:12px;color:var(--ink3);margin-top:4px;font-family:var(--mono)}
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+
+.corezone{display:flex;flex-direction:column;align-items:center;gap:8px}
+.core{position:relative;width:76px;height:76px;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,rgba(232,168,124,.55),rgba(133,205,202,.36) 55%,rgba(195,141,148,.26) 85%);
+  border:1.5px solid rgba(74,111,165,.35);box-shadow:var(--shm);
+  animation:breathe 4.5s var(--ease) infinite;cursor:pointer;
+  transition:box-shadow .5s var(--ease),border-color .5s var(--ease)}
+.core .glint{position:absolute;width:20px;height:20px;border-radius:50%;left:16px;top:14px;
+  background:radial-gradient(circle,rgba(255,255,255,.9),rgba(255,255,255,0));transition:left .12s linear,top .12s linear;pointer-events:none}
+.core.thinking{animation-duration:1.7s;box-shadow:0 0 0 7px rgba(74,111,165,.10),var(--shm)}
+.core.done{box-shadow:0 0 0 6px rgba(120,160,130,.32),var(--shm);border-color:rgba(120,160,130,.6)}
+.core.attention{box-shadow:0 0 0 6px rgba(180,120,140,.26),var(--shm);border-color:rgba(180,120,140,.6)}
+.core.off{filter:grayscale(.7);opacity:.55}
+.simbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.simbtns button{border:1px solid var(--hair);background:var(--paper);color:var(--ink2);border-radius:999px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:var(--mono);transition:all .5s var(--ease)}
+.simbtns button:hover{box-shadow:var(--bloom)}
+.simcap{font-size:11px;color:var(--ink3);text-align:center;max-width:220px;line-height:1.5}
+.ripple{position:absolute;inset:-2px;border-radius:50%;border:1.5px solid rgba(74,111,165,.45);animation:rip 1.8s var(--ease) forwards;pointer-events:none}
+@keyframes rip{from{transform:scale(.65);opacity:.55}to{transform:scale(1.9);opacity:0}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+
+.card{background:var(--paper);border:1px solid var(--hair);border-radius:24px;box-shadow:var(--shm);transition:box-shadow .5s var(--ease),background .5s var(--ease)}
+.card:hover{box-shadow:var(--shl)}
+.flip{perspective:1400px;cursor:pointer;margin-bottom:18px}
+.flip .inner{position:relative;transition:transform .6s var(--ease);transform-style:preserve-3d;min-height:296px}
+.flip.on .inner{transform:rotateY(180deg)}
+.face{backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.face.back{position:absolute;inset:0;transform:rotateY(180deg);display:flex;flex-direction:column}
+.cardhead{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px 12px}
+.cardhead h2{font-family:var(--serif);font-weight:400;font-size:19px}
+.cardhead .sub2{font-size:12px;color:var(--ink3);margin-top:3px}
+.flipbtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--hair);background:var(--paper);color:var(--ink2);font-size:17px;cursor:pointer;box-shadow:var(--shs);transition:all .5s var(--ease);flex:none}
+.flipbtn:hover{box-shadow:var(--bloom);transform:scale(1.02)}
+.flipbtn:active{transform:scale(.98)}
+.svc{display:flex;align-items:center;gap:13px;padding:12px 22px;border-top:1px solid var(--hair)}
+.svc:last-of-type{border-bottom:0}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.dot.ok{background:var(--ok);box-shadow:0 0 0 4px rgba(120,160,130,.18)}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 4px rgba(201,168,76,.18)}
+.dot.bad{background:var(--bad);box-shadow:0 0 0 4px rgba(180,120,140,.18)}
+.svc .name{font-family:var(--serif);font-size:15px}
+.pill{border-radius:999px;padding:3px 11px;font-size:11px;color:var(--ink);background:rgba(74,111,165,.12);white-space:nowrap}
+.pill.ok{background:rgba(120,160,130,.16)}
+.pill.warn{background:rgba(201,168,76,.18)}
+.pill.bad{background:rgba(180,120,140,.16)}
+.pill.gold{background:rgba(201,168,76,.18)}
+.meta{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.fliphint{padding:12px 22px 16px;font-size:11px;color:var(--ink3);border-top:1px solid var(--hair)}
+
+.chat{flex:1;padding:14px 22px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.bub{max-width:80%;padding:10px 15px;border-radius:18px;font-size:13px;line-height:1.7}
+.bub.user{background:rgba(74,111,165,.13);border-bottom-right-radius:6px;align-self:flex-end}
+.bub.ai{background:var(--paper2);border:1px solid var(--hair);border-bottom-left-radius:6px;box-shadow:var(--shs)}
+.plan{border:1px dashed rgba(74,111,165,.35);border-radius:16px;padding:10px 14px;font-size:12px;line-height:1.8;background:rgba(74,111,165,.05)}
+.confirm{border:1px solid rgba(180,120,140,.4);background:rgba(180,120,140,.10);border-radius:18px;padding:12px 15px;max-width:88%}
+.confirm p{font-size:12.5px;margin-bottom:10px}
+.cbtns{display:flex;gap:8px}
+.dots{display:flex;gap:5px;padding:4px 0}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--ink2);opacity:.35;animation:blink 1.4s var(--ease) infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:.25;transform:scale(.9)}50%{opacity:.7;transform:scale(1.05)}}
+.inrow{display:flex;gap:10px;padding:12px 22px 18px;border-top:1px solid var(--hair)}
+.inp{flex:1;border-radius:16px;border:1px solid var(--hair);background:rgba(255,255,255,.55);padding:10px 16px;font-family:var(--sans);font-size:13px;color:var(--ink);transition:box-shadow .5s var(--ease)}
+[data-theme="night"] .inp{background:rgba(255,255,255,.07)}
+.inp:focus{outline:none;box-shadow:0 4px 20px rgba(74,111,165,.15)}
+.inp::placeholder{color:var(--ink3)}
+
+.btn{border:0;cursor:pointer;font-family:var(--sans);border-radius:16px;font-weight:400;transition:all .5s var(--ease)}
+.btn-solid{background:rgba(74,111,165,.85);color:#fff;padding:10px 22px;box-shadow:var(--shm)}
+.btn-solid:hover{transform:scale(1.02);box-shadow:var(--bloom)}
+.btn-solid:active{transform:scale(.98);box-shadow:inset 0 2px 8px rgba(20,30,60,.25)}
+.btn-ghost{background:var(--paper);color:var(--ink2);border:1px solid rgba(74,111,165,.30);padding:8px 18px;box-shadow:var(--shs)}
+.btn-ghost:hover{transform:scale(1.02);box-shadow:var(--bloom)}
+.btn-ghost:active{transform:scale(.98);box-shadow:inset 0 2px 8px rgba(74,111,165,.15)}
+.btn.sm{padding:7px 15px;font-size:12px;border-radius:14px}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.pad{padding:16px 20px}
+.ct{font-family:var(--serif);font-weight:400;font-size:15px;color:var(--ink2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.ct.mt{margin-top:16px}
+.issue{display:flex;gap:11px;align-items:flex-start;margin-bottom:14px}
+.issue .it{font-size:13.5px;font-family:var(--serif)}
+.issue .is{font-size:12px;color:var(--ink3);margin-top:3px;line-height:1.6}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--hair);border-radius:999px;padding:4px 13px;font-size:11px;font-family:var(--mono);color:var(--ink2);background:var(--paper)}
+.recent p{font-size:12.5px;padding:7px 0;border-top:1px solid var(--hair);display:flex;gap:8px;align-items:center}
+.recent p:first-child{border-top:0}
+.recent .t{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.foot{font-size:11px;color:var(--ink3);text-align:center;line-height:1.7;margin-top:6px}
+
+.search{width:100%;max-width:460px;border-radius:16px;border:1px solid var(--hair);background:rgba(255,255,255,.55);padding:11px 18px;font-size:13px;font-family:var(--sans);color:var(--ink);margin-bottom:18px;transition:box-shadow .5s var(--ease)}
+[data-theme="night"] .search{background:rgba(255,255,255,.07)}
+.search:focus{outline:none;box-shadow:0 4px 20px rgba(74,111,165,.15)}
+.grp{background:var(--paper);border:1px solid var(--hair);border-radius:24px;box-shadow:var(--shm);margin-bottom:16px;overflow:hidden;transition:box-shadow .5s var(--ease)}
+.grp:hover{box-shadow:var(--shl)}
+.grp>.gh{display:flex;align-items:center;gap:10px;padding:15px 20px 11px;cursor:pointer;user-select:none}
+.grp>.gh h3{font-family:var(--serif);font-weight:400;font-size:16px;color:var(--ink2);flex:1}
+.grp>.gh .chev{color:var(--ink2);opacity:.55;font-size:12px;transition:transform .5s var(--ease)}
+.grp.closed>.gh .chev{transform:rotate(-90deg)}
+.grp.closed .rows{display:none}
+.row{display:flex;align-items:center;gap:12px;padding:11px 20px;border-top:1px solid var(--hair);font-size:13px}
+.row .k{font-family:var(--serif)}
+.row .v{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink3);text-align:right}
+.row .go{color:var(--ink2);opacity:.6;font-size:12px;margin-left:8px}
+.prog{height:6px;border-radius:999px;background:rgba(74,111,165,.12);overflow:hidden;margin-top:7px}
+.prog>i{display:block;height:100%;border-radius:999px;background:rgba(74,111,165,.45);transition:width .5s var(--ease)}
+.subline{padding:10px 20px 14px;font-size:11.5px;color:var(--ink3);border-top:1px solid var(--hair);line-height:1.7}
+.hidden{display:none!important}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition-duration:.01ms!important}
+  .flip .inner{transition:opacity .3s var(--ease)}
+  .flip.on .inner{transform:none;opacity:0}
+  .flip.on .face.back{transform:none;opacity:1}
+  .flip.on .face.front{opacity:0}
+}
+</style>
+</head>
+<body>
+<div class="bloom b1"></div><div class="bloom b2"></div><div class="bloom b3"></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="seg" role="tablist">
+      <button id="seg-status" class="on" onclick="showView('status')">状态</button>
+      <button id="seg-cfg" onclick="showView('cfg')">配置</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="toggle" id="themeBtn" onclick="toggleTheme()"><span class="knob"></span><span id="themeTxt">日</span></button>
+  </div>
+
+  <div style="border:1px dashed rgba(74,111,165,.35);border-radius:14px;padding:10px 16px;margin-bottom:22px;font-size:12px;line-height:1.7;color:var(--ink3);background:rgba(74,111,165,.06)">
+    ⛔ <strong style="color:var(--ink2);font-weight:600">已冻结 · 探讨产物（2026-10-19）</strong>——此原型记录水彩画风与两页架构的可行性，<strong style="color:var(--ink2);font-weight:600">不作为实施依据</strong>；后续改造按原定路线（先拆文件）推进。详见 <span style="font-family:var(--mono)">DESIGN-v3.1-minimal.md</span> 顶部冻结声明。
+  </div>
+
+  <section id="view-status">
+    <div class="pagehead">
+      <div>
+        <h1>状态</h1>
+        <p class="sub">EnvKit · 2026-10-19 20:31 · 每 5 秒轮询</p>
+      </div>
+      <div class="corezone">
+        <div class="core" id="coreMain"><span class="glint" id="glintMain"></span></div>
+        <div class="simbtns">
+          <button data-st="">静息</button><button data-st="thinking">思考</button><button data-st="streaming">流式</button><button data-st="done">达成</button><button data-st="attention">注意</button>
+        </div>
+        <p class="simcap">模拟事件 → 核的每个变化都必须有真实来源；这里是演示台</p>
+      </div>
+    </div>
+
+    <div class="card flip" id="flipCard" onclick="this.classList.toggle('on')">
+      <div class="inner">
+        <div class="face front">
+          <div class="cardhead">
+            <div><h2>主进程</h2><p class="sub2">4 项服务 · 3 项已验证 · 1 项待复验</p></div>
+            <button class="flipbtn" onclick="event.stopPropagation();document.getElementById('flipCard').classList.toggle('on')" title="翻面与助手对话">↻</button>
+          </div>
+          <div class="svc"><span class="dot ok"></span><span class="name">链端 · FISCO BCOS</span><span class="pill ok">已验证</span><span class="meta">4/4 节点</span></div>
+          <div class="svc"><span class="dot ok"></span><span class="name">WeBASE-Front</span><span class="pill ok">已验证</span><span class="meta">:5002</span></div>
+          <div class="svc"><span class="dot ok"></span><span class="name">后端 API</span><span class="pill ok">已验证</span><span class="meta">:8888</span></div>
+          <div class="svc"><span class="dot warn"></span><span class="name">MySQL</span><span class="pill warn">运行中 · 未复验</span><span class="meta">farm</span></div>
+          <p class="fliphint">点卡片或 ↻ 翻到背面 → 与助手对话（同一个 #ai-msgs，零删减搬迁）</p>
+        </div>
+        <div class="face back">
+          <div class="cardhead">
+            <div><h2>助手</h2><p class="sub2">与桌宠抽屉、助手页共用同一份历史</p></div>
+            <button class="flipbtn" onclick="event.stopPropagation();document.getElementById('flipCard').classList.toggle('on')" title="翻回主进程">↻</button>
+          </div>
+          <div class="chat">
+            <div class="bub user">链端好像挂了</div>
+            <div class="bub ai">看了下，node0 没在听 20200。跑启动脚本重启链端，再复验四个节点。</div>
+            <div class="plan">① 执行启动脚本 start_all.sh → ② 探活四节点 → ③ 复验出块高度 → ④ 记录审计</div>
+            <div class="confirm">
+              <p>重启链端 · 中风险 · 需要你确认</p>
+              <div class="cbtns"><button class="btn btn-ghost sm">取消</button><button class="btn btn-solid sm">确认执行</button></div>
+            </div>
+            <div class="dots"><i></i><i></i><i></i></div>
+          </div>
+          <div class="inrow"><input class="inp" placeholder="说点什么，或直接说「启动服务」…"><button class="btn btn-solid sm">发送</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <section class="card pad">
+        <h3 class="ct">需要处理 <span class="pill bad">1</span></h3>
+        <div class="issue">
+          <span class="dot warn"></span>
+          <div><p class="it">MySQL 在跑，但没复验过</p><p class="is">跑着 ≠ 正常。复验通过前，状态灯不会变绿。</p></div>
+        </div>
+        <button class="btn btn-solid">现在复验</button>
+      </section>
+      <section class="card pad">
+        <h3 class="ct">基础设施</h3>
+        <div class="chips"><span class="chip">Go 1.25</span><span class="chip">Node 22</span><span class="chip">Java 11</span><span class="chip">MySQL 8.0</span></div>
+        <h3 class="ct mt">最近</h3>
+        <div class="recent">
+          <p><span class="t">20:14</span>守护自动恢复链端<span class="pill ok">已验证</span></p>
+          <p><span class="t">19:02</span>影子 wait_slow_start 通过<span class="meta">12/20</span></p>
+          <p><span class="t">17:45</span>你备份了数据库<span class="pill ok">成功</span></p>
+        </div>
+      </section>
+    </div>
+    <p class="foot">服务行由 /api/runtime/state 键驱动渲染——前端不写死 web/backend；绿色必须 verified。<br>设计原型（DESIGN-v3.1-minimal.md §十二），非产品代码。</p>
+  </section>
+
+  <section id="view-cfg" class="hidden">
+    <div class="pagehead">
+      <div>
+        <h1>配置</h1>
+        <p class="sub">所有配置与统计的唯一收纳处 · 默认全折叠，搜索兜底</p>
+      </div>
+    </div>
+    <input class="search" id="cfgSearch" placeholder="搜索配置…（如：链端 / 晋升 / 密钥）" oninput="filterCfg(this.value)">
+
+    <div class="grp" data-g="组件">
+      <div class="gh"><h3>组件</h3><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="dot ok"></span><span class="k">Go</span><span class="v">1.25.0 · 正常</span></div>
+        <div class="row"><span class="dot ok"></span><span class="k">Node</span><span class="v">22.22.2 · 正常</span></div>
+        <div class="row"><span class="dot ok"></span><span class="k">Java</span><span class="v">11 · 正常</span></div>
+        <div class="row"><span class="dot ok"></span><span class="k">MySQL</span><span class="v">8.0 · 正常</span></div>
+        <div class="row"><span class="k">镜像加速 / SHA256 / 演练安装</span><span class="go">›</span></div>
+      </div>
+    </div>
+
+    <div class="grp" data-g="项目">
+      <div class="gh"><h3>项目</h3><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="k">前端目录</span><span class="v">D:\BCGD\FarmTrace\web</span><span class="go">›</span></div>
+        <div class="row"><span class="k">后端目录</span><span class="v">D:\BCGD\FarmTrace\server</span><span class="go">›</span></div>
+        <div class="row"><span class="k">数据库</span><span class="v">farm</span><span class="go">›</span></div>
+      </div>
+    </div>
+
+    <div class="grp" data-g="链端">
+      <div class="gh"><h3>链端</h3><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="k">SSH 主机</span><span class="v">111.228.57.198:22</span><span class="go">›</span></div>
+        <div class="row"><span class="k">启动脚本</span><span class="v">start_all.sh</span><span class="go">›</span></div>
+        <div class="row"><span class="k">守护开关 / 间隔</span><span class="v">开 · 60s</span><span class="go">›</span></div>
+        <div class="row"><span class="k">重启链端（破坏性）</span><span class="go">⋯</span></div>
+      </div>
+    </div>
+
+    <div class="grp" data-g="守护与晋升">
+      <div class="gh"><h3>守护与晋升</h3><span class="pill gold">影子 12/20</span><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="k">restart_chain 链端重启</span><span class="pill gold">祖父 · 自动执行</span></div>
+        <div class="row"><span class="k">wait_slow_start 慢启动等待</span><span class="pill ok">就绪 · 待签字</span></div>
+        <div class="row">
+          <div style="flex:1"><span class="k">port_conflict 端口冲突</span><span class="pill">评估中 12/20</span>
+          <div class="prog"><i style="width:60%"></i></div></div>
+        </div>
+        <div class="row">
+          <div style="flex:1"><span class="k">refresh_backup 备份刷新</span><span class="pill">待评估 3/20</span>
+          <div class="prog"><i style="width:15%"></i></div></div>
+        </div>
+        <div class="row"><span class="k">db_restart 数据库重启</span><span class="pill bad">高风险 · 需人工</span></div>
+      </div>
+      <p class="subline">晋升规则：连续 20 次影子通过 + 人工审批，缺一不可。wait_slow_start 已攒够通过数，blockers：缺审批人。</p>
+    </div>
+
+    <div class="grp" data-g="AI">
+      <div class="gh"><h3>AI</h3><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="k">模型</span><span class="v">deepseek-flash</span><span class="go">›</span></div>
+        <div class="row"><span class="k">密钥</span><span class="v">sk-••••••••3f2a</span><span class="go">›</span></div>
+        <div class="row"><span class="k">温度 / 系统提示词</span><span class="v">0.3</span><span class="go">›</span></div>
+      </div>
+    </div>
+
+    <div class="grp" data-g="统计与审计">
+      <div class="gh"><h3>统计与审计</h3><span class="chev">▾</span></div>
+      <div class="rows">
+        <div class="row"><span class="k">今日用量</span><span class="v">1,284 tokens</span></div>
+        <div class="row"><span class="k">缓存命中率</span><span class="v">62%</span></div>
+        <div class="row"><span class="k">余额</span><span class="pill ok">充足</span></div>
+        <div class="row"><span class="k">操作审计（30 天）</span><span class="go">›</span></div>
+      </div>
+    </div>
+    <p class="foot">六组收纳原六面板全部能力；日志抽屉在各组内。破坏性操作无论从哪个入口都走服务端 needConfirm。<br>设计原型（DESIGN-v3.1-minimal.md §十二），非产品代码。</p>
+  </section>
+
+</div>
+
+<script>
+function showView(v){
+  document.getElementById('view-status').classList.toggle('hidden',v!=='status');
+  document.getElementById('view-cfg').classList.toggle('hidden',v!=='cfg');
+  document.getElementById('seg-status').classList.toggle('on',v==='status');
+  document.getElementById('seg-cfg').classList.toggle('on',v==='cfg');
+}
+function toggleTheme(){
+  var h=document.documentElement;
+  var night=h.getAttribute('data-theme')==='night';
+  h.setAttribute('data-theme',night?'day':'night');
+  document.getElementById('themeTxt').textContent=night?'日':'夜';
+}
+var core=document.getElementById('coreMain');
+document.querySelectorAll('.simbtns button').forEach(function(b){
+  b.addEventListener('click',function(ev){
+    ev.stopPropagation();
+    var st=b.getAttribute('data-st');
+    core.className='core'+(st?' '+st:'');
+    if(st==='streaming'){
+      for(var i=0;i<3;i++){(function(i){setTimeout(function(){
+        var r=document.createElement('span');r.className='ripple';
+        core.appendChild(r);setTimeout(function(){r.remove();},1800);
+      },i*380);})(i);}
+    }
+    if(st==='done'){setTimeout(function(){core.className='core';},1600);}
+  });
+});
+core.addEventListener('mousemove',function(e){
+  var r=core.getBoundingClientRect(),g=document.getElementById('glintMain');
+  g.style.left=(e.clientX-r.left-10)+'px';
+  g.style.top=(e.clientY-r.top-10)+'px';
+});
+document.querySelectorAll('.grp>.gh').forEach(function(h){
+  h.addEventListener('click',function(){h.parentElement.classList.toggle('closed');});
+});
+function filterCfg(q){
+  q=(q||'').trim().toLowerCase();
+  document.querySelectorAll('.grp').forEach(function(g){
+    var title=g.getAttribute('data-g').toLowerCase();
+    var hit=title.indexOf(q)>=0;
+    var anyRow=false;
+    g.querySelectorAll('.row').forEach(function(r){
+      var m=!q||hit||r.textContent.toLowerCase().indexOf(q)>=0;
+      r.classList.toggle('hidden',!m);
+      if(m)anyRow=true;
+    });
+    var show=!q||hit||anyRow;
+    g.classList.toggle('hidden',!show);
+    if(q&&show)g.classList.remove('closed');
+  });
+}
+</script>
+</body>
+</html>
