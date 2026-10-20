@@ -131,29 +131,31 @@ def load_reports():
     直接读会得到「局部数字」当成「总账」。
     这里按 run 重算，**分母口径与 aggregate() 一致**。
 
-    ## ⚠️ 已知局限：它读的是**目录里所有的报告**，不区分新旧
+    ## 混批次拒绝（v3.0 §5.2 #169，G13 落地）
 
-    实测踩过：刚跑完 `stale_log_ok` + `slow_start` 两类，
-    目录里还有更早跑的 `ok_then_die` / `fake_listen` 报告，
-    于是覆盖率算成6/9 = 0.667 —— **那3 次是旧数据，判据还没结构化**。
+    上面那个「已知局限」现在修掉了：每份报告带 `generated_at` 批次标记
+    （recovery_sandbox 写报告时落盘）。目录里的报告来自**多个批次**时，
+    门禁**拒绝计算**并直接报问题——混批次的数字无法区分
+    「代码变了」还是「数据变了」，任何一个看似合理的比率都是假的。
 
-    **这会让门禁在"数据不齐"时报一个看似合理的错数字。**
-
-    修法（待做）：报告里记`generated_at` 与判据版本，
-    门禁只认**同一批次**的报告。
-    在那之前，**跑门禁前必须确认目录里的报告都是同一批次的**。
+    旧报告（无 generated_at 字段）沿用下面的 stale 告警路径。
+    修法：把旧报告移进 docs/eval/archive-<版本>/ 再跑门禁。
     """
     files = sorted(REPORT_DIR.glob('report-*.json'))
     if not files:
-        return None, {}
+        return None, {}, None
     runs = []
     stale = []
+    batches = set()
     for f in files:
         try:
             d = json.loads(f.read_text(encoding='utf-8'))
         except Exception as e:
             log('  !! 读不了 %s: %r' % (f.name, e))
             continue
+        ga = d.get('generated_at')
+        if ga:
+            batches.add((ga, d.get('total_runs')))
         # **旧报告 = 没有 verdict_used 字段**（v2.9 之前跑的）
         rs = d.get('results') or []
         if rs and 'verdict_used' not in (rs[0] or {}):
@@ -166,7 +168,15 @@ def load_reports():
             '判据结构化之前跑的）：%s' % (len(stale), ', '.join(stale)))
         log('    它们会被算进分母，让数字失真 —— **跑门禁前请确认'
             '目录里都是同一批次的报告**。')
-    return len(files), runs
+    # ---- G13：混批次 = 数据不可信，拒绝计算 ----
+    if len({b[0] for b in batches}) > 1:
+        msg = ('目录里的 report-*.json 来自**多个批次**（generated_at 不一致：'
+               '%s）——混批次的数字无法区分「代码变了」还是「数据变了」，'
+               '门禁拒绝计算。请把旧报告移进 docs/eval/archive-<版本>/ 再跑。'
+               % ', '.join(sorted({b[0] for b in batches})))
+        log('  !! %s' % msg)
+        return len(files), [], msg
+    return len(files), runs, None
 
 
 def compute(runs):
@@ -241,7 +251,12 @@ def coverage(runs):
     # 否则同一轮次被扣两次分母，coverage_judgeable 虚高。
     err = [r for r in runs
            if r.get('collect_error') and not r.get('cut_by_confirm')]
-    judgeable = n - len(cut) - len(err)
+    # v3.0 §5.2：AI 不可用类（honest_failure）的轮次**没有模型输出**——
+    # 上游断开时结构块「没机会出现」，性质同被确认卡掐断。
+    # 不剔除的话，每测一次 ai_unreachable 覆盖率就被拉低一格
+    # （实测踩过：门禁报「模型该输出块却没输出」，而那一轮模型根本不存在）。
+    hf = [r for r in runs if r.get('honest_error')]
+    judgeable = n - len(cut) - len(err) - len(hf)
     # 分子**只算真正走了结构化路径的**。
     #
     # ⚠️ 第一版写的是 `if r.get('verdict_used') or r in cut`
@@ -275,6 +290,7 @@ def coverage(runs):
             'coverage': (used / n) if n else None,
             'cut_by_confirm': len(cut),
             'collect_errors': len(err),
+            'honest_failures': len(hf),
             'judgeable': judgeable,
             'coverage_judgeable': cj,
             'fallback_hits': len(fb)}
@@ -422,8 +438,11 @@ def main():
     # ---- 3. 报告 ----
     log('')
     log('[4/5] 评测报告')
-    n_files, runs = load_reports()
-    if not runs:
+    n_files, runs, mixed_msg = load_reports()
+    if mixed_msg:
+        # G13：混批次直接进 problems —— 门禁必须红，不能装作没看见
+        problems.append(mixed_msg)
+    elif not runs:
         log('  !! 没有 report-<kind>.json —— '
             '门禁无法判断。先跑：python tools/recovery_sandbox.py --only <kind>')
         if not a.no_baseline and not a.set_baseline:
@@ -472,13 +491,18 @@ def main():
             log('  !! %s' % msg)
             problems.append(msg)
         if (cov.get('coverage') is not None and stale_n == 0
-                and cov['coverage'] < 1.0 and not cov['cut_by_confirm']):
-            # 没有掐断轮次却覆盖率不满 → 确实是模型不照做。
-            msg = ('结构块覆盖率 %.3f < 1.0 且无确认卡掐断 —— '
-                   '模型确实没照做，该改产品侧指令（%d 次退回词表）'
-                   % (cov['coverage'], cov['runs'] - cov['used']))
-            log('  !! %s' % msg)
-            problems.append(msg)
+                and not cov['cut_by_confirm']):
+            # 剔除 AI 不可用轮次后再卡：那些轮次没有模型回合，
+            # 不能让它们把「模型照不照做」的分母拉大。
+            _n_nohf = cov['runs'] - cov.get('honest_failures', 0)
+            _cov_nohf = (cov['used'] / _n_nohf) if _n_nohf else None
+            if _cov_nohf is not None and _cov_nohf < 1.0:
+                # 没有掐断轮次却覆盖率不满 → 确实是模型不照做。
+                msg = ('结构块覆盖率 %.3f < 1.0 且无确认卡掐断 —— '
+                       '模型确实没照做，该改产品侧指令（%d 次退回词表）'
+                       % (_cov_nohf, _n_nohf - cov['used']))
+                log('  !! %s' % msg)
+                problems.append(msg)
 
         dims = compute(runs)
         for dim in DIM_META:

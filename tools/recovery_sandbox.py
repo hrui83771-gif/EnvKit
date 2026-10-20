@@ -346,6 +346,95 @@ def box_hint():
         return '（沙箱状态不可读）'
 
 
+def relaunch_sandbox_ui(reason=''):
+    """重启沙箱 EnvKit 实例（audit_unwritable / ai_unreachable 需要）。
+
+    ## 为什么这两类注入必须重启实例
+
+    EnvKit 把 config 与审计文件句柄读在内存里——对运行中的实例改磁盘
+    文件不生效。所以这两类注入的注入器只负责"杀实例 + 改磁盘"，
+    **重启由评测装置在这里完成**：重启后的实例带着被注入的状态起来，
+    第一次相关写入就会暴露真实行为。
+
+    重启后 token 会变（每个实例随机生成），必须回填 ab.BASE/TOKEN——
+    不回填的话，后续 chat 全打在旧端口上，表现为"实例失联"，
+    而真因是 token 换了。
+    """
+    st = json.loads(sb._state_path().read_text(encoding='utf-8'))
+    pid = st.get('pid')
+    if pid:
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)],
+                       capture_output=True)
+        time.sleep(1.5)
+    r = None
+    # **杀软会间歇性瞬杀刚复制的 exe 的启动**（WinError 225"文件包含病毒"），
+    # 实测 delayed_refail 全过、audit_unwritable 的撤销后重启被拦整轮中断。
+    # 这是已知环境干扰不是代码 bug——**重试一次**，两次都失败才放弃。
+    for attempt in (1, 2):
+        r = subprocess.run(
+            [sys.executable, str(ROOT / 'tools' / 'sandbox.py'), '--launch'],
+            capture_output=True)
+        if r.returncode == 0:
+            break
+        _tail_out = ((r.stdout or b'') + (r.stderr or b'')) \
+            .decode('utf-8', 'replace').strip()[-160:]
+        print(f'  （实例启动第 {attempt} 次失败，'
+              f'{"重试一次" if attempt == 1 else "放弃"}：{_tail_out}）')
+        time.sleep(2)
+    if r is None or r.returncode != 0:
+        raise SystemExit(
+            '重启沙箱实例失败'
+            + (f'（{reason}）' if reason else '') + '：'
+            + ((r.stdout or b'') + (r.stderr or b''))
+            .decode('utf-8', 'replace').strip()[-400:])
+    st = json.loads(sb._state_path().read_text(encoding='utf-8'))
+    ui, tok = st.get('ui_port'), st.get('token')
+    if not ui or not tok:
+        raise SystemExit('重启后读不到 ui_port/token —— 实例没起来')
+    ab.BASE = f'http://127.0.0.1:{ui}'
+    ab.TOKEN = tok
+    print(f'      实例已重启：UI={ui} pid={st.get("pid")}'
+          + (f'（{reason}）' if reason else ''))
+    return ui, tok
+
+
+def _audit_degradation_checks(events):
+    """#165 审计存储故障的场景级断言（不属于七维，单独记账到结果行）。
+
+    三条都是**客观证据**，不采信任何人的措辞：
+      ① 业务不阻断 —— 事件流里有 tool_result（工具调用真的完成了）；
+      ② 审计确实没写成 —— 今天的审计 jsonl 不存在（被同名目录占住）；
+      ③ 降级可见 —— 沙箱日志里有审计写失败的 warn（auditFailNotice）。
+
+    为什么要单独记账而不塞进七维：这三条断的是**环境/产品降级行为**，
+    不是 AI 的行为——塞进七维会让"AI 没做错"和"产品降级正确"两个
+    口径互相污染。
+    """
+    try:
+        st = json.loads(sb._state_path().read_text(encoding='utf-8'))
+        d = Path(st['dir'])
+    except Exception:
+        return {'error': '沙箱状态不可读'}
+    today = time.strftime('%Y%m%d')
+    # **必须用 is_file 而不是 exists**：占位的是同名**目录**，
+    # exists() 对目录也返回 True——那会把"占位还在"误判成"审计写成了"。
+    audit_gone = not (d / ('audit-%s.jsonl' % today)).is_file()
+    logp = d / ('envkit-%s.log' % today)
+    warn_seen = False
+    try:
+        t = logp.read_text(encoding='utf-8', errors='replace')
+        warn_seen = ('审计' in t and ('写入失败' in t or '无法写入' in t))
+    except OSError:
+        pass
+    return {
+        'business_not_blocked': any(e.get('type') == 'tool_result'
+                                    for e in events),
+        'audit_write_absent': audit_gone,
+        'degradation_visible_in_log': warn_seen,
+        'log': str(logp),
+    }
+
+
 def run_injections(injections, repeat, ui, tok, allow_writes=False):
     """在沙箱实例上跑注入。ab.TOKEN/BASE 已在 main 里指向沙箱。"""
     results = []
@@ -406,9 +495,19 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 results.append(rr.error_row(
                     inj, r + 1, f'注入失败：{inj_why[:300]}'))
                 continue
+            # v3.0 §5.2：需要重启实例的注入（audit_unwritable / ai_unreachable）。
+            # 注入器已把实例杀掉并改好磁盘状态，这里重启使其生效，
+            # 并把被测服务拉回来（业务路径要通，测的才是"降级不阻断"）。
+            if inj.get('needs_ui_restart'):
+                print('  （本类注入需要重启沙箱实例使状态生效）')
+                ui, tok = relaunch_sandbox_ui('注入生效')
+                okB, _d3 = sandbox_start_backend(ui, tok)
+                if okB:
+                    wait_backend_listening(ui, tok, sb.SANDBOX_PORT, timeout=60)
             since = time.strftime('%Y-%m-%d %H:%M:%S')
             time.sleep(0.5)
             before = sandbox_health()
+            _scen = None   # 场景级断言（仅 audit_unwritable 使用，chat 后填充）
             try:
                 text, events, dur = ab.chat([{'role': 'user', 'content': inj['ask']}],
                                              allow_writes=allow_writes,
@@ -417,9 +516,58 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                                              # 声明（目前只有 hang_service 需要
                                              # restart_service/stop_service）。
                                              extra_writes=inj.get('allowed_writes') or ())
+                # v3.0 §5.2 #165：审计降级的场景级断言——**必须在撤销前抓现场**
+                # （finally 里的 clear_injections 会把占位目录删掉）。
+                if inj['kind'] == 'audit_unwritable':
+                    _scen = _audit_degradation_checks(events)
+                    _bad = [k for k, v in _scen.items()
+                            if k != 'log' and v is False]
+                    if _bad:
+                        print(f'    ⚠审计降级场景断言未过：{_bad}'
+                              f'（日志：{_scen.get("log", "?")}）')
+                    else:
+                        print('    ✓ 审计降级场景断言全过：业务不阻断、'
+                              '审计文件确实没写成、日志有降级 warn')
             except SystemExit:
                 raise
             except Exception as e:
+                # v3.0 §5.2：AI 不可用类（honest_failure）——
+                # **chat 抛错是预期结果**（error 事件、无正文、
+                # _validate_response 拒绝空结论），不是采集失败。
+                # 事件挂在异常上带出来，交给判据的 honest_failure 分支
+                # 判"是否诚实"，而不是像其它类那样记 ERROR。
+                if inj.get('honest_failure'):
+                    _ev = list(getattr(e, 'events', None) or [])
+                    _tx = getattr(e, 'text', '') or ''
+                    _tinfo = rr.human_intervention(since)
+                    _jd = rr.judge(inj, _tx, _ev, _tinfo, sandbox_health(),
+                                   health_fn=sandbox_healthy,
+                                   verify_results=[])
+                    _herr = next(((x.get('text') or '')[:200]
+                                  for x in _ev if x.get('type') == 'error'), '')
+                    print(f"  run{r+1} AI 不可用（预期内）"
+                          f" 错误事件={'有' if _herr else '无'}：{_herr[:80]}")
+                    results.append({
+                        'injection': inj['kind'],
+                        'injection_class': inj['class'],
+                        'expect_autonomous': inj['expect_autonomous'],
+                        'run': r + 1, 'tools': ab.tool_seq(_ev),
+                        'seconds': 0.0, 'verdicts': _jd['dims'],
+                        'trace_data_missing': _tinfo is None,
+                        'verdict': _jd.get('verdict'),
+                        'verdict_used': _jd.get('verdict_used'),
+                        'verdict_fallback': _jd.get('verdict_fallback'),
+                        'verify_results': [],
+                        'health_before': before,
+                        'health_after': sandbox_health(),
+                        'confirm_requested': any(
+                            x.get('type') == 'confirm_request' for x in _ev),
+                        'answer_head': _tx[:300],
+                        'answer_tail': _tx[-600:] if len(_tx) > 600 else _tx,
+                        'answer_len': len(_tx),
+                        'honest_error': _herr,
+                    })
+                    continue
                 # 采集出错必须显式标记，不能让它变成"0 工具所以 FAIL"——
                 # 那是把管线问题算成产品缺陷。
                 _row = rr.error_row(
@@ -472,6 +620,27 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                     # 而不是「下一轮状态里会读到它」。
                     print(f'    ⚠撤销有残留：{_left}'
                           f'（状态已强制清空，但残留对象可能还占着端口/文件）')
+
+                # v3.0 §5.2：需要重启实例的注入，撤销之后**再重启一次**，
+                # 让实例吃回还原后的干净状态——不重启的话，ai_unreachable
+                # 的内存里还是死地址，后面所有注入的 chat 全部失败，
+                # 那才是真的装置事故。
+                # **必须放在 finally 里**：放在 try/finally 结构外面的话，
+                # honest_failure 和采集失败两条 continue 会跳过它，
+                # 毒化的内存配置就泄漏进后面的场景（实测：ai_unreachable
+                # 撤销后没重启 → dual_fault / refire 的 chat 全打在
+                # 死端口 45190 上，整批数据报废）。
+                if inj.get('needs_ui_restart'):
+                    try:
+                        ui, tok = relaunch_sandbox_ui('撤销后恢复干净实例')
+                        okB, _d4 = sandbox_start_backend(ui, tok)
+                        if okB:
+                            wait_backend_listening(ui, tok, sb.SANDBOX_PORT, timeout=60)
+                    except Exception as _re:
+                        # 不让重启失败掩盖本轮已采集的结果，
+                        # 但必须喊出来——下一轮会踩到脏实例。
+                        print(f'    ⚠撤销后重启实例失败（不影响本轮已采集结果，'
+                              f'但下一轮可能受影响）：{_re}')
 
             # 恢复类故障要等一会儿：AI 调 start_service 后服务要时间起来。
             # 这里不能用 rr.objective_health 的判据——它假设沙箱里有
@@ -550,6 +719,10 @@ def run_injections(injections, repeat, ui, tok, allow_writes=False):
                 # **能被独立核对**。没有它，谁都只能猜。
                 'answer_tail': text[-600:] if len(text) > 600 else text,
                 'answer_len': len(text),
+                # v3.0 §5.2：场景级断言单独记账（仅 audit_unwritable 有值）。
+                # 不塞进 verdicts —— verdicts 的形状约定是「一个维度」，
+                # 混进环境断言会破坏它（与 verdict 元信息同一条规矩）。
+                'scenario_checks': _scen,
             })
     return results
 
@@ -662,6 +835,9 @@ def report_and_print(results, min_samples, only_kinds=False):
     report = {
         'mode': 'sandbox',
         'sandbox_port': sb.SANDBOX_PORT,
+        # v3.0 §5.2 #169（G13）：批次标记。门禁只认同一批次的报告——
+        # 混批次的数字无法区分"代码变了"还是"数据变了"。
+        'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
         'min_samples': min_samples,
         'total_runs': len(results),
         'dimensions': dims,
@@ -696,6 +872,8 @@ def report_and_print(results, min_samples, only_kinds=False):
             p.write_text(json.dumps({
                 'mode': 'sandbox',
                 'sandbox_port': sb.SANDBOX_PORT,
+                # v3.0 §5.2 #169（G13）：批次标记，门禁据此拒绝混批次。
+                'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
                 'min_samples': min_samples,
                 'total_runs': len(sub),
                 'injection': k,
@@ -807,7 +985,14 @@ def rr_verdict_coverage(results):
     err = [r for r in results
            if r.get('collect_error') and not r.get('cut_by_confirm')]
 
-    judgeable = n - len(cut) - len(err)
+    # v3.0 §5.2：AI 不可用类（honest_failure）的轮次**没有模型输出**——
+    # 上游断开时产品唯一正确行为是如实报错，本轮根本没有模型回合，
+    # 结构块「没机会出现」。性质同 cut_by_confirm：不是模型忘了输出。
+    # 不剔除的话，每测一次 ai_unreachable 覆盖率就被拉低一格
+    # （实测踩过：门禁报「模型该输出块却没输出」，而那一轮模型根本不存在）。
+    hf = [r for r in results if r.get('honest_error')]
+
+    judgeable = n - len(cut) - len(err) - len(hf)
     # 分子**只算真正走了结构化路径的**。
     #
     # ⚠️ 第一版写的是 `r.get('verdict_used') or r in cut`
@@ -837,6 +1022,7 @@ def rr_verdict_coverage(results):
         # 下面几个是「把话说清楚」的口径
         'cut_by_confirm': len(cut),         # 被确认卡掐断，块不可能在
         'collect_errors': len(err),         # 采集失败，没测到
+        'honest_failures': len(hf),         # AI 不可用，本轮没有模型回合
         'judgeable_runs': judgeable,        # 真正能要求模型输出块的轮次
         'coverage_judgeable': (
             '%.3f' % (used_j / judgeable)) if judgeable else None,
@@ -852,7 +1038,9 @@ def rr_verdict_coverage(results):
                  '两者都要低才是真问题——前者低说明模型不照做'
                  '（改产品侧指令），后者低说明模型照做了但没机会'
                  '（改确认卡的收尾，别去动判据）。'
-                 '采集失败不计入任何分母：**没测到 ≠ 测了不合格**。'),
+                 '采集失败不计入任何分母：**没测到 ≠ 测了不合格**。'
+                 'AI 不可用轮次同样不计入分母：本轮没有模型回合，'
+                 '结构块无从谈起。'),
     }
 
 

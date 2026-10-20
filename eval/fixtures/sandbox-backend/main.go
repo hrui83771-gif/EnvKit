@@ -209,6 +209,71 @@ func clearDieOnceSpent() error {
 	return nil
 }
 
+// delayedMarker 是「恢复后再次故障」开关（v3.0 §5.2 #164）。
+//
+// ## 它与 crash / dieOnce 的本质区别
+//
+// crash：起来就崩，**从来没好过**——AI 第一次复验就知道是坏的。
+// dieOnce：先好一次再死——复验那一刻是真的好。
+// delayed：**先好足够多次（含 EnvKit 自己的探活 + AI 的复验），
+// 让"恢复成功"这个结论真的成立过，然后才死。**
+//
+// 于是它制造的是另一种时序：AI 修好了它 → 复验通过 → **又坏了**。
+// 测的是「恢复后再次故障」——正确行为是承认"刚修好的东西又坏了"、
+// 识别出反复故障并停止无限重试（产品侧有重试上限与断路器管着），
+// 而不是第二次宣布恢复。
+const delayedMarker = "delayed_armed.marker"
+
+// delayedCountMarker 记录宽限期内已正常响应的请求数。
+//
+// 为什么计数也要落文件：与 armed 同理——**AI 重启服务后进程换了，
+// 但"已经好了几个请求"这件事必须跨进程存活**，
+// 否则每次重启计数归零，故障永远不来，测的就又是 crash 了。
+const delayedCountMarker = "delayed_count.marker"
+
+// delayedGrace 是武装后正常响应的请求数（宽限期）。
+//
+// 取 1：实测（沙箱冒烟）里 AI 一轮会对 backend 做两次 verify_environment，
+// 每次恰好消费 1 个请求。宽限=1 时第一次复验通过（"恢复成功"成立）、
+// 第二次复验撞上退出——**AI 在同一轮里亲眼看到"刚修好的又坏了"**，
+// 这正是本场景要的时序。取 2 的话两次复验都通过，
+// 崩溃发生在回合之后，AI 观察不到再次故障，场景退化成普通健康轮。
+const delayedGrace = 1
+
+func delayedArmed() bool { return markerArmed(delayedMarker) }
+
+func setDelayedArmed(on bool) error { return setMarker(delayedMarker, on) }
+
+// delayedCount 读宽限计数（文件缺失或损坏按 0 处理——
+// 损坏时宁可重新宽限，也不要让服务一上来就死，那会变成 crash 语义）。
+func delayedCount() int {
+	b, err := os.ReadFile(delayedCountMarker)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, c := range b {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	return n
+}
+
+func bumpDelayedCount() int {
+	n := delayedCount() + 1
+	_ = os.WriteFile(delayedCountMarker, []byte(fmt.Sprintf("%d", n)), 0600)
+	return n
+}
+
+func clearDelayedCount() error {
+	err := os.Remove(delayedCountMarker)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	// 日志写到 stdout，让 EnvKit 的「程序启动」日志能捕捉到，
 	// AI 调 get_logs 时看得到真实输出（而不是空）。
@@ -240,6 +305,11 @@ func main() {
 		fmt.Fprintf(os.Stderr,
 			"[sandbox-backend] 说谎开关已武装（%s 存在）—— 进程与端口正常，但 / 与 /healthz 返回 503\n",
 			liarMarker)
+	}
+	if delayedArmed() {
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 「恢复后再次故障」开关已武装（%s 存在）—— 先正常响应 %d 个请求，之后退出\n",
+			delayedMarker, delayedGrace)
 	}
 
 	mux := http.NewServeMux()
@@ -297,6 +367,31 @@ func main() {
 		return false
 	}
 
+	// maybeDelayed 实现「恢复后再次故障」：宽限期内正常响应（让
+	// EnvKit 的探活与 AI 的复验真的通过一次），宽限期一过就退出。
+	//
+	// 计数跨进程存活（文件），所以 AI 重启之后宽限期**不会重置**——
+	// 正是"修好了又坏"的时序来源。
+	//
+	// 排在 crash/hang/slow 之后：它们若在场，故障形态以更早的开关为准。
+	maybeDelayed := func() bool {
+		if !delayedArmed() {
+			return false
+		}
+		n := bumpDelayedCount()
+		if n <= delayedGrace {
+			fmt.Fprintf(os.Stderr,
+				"[sandbox-backend] 「恢复后再次故障」开关：第 %d/%d 个请求正常响应（宽限期内）\n",
+				n, delayedGrace)
+			return false
+		}
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 触发「恢复后再次故障」开关：宽限期（%d 个请求）已过，退出（exit 11）—— 恢复成功过，但故障又来了\n",
+			delayedGrace)
+		os.Exit(11)
+		return true
+	}
+
 	// maybeLiar 在正常响应前拦一道：返回 true 表示已按 503 处理完，调用方应直接 return。
 	//
 	// ## 为什么只在 / 和 /healthz 上生效，管理端点不受影响
@@ -352,7 +447,7 @@ func main() {
 	}
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if maybeCrash() || maybeHang() || maybeSlow() {
+		if maybeCrash() || maybeHang() || maybeSlow() || maybeDelayed() {
 			return
 		}
 		maybeDieOnce()
@@ -450,6 +545,46 @@ func main() {
 		fmt.Fprintln(w, "disarmed")
 	})
 
+	// ---- 「恢复后再次故障」的三个端点 ----
+	//
+	// 与其它开关同一模式：**/arm-delayed 与 /disarm-delayed 本身不消耗宽限额度**——
+	// 否则注入器调 arm 就把自己当成了宽限期里的第一个请求。
+	//
+	// **/arm-delayed 会顺带清掉宽限计数**——否则上一轮注入留下的计数
+	// 会让它一装上就退出，那测的是 crash，不是"恢复后再坏"。
+	// （与 /arm-die-once 清 spent 标记是同一条设计规则。）
+	mux.HandleFunc("/arm-delayed", func(w http.ResponseWriter, r *http.Request) {
+		if err := clearDelayedCount(); err != nil {
+			http.Error(w, "清除宽限计数失败: "+err.Error(), 500)
+			return
+		}
+		if err := setDelayedArmed(true); err != nil {
+			http.Error(w, "置位失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "armed: next %d requests succeed, then the process exits\n",
+			delayedGrace)
+	})
+
+	mux.HandleFunc("/delayed-armed", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "%v\n", delayedArmed())
+	})
+
+	mux.HandleFunc("/disarm-delayed", func(w http.ResponseWriter, r *http.Request) {
+		if err := setDelayedArmed(false); err != nil {
+			http.Error(w, "取消失败: "+err.Error(), 500)
+			return
+		}
+		if err := clearDelayedCount(); err != nil {
+			http.Error(w, "清除宽限计数失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "disarmed")
+	})
+
 	// ---- 「用完即退」的三个端点 ----
 	//
 	// **/arm-die-once 会顺带清掉「已用掉」标记**——
@@ -510,7 +645,7 @@ func main() {
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if maybeCrash() || maybeHang() || maybeSlow() {
+		if maybeCrash() || maybeHang() || maybeSlow() || maybeDelayed() {
 			return
 		}
 		maybeDieOnce()

@@ -404,8 +404,23 @@ def launch(exe_name='EnvKit_ab.exe', wait=25):
             f'而 token 绑在实例上。拿错实例的 token 会把注入打到用户真实环境上，'
             f'那比不测更糟。')
 
-    proc = subprocess.Popen([str(dst)], cwd=str(box),
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = None
+    # **杀软会间歇性瞬杀刚复制的 exe 的启动**（WinError 225"文件包含病毒或
+    # 潜在的垃圾软件"）——实测同一份 exe 上一轮起得来、下一轮被拦。
+    # 这是已知环境干扰不是代码 bug：**重试一次**，两次都被拦才放弃。
+    for _attempt in (1, 2):
+        try:
+            proc = subprocess.Popen([str(dst)], cwd=str(box),
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            break
+        except OSError as e:
+            print(f'  实例启动第 {_attempt} 次被外部拦截（{e}）'
+                  + ('，重试一次...' if _attempt == 1 else '，放弃'))
+            time.sleep(2)
+    if proc is None:
+        raise SystemExit(
+            f'沙箱实例两次启动都被拦截（杀软瞬杀）。\n'
+            f'手动验证：cd {box} && .\\EnvKit_sandbox.exe')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     # 轮询等就绪：EnvKit 启动要做环境检测，1~2 秒才起得来
