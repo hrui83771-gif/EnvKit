@@ -335,6 +335,13 @@ type Verifier interface { Verify(spec VerifySpec) OpResult }        // 三态出
 
 ### 5.2 负向场景扩展（8 个新场景 + 挂点）
 
+> **完成进度（2026-10-20，提交 `3fbd33f`）**：
+> ✅ **复验失败——已交付且带产品修复闭环**（fixture liar 开关返回 503；`verify.go` 复验路径
+> 新增 5xx 检查 → `Ok&&!Verified` 三态第二态 + 证据明写 HTTP 503；判据走 `sys_unknown` 桶。
+> 端到端序列 + 575 测试 + 210 项自检断言全绿）。
+> 🔲 审计存储故障 / AI 不可用 / 并发恢复 / 重复触发 / 恢复后再次故障：待做（分 3 批）。
+> ⚠️ **验证器超时建议合并**（见本节末「架构变化」）；**节点失联需链环境**（沙箱 chain 清空，无 SSH 链端）。
+
 | 场景 | 注入方式 | 判据期望（注意口径） |
 |---|---|---|
 | 验证器超时 | fixture 加"复验挂起"开关（探活通但验证器不返回） | 产品报"复验未完成"而非"已恢复"；判假愈=0 |
@@ -343,8 +350,20 @@ type Verifier interface { Verify(spec VerifySpec) OpResult }        // 三态出
 | 节点失联 | SSH 适配器探针失败（链环境） | 守护跳过恢复 + 连续 N 轮升级通知（`chain.go:945-951` 先例）；不算恢复失败 |
 | 并发恢复 | 沙箱支持双注入叠加（现流程严格串行 `recovery_sandbox.py:352-354`） | 组锁生效、无双重恢复、`cascade_suppressed` 正确压制下游 |
 | 重复触发 | 注入器允许"不撤销直接二次触发"（现拒绝重复 `fault_inject.py:524-532` 等） | 断路器/预算生效；升级及时 |
-| 复验失败 | fixture 加"端口 LISTENING 但不健康"端点（G12 最大缺口） | 产品走 Compensate 或 Escalate，**绝不 Commit**；判据 unknown 态正确 |
+| 复验失败 ✅ | fixture 加"端口 LISTENING 但不健康"端点（G12 最大缺口） | 产品走 Compensate 或 Escalate，**绝不 Commit**；判据 unknown 态正确 |
 | 恢复后再次故障 | fixture 加延迟触发开关（现只有"下一请求"触发） | 二次恢复受 max_attempts 约束；不无限循环 |
+
+**架构变化导致的两个场景处置（2026-10-20 记，不算漏做）**：
+
+1. **验证器超时——建议与 hang_service / slow_start 合并，不重复注入**。写计划时的设想是
+   "独立 verifier 组件挂起"；v3.0 之后复验已合入 `verify_service` 的探活链
+   （`verify.go:60` + `lifecycle.go:75`），"复验挂起"的两种形态分别由
+   hang_service（挂起不返回）与 slow_start（慢到超时）覆盖，判据重叠度 >80%。
+   按"不为每种形态复制一套注入"的原则，再造一类重复场景只会稀释样本。
+2. **节点失联——沙箱结构性不可测**。`sandbox.py:199` 建沙箱时清空 chain 配置，
+   推导不出 chain/webase，SSH 适配器无从失联。硬造一个假 SSH 端点测的是适配器的
+    mock 自己。此场景留到有链配置的环境（含 3 天试运行）验证，届时 `chain.go:945-951`
+   的"连续 N 轮升级通知"路径是验收对象。
 
 ### 5.3 指标口径（试验前固定，写 `docs/eval/metrics-spec.md`）
 
