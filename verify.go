@@ -129,7 +129,33 @@ func verifyServiceInner(target string, wait time.Duration) OpResult {
 				time.Sleep(verifyPollEvery)
 				continue
 			}
-			ev = append(ev, httpProbe(port))
+			// G12 修复：端口 LISTENING、owner 匹配、HTTP 有响应——但状态码是 5xx。
+			//
+			// 这是"端口 LISTENING 但不健康"的精确形态（plan §5.2 的 G12 缺口，
+			// 被测形态见 eval/fixtures/sandbox-backend 的 liar 开关）：
+			// 进程活着、端口通着、HTTP 服务器也在应答，**但服务端自己说它坏了**
+			// （配置错误、依赖掉了、健康检查报错——真实世界里"起来了但功能全废"）。
+			// 只看"有没有响应"的旧判据会放它过关，于是恢复被宣布成功，
+			// 而用户访问到的是一片 503——**假愈：系统说好了，现实是坏的。**
+			//
+			// 判 Ok&&!Verified（三态的第二态）而不是 !Ok：
+			// 探活确实执行了、端口确实在听、进程确实活着——动作层面的事实都成立；
+			// 没被证明的是"服务健康"。这与"进程死了"（!Ok, spawn_fail）和
+			// "确实健康"（Ok&&Verified）是三种不同结论，混不掉。
+			// AI 拿到它时不许宣布"已恢复"，正确行为是报告 5xx + 给下一步。
+			//
+			// 阈值取 5xx 而不是"非 2xx"：4xx 是**请求**的问题（401 要登录、
+			// 404 路由不对、405 方法错），服务端明明活着——把它判不健康
+			// 就是误杀，而误杀比漏拦更糟（会让用户去"修"一个没坏的服务）。
+			probe := httpProbe(port)
+			if code := httpStatusCode(probe); code >= 500 {
+				ev = append(ev, probe,
+					"hint=HTTP 5xx 是服务端自报异常：进程与端口正常，但无法认定服务可用")
+				return opOK(action, target,
+					fmt.Sprintf("%sHTTP 返回 %d：进程在跑、端口在听，但服务端自报异常，无法认定已就绪", svcLabel(target), code),
+					ev...)
+			}
+			ev = append(ev, probe)
 			// v2.2 M10：不立即返回。端口监听到进程活着还有一段路——
 			// "起来了又崩了"是最常见的故障，而"监听的那一刻"恰好看不到它。
 			// 进入存活观察窗，期间崩溃才算启动失败并附日志尾部。
@@ -336,7 +362,12 @@ func dialLocal(port int) bool {
 }
 
 // portOwner 端口占用者进程名（netstat + tasklist），查不到返回空串（按"未知"处理，不冤枉）。
-func portOwner(port int) string {
+//
+// 提成 var 与 httpProbe / lifecycleAlive 同一模式：netstat 依赖让
+// "端口占用者是谁"在测试环境里不可控（TestVerifyServiceListening 的注释
+// 承认过"测试随开发机状态随机假失败或假通过"），而 G12 场景需要
+// **确定性地构造"占用者未知 → 放行"这条路径**才能走到 HTTP 状态码检查。
+var portOwner = func(port int) string {
 	for _, row := range scanPortsOnce([]int{port}) {
 		if row.Port == port && row.State == "LISTENING" {
 			return row.Name
@@ -347,7 +378,12 @@ func portOwner(port int) string {
 
 // httpProbe 首页握手探测：能拿到 HTTP 响应（哪怕 404/401）就证明有 HTTP 服务在。
 // 走 httpDirect 强制直连：用户配了代理时，共享 client 会把 127.0.0.1 也发给代理而误判失败。
-func httpProbe(port int) string {
+//
+// 提成 var 与 webaseFetch / lifecycleAlive / svcPortsFn 同一模式：
+// 单测要注入"HTTP 503"这种真实环境里难复现的响应——G12「说谎服务」场景
+// （eval/fixtures/sandbox-backend 的 liar 开关）要求复验层对 5xx 有确定行为，
+// 而 CI 里没有真返回 503 的服务。
+var httpProbe = func(port int) string {
 	resp, err := httpDirect.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
 	if err != nil {
 		return "HTTP 未响应（" + firstLines(err.Error(), 60) + "）"
@@ -355,6 +391,16 @@ func httpProbe(port int) string {
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return "HTTP " + strconv.Itoa(resp.StatusCode)
+}
+
+// httpStatusCode 从 httpProbe 的返回里解析状态码（"HTTP 503" → 503；解析不到返回 0）。
+func httpStatusCode(probe string) int {
+	s := strings.TrimPrefix(strings.TrimSpace(probe), "HTTP ")
+	code, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0
+	}
+	return code
 }
 
 func svcLabel(target string) string {

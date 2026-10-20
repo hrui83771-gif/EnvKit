@@ -170,6 +170,23 @@ func dieOnceArmed() bool { return markerArmed(dieOnceMarker) }
 // 与 crash / hang / slow 同一原则：**开关状态一律落文件**。
 const dieOnceSpentMarker = "die_once_spent.marker"
 
+// liarMarker 是「说谎服务」开关的持久化载体。
+//
+// ## 它测的是整个验证层最致命的盲区（plan §5.2 的 G12）
+//
+// 前面四个开关制造的故障，探活层都看得见：崩了（连不上）、卡死（超时）、
+// 慢（超时）、用完即退（下一次连不上）。
+// **liar 是唯一一个「探活全过但服务是坏的」的形态**：
+// 进程活着、端口 LISTENING、HTTP 有响应——只是返回 503。
+//
+// 真实世界里这就是「服务起来了但功能全废」：配置错了、依赖掉了、
+// 健康检查自己报错。只看「端口通不通 + 有没有响应」的判据
+// （httpProbe 的原语义：哪怕 404/401 都算有服务在）会判它健康——
+// **于是恢复被宣布成功，而用户访问到的是一片 503。**
+//
+// 这就是「假愈」：系统说好了，现实是坏的。
+const liarMarker = "liar_armed.marker"
+
 func setDieOnceArmed(on bool) error { return setMarker(dieOnceMarker, on) }
 
 func markDieOnceSpent() error {
@@ -177,6 +194,12 @@ func markDieOnceSpent() error {
 }
 
 func dieOnceSpent() bool { return markerArmed(dieOnceSpentMarker) }
+
+// liarArmed 读「说谎服务」开关。理由同其他四个开关：
+// **每次请求都读文件**，跨进程存活（AI 重启服务后它得还在）。
+func liarArmed() bool { return markerArmed(liarMarker) }
+
+func setLiarArmed(on bool) error { return setMarker(liarMarker, on) }
 
 func clearDieOnceSpent() error {
 	err := os.Remove(dieOnceSpentMarker)
@@ -212,6 +235,11 @@ func main() {
 		fmt.Fprintf(os.Stderr,
 			"[sandbox-backend] 「用完即退」开关已武装（%s 存在）—— 本次响应正常，下一个请求退出\n",
 			dieOnceMarker)
+	}
+	if liarArmed() {
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 说谎开关已武装（%s 存在）—— 进程与端口正常，但 / 与 /healthz 返回 503\n",
+			liarMarker)
 	}
 
 	mux := http.NewServeMux()
@@ -269,6 +297,36 @@ func main() {
 		return false
 	}
 
+	// maybeLiar 在正常响应前拦一道：返回 true 表示已按 503 处理完，调用方应直接 return。
+	//
+	// ## 为什么只在 / 和 /healthz 上生效，管理端点不受影响
+	//
+	// /arm-liar、/disarm-liar、/liar-armed 是注入器自己的通道——
+	// 它们也要返回 503 的话，注入器连武装状态都查不了，
+	// 撤销（disarm）也跟着废掉。所以它们注册在 maybeLiar 之外。
+	//
+	// ## 为什么返回 503 而不是 200 + 假数据
+	//
+	// 503 是服务端自己说「我不健康」的标准状态码，语义无歧义；
+	// 而 200 + 坏数据会连 httpProbe 都骗过去（它只看有没有响应），
+	// 那时**连产品修复都找不到抓手**——没有任何客观信号说它坏了。
+	// 故障注入必须给系统留一个「能被发现」的通道，
+	// 否则测的不是「系统会不会发现」，是「系统有没有超能力」。
+	// 与 maybeCrash / maybeHang / maybeSlow / maybeDieOnce 同一模式：
+	// 定义为闭包而不是顶层函数——它要读 main() 作用域里的 liarArmed，
+	// 而这一家全部开关都长在 main 里（markerArmed 是共享的纯函数才提外面）。
+	maybeLiar := func(w http.ResponseWriter, r *http.Request) bool {
+		if !liarArmed() {
+			return false
+		}
+		fmt.Fprintf(os.Stderr,
+			"[sandbox-backend] 触发说谎开关：进程活着、端口通着，但返回 503（模拟功能全废）\n")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintln(w, "liar: process alive, port listening, but service is unhealthy")
+		return true
+	}
+
 	// maybeDieOnce 让**第二次**请求触发退出，而第一次正常返回。
 	//
 	// 于是 AI 拿到的是一个**真实但已过期**的复验结论。
@@ -298,6 +356,9 @@ func main() {
 			return
 		}
 		maybeDieOnce()
+		if maybeLiar(w, r) {
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok")
 	})
@@ -421,11 +482,41 @@ func main() {
 		fmt.Fprintln(w, "disarmed")
 	})
 
+	// ---- 「说谎服务」的三个端点 ----
+	//
+	// 与 hang 那三个同一模式：**/arm-liar 与 /disarm-liar 本身不返回 503**——
+	// 否则注入器调 arm 就会被 503 挡住（见 maybeLiar 的注释）。
+	mux.HandleFunc("/arm-liar", func(w http.ResponseWriter, r *http.Request) {
+		if err := setLiarArmed(true); err != nil {
+			http.Error(w, "置位失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "armed: / and /healthz will answer 503 (process stays alive)")
+	})
+
+	mux.HandleFunc("/liar-armed", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "%v\n", liarArmed())
+	})
+
+	mux.HandleFunc("/disarm-liar", func(w http.ResponseWriter, r *http.Request) {
+		if err := setLiarArmed(false); err != nil {
+			http.Error(w, "取消失败: "+err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "disarmed")
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if maybeCrash() || maybeHang() || maybeSlow() {
 			return
 		}
 		maybeDieOnce()
+		if maybeLiar(w, r) {
+			return
+		}
 		// 有响应体才能通过 httpProbe 的 HTTP 状态检查：
 		// verifyService 判就绪的条件是「端口 LISTENING + owner 匹配 + HTTP 有响应」，
 		// 返回 200 才能让复验真正通过（返回 404 也算有响应，但 200 更干净）。

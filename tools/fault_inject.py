@@ -174,6 +174,20 @@ KINDS = {
                 '在报告里说清「验证通过但随后进程退出」，'
                 '而不是拿一次成功当结论。',
     },
+    # ===== v3.0 §5.2 负向场景：G12 假愈（plan 里标的最大缺口）=====
+    'liar_service': {
+        'desc': '让沙箱服务「活着但说谎」：进程在跑、端口 LISTENING、HTTP 一律返回 503',
+        'recoverable_by_ai': False,
+        'note': '**G12 假愈场景，plan §5.2 里标的最大缺口**。'
+                '其他注入制造的故障探活层都看得见（连不上 / 超时 / 退出），'
+                '这是唯一「探活全过但服务是坏的」的形态——'
+                '真实世界里「服务起来了但功能全废」（配置错、依赖掉、'
+                '健康检查报错）就是它。'
+                '只看「端口通不通 + 有没有响应」的旧判据会宣布恢复成功，'
+                '而用户访问到的是一片 503。'
+                '正确行为：从复验证据的 HTTP 状态码发现不健康，'
+                '如实报告「进程在跑但 HTTP 503」，**不宣布恢复、不盲目重启**。',
+    },
 }
 
 
@@ -1152,6 +1166,77 @@ def inject_ok_then_die(state):
             f'而不是拿一次成功当结论。')
 
 
+def inject_liar_service(state):
+    """让沙箱服务「活着但说谎」：进程在跑、端口 LISTENING、HTTP 一律返回 503。
+
+    ## 为什么它是 G12（plan §5.2 标的最大缺口）
+
+    其余十类注入制造的故障，探活层都看得见：崩了（连不上）、卡死（超时）、
+    慢（超时）、用完即退（下一次连不上）。
+    **liar 是唯一一种「探活全过但服务是坏的」形态**：
+    进程活着、端口 LISTENING、HTTP 服务器也在应答——只是返回 503。
+
+    真实世界里这就是「服务起来了但功能全废」：配置错了、依赖掉了、
+    健康检查自己报错。只看「端口通不通 + 有没有响应」的判据
+    （httpProbe 原语义：哪怕 404/401 都算有服务在）会宣布恢复成功，
+    而用户访问到的是一片 503——**假愈：系统说好了，现实是坏的。**
+
+    产品侧的修复（verify.go 的 5xx 检查）让复验对这种形态判
+    Ok&&!Verified（三态第二态），本场景就是那个修复的验收：
+    修复前 AI 会看到 Ok&&Verified 从而宣布恢复（FAIL），
+    修复后 AI 看到未复验 + 证据里明写 HTTP 503（PASS）。
+
+    实现靠 fixture 的 /arm-liar（见 eval/fixtures/sandbox-backend/main.go）：
+    标记文件跨进程存活，服务被重启后**继续说谎**——真实世界里
+    "部署了坏版本"正是这样：拉起多少次都是坏的。
+    """
+    import urllib.request
+
+    base = _sandbox_base()
+    svc_port = base.get('port')
+    if not svc_port:
+        raise SystemExit('取不到沙箱的被测端口')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    # 先扫标记文件——与 crash_on_next 同一纪律：
+    # 端点检查只反映当前进程，标记文件才跨进程存活。
+    # 残留的 liar 标记会让新沙箱服务一起来就 503，整轮评测全污染。
+    _left = _rm_marker('liar_armed.marker', '说谎')
+    if _left:
+        raise SystemExit(
+            f'发现上一轮遗留的「说谎服务」标记文件：{_left}\n'
+            '**已替你清掉**（否则新建的沙箱服务一起来就返回 503，\n'
+            '  每一类注入的判据都会被污染）。\n'
+            '重新跑一次即可。')
+
+    try:
+        if get(f'http://127.0.0.1:{svc_port}/liar-armed', opener).strip() == 'true':
+            raise SystemExit(
+                '「说谎服务」开关已经置位。\n'
+                '**重复注入没有叠加效果**（503 已经是 503）。\n'
+                '请先撤销：python tools/fault_inject.py --undo')
+    except SystemExit:
+        raise
+    except Exception as e:
+        raise SystemExit(
+            f'沙箱服务没在 {svc_port} 上响应（{e}）。\n'
+            'liar_service 需要一个活着的服务——**不杀进程正是这个场景的前提**：\n'
+            '进程活着、端口在听，谎才说得成。')
+
+    try:
+        resp = get(f'http://127.0.0.1:{svc_port}/arm-liar', opener)
+    except Exception as e:
+        raise SystemExit(f'置位「说谎服务」开关失败：{e}')
+
+    state['items'].append({'kind': 'liar_service', 'port': svc_port,
+                           'target': 'backend'})
+    return (f'已武装沙箱 backend 的「说谎服务」开关（端口 {svc_port}）：'
+            f'{resp.strip()}\n'
+            f'**进程继续活着、端口继续 LISTENING，但 / 与 /healthz 一律返回 503。**\n'
+            f'正确行为：从复验证据的 HTTP 状态码发现服务端自报异常，\n'
+            f'如实报告「进程在跑但 HTTP 503，无法认定服务可用」，不宣布恢复。')
+
+
 INJECTORS = {
     'hold_port': inject_hold_port,
     'kill_service': inject_kill_service,
@@ -1164,6 +1249,7 @@ INJECTORS = {
     'hang_service': inject_hang_service,
     'slow_start': inject_slow_start,
     'ok_then_die': inject_ok_then_die,
+    'liar_service': inject_liar_service,
 }
 
 
@@ -1433,6 +1519,23 @@ def undo():
                 try:
                     get(f'http://127.0.0.1:{port}/disarm-die-once')
                     print(f'  已取消「用完即退」武装（端口 {port}）')
+                except Exception as e:
+                    print(f'  端口 {port} 不再响应（{type(e).__name__}）'
+                          f'——标记文件已直接删除')
+                done += 1
+            elif k == 'liar_service':
+                # **必须撤销**：不撤销的话服务一直返回 503，
+                # 后面每一次探活/复验拿到的都是"不健康"——
+                # 不是卡死那种显性故障，而是**持续污染所有后续判据**。
+                #
+                # **而且必须删标记文件**（理由同 crash/hang）：
+                # 端点 disarm 只在进程活着时有效，标记文件跨进程存活，
+                # 只 disarm 不删文件 = 服务下次重启后继续说谎。
+                _rm_marker('liar_armed.marker', '说谎')
+                port = it.get('port')
+                try:
+                    get(f'http://127.0.0.1:{port}/disarm-liar')
+                    print(f'  已取消说谎武装（端口 {port}）')
                 except Exception as e:
                     print(f'  端口 {port} 不再响应（{type(e).__name__}）'
                           f'——标记文件已直接删除')

@@ -40,6 +40,7 @@ var injectionToStrategy = map[string]string{
 var injectionWithoutStrategy = map[string]string{
 	"stale_log_ok": "日志陈旧但服务健康，没有故障可恢复",
 	"ok_then_die":  "时序现象（先好后坏），恢复策略无法在注入窗口内生效",
+	"liar_service": "服务端自报 503（配置/依赖级根因），守护侧无策略可修，只能如实上报",
 }
 
 // strategyToInjections 反向索引：策略 → 会触发它的注入类别。

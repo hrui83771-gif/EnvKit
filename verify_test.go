@@ -267,6 +267,123 @@ func TestVerifyServiceListening(t *testing.T) {
 	}
 }
 
+// ---------- G12「说谎服务」：端口 LISTENING 但不健康 ----------
+
+func TestHTTPStatusCode(t *testing.T) {
+	cases := map[string]int{
+		"HTTP 200":                   200,
+		"HTTP 503":                   503,
+		"HTTP 404":                   404,
+		"HTTP 未响应（dial tcp timeout）": 0, // 探活失败的字符串解析不出码
+		"":                           0,
+	}
+	for in, want := range cases {
+		if got := httpStatusCode(in); got != want {
+			t.Fatalf("httpStatusCode(%q)=%d，期望 %d", in, got, want)
+		}
+	}
+}
+
+// G12 集成：进程活着、端口 LISTENING、owner 未知（放行）、HTTP 返回 503。
+//
+// 期望三态的第二态 Ok&&!Verified：
+//
+//	· 不许 Verified——那是假愈（系统说好了，用户看到的是一片 503）；
+//	· 不许 !Ok——端口确实在听、进程确实活着，动作层面的事实都成立，
+//	  这是"无法认定健康"而不是"启动失败"（后者是 spawn_fail/crash）。
+//
+// 判据侧（recovery_rate.py 的 sys_unknown 桶）靠 err_kind 为空 + ok&&!verified 认它。
+func TestVerifyServiceHTTP503(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("无法监听：%v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	svcMu.Lock()
+	old := svcState["backend"]
+	svcState["backend"] = &SvcInfo{Running: true, PID: os.Getpid(),
+		URL: fmt.Sprintf("http://localhost:%d/", port)}
+	svcMu.Unlock()
+
+	oldPortsFn := svcPortsFn
+	svcPortsFn = func(string) []int { return []int{port} }
+	oldProbe := httpProbe
+	httpProbe = func(int) string { return "HTTP 503" }
+	oldOwner := portOwner
+	portOwner = func(int) string { return "" } // 占用者未知 → 放行（不冤枉）
+	t.Cleanup(func() {
+		svcMu.Lock()
+		svcState["backend"] = old
+		svcMu.Unlock()
+		svcPortsFn = oldPortsFn
+		httpProbe = oldProbe
+		portOwner = oldOwner
+	})
+
+	r := verifyService("backend", 4*time.Second)
+	if !r.Ok {
+		t.Fatalf("端口在听、进程活着：动作事实成立，不该判失败，实际：%s", r.String())
+	}
+	if r.Verified {
+		t.Fatalf("HTTP 503 时不许认定已就绪——那就是假愈，实际：%s", r.String())
+	}
+	if r.ErrKind != "" {
+		t.Fatalf("503 是「无法认定」不是「失败」，err_kind 应为空，实际 %q", r.ErrKind)
+	}
+	if !strings.Contains(r.Msg, "503") {
+		t.Fatalf("结论必须点明 503，实际：%s", r.Msg)
+	}
+	joined := strings.Join(r.Evidence, " ")
+	if !strings.Contains(joined, "HTTP 503") {
+		t.Fatalf("证据链必须带原始探活结果，实际：%v", r.Evidence)
+	}
+}
+
+// 4xx 不许判不健康：401/404 是**请求**的问题（要登录、路由不对），
+// 服务端明明活着。把它判坏就是误杀——比漏拦更糟的一种。
+func TestVerifyServiceHTTP4xxStillVerifiable(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("无法监听：%v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	svcMu.Lock()
+	old := svcState["backend"]
+	svcState["backend"] = &SvcInfo{Running: true, PID: os.Getpid(),
+		URL: fmt.Sprintf("http://localhost:%d/", port)}
+	svcMu.Unlock()
+
+	oldPortsFn := svcPortsFn
+	svcPortsFn = func(string) []int { return []int{port} }
+	oldProbe := httpProbe
+	httpProbe = func(int) string { return "HTTP 404" }
+	oldOwner := portOwner
+	// 桩成 go.exe 而不是空串：lifecycleListen 正是用 portOwner 判断端口还在不在
+	// （空串会让观察窗判"端口已不再监听"）；go.exe 同时在 backend 的
+	// expect 进程表里，owner 检查也过——两条路都真实。
+	portOwner = func(int) string { return "go.exe" }
+	oldWindow, oldEvery := verifyObserveWindow, verifyObserveEvery
+	verifyObserveWindow, verifyObserveEvery = 300*time.Millisecond, 100*time.Millisecond
+	t.Cleanup(func() {
+		svcMu.Lock()
+		svcState["backend"] = old
+		svcMu.Unlock()
+		svcPortsFn = oldPortsFn
+		httpProbe = oldProbe
+		portOwner = oldOwner
+		verifyObserveWindow, verifyObserveEvery = oldWindow, oldEvery
+	})
+
+	r := verifyService("backend", 4*time.Second)
+	if !r.Ok || !r.Verified {
+		t.Fatalf("404 只是路由问题，服务活着：应正常认定就绪，实际：%s", r.String())
+	}
+}
+
 func TestSvcOwnerAcceptable(t *testing.T) {
 	if !svcOwnerAcceptable("", []string{"node.exe"}) {
 		t.Fatal("占用者未知时应放行（不冤枉）")
