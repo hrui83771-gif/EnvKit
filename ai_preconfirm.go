@@ -85,41 +85,6 @@ func aiPreconfirmPrompt(cnName string) string {
 		"不要反问用户。说完之后不要再调用任何工具，直接结束这一段回复。"
 }
 
-// aiVerifyBadgeClass 复验三态 → 前端 CSS 类。
-//
-// **前后端必须共用同一套判定**。曾经考虑在 JS 侧写一份，
-// 但那意味着两处独立演化 ——
-// 一处改了另一处没改，徽章就会显示错误的状态，
-// 而徽章的全部价值就是「它说验了就是真验了」。
-// 所以判定在 Go 侧，通过 SSE 的 ok/verified 传下去，JS 只做映射。
-//
-// 三态不能合并：
-//   - ok && verified → is-ok（真的恢复了）
-//   - ok && !verified → is-pending（动作执行了，但**没有证据说恢复了**）
-//   - !ok → is-bad（复验本身失败）
-//
-// ok && !verified 与 is-ok 合并 = 白做本功能。
-func aiVerifyBadgeClass(ok, verified bool) string {
-	if !ok {
-		return "is-bad"
-	}
-	if verified {
-		return "is-ok"
-	}
-	return "is-pending"
-}
-
-// aiVerifyBadgeText 复验三态的徽章文案（中文；前端按语言走 i18n）。
-func aiVerifyBadgeText(ok, verified bool) string {
-	if !ok {
-		return "复验未通过"
-	}
-	if verified {
-		return "已复验通过"
-	}
-	return "已执行·未确认"
-}
-
 // aiPreconfirmExplain 在弹确认卡之前，让模型用自然语言把诊断结论说完。
 //
 // 流式转发 delta，所以用户看到的是逐字输出而不是"等几秒后突然出现"。

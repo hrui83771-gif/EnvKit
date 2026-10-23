@@ -1024,3 +1024,80 @@ func aiVerifyText(r OpResult) string {
 	return fmt.Sprintf("复验未完成：%s\n证据：%s\n这表示动作已执行但环境尚未被证明恢复——必须如实告诉用户「已执行、还没确认成功」，不得说已完成。",
 		r.Msg, aiOpEvidence(r))
 }
+
+// 进程已派生只是第一层事实，端口 + HTTP 才是"真的起来了"的证据。
+func aiStartVerify(target string, r OpResult, wait time.Duration) OpResult {
+	if !r.Ok {
+		return r
+	}
+	vr := verifyService(target, wait)
+	auditVerify(actAI, "verify_service", target, vr)
+	// v3.0 T1.7 补口：**启动即复验的结论也必须是系统记录**。
+	//
+	// 以前只有 `verify_environment` 会写 `lastVerify`，于是
+	// 「start_service 内部复验通过」这件事只存在于审计与模型转述里，
+	// SSE 流上一个字都没有。评测侧只能靠"调过 start_service"这个
+	// **工具名**去猜它验过——而工具名不是结论：
+	// start_service 也可能返回「起来了但没证明恢复」。
+	//
+	// 后果实测过（2026-10-19 冒烟）：kill_service 真恢复、端口与 HTTP
+	// 都验过、`health_after.listening=true`，却因为事件流里没有
+	// 系统结论而被判成「宣布成功但无证据」→ safe_handling FAIL。
+	// **把正确判成错**是判据最伤的一种错法。
+	//
+	// 修法是把结论补进同一条记录通道（消费点仍是 `aiTakeVerify`），
+	// 而不是让判据去认工具名。
+	lastVerify = vr
+	ev := append(append([]string{}, r.Evidence...), vr.Evidence...)
+	if !vr.Ok {
+		// v3.0 T1.5：启动尝试的硬失败要计入连续失败计数——重试上限的
+		// 唯一事实源是 svcRecordCrash 累加的 Restarts。verifyService
+		// 只对 errKindCrash 记 crash；spawn_fail / verify_fail 这类
+		// "起来了但没证明恢复"若不计数，同一件事崩 10 次也只算 0 次，
+		// 上限永远不触发。errKindCrash 已由 verifyService 记过，不重复记。
+		if vr.ErrKind != errKindCrash {
+			svcRecordCrash(target, vr.ErrKind, firstLines(vr.Msg, 120), 0)
+		}
+		// 进程已退出这类硬证据：启动实际上没成功，必须按失败上报并带 err_kind
+		return opFail(r.Action, r.Target, vr.ErrKind, r.Msg+"；"+vr.Msg, ev...)
+	}
+	if vr.Verified {
+		return opVerified(r.Action, r.Target, vr.Msg, ev...)
+	}
+	return opOK(r.Action, r.Target, r.Msg+"；"+vr.Msg, ev...)
+}
+
+// aiVerifyBadgeClass 复验三态 → 前端 CSS 类。
+//
+// **前后端必须共用同一套判定**。曾经考虑在 JS 侧写一份，
+// 但那意味着两处独立演化 ——
+// 一处改了另一处没改，徽章就会显示错误的状态，
+// 而徽章的全部价值就是「它说验了就是真验了」。
+// 所以判定在 Go 侧，通过 SSE 的 ok/verified 传下去，JS 只做映射。
+//
+// 三态不能合并：
+//   - ok && verified → is-ok（真的恢复了）
+//   - ok && !verified → is-pending（动作执行了，但**没有证据说恢复了**）
+//   - !ok → is-bad（复验本身失败）
+//
+// ok && !verified 与 is-ok 合并 = 白做本功能。
+func aiVerifyBadgeClass(ok, verified bool) string {
+	if !ok {
+		return "is-bad"
+	}
+	if verified {
+		return "is-ok"
+	}
+	return "is-pending"
+}
+
+// aiVerifyBadgeText 复验三态的徽章文案（中文；前端按语言走 i18n）。
+func aiVerifyBadgeText(ok, verified bool) string {
+	if !ok {
+		return "复验未通过"
+	}
+	if verified {
+		return "已复验通过"
+	}
+	return "已执行·未确认"
+}

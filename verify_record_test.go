@@ -116,9 +116,11 @@ func TestLoopEmitsVerifyForAnyTool(t *testing.T) {
 }
 
 func TestStartVerifyPublishesRecord(t *testing.T) {
-	src, err := os.ReadFile("ai_tools.go")
+	// aiStartVerify 现定义在 verify.go（从 ai_tools.go 搬回归属文件）。
+	// 断言跟着函数走：只要它在哪个文件，就检查哪个文件。
+	src, err := os.ReadFile("verify.go")
 	if err != nil {
-		t.Fatalf("读 ai_tools.go 失败：%v", err)
+		t.Fatalf("读 verify.go 失败：%v", err)
 	}
 	if !strings.Contains(string(src), "lastVerify = vr") {
 		t.Error("aiStartVerify 没把复验结论写入 lastVerify——" +

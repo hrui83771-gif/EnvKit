@@ -11,6 +11,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -115,4 +116,46 @@ func nonEmpty(in []string) []string {
 		}
 	}
 	return out
+}
+
+// ---------- OpResult → AI 可读文本 ----------
+// 写工具的结果一律走这两个函数：成功给结论 + 证据，失败给归类 + 证据。
+// 目的是让 AI 能如实告诉用户"失败在哪、下一步做什么"，而不是笼统地说"已执行"。
+
+// aiOpEvidence 证据链拼接；没有证据时明确说"无"，避免 AI 脑补。
+func aiOpEvidence(r OpResult) string {
+	if len(r.Evidence) == 0 {
+		return "无"
+	}
+	return strings.Join(r.Evidence, "；")
+}
+
+// aiOpErr 把失败结果转成工具错误；错误文本会回传给模型，所以它本身就是给 AI 的提示。
+func aiOpErr(what string, r OpResult) error {
+	return fmt.Errorf("%s失败[%s]：%s\n证据：%s", what, r.ErrKind, r.Msg, aiOpEvidence(r))
+}
+
+// rrRes OpResult → 审计结果值。
+// v3.0 T1.6 会把它升级成三态（resUnverified）；当前先二值：
+// 执行了记 ok，没执行记 fail——**未复验不在此处放大成失败**，
+// 复验结论由 auditVerify 那条记录单独说（两条记录各管一件事）。
+func rrRes(r OpResult) string {
+	if r.Ok {
+		return resOK
+	}
+	return resFail
+}
+
+// aiOpResultText 把一个 OpResult 翻译成给模型的结论文本，三态语义必须分开说：
+// 失败给 err_kind 与下一步；已复验给证据并允许确认完成；未复验要堵死"那就当它成功了"的脑补。
+func aiOpResultText(what string, r OpResult) string {
+	switch {
+	case !r.Ok:
+		return fmt.Sprintf("%s失败[%s]：%s\n证据：%s\n请如实转述失败原因并给出下一步。", what, r.ErrKind, r.Msg, aiOpEvidence(r))
+	case r.Verified:
+		return fmt.Sprintf("%s成功且已复验通过：%s\n证据：%s", what, r.Msg, aiOpEvidence(r))
+	default:
+		return fmt.Sprintf("%s已执行但未通过复验：%s\n证据：%s\n必须如实告诉用户「已执行，还没确认成功」，禁止说已经好了。",
+			what, r.Msg, aiOpEvidence(r))
+	}
 }
