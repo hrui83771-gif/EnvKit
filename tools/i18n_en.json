@@ -208,6 +208,7 @@
   "复验反复失败": "Verification keeps failing",
   "复验未通过": "Verification failed",
   "复验环境状态": "Verify environment state",
+  "同步链地址到 config.toml": "Sync chain address into config.toml",
   "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",

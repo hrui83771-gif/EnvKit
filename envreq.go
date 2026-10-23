@@ -56,6 +56,12 @@ const (
 	reqTooLow     = "too_low"
 	reqUndeclared = "undeclared"
 	reqNotInstall = "not_installed"
+	// v3.1：config.toml 链地址一致性（chainip.go）。值不是版本而是地址，
+	// 性质同样是"当前状态不满足项目运行需要"。
+	reqMismatch = "mismatch"
+	// reqNA 没有可比对象（文件不存在/不是链项目）——**不是问题**，
+	// 与 reqUndeclared 同类：如实呈现，不进"不对"清单。
+	reqNA = "n_a"
 )
 
 // goModGoRe 从 go.mod 里取 go 指令的版本。
@@ -290,6 +296,10 @@ func checkAllEnvReq() []EnvReq {
 	return []EnvReq{
 		checkGoReq(cfg.Projects.BackendDir, goVer),
 		checkNodeReq(cfg.Projects.FrontendDir, nodeVer),
+		// v3.1：config.toml 链地址一致性。权威源 = 链端路由配置
+		// （ChainHost:ChainPort），检测纯客观比对，不经过 AI。
+		// n_a（非链项目）时 Why 会说明"不视为问题"。
+		chainIPCheckReq(),
 	}
 }
 
@@ -393,7 +403,7 @@ func envReqSummary(reqs []EnvReq) string {
 	var undeclared int
 	for _, r := range reqs {
 		switch r.Status {
-		case reqTooLow, reqNotInstall:
+		case reqTooLow, reqNotInstall, reqMismatch:
 			bad = append(bad, r.Component+": "+r.Why)
 		case reqUndeclared:
 			undeclared++
@@ -421,10 +431,14 @@ func envReqBadBrief() string {
 				r.Component, r.Required, r.Actual))
 		case reqNotInstall:
 			bad = append(bad, fmt.Sprintf("%s：未安装，而项目需要它", r.Component))
+		case reqMismatch:
+			// 链地址不一致是"现在就连不上"级别的问题，措辞要比版本类更急
+			bad = append(bad, fmt.Sprintf("%s：应为 %s，实际 %s（不一致，后端可能连不上链；可用 sync_chain_ip 同步）",
+				r.Component, r.Required, r.Actual))
 		}
 	}
 	if len(bad) == 0 {
 		return ""
 	}
-	return "**版本不够，动手之前先解决** —— " + strings.Join(bad, "；")
+	return "**有配置不满足运行需要，动手之前先解决** —— " + strings.Join(bad, "；")
 }

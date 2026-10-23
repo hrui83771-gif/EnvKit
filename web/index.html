@@ -1466,6 +1466,7 @@ const I18N_EN = {
   "右键可以让我藏起来": "Right-click lets me hide",
   "合法候选：": "Valid candidates:",
   "同时停止由本程序启动的前端 / 后端服务": "Also stop the frontend / backend services started by EnvKit",
+  "同步链地址到 config.toml": "Sync chain address into config.toml",
   "后台守护：定时检测并自动拉起（挂机用）": "Background guardian: periodically checks and restarts automatically (for unattended runs)",
   "后端": "Backend",
   "后端 go mod tidy": "Backend go mod tidy",
@@ -1640,7 +1641,6 @@ const I18N_EN = {
   "换个项目后自动失效": "goes stale after switching project",
   "搜索项目文件": "Search project files",
   "操作主体": "By actor",
-  "影子": "Shadow",
   "操作失败：": "Operation failed: ",
   "操作审计": "Audit log",
   "操作总数": "Total operations",
@@ -4851,7 +4851,8 @@ const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日�
   run_detection:'重新检测组件', db_backup:'备份数据库', start_service:'启动服务', stop_service:'停止服务',
   restart_service:'重启服务', apply_whitelist:'加入 Defender 白名单', db_check:'检测数据库连接',
   cleanup_processes:'清理后台进程', get_project_brief:'读取项目画像', list_project:'查看项目目录',
-  search_files:'搜索项目文件', read_file:'读取项目文件', verify_environment:'复验环境状态'};
+  search_files:'搜索项目文件', read_file:'读取项目文件', verify_environment:'复验环境状态',
+  sync_chain_ip:'同步链地址到 config.toml'};
 function aiToolName(name){ return t(AI_TOOL_CN[name] || name) + '（' + name + '）'; }
 
 // v2.9：把 verify_environment 的客观结果渲染成状态徽章。
