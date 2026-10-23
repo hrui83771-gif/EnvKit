@@ -87,6 +87,9 @@
   .prov-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--text)}
   /* 菜单项里的图标是裸 svg（没包 .prov-ic），不钉尺寸会按 viewBox 撑满整行 */
   .prov-item svg{width:18px;height:18px;display:block;flex:none}
+  /* 自动保存状态字：静默保存也要让用户看得见「存没存上」 */
+  #ai_autosave_st{font-weight:700;margin-right:6px;color:var(--ok,inherit)}
+  #ai_autosave_st.bad{color:var(--err)}
   .prov-item:hover{background:var(--hover)}
   .prov-item.on{background:var(--off)}
   .prov-native{display:none}
@@ -900,7 +903,7 @@
           <button class="ghost" id="btn-ai-models">拉取模型列表</button>
           <span class="hint" id="h-ai"></span>
         </div>
-        <div class="muted" style="margin-top:8px">配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。</div>
+        <div class="muted" style="margin-top:8px"><span id="ai_autosave_st"></span>配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。</div>
       </div>
 
       <div class="sec">
@@ -1114,7 +1117,7 @@
         <img id="about-logo" alt="" style="width:48px;height:48px;border-radius:12px;box-shadow:0 2px 6px rgba(16,24,40,.18)" />
         <div>
           <p style="margin:0"><b>EnvKit</b> v__APP_VERSION__</p>
-          <p style="margin:3px 0 0;color:var(--muted)">统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）</p>
+          <p style="margin:3px 0 0;color:var(--muted)">统一开发环境助手 · 单文件 Go · 零依赖 · 内置 AI 运维助手</p>
         </div>
       </div>
       <p style="margin:0 0 10px">作者 / 项目地址：<a href="https://github.com/hrui83771-gif" target="_blank" style="color:var(--info);word-break:break-all">https://github.com/hrui83771-gif</a></p>
@@ -1327,6 +1330,8 @@ const I18N_EN = {
   "EnvKit 已重启，本页令牌已过期，点击确定自动刷新页面。": "EnvKit restarted and this page's token expired. Click OK to refresh.",
   "EnvKit 环境助手": "EnvKit Assistant",
   "GOPROXY（Go 代理）": "GOPROXY (Go mirror)",
+  "HTTPS 证书异常：检查地址与系统时间": "HTTPS certificate problem: check the URL and your system clock",
+  "Key 被拒（HTTP {0}）：检查 API Key 是否正确": "Key rejected (HTTP {0}): check that your API key is correct",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
   "MySQL 端口": "MySQL port",
@@ -1418,6 +1423,7 @@ const I18N_EN = {
   "依赖 待办": "Deps pending",
   "依赖 未执行": "Deps not run",
   "依赖 未检测": "Deps not checked",
+  "保存中…": "Saving…",
   "保存失败": "Save failed",
   "保存失败：HTTP ": "Save failed: HTTP ",
   "保存失败：{0}": "Save failed: {0}",
@@ -1518,6 +1524,7 @@ const I18N_EN = {
   "唔…醒了": "Mm… awake now",
   "嗯？一直点我干嘛👀": "Hmm? Why keep poking me👀",
   "在呢~": "Here~",
+  "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
   "备份数据库": "back up database",
   "复位断路器": "Reset breaker",
   "复制": "Copy",
@@ -1603,6 +1610,7 @@ const I18N_EN = {
   "已整理": "Tidied",
   "已是最新": "Up to date",
   "已结束 PID {0}，可重新扫描确认": "Killed PID {0}; rescan to confirm",
+  "已自动保存 ✓": "Auto-saved ✓",
   "已自动保存，已拉取 {0} 个模型并回填": "Auto-saved; fetched {0} models and filled the dropdown",
   "已自动适配": "Auto-adapted",
   "已被安全策略拒绝": "Denied by policy",
@@ -1711,6 +1719,7 @@ const I18N_EN = {
   "最近有任务失败": "A recent task failed",
   "最近的日志里没有发现错误": "No errors found in recent logs",
   "有任务正在执行，请稍候": "Another task is running — please wait",
+  "有改动，待保存…": "Unsaved changes…",
   "有话直说~": "Just ask~",
   "服务 已就绪": "Services ready",
   "服务 异常": "Service error",
@@ -1719,6 +1728,7 @@ const I18N_EN = {
   "服务 运行中": "Services running",
   "服务商": "Provider",
   "服务商与密钥": "Provider & API key",
+  "服务商返回 HTTP {0}": "Provider returned HTTP {0}",
   "未保存…": "Unsaved…",
   "未发生": "Not yet",
   "未启动": "Not started",
@@ -1765,6 +1775,7 @@ const I18N_EN = {
   "检测数据库连接": "Check database connection",
   "模型": "Model",
   "模型名": "Model name",
+  "模型地址不存在（HTTP 404）：检查 Base URL 是否少了 /v1 或多了路径": "Models endpoint not found (HTTP 404): check the Base URL — usually a missing /v1 or an extra path segment",
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
   "次数": "Hits",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
@@ -1847,7 +1858,7 @@ const I18N_EN = {
   "结果": "Result",
   "结论": "Conclusion",
   "统一开发环境助手": "All-in-one Dev Environment Helper",
-  "统一开发环境助手 · Go + Node.js + MySQL 8 · 区块链溯源（FISCO-BCOS v2 / WeBASE）": "All-in-one Dev Environment Helper · Go + Node.js + MySQL 8 · Blockchain traceability (FISCO-BCOS v2 / WeBASE)",
+  "统一开发环境助手 · 单文件 Go · 零依赖 · 内置 AI 运维助手": "All-in-one Dev Environment Helper · Single-file Go · Zero dependencies · Built-in AI ops assistant",
   "缓存命中": "Cache hit",
   "缓存命中 {0}%": "cache hit {0}%",
   "缓存命中 {0}%　输入 {1} · 输出 {2}": "cache hit {0}% · in {1} · out {2}",
@@ -1890,6 +1901,7 @@ const I18N_EN = {
   "设置": "Settings",
   "诊断报告": "Diagnostic report",
   "诊断报告 AI 解读": "AI analysis of diagnostic report",
+  "该地址与已保存的服务商不一致，为防密钥外发未附带 Key——先保存配置再拉取": "This URL differs from the saved provider, so no API key was attached (to avoid leaking it to an unknown host) — save the config first, then fetch",
   "该模型不支持工具调用（已降级为纯问答）": "model does not support tool calls (degraded to plain Q&A)",
   "该端口已在列表中": "Port already in the list",
   "详情 / 复验结论": "Detail / verification",
@@ -1939,6 +1951,8 @@ const I18N_EN = {
   "连接正常": "Connection OK",
   "连接正常 · ": "Connected · ",
   "连接终端": "Connect terminal",
+  "连接被拒：地址或端口不对": "Connection refused: wrong address or port",
+  "连接超时：服务商无响应或网络不通": "Connection timed out: the provider is unresponsive or the network is down",
   "连点 5 次换衣服，10 次换发型，按住 1.5 秒摸头，拖着我甩会晕，连点 15 次有惊喜🌈": "Rapid-click 5× for a new outfit, 10× for new hair, hold 1.5s to pat me, swing me around and I get dizzy, 15× for a surprise🌈",
   "退出": "Exit",
   "退出程序": "Exit EnvKit",
@@ -4929,7 +4943,7 @@ $ai('btn-ai-models').onclick = async ()=>{
   $ai('h-ai').textContent = t('拉取模型列表中...');
   try{
     const c = await (await fetch('/api/ai/models', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({base_url:$ai('ai_base').value.trim()})})).json();
-    if(!c.ok){ $ai('h-ai').textContent = t('拉取失败：')+(c.error||''); return; }
+    if(!c.ok){ $ai('h-ai').textContent = aiPullErrHuman(c.error); return; }
     const cur = aiCurrentModel();
     aiPulledModels = c.models || [];
     // 记录这份列表来自哪个地址：**Base URL 改动后必须作废**，
@@ -4938,7 +4952,7 @@ $ai('btn-ai-models').onclick = async ()=>{
     aiPulledFrom = $ai('ai_base').value.trim();
     aiApplyProvider(cur);   // 重新渲染：下拉框显示拉取到的真值并选中当前模型
     $ai('h-ai').textContent = t('已拉取 {0} 个模型，已在「模型」下拉框中回填', aiPulledModels.length);
-  }catch(e){ $ai('h-ai').textContent = t('拉取失败：')+e; }
+  }catch(e){ $ai('h-ai').textContent = aiPullErrHuman(e); }
 };
 $ai('btn-ai-test').onclick = async ()=>{
   $ai('h-ai').textContent = t('测试中...');
@@ -4967,29 +4981,61 @@ function aiCollectPayload(){
     temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))};
 }
 
+/* 自动保存状态字：静默保存也要让用户看见「存没存上」——
+   2026-10-23 用户把「保存链炸了」误判成「启用开关失灵」，根因就是全程无反馈。 */
+function aiAutoSaveSt(txt, bad){
+  const el = $ai('ai_autosave_st');
+  if(!el) return;
+  el.textContent = txt ? t(txt) : '';
+  el.classList.toggle('bad', !!bad);
+}
+
+/* 拉取失败的人话分类：超时 / 401 / 404 / DNS 各是各的病，
+   别让用户对着 Go 的报错原文猜。命中不了就原样透出（不编造）。 */
+function aiPullErrHuman(err){
+  err = String(err||'');
+  // 后端对「地址≠已存服务商」的 401 有专属说明（防密钥发往陌生域名没带 Key），
+  // 这个要先于「Key 被拒」判断，否则会把「没带 Key」误说成「Key 错」
+  if(err.indexOf('未附带 API Key') >= 0)
+    return t('该地址与已保存的服务商不一致，为防密钥外发未附带 Key——先保存配置再拉取');
+  const m = err.match(/HTTP (\d+)/);
+  if(m){
+    const code = m[1];
+    if(code === '401' || code === '403') return t('Key 被拒（HTTP {0}）：检查 API Key 是否正确', code);
+    if(code === '404') return t('模型地址不存在（HTTP 404）：检查 Base URL 是否少了 /v1 或多了路径');
+    return t('服务商返回 HTTP {0}', code) + '：' + err;
+  }
+  if(/Client\.Timeout|context deadline/i.test(err)) return t('连接超时：服务商无响应或网络不通');
+  if(/no such host|lookup/i.test(err)) return t('域名无法解析：检查 Base URL 拼写与网络');
+  if(/connection refused/i.test(err)) return t('连接被拒：地址或端口不对');
+  if(/x509|certificate|tls:/i.test(err)) return t('HTTPS 证书异常：检查地址与系统时间');
+  return t('拉取失败：') + err;
+}
+
 async function aiPullModelsCore(){
   // 拉取前必须已存 Key（/models 用后端 DPAPI 里的 Key 做 Bearer）；
   // 没有就跳过——让用户先填 Key，免得每次都吃一个注定 401 的请求。
   if(!aiKeySet && !$ai('ai_key').value.trim()) return;
   try{
     const c = await (await fetch('/api/ai/models', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({base_url:$ai('ai_base').value.trim()})})).json();
-    if(!c.ok){ $ai('h-ai').textContent = t('自动保存完成，但拉取模型失败：')+(c.error||''); return false; }
+    if(!c.ok){ $ai('h-ai').textContent = t('自动保存完成，但拉取模型失败：')+aiPullErrHuman(c.error); return false; }
     const cur = aiCurrentModel();
     aiPulledModels = c.models || [];
     aiPulledFrom = $ai('ai_base').value.trim();   // Base URL 改动后旧列表作废（同手动拉取）
     aiApplyProvider(cur);
     $ai('h-ai').textContent = t('已自动保存，已拉取 {0} 个模型并回填', aiPulledModels.length);
     return true;
-  }catch(e){ $ai('h-ai').textContent = t('拉取失败：')+e; return false; }
+  }catch(e){ $ai('h-ai').textContent = t('自动保存完成，但拉取模型失败：')+aiPullErrHuman(e); return false; }
 }
 
 async function aiAutoSaveNow(){
   const payload = aiCollectPayload();
   if(!payload) return;
   aiAutoBusy = true;
+  aiAutoSaveSt('保存中…');
   try{
     const r = await fetch('/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    if(!r.ok){ $ai('h-ai').textContent = t('保存失败：HTTP ')+r.status; return; }
+    if(!r.ok){ aiAutoSaveSt('保存失败：HTTP '+r.status, true); return; }
     if(payload.api_key){ $ai('ai_key').value=''; aiKeySet = true;
       // Key 已入库，刷新脱敏占位符（只动 placeholder，不整表重载——整表重载会打断用户正在输入的字段）
       try{ const c = await (await fetch('/api/ai/config')).json();
@@ -4998,11 +5044,13 @@ async function aiAutoSaveNow(){
     }
     memSyncGate();
     await aiPullModelsCore();
+    aiAutoSaveSt('已自动保存 ✓');   // 拉取的成败在 h-ai 里说，这里只报保存结果
   }finally{ aiAutoBusy = false; }
 }
 
 function aiScheduleAutoSave(){
   if(aiSuppress) return;
+  aiAutoSaveSt('有改动，待保存…');
   clearTimeout(aiAutoTimer);
   aiAutoTimer = setTimeout(()=>{ if(!aiAutoBusy) aiAutoSaveNow(); else aiScheduleAutoSave(); }, 900);
 }
