@@ -200,7 +200,8 @@ var aiProviderPresets = []aiProviderPreset{
 	{
 		ID: "glm", Name: "GLM 智谱", BaseURL: "https://open.bigmodel.cn/api/paas/v4",
 		Models: []string{"glm-5.3", "glm-5.3-flash", "glm-4.7"},
-		Note:   "GLM 的思考模式由请求参数控制而非独立模型名，下拉里的名字都是完整模型；flash 为免费档",
+		// Note 不设：思考模式说明用户明确不要在前端展示（2026-10-23）；
+		// Note 机制保留，哪个服务商确需说明再加。
 	},
 	{
 		ID: "kimi", Name: "Kimi 月之暗面", BaseURL: "https://api.moonshot.cn/v1",
