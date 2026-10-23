@@ -15,10 +15,12 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 func psEncode(script string) string {
-	return base64.StdEncoding.EncodeToString(utf16Bytes(script))
+	return base64.StdEncoding.EncodeToString(platform.UTF16Bytes(script))
 }
 
 func exeDir() string {

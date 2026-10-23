@@ -13,6 +13,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // 内嵌的是「干净模板」而非 config.json —— config.json 是本机实配（含服务器 IP、
@@ -42,7 +44,7 @@ var (
 )
 
 func main() {
-	if !acquireSingleInstance() {
+	if !platform.AcquireSingleInstance() {
 		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）
 		for p := 18765; p < 18815; p++ {
 			u := fmt.Sprintf("http://127.0.0.1:%d/", p)
@@ -55,11 +57,11 @@ func main() {
 			if strings.Contains(string(body), "EnvKit") {
 				info(scSys, "服务", "EnvKit 已在运行：%s，已为你打开控制台页面", u)
 				go openBrowser(u)
-				notify("EnvKit 已在运行", "已为你打开正在运行的控制台页面")
+				platform.Notify("EnvKit 已在运行", "已为你打开正在运行的控制台页面")
 				os.Exit(0)
 			}
 		}
-		notify("EnvKit 已在运行", "请使用已打开的 EnvKit 窗口；若找不到，请在任务管理器结束 EnvKit.exe 后重试")
+		platform.Notify("EnvKit 已在运行", "请使用已打开的 EnvKit 窗口；若找不到，请在任务管理器结束 EnvKit.exe 后重试")
 		fmt.Println("EnvKit 已在运行（单实例保护）。")
 		os.Exit(1)
 	}
@@ -79,8 +81,12 @@ func main() {
 
 	go runSelfUpdateCheck() // 自版本检查（未配置 update_url 时静默跳过）
 
-	// 控制台关闭钩子：点窗口 X 先弹确认，退出前停掉启动的子进程（console_windows.go）
-	installConsoleHook()
+	// 控制台关闭钩子：点窗口 X 先弹确认，退出前停掉启动的子进程（internal/platform）
+	// Ctrl+C / 关窗口事件 → 停子进程 → 退出，绝不留无窗口的后台孤儿。
+	platform.InstallConsoleHook(func() {
+		shutdownChildren()
+		os.Exit(0)
+	})
 
 	http.HandleFunc("/", serveIndex)
 	http.HandleFunc("/api/config", handleConfig)

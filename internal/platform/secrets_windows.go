@@ -1,4 +1,4 @@
-package main
+package platform
 
 // 敏感信息保护（Windows）：
 //  1. DPAPI 加密 config.json 中的密码字段 —— 用 CryptProtectData（当前用户作用域），
@@ -13,7 +13,8 @@ import (
 	"unsafe"
 )
 
-const dpapiPrefix = "dpapi:"
+// DPAPIPrefix 是加密值的前缀标记；带此前缀的值视为密文。
+const DPAPIPrefix = "dpapi:"
 
 var (
 	crypt32                = syscall.NewLazyDLL("crypt32.dll")
@@ -30,8 +31,8 @@ type dataBlob struct {
 	pbData *byte
 }
 
-// dpapiProtect 加密；失败返回 ""（调用方保底存原文）。
-func dpapiProtect(plain string) string {
+// DPAPIProtect 加密；失败返回 ""（调用方保底存原文）。
+func DPAPIProtect(plain string) string {
 	if plain == "" {
 		return ""
 	}
@@ -45,15 +46,15 @@ func dpapiProtect(plain string) string {
 	}
 	defer procLocalFree.Call(uintptr(unsafe.Pointer(out.pbData)))
 	raw := unsafe.Slice(out.pbData, out.cbData)
-	return dpapiPrefix + base64.StdEncoding.EncodeToString(raw)
+	return DPAPIPrefix + base64.StdEncoding.EncodeToString(raw)
 }
 
-// dpapiUnprotect 解密；无前缀原样返回（兼容明文），解不开报错。
-func dpapiUnprotect(s string) (string, error) {
-	if !strings.HasPrefix(s, dpapiPrefix) {
+// DPAPIUnprotect 解密；无前缀原样返回（兼容明文），解不开报错。
+func DPAPIUnprotect(s string) (string, error) {
+	if !strings.HasPrefix(s, DPAPIPrefix) {
 		return s, nil
 	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(s, dpapiPrefix))
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(s, DPAPIPrefix))
 	if err != nil {
 		return "", err
 	}
@@ -68,8 +69,8 @@ func dpapiUnprotect(s string) (string, error) {
 	return string(unsafe.Slice(out.pbData, out.cbData)), nil
 }
 
-// acquireSingleInstance 拿到互斥锁返回 true；已有实例在跑返回 false。
-func acquireSingleInstance() bool {
+// AcquireSingleInstance 拿到互斥锁返回 true；已有实例在跑返回 false。
+func AcquireSingleInstance() bool {
 	name, _ := syscall.UTF16PtrFromString(`Local\EnvKit-single-instance`)
 	h, _, err := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(name)))
 	if h == 0 {

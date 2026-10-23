@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // ---------- 命令执行 ----------
@@ -220,7 +222,7 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 		return err
 	}
 	// 绑定到 Job Object：EnvKit 任何方式退出都会连带终止整个子进程树，防止孤儿占端口
-	assignToJob(cmd.Process.Pid)
+	platform.AssignToJob(cmd.Process.Pid)
 	procMu.Lock()
 	activeProcs[key] = cmd
 	delete(stoppingProcs, key) // 新进程与上一次停止无关，别让残留标记吞掉真实崩溃上报
@@ -290,7 +292,7 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 					svcMarkStoppedIfCurrent(key, prev)
 					break
 				}
-				assignToJob(cmd.Process.Pid)
+				platform.AssignToJob(cmd.Process.Pid)
 				procMu.Lock()
 				activeProcs[key] = cmd
 				delete(stoppingProcs, key)
@@ -420,6 +422,15 @@ func killTree(cmd *exec.Cmd) {
 		return
 	}
 	_ = cmd.Process.Kill()
+}
+
+// shutdownChildren 停掉本实例启动的前端/后端子进程（与「全部停止」按钮同一套机制，
+// 保证 stoppingProcs 标记与监控 goroutine 状态一致，不留孤儿进程）。
+// 调用方：main 的控制台关闭钩子（internal/platform.InstallConsoleHook 的 onClose）
+// 与网页「退出程序」的"连带停服务"分支。
+func shutdownChildren() {
+	stopByKey(scStart, "web", "web-start")
+	stopByKey(scStart, "backend", "backend-start")
 }
 
 func stopByKey(scope, key, progKey string) {

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"envkit/internal/platform"
 )
 
 // ---------- 杂项 ----------
@@ -44,7 +46,7 @@ func loadConfig() {
 			var rawCfg Config
 			_ = json.Unmarshal(data, &rawCfg)
 			// 迁移判断必须基于磁盘原文（内存中解密后必然是明文）
-			plain := func(v string) bool { return v != "" && !strings.HasPrefix(v, dpapiPrefix) }
+			plain := func(v string) bool { return v != "" && !strings.HasPrefix(v, platform.DPAPIPrefix) }
 			needMigrate := plain(rawCfg.MySQL.Password) || plain(rawCfg.Projects.MySQLPass) || plain(rawCfg.Chain.SSHPassword) || (rawCfg.AI != nil && plain(rawCfg.AI.APIKey))
 			_ = json.Unmarshal(data, &cfg)
 			applyConfigDefaults()
@@ -227,20 +229,20 @@ func saveExternalConfig(c Config) {
 }
 
 func protectIfPlain(v string) string {
-	if v == "" || strings.HasPrefix(v, dpapiPrefix) {
+	if v == "" || strings.HasPrefix(v, platform.DPAPIPrefix) {
 		return v
 	}
-	if e := dpapiProtect(v); e != "" {
+	if e := platform.DPAPIProtect(v); e != "" {
 		return e
 	}
 	return v // 加密失败保底存原文
 }
 
 func decryptField(v string) string {
-	if !strings.HasPrefix(v, dpapiPrefix) {
+	if !strings.HasPrefix(v, platform.DPAPIPrefix) {
 		return v
 	}
-	if p, err := dpapiUnprotect(v); err == nil {
+	if p, err := platform.DPAPIUnprotect(v); err == nil {
 		return p
 	}
 	return "" // 换机/换用户解不开 → 置空，等用户重填

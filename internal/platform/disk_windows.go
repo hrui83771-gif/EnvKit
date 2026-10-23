@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"os"
@@ -9,8 +9,8 @@ import (
 	"unsafe"
 )
 
-// diskFreeBytes 返回 exe 所在分区的剩余空间（字节）。失败返回 ok=false（指标行直接省略）。
-func diskFreeBytes() (uint64, bool) {
+// DiskFreeBytes 返回 exe 所在分区的剩余空间（字节）。失败返回 ok=false（指标行直接省略）。
+func DiskFreeBytes() (uint64, bool) {
 	exe, err := os.Executable()
 	if err != nil {
 		return 0, false

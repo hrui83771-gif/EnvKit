@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // ---------- SQL 风险扫描 ----------
@@ -1001,7 +1003,18 @@ func handleProgramExit(w http.ResponseWriter, r *http.Request) {
 		if body.StopServices {
 			shutdownChildren()
 		} else {
-			keepJobAlive()
+			// 只退出助手、服务继续跑：把 Job 句柄复制进仍在运行的子进程，
+			// 防止 EnvKit 退出关闭最后一个句柄后 KILL_ON_JOB_CLOSE 强杀服务树。
+			platform.KeepJobAlive(func() int {
+				procMu.Lock()
+				defer procMu.Unlock()
+				for _, c := range activeProcs {
+					if c.Process != nil {
+						return c.Process.Pid
+					}
+				}
+				return 0
+			})
 		}
 		os.Exit(0)
 	}()

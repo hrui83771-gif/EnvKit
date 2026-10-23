@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // runtimeVersion 返回编译本二进制的 Go 版本（如 go1.25.0），用于 envkit_build_info。
@@ -240,7 +242,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 磁盘剩余空间（exe 所在盘）—— CentOS 上 node1 日志撑爆磁盘的教训
-	if free, ok := diskFreeBytes(); ok {
+	if free, ok := platform.DiskFreeBytes(); ok {
 		add("envkit_disk_free_bytes", "exe 所在分区剩余空间（字节）", "gauge", []string{lb()}, free)
 	}
 

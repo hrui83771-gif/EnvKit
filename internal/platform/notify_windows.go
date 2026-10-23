@@ -1,6 +1,7 @@
-package main
+package platform
 
 // Windows 桌面通知：NotifyIcon 气泡（Toast 对无注册 AppId 的进程不可靠）。
+// 非 Windows 构建也编译本文件，运行时按 GOOS 直接返回。
 
 import (
 	"encoding/base64"
@@ -10,8 +11,8 @@ import (
 	"unicode/utf16"
 )
 
-// notify 弹出桌面气泡通知；失败静默（通知只是辅助，不影响主流程）。
-func notify(title, msg string) {
+// Notify 弹出桌面气泡通知；失败静默（通知只是辅助，不影响主流程）。
+func Notify(title, msg string) {
 	if runtime.GOOS != "windows" {
 		return
 	}
@@ -23,13 +24,14 @@ func notify(title, msg string) {
 		`$n.ShowBalloonTip(6000,[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('` + b64(title) + `')),[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('` + b64(msg) + `')),[System.Windows.Forms.ToolTipIcon]::Info);` +
 		`Start-Sleep -Seconds 7;$n.Dispose()`
 	// -EncodedCommand 规避引号/中文/路径坑（UTF-16LE + base64）
-	enc := base64.StdEncoding.EncodeToString(utf16Bytes(ps))
+	enc := base64.StdEncoding.EncodeToString(UTF16Bytes(ps))
 	_ = exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", enc).Start()
 }
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
-func utf16Bytes(s string) []byte {
+// UTF16Bytes 把字符串编成 UTF-16LE 字节（PowerShell -EncodedCommand 的编码格式）。
+func UTF16Bytes(s string) []byte {
 	u := utf16.Encode([]rune(s))
 	b := make([]byte, len(u)*2)
 	for i, v := range u {

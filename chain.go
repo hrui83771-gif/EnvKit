@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"envkit/internal/platform"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -644,7 +645,7 @@ func doChainCheckWithRecover(allowRecover bool) {
 		auditNow(actGuard, "chain_unreachable", c.SSHHost, host, resFail,
 			"自动恢复已跳过（主机不可达）："+reachHint(c, reach))
 		if c.ChainNotify {
-			notify("链端不可达，已跳过自动恢复", reachHint(c, reach))
+			platform.Notify("链端不可达，已跳过自动恢复", reachHint(c, reach))
 		}
 		setChain(func(ci *ChainInfo) {
 			ci.Checked = true

@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // AlertConfig 告警配置（config.json 的 "alerts" 段）。
@@ -28,7 +30,7 @@ var alertLast = map[string]time.Time{} // 告警标题 → 上次发送时间
 
 // alertDispatch 发出一条运维告警：桌面气泡（总是）+ Webhook（受抑制窗口约束）。
 func alertDispatch(title, msg string) {
-	notify(title, msg) // 本地感知不走抑制 —— 气泡 6 秒自动消失，刷屏成本低
+	platform.Notify(title, msg) // 本地感知不走抑制 —— 气泡 6 秒自动消失，刷屏成本低
 
 	cfgMu.Lock()
 	hook := cfg.Alert.Webhook

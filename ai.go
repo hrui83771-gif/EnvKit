@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 type AIConfig struct {
@@ -347,7 +349,7 @@ func (a AIConfig) modelsEndpoint() string {
 }
 
 func (a AIConfig) keyPlain() string {
-	if p, err := dpapiUnprotect(a.APIKey); err == nil {
+	if p, err := platform.DPAPIUnprotect(a.APIKey); err == nil {
 		return p
 	}
 	return a.APIKey // 兼容未加密的历史配置
