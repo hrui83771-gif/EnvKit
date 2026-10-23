@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "app_name": "EnvKit",
-  "app_title": "EnvKit · 统一开发环境助手（环境安装 / 程序配置 / 程序启动）",
+  "app_title": "EnvKit · 统一开发环境助手（环境安装 / 程序配置 / 链端校验 / 程序启动 / AI 运维）",
   "install_dir": "C:\\EnvKit\\tools",
   "proxy": {
     "http": "",
