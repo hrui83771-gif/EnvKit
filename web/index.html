@@ -874,7 +874,7 @@
           <button class="ghost" id="btn-ai-models">拉取模型列表</button>
           <span class="hint" id="h-ai"></span>
         </div>
-        <div class="muted" style="margin-top:8px">「拉取模型列表」会调用服务商的 /models 接口获取在售模型；拉取失败时仍可用预置列表或自定义模型名。Key 经 DPAPI 加密存储，仅本机可解密。</div>
+        <div class="muted" style="margin-top:8px">配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。</div>
       </div>
 
       <div class="sec">
@@ -1300,6 +1300,7 @@ const I18N_EN = {
   "EnvKit 已退出": "EnvKit has exited",
   "EnvKit 已重启，本页令牌已过期，点击确定自动刷新页面。": "EnvKit restarted and this page's token expired. Click OK to refresh.",
   "EnvKit 环境助手": "EnvKit Assistant",
+  "GLM 的思考模式由请求参数控制而非独立模型名，下拉里的名字都是完整模型；flash 为免费档": "GLM's thinking mode is a request parameter rather than a separate model name — every entry in the dropdown is a full model; flash is the free tier",
   "GOPROXY（Go 代理）": "GOPROXY (Go mirror)",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
@@ -1577,6 +1578,7 @@ const I18N_EN = {
   "已整理": "Tidied",
   "已是最新": "Up to date",
   "已结束 PID {0}，可重新扫描确认": "Killed PID {0}; rescan to confirm",
+  "已自动保存，已拉取 {0} 个模型并回填": "Auto-saved; fetched {0} models and filled the dropdown",
   "已自动适配": "Auto-adapted",
   "已被安全策略拒绝": "Denied by policy",
   "已装组件会自动跳过。": "Already-installed components are skipped.",
@@ -1839,6 +1841,7 @@ const I18N_EN = {
   "能做什么": "What it can do",
   "脚本名含非法字符": "Script name has invalid characters",
   "自动保存": "Auto-save",
+  "自动保存完成，但拉取模型失败：": "Auto-saved, but fetching models failed: ",
   "自动恢复": "Auto-recover",
   "自动滚动": "Auto-scroll",
   "自动经验": "Auto lessons",
@@ -1924,6 +1927,7 @@ const I18N_EN = {
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
   "部分完成": "Partial",
   "配置": "Configure",
+  "配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。": "Changes are saved automatically, then the provider's /models endpoint is called to fetch available models (a successful fetch also proves the key and URL are correct; on failure you can still use the built-in list or type a model name). The API key is DPAPI-encrypted and only decryptable on this machine.",
   "配置已保存": "Config saved",
   "采用": "Used",
   "重启服务": "Restart service",
@@ -4730,7 +4734,9 @@ let aiPulledFrom = '';     // 上面那份列表来自哪个 Base URL（改动�
 async function aiLoadProviders(){
   try{ aiPresets = (await (await fetch('/api/ai/providers')).json()).providers || []; }catch(e){ aiPresets = []; }
   const sel = $ai('ai_provider');
-  sel.innerHTML = aiPresets.map(p=>`<option value="${p.id}">${p.name}</option>`).join('') + '<option value="custom">自定义</option>';
+  // 「自定义」由后端预置表统一给出（带 icon），**前端不再追加**——
+  // 2026-10-23 用户截图发现两个「自定义」：后端列表已含 custom 项，前端又硬拼了一个。
+  sel.innerHTML = aiPresets.map(p=>`<option value="${p.id}">${p.icon ? p.icon+' ' : ''}${p.name}</option>`).join('');
   sel.value = 'deepseek';
 }
 function aiProviderPreset(){ return aiPresets.find(p=>p.id === $ai('ai_provider').value) || null; }
@@ -4781,7 +4787,7 @@ function aiApplyProvider(keepModel){
   }
 }
 // 换服务商等于换地址，上一个地址的模型列表必须一起作废
-$ai('ai_provider').addEventListener('change', ()=>{ aiPulledModels = []; aiPulledFrom = ''; aiApplyProvider(''); });
+$ai('ai_provider').addEventListener('change', ()=>{ aiPulledModels = []; aiPulledFrom = ''; aiApplyProvider(''); aiScheduleAutoSave(); });
 $ai('ai_model_sel').addEventListener('change', ()=>{
   const isCustom = $ai('ai_model_sel').value === '__custom__';
   $ai('ai_model_row').style.display = isCustom ? '' : 'none';
@@ -4795,6 +4801,7 @@ function aiCurrentModel(){
 /* 设置卡片 */
 async function aiLoadConfig(){
   try{
+    aiSuppress = true;   // 程序化回填不触发自动保存（change/input 事件都会被它拦下）
     const c = await (await fetch('/api/ai/config')).json();
     await aiLoadProviders();
     $ai('ai_provider').value = c.provider || 'deepseek';
@@ -4803,6 +4810,7 @@ async function aiLoadConfig(){
     $ai('ai_base').value = c.base_url || $ai('ai_base').value;
     $ai('ai_enabled').checked = !!c.enabled;
     $ai('ai_memory_on').checked = !!c.memory_enabled;
+    aiKeySet = !!c.key_set;   // 自动拉取要用：后端已存 Key 才值得发 /models 请求
     $ai('ai_key').placeholder = c.key_set ? t('已保存（{0}），留空保留', c.key_masked||'****') : 'sk-...';
     $ai('ai_temp').value = (c.temperature === undefined || c.temperature === null) ? '' : (Math.round(Number(c.temperature)*100)/100);
     const q = c.quirk || {};
@@ -4814,6 +4822,7 @@ async function aiLoadConfig(){
     $ai('ai_quirk').textContent = notes.join('；');
     $ai('ai_quirk_row').style.display = notes.length ? '' : 'none';
   }catch(e){}
+  finally{ aiSuppress = false; }   // 无论成功失败都要放行，否则自动保存永久失灵
 }
 aiLoadConfig();
 $ai('btn-ai-save').onclick = async ()=>{
@@ -4845,6 +4854,74 @@ $ai('btn-ai-test').onclick = async ()=>{
     $ai('h-ai').textContent = c.ok ? (t('连接正常 · ')+c.latency_ms+'ms') : (t('失败：')+(c.error||t('未知')));
   }catch(e){ $ai('h-ai').textContent = t('失败：')+e; }
 };
+
+/* ---------- 表单自动保存 + 自动拉取模型（2026-10-23） ----------
+ *
+ * 用户裁定的新主链路：**改完即存、存完即拉**。
+ * 模型名的真值永远来自服务商的 /models（内置预置只是拉取失败时的兜底），
+ * 所以把「保存配置 → 拉取模型列表」从两个手动按钮改成一条自动链：
+ * 选服务商（URL 自动回填）→ 填 Key → 防抖自动保存 → 自动拉取回填。
+ * 拉取成功 = Key 和网址都对（当场验证，不用再点「测试连接」）；
+ * 拉取失败 = 错误原样亮出来，用户立刻知道是 Key 错还是地址错。
+ */
+let aiAutoTimer = null;      // 防抖句柄
+let aiAutoBusy = false;      // 上一次自动链还没跑完时，新改动只重置计时器
+let aiKeySet = false;        // 后端是否已存有 Key（决定自动拉取要不要发起）
+let aiSuppress = false;      // 程序化回填（加载配置/切换服务商）期间不触发自动保存
+
+function aiCollectPayload(){
+  const model = aiCurrentModel();
+  if(!model) return null;    // 模型还没选（比如刚切服务商正在拉取），这轮不存
+  return {enabled:$ai('ai_enabled').checked, memory_enabled:$ai('ai_memory_on').checked,
+    provider:$ai('ai_provider').value, base_url:$ai('ai_base').value.trim(),
+    api_key:$ai('ai_key').value.trim(), model,
+    temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))};
+}
+
+async function aiPullModelsCore(){
+  // 拉取前必须已存 Key（/models 用后端 DPAPI 里的 Key 做 Bearer）；
+  // 没有就跳过——让用户先填 Key，免得每次都吃一个注定 401 的请求。
+  if(!aiKeySet && !$ai('ai_key').value.trim()) return;
+  try{
+    const c = await (await fetch('/api/ai/models', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({base_url:$ai('ai_base').value.trim()})})).json();
+    if(!c.ok){ $ai('h-ai').textContent = t('自动保存完成，但拉取模型失败：')+(c.error||''); return false; }
+    const cur = aiCurrentModel();
+    aiPulledModels = c.models || [];
+    aiPulledFrom = $ai('ai_base').value.trim();   // Base URL 改动后旧列表作废（同手动拉取）
+    aiApplyProvider(cur);
+    $ai('h-ai').textContent = t('已自动保存，已拉取 {0} 个模型并回填', aiPulledModels.length);
+    return true;
+  }catch(e){ $ai('h-ai').textContent = t('拉取失败：')+e; return false; }
+}
+
+async function aiAutoSaveNow(){
+  const payload = aiCollectPayload();
+  if(!payload) return;
+  aiAutoBusy = true;
+  try{
+    const r = await fetch('/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!r.ok){ $ai('h-ai').textContent = t('保存失败：HTTP ')+r.status; return; }
+    if(payload.api_key){ $ai('ai_key').value=''; aiKeySet = true;
+      // Key 已入库，刷新脱敏占位符（只动 placeholder，不整表重载——整表重载会打断用户正在输入的字段）
+      try{ const c = await (await fetch('/api/ai/config')).json();
+        if(c.key_set) $ai('ai_key').placeholder = t('已保存（{0}），留空保留', c.key_masked||'****');
+      }catch(e){}
+    }
+    memSyncGate();
+    await aiPullModelsCore();
+  }finally{ aiAutoBusy = false; }
+}
+
+function aiScheduleAutoSave(){
+  if(aiSuppress) return;
+  clearTimeout(aiAutoTimer);
+  aiAutoTimer = setTimeout(()=>{ if(!aiAutoBusy) aiAutoSaveNow(); else aiScheduleAutoSave(); }, 900);
+}
+
+// 绑定自动保存：下拉/开关用 change，文本输入用 input（防抖合并击键）
+// provider 的 change 在上面既有绑定里处理（清拉取缓存 + 应用预置），这里只挂保存调度
+['ai_base','ai_key','ai_temp'].forEach(id=>$ai(id).addEventListener('input', aiScheduleAutoSave));
+['ai_enabled','ai_memory_on'].forEach(id=>$ai(id).addEventListener('change', aiScheduleAutoSave));
 
 /* 对话消费：读取 SSE 流 */
 const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日志', get_diag_report:'生成诊断报告',

@@ -157,6 +157,9 @@ type aiProviderPreset struct {
 	Name    string   `json:"name"`
 	BaseURL string   `json:"base_url"`
 	Models  []string `json:"models"`
+	// Icon 是前端下拉里的 emoji 前缀。原生 <select> 的 option 渲染不了图片，
+	// emoji 是唯一能进 option 的"图标"；留空则不加前缀。
+	Icon string `json:"icon,omitempty"`
 	// Note 给前端的一句话说明。厂商有「思考模式是请求参数而非独立模型」
 	// 这类概念时必须讲清，否则用户会以为下拉框里少了一个模型。
 	//
@@ -164,12 +167,50 @@ type aiProviderPreset struct {
 	Note string `json:"note,omitempty"`
 }
 
+// aiProviderPresets 服务商预置表（2026-10-23 核实）。
+//
+// 模型名核实来源：
+//   - DeepSeek：现行 deepseek-flash / deepseek-v4-pro（chat/reasoner 已停用，见 retiredModels）
+//   - OpenAI：developers.openai.com/api/docs/models —— 现行旗舰线 GPT-5.6
+//     （sol/terra/luna 三档），文档示例仍用 gpt-5.2
+//   - GLM：docs.bigmodel.cn —— glm-4.7 旗舰 + glm-4.7-flash（免费档）+ glm-4.5-air
+//     （GLM-5/5.1 已发布但模型 ID 未在官方文档核实到，不凭印象写，靠「拉取模型列表」）
+//   - Kimi：platform.moonshot.cn/docs/models —— kimi-k3 现行旗舰；k2 系列、
+//     moonshot-v1 系列、kimi-latest 已于 2026 年停用（见 retiredModels）
+//   - Grok：docs.x.ai —— grok-4.7 现行旗舰；grok-3/grok-4 旧 slug 已退役（重定向到 4.3）
+//   - Gemini：ai.google.dev/gemini-api/docs/openai —— 官方 OpenAI 兼容层
+//     （base 以 /openai/ 结尾），文档示例用 gemini-3.8-flash
+//
+// Claude 故意不在列：Anthropic 是另一套协议（/v1/messages + x-api-key +
+// 独立 SSE 事件格式），本产品全链路按 OpenAI chat/completions 实现，
+// 要支持得加协议适配层——用户拍板暂不考虑，仍可经 OpenAI 兼容网关中转。
 var aiProviderPresets = []aiProviderPreset{
 	{
-		ID: "deepseek", Name: "DeepSeek", BaseURL: "https://api.deepseek.com",
+		ID: "deepseek", Name: "DeepSeek", Icon: "🐋", BaseURL: "https://api.deepseek.com",
 		Models: []string{"deepseek-flash", "deepseek-v4-pro"},
 	},
-	{"custom", "自定义", "", nil, ""},
+	{
+		ID: "openai", Name: "OpenAI", Icon: "🤖", BaseURL: "https://api.openai.com/v1",
+		Models: []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"},
+	},
+	{
+		ID: "glm", Name: "GLM 智谱", Icon: "⚡", BaseURL: "https://open.bigmodel.cn/api/paas/v4",
+		Models: []string{"glm-4.7", "glm-4.7-flash", "glm-4.5-air"},
+		Note:   "GLM 的思考模式由请求参数控制而非独立模型名，下拉里的名字都是完整模型；flash 为免费档",
+	},
+	{
+		ID: "kimi", Name: "Kimi 月之暗面", Icon: "🌙", BaseURL: "https://api.moonshot.cn/v1",
+		Models: []string{"kimi-k3", "kimi-k2.7-code", "kimi-k2.6"},
+	},
+	{
+		ID: "grok", Name: "Grok xAI", Icon: "🚀", BaseURL: "https://api.x.ai/v1",
+		Models: []string{"grok-4.7", "grok-4.3"},
+	},
+	{
+		ID: "gemini", Name: "Gemini Google", Icon: "♊", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+		Models: []string{"gemini-3.8-flash"},
+	},
+	{"custom", "自定义", "", nil, "✏️", ""},
 }
 
 func handleAIProviders(w http.ResponseWriter, r *http.Request) {
