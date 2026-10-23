@@ -85,6 +85,8 @@
   .picon-z{background:#3F5BF6;color:#fff;border-radius:4px;font-size:11px;font-weight:700;width:18px;height:18px;line-height:18px;text-align:center;flex:none}
   .prov-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:60;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.14);padding:4px;max-height:280px;overflow:auto}
   .prov-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--text)}
+  /* 菜单项里的图标是裸 svg（没包 .prov-ic），不钉尺寸会按 viewBox 撑满整行 */
+  .prov-item svg{width:18px;height:18px;display:block;flex:none}
   .prov-item:hover{background:var(--hover)}
   .prov-item.on{background:var(--off)}
   .prov-native{display:none}
@@ -4881,6 +4883,15 @@ function aiCurrentModel(){
   return $ai('ai_model_sel').value;
 }
 
+/* 自动保存/自动拉取链的状态——必须声明在 aiLoadConfig 之前：
+   aiLoadConfig 在页面初始化（ekSetLang）就被调用，而 let 有暂时性死区，
+   声明放在它后面会炸 "Cannot access 'aiSuppress' before initialization"，
+   连锁炸断整个 AI 设置卡片初始化（下拉空白、启用开关失灵）。 */
+let aiAutoTimer = null;      // 防抖句柄
+let aiAutoBusy = false;      // 上一次自动链还没跑完时，新改动只重置计时器
+let aiKeySet = false;        // 后端是否已存有 Key（决定自动拉取要不要发起）
+let aiSuppress = false;      // 程序化回填（加载配置/切换服务商）期间不触发自动保存
+
 /* 设置卡片 */
 async function aiLoadConfig(){
   try{
@@ -4947,10 +4958,6 @@ $ai('btn-ai-test').onclick = async ()=>{
  * 拉取成功 = Key 和网址都对（当场验证，不用再点「测试连接」）；
  * 拉取失败 = 错误原样亮出来，用户立刻知道是 Key 错还是地址错。
  */
-let aiAutoTimer = null;      // 防抖句柄
-let aiAutoBusy = false;      // 上一次自动链还没跑完时，新改动只重置计时器
-let aiKeySet = false;        // 后端是否已存有 Key（决定自动拉取要不要发起）
-let aiSuppress = false;      // 程序化回填（加载配置/切换服务商）期间不触发自动保存
 
 function aiCollectPayload(){
   const model = aiCurrentModel();
