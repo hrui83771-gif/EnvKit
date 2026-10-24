@@ -224,6 +224,9 @@
   #term-card{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
   #term-card.full{position:fixed;inset:14px;z-index:60;height:auto;display:flex;flex-direction:column;margin:0}
   #term-card.full #term-wrap{flex:1;height:auto;resize:none}
+  /* 收起态：只留标题栏，SSH 会话保持不断（窗口隐藏时 ResizeObserver 会报 0 尺寸，
+     termFit 必须跳过，否则 fitAddon 按 0 行列 resize，pty 尺寸被打乱） */
+  #term-card.collapsed #term-wrap{display:none}
   .tbar{background:#1a2230;padding:8px 12px;display:flex;align-items:center;gap:8px}
   .tbar .tdot{width:9px;height:9px;border-radius:50%;background:#37b56a;flex:none}
   .tbar .tt{font-size:12px;color:#c6cfdd;font-family:Consolas,Menlo,monospace}
@@ -737,7 +740,7 @@
           <button class="ghost" id="btn-term-clear">清屏</button></div>
         <div id="term-card" style="display:none">
           <div class="tbar"><span class="tdot"></span><span class="tt" id="term-title">SSH</span>
-            <span style="margin-left:auto;display:flex;gap:8px"><button class="tbtn" id="btn-term-full">全屏</button><button class="tbtn" id="btn-term-close2">断开</button></span>
+            <span style="margin-left:auto;display:flex;gap:8px"><button class="tbtn" id="btn-term-collapse">收起</button><button class="tbtn" id="btn-term-full">全屏</button><button class="tbtn" id="btn-term-close2">断开</button></span>
           </div>
           <div id="term-wrap"><div id="term"></div></div>
         </div>
@@ -2481,7 +2484,7 @@ $('#btn-theme').onclick = ()=> applyTheme(document.body.dataset.theme==='dark' ?
 
 /* ---------- 内嵌 SSH 终端（xterm.js + WebSocket 桥接） ---------- */
 let term=null, fitAddon=null, termWS=null, termRO=null;
-function termFit(){ try{ if(fitAddon) fitAddon.fit(); }catch(e){} }
+function termFit(){ try{ const w=document.getElementById('term-wrap'); if(!w || !w.offsetParent) return; if(fitAddon) fitAddon.fit(); }catch(e){} }
 $('#btn-term-connect').onclick = ()=>{
   if(!term){
     term = new Terminal({cursorBlink:true, fontSize:13, fontFamily:'Consolas,"Courier New",monospace',
@@ -2496,6 +2499,7 @@ $('#btn-term-connect').onclick = ()=>{
     window.addEventListener('resize', termFit);
   }
   document.getElementById('term-card').style.display='';
+  termSetCollapsed(false);   // 已收起状态下点「连接终端」＝重新展开
   const host=$('#ch_ssh_host').value.trim(), user=$('#ch_ssh_user').value.trim();
   document.getElementById('term-title').textContent = (user||'root')+'@'+(host||'未配置主机')+' — ssh';
   setTimeout(termFit, 30);
@@ -2513,6 +2517,16 @@ $('#btn-term-disconnect').onclick = termDisconnect;
 $('#btn-term-close2').onclick = ()=>{ termDisconnect(); document.getElementById('term-card').classList.remove('full'); };
 $('#btn-term-clear').onclick = ()=>{ if(term) term.clear(); };
 $('#btn-term-full').onclick = ()=>{ document.getElementById('term-card').classList.toggle('full'); setTimeout(termFit, 40); };
+
+/* 收起/展开：只切 UI，不动 WebSocket——SSH 会话在后台继续，展开后无需重连 */
+let termCollapsed=false;
+function termSetCollapsed(c){
+  termCollapsed=c;
+  document.getElementById('term-card').classList.toggle('collapsed', c);
+  const b=$('#btn-term-collapse'); if(b) b.textContent = c ? t('展开') : t('收起');
+  if(!c) setTimeout(termFit, 40);   // 展开后重新适配尺寸（隐藏期间 ResizeObserver 被 termFit 跳过）
+}
+$('#btn-term-collapse').onclick = ()=> termSetCollapsed(!termCollapsed);
 
 /* ---------- SSH 密码显示切换 ---------- */
 $('#ch_pass_eye').onclick = ()=>{
