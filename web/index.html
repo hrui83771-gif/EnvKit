@@ -23,14 +23,14 @@
   body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
     background:var(--bg);color:var(--text);font-size:13px;transition:background .2s,color .2s}
   header{background:var(--card);border-bottom:1px solid var(--line);padding:11px 22px;position:sticky;top:0;z-index:5}
-  .hrow{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .hrow{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0;overflow:hidden}
   #app-logo{width:34px;height:34px;border-radius:9px;display:block;box-shadow:0 1px 3px rgba(16,24,40,.18)}
   .brand h1{margin:0;font-size:15px;font-weight:600;color:var(--brand)}
   .brand p{margin:1px 0 0;font-size:12px;color:var(--muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   @media (max-width:1120px){ .brand p{display:none} }
-  .chips{display:flex;gap:6px;flex-wrap:wrap;flex:0 1 auto;min-width:0}
-  .hactions{display:flex;align-items:center;gap:10px;margin-left:auto;flex:0 0 auto}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;flex:0 1 auto;min-width:0}
+  .hactions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:0 0 auto}
   .chip{font-size:12px;padding:3px 10px;border-radius:999px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap}
   .chip.ok{background:var(--okbg);color:var(--ok)}
   .chip.warn{background:var(--warnbg);color:var(--warn)}
@@ -1389,7 +1389,7 @@ const I18N_EN = {
   "今日统计": "Today's usage",
   "仍有 {0} 个组件未就绪": "{0} component(s) still not ready",
   "从操作记录统计，不是你在下的命令": "computed from activity, not an order from you",
-  "以管理员身份重启": "Restart as administrator",
+  "以管理员身份重启": "Restart as admin",
   "任何项目都生效": "applies to all projects",
   "任务数": "Tasks",
   "位置：": "Location: ",
@@ -1678,10 +1678,10 @@ const I18N_EN = {
   "收起一会儿": "Tuck away for a while",
   "收起数据浏览": "Collapse data browser",
   "数据库": "Database",
-  "数据库 就绪": "Database ready",
-  "数据库 未建库": "Database missing",
-  "数据库 未检测": "Database not checked",
-  "数据库 连接失败": "Database connection failed",
+  "数据库 就绪": "DB ready",
+  "数据库 未建库": "DB missing",
+  "数据库 未检测": "DB not checked",
+  "数据库 连接失败": "DB connect failed",
   "数据库列表读取失败：{0}": "Failed to list databases: {0}",
   "数据库名": "Database name",
   "数据库备份": "DB backup",
@@ -1720,8 +1720,8 @@ const I18N_EN = {
   "有话直说~": "Just ask~",
   "服务 已就绪": "Services ready",
   "服务 异常": "Service error",
-  "服务 未启动": "Services not started",
-  "服务 未复验": "Services not verified",
+  "服务 未启动": "Services stopped",
+  "服务 未复验": "Services unverified",
   "服务 运行中": "Services running",
   "服务商": "Provider",
   "服务商与密钥": "Provider & API key",
@@ -1811,9 +1811,9 @@ const I18N_EN = {
   "状态": "Status",
   "状态：": "Status: ",
   "玩法说明": "Play guide",
-  "环境 就绪": "Environment ready",
-  "环境 未检测": "Environment not checked",
-  "环境 缺失": "Environment missing",
+  "环境 就绪": "Env ready",
+  "环境 未检测": "Env not checked",
+  "环境 缺失": "Env missing",
   "环境安装": "Environment Setup",
   "环境很健康": "Environment looks healthy",
   "生成诊断报告": "build diagnostic report",
@@ -1848,7 +1848,7 @@ const I18N_EN = {
   "端口与链信息": "Ports & chain info",
   "端口占用诊断": "Port diagnostics",
   "策略预期行为，不算失败": "Expected policy behaviour, not a failure",
-  "管理员": "Administrator",
+  "管理员": "Admin",
   "类型": "Kind",
   "粘贴要导入的记忆，每行一条：": "Paste memories to import, one per line:",
   "系统": "System",
