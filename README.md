@@ -276,6 +276,10 @@ Go 68 个非测试文件 / 约 20,700 行，按职责分七组：**执行与验�
 
 [MIT](LICENSE)
 
+### 第三方资源
+
+右下角桌宠形象与部分互动台词取自开源项目 [dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet)（MIT 协议），已按许可要求随附完整声明，详见 [THIRD-PARTY-NOTICE.md](THIRD-PARTY-NOTICE.md)。
+
 ## 免责声明
 
 本软件按「现状」（AS IS）提供。作者不对其准确性、可靠性、适用性作任何明示或暗示的担保，使用本软件产生的任何后果由使用者自行承担。依赖的第三方组件（Go、Node.js、MySQL、FISCO-BCOS、WeBASE 等）的版权与许可归各自权利方所有。链上数据仅供参考，不构成任何投资、法律、财务或商业建议。完整声明见软件内「关于 / 免责声明」。
