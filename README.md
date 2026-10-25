@@ -112,7 +112,7 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 
 ### 下载
 
-从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载最新版本，解压后运行 `EnvKit.exe` 或 `安装.bat`。控制台默认 `http://127.0.0.1:18765`，端口冲突时自动避让。
+从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载 `EnvKit-v3.2.0-win64.zip`，解压后运行 `安装.bat`（复制到 `%LOCALAPPDATA%\EnvKit` 并建桌面快捷方式），或直接双击 `EnvKit.exe`——单文件、免安装。控制台默认 `http://127.0.0.1:18765`，端口冲突时自动避让。
 
 ### 从源码构建
 

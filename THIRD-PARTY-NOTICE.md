@@ -13,10 +13,13 @@
 
 | 内容 | 来源文件 | 在本项目中的位置 |
 |---|---|---|
-| 桌宠形象（正面图） | `sprites/正面_238.png` | 以 base64 data URI 内嵌于 `web/index.html` 的 `#petSvg`（`<image id="pet-img">`），未作任何修改 |
-| 互动 / 待机台词（各 5 句） | `桌宠.py` 中 `REACT_LINES` / `LINES` 精选 | `web/index.html` 中 `FISH_REACT` / `FISH_IDLE` 台词池，为适配本项目语境译为中英双语（原文见 i18n 词典 `tools/i18n_en.json`） |
+| 桌宠形象三视图（正面 / 侧面 / 背面） | `sprites/正面_238.png`、`侧面_238.png`、`背面_238.png` | 以 base64 data URI 内嵌于 `web/index.html`，分别为 `#pet-img`、`#pet-img-side`、`#pet-img-back`；像素未作任何修改 |
+| 台词池（5 类） | `桌宠.py` 中 `LINES` / `REACT_LINES` / `INNER_LINES` / `DRAG_LINES` / `FOOD_LINES` 精选 | `web/index.html` 中 `FISH_LINES` / `FISH_REACT` / `FISH_INNER` / `FISH_DRAG` / `FISH_FOOD`，按本项目语境译为中英双语（英文见 `tools/i18n_en.json`） |
+| 交互行为设计 | `桌宠.py`（`TICK_INTERVAL` 定时器、`SIZE_LEVELS`、三种模式 wander / follow / still、拖拽侧面朝向、双击投喂、呼吸 / 摇摆 / 跳跃 / 拉伸动画） | 以行为规格为参考，在 `web/index.html` 的桌宠模块中用 DOM + CSS 重写实现（非逐行移植） |
 
-未使用该仓库中任何含不当内容的台词条目。桌宠的其余交互逻辑（拖拽、喂食面板、AI 对话、天气、系统监控等）为本项目自研，与上述仓库的实现无关。
+**已剔除的内容**：原仓库 `INNER_LINES` 中语气粗俗的条目、以及「彩虹模式」彩蛋，本项目均未采用。喂食共 5 种食物，与原仓库一致；连击 15 次的彩蛋改为「鲸式喷水」，与原仓库的彩虹模式不同。
+
+桌宠的其余交互逻辑（与 AI 抽屉联动、拖入 `.sql` 触发备份流程、进度环、确认徽标、AI 对话、天气、系统监控等）为本项目自研，与上述仓库的实现无关。
 
 该形象为 DeepSeek 社区二创作品，与本项目及 FISCO-BCOS、WeBASE 等组件无任何隶属或背书关系。
 
