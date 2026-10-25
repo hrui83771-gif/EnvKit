@@ -24,6 +24,9 @@ type TrayActions struct {
 	OpenLogs    func()
 	Exit        func()
 	Ready       func() // 托盘创建成功（日志/自检用；菜单此时已可用）
+	// CreateShortcut 在桌面创建指向当前 exe 的快捷方式。
+	// 由 main 注入（platform 是叶子包，不碰业务里的 exe 路径与日志）。
+	CreateShortcut func()
 	// ToggleWindow 切换控制台窗口显隐，返回切换后是否处于隐藏态。
 	// 由 main 实现并负责持久化（platform 是叶子包，不碰 config）。
 	ToggleWindow func() bool
@@ -42,6 +45,7 @@ func RunTray(icon []byte, act TrayActions) {
 		mOpen := systray.AddMenuItem("打开控制台", "在浏览器中打开控制台页面")
 		mCfg := systray.AddMenuItem("程序配置", "直接打开「程序配置」页")
 		mLogs := systray.AddMenuItem("打开日志目录", "在资源管理器中打开 EnvKit 所在目录")
+		mShortcut := systray.AddMenuItem("创建桌面快捷方式", "在桌面创建一个指向当前 EnvKit.exe 的快捷方式")
 		systray.AddSeparator()
 		mHide := systray.AddMenuItem("隐藏窗口到托盘", "隐藏控制台窗口，EnvKit 继续在后台运行")
 		systray.AddSeparator()
@@ -61,6 +65,10 @@ func RunTray(icon []byte, act TrayActions) {
 				case <-mLogs.ClickedCh:
 					if act.OpenLogs != nil {
 						act.OpenLogs()
+					}
+				case <-mShortcut.ClickedCh:
+					if act.CreateShortcut != nil {
+						act.CreateShortcut()
 					}
 				case <-mHide.ClickedCh:
 					if act.ToggleWindow != nil {

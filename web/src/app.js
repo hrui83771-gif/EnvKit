@@ -227,12 +227,16 @@ const I18N_EN = {
   "历史回合的轨迹（只读）": "Trace of an earlier turn (read-only)",
   "压力一只蓝色大肥鱼？": "Bullying a big blue fish?",
   "原地待着": "Stay put",
+  "原始大小": "Normal size",
   "去别的地方玩！不要耽误 AGI 训练！": "Go play elsewhere! Don't hold up AGI training!",
   "反复失败": "Repeated failure",
   "发财啦！明天开始吃高级鱼粮！": "Rich! From tomorrow on, premium fish food!",
   "发送": "Send",
   "发送 {0} / 收到 {1}": "sent {0} / received {1}",
   "取消": "Cancel",
+  "变大一点": "Bigger",
+  "变大啦，看得清吗": "Bigger now — easier to see?",
+  "变小一点": "Smaller",
   "只存在本机": "Stored on this device only",
   "只收 .sql 文件哦，「{0}」先还给你": "I only take .sql files — \"{0}\" is returned to you",
   "只看异常": "Issues only",
@@ -340,6 +344,7 @@ const I18N_EN = {
   "将通过 SSH 在链端目录执行启动脚本：\n{0} && {1}\n\n可能耗时较久。": "Start script to run over SSH in the chain directory:\n{0} && {1}\n\nThis may take a while.",
   "将通过 UAC 申请管理员权限，把 EnvKit 所在目录和 EnvKit.exe\n加入 Windows Defender 排除项，防止 go / npm / mysqldump 子进程被误拦。\n\n弹出 UAC 窗口时请点「是」。": "This requests administrator rights via UAC and adds the EnvKit folder and EnvKit.exe\nto the Windows Defender exclusions, so go / npm / mysqldump child processes are not blocked by mistake.\n\nClick “Yes” when the UAC prompt appears.",
   "将重新走一遍安装流程：重新下载并解压所有组件（已装的会跳过）。\n可能耗时较久。": "This runs the install flow again: download and unpack every component (already-installed ones are skipped).\nIt may take a while.",
+  "小一点，不吵你": "Smaller, won't bother you",
   "小鱼": "Little fish",
   "小鱼干": "Dried fish",
   "小鱼干！我的最爱！": "Small dried fish — my favorite!",
@@ -390,6 +395,7 @@ const I18N_EN = {
   "已被安全策略拒绝": "Denied by policy",
   "已装组件会自动跳过。": "Already-installed components are skipped.",
   "已记为全局适用（换项目也生效）": "Saved as global (applies to any project)",
+  "已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复": "Click-through is on, so you can't click me now. Refresh the page or open the console from the tray to restore.",
   "已读入：{0}": "Loaded: {0}",
   "已进行 {0} 分 {1} 秒": "{0}m {1}s elapsed",
   "已退出": "Exited",
@@ -420,6 +426,7 @@ const I18N_EN = {
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
   "怎么称呼你？（可留空）": "What should I call you? (optional)",
   "思考中": "Thinking",
+  "恢复原本大小": "Back to normal size",
   "恢复演练": "Restore drill",
   "恢复默认": "Reset",
   "慢路径": "Slow path",
@@ -685,6 +692,7 @@ const I18N_EN = {
   "程序配置": "Configure",
   "空目录": "Empty directory",
   "空闲": "Free",
+  "穿透已解除": "Click-through is off",
   "立即检测": "Run detection now",
   "端口": "Port",
   "端口与链信息": "Ports & chain info",
@@ -753,6 +761,7 @@ const I18N_EN = {
   "表数据": "Table data",
   "被拦下": "Blocked",
   "要不直接骂他一句？！": "Or just tell them off?!",
+  "解除鼠标穿透": "Disable click-through",
   "誓死捍卫深度求索！": "Defend DeepSeek with my life!",
   "计划": "Plan",
   "让 AI 分析": "Analyze with AI",
@@ -891,6 +900,7 @@ const I18N_EN = {
   "默认关闭。启用后助手会记住你写的长期规矩，并从历史操作中学习失败模式以避免重复犯错；关闭时不再向模型注入任何记忆内容": "Off by default. When on, the assistant remembers the long-term rules you write and learns failure patterns from past actions to avoid repeating mistakes; when off, no memory content is injected into the model.",
   "默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。": "Applies to this project only by default and expires when you switch projects — another machine's lessons rarely fit the current one. Check this only for truly general rules (e.g. stop the backend before backing up).",
   "默认库": "default DB",
+  "鼠标穿透（点不到它）": "Click-through (can't click it)",
   "（上一级）": "(up one level)",
   "（无表）": "(no tables)",
   "（空结果）": "(empty result)",
@@ -3298,6 +3308,10 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(act==='mode-still'){ setPetMode('still'); say(t('我就在这儿待着')); }
     if(act==='mode-wander'){ setPetMode('wander'); say(t('溜达溜达～')); }
     if(act==='mode-follow'){ setPetMode('follow'); say(t('跟上你的鼠标')); }
+    if(act==='size-small'){ setPetSize('small'); }
+    if(act==='size-normal'){ setPetSize('normal'); }
+    if(act==='size-large'){ setPetSize('large'); }
+    if(act==='passthrough'){ setPassthrough(!petPass); }
     if(act==='aierr'){ aiAnalyzeError(); }
     if(act==='tricks'){ say(t('连点 5 次我会回嘴，10 次撒花，15 次看我喷水；双击投喂，右键能换模式，按住 1.5 秒摸头，拖着我甩会晕'), true); }
     if(act==='drawer'){ aiOpen(); }
@@ -3351,6 +3365,48 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(m === 'still'){ petTargetX = null; if(petWalking){ petWalking = false; pet.classList.remove('walking'); setView('front'); } }
     if(m === 'wander') petRestUntil = 0;
   }
+  /* ---------- 大小三档（原版 SIZE_LEVELS：小 .55 / 中 .7 / 大 .9，以中为基准等比） ---------- */
+  /* 用 --pet-scale 承载倍率，walking/hop 等动画仍作用在内层 #pet-float 上，互不打架 */
+  const PET_SIZES = ['small', 'normal', 'large'];
+  let petSize = 'normal';
+  try{ petSize = localStorage.getItem('ek-pet-size') || 'normal'; }catch(_){}
+  if(PET_SIZES.indexOf(petSize) < 0) petSize = 'normal';
+  function petSizeButtons(){
+    for(const s of PET_SIZES){
+      const b = ctxmenu.querySelector('[data-act="size-' + s + '"]');
+      if(b) b.classList.toggle('cur', petSize === s);
+    }
+  }
+  function setPetSize(s){
+    if(PET_SIZES.indexOf(s) < 0) return;
+    petSize = s;
+    pet.classList.remove('pet-sz-small', 'pet-sz-normal', 'pet-sz-large');
+    pet.classList.add('pet-sz-' + s);
+    try{ localStorage.setItem('ek-pet-size', s); }catch(_){}
+    petSizeButtons();
+    say(t(s === 'small' ? '小一点，不吵你' : s === 'large' ? '变大啦，看得清吗' : '恢复原本大小'));
+  }
+  /* ---------- 鼠标穿透（原版 set_passthrough） ---------- */
+  /* 与 PySide6 原版的关键差别：原版是独立窗口，可用托盘菜单直接解除；
+     而 EnvKit 的桌宠活在网页里，Go 端点不到 DOM。所以这里的策略是
+     **穿透不跨页面生命周期**——只在当前页面会话内有效，刷新/重新打开即恢复。
+     这样不会出现"永远点不到、又没有出口"的死锁，也不写 localStorage。 */
+  let petPass = false;
+  function applyPassthrough(on){
+    petPass = !!on;
+    pet.classList.toggle('passthrough', petPass);
+    const b = ctxmenu.querySelector('[data-act="passthrough"]');
+    if(b){
+      b.textContent = petPass ? t('解除鼠标穿透') : t('鼠标穿透（点不到它）');
+      b.classList.toggle('cur', petPass);
+    }
+    if(petPass){
+      say(t('已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复'), true);
+    } else {
+      say(t('穿透已解除'));
+    }
+  }
+  function setPassthrough(on){ applyPassthrough(on); }
   /* 待机小动作（原版 _maybe_idle_action：蹦跳/摇摆/伸懒腰/日常台词/心声） */
   function petHop(){ pet.classList.add('hop'); setTimeout(()=>pet.classList.remove('hop'), 660); }
   function petStretch(){ pet.classList.add('stretch'); setTimeout(()=>pet.classList.remove('stretch'), 920); }
@@ -3455,6 +3511,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     petHop();
   }
   petModeButtons();
+  /* 尺寸档位也要在启动时落到 DOM 上，否则刷新后菜单勾选对了、鱼却没变大 */
+  pet.classList.add('pet-sz-' + petSize);
+  petSizeButtons();
 
   /* ---------- 甩晕 ---------- */
   let wobble = 0, dizzyT = null, dizzyStage = 0;

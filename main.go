@@ -230,6 +230,23 @@ func main() {
 		OpenConsole: func() { openBrowser(openURL) },
 		OpenConfig:  func() { openBrowser(openURL + "#config") },
 		OpenLogs:    func() { platform.OpenFolder(exeDir()) },
+		CreateShortcut: func() {
+			// 用 os.Executable 的绝对路径，不用 exeDir()+文件名拼——临时改过名的 exe
+			// （比如 EnvKit_ab.exe）也能指向它自己，快捷方式不会失效。
+			self, err := os.Executable()
+			if err != nil {
+				warn(scSys, "服务", "创建桌面快捷方式失败：取不到 exe 路径（%v）", err)
+				return
+			}
+			lnk, err := platform.CreateDesktopShortcut(self, "EnvKit", "EnvKit 统一开发环境助手")
+			if err != nil {
+				warn(scSys, "服务", "创建桌面快捷方式失败：%v", err)
+				platform.Notify("EnvKit", "创建桌面快捷方式失败："+err.Error())
+				return
+			}
+			info(scSys, "服务", "已在桌面创建快捷方式：%s", lnk)
+			platform.Notify("EnvKit", "桌面快捷方式已创建")
+		},
 		Ready: func() {
 			info(scSys, "服务", "托盘菜单已就绪：右键图标可打开控制台 / 配置 / 日志，或退出")
 			cfgMu.Lock()

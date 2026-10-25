@@ -312,7 +312,14 @@
   .vtab .mini{white-space:nowrap}
   .vtag{font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap}
   /* ===== AI 桌宠「小画师」（v1.9.6 接入，替代原右下角悬浮球）===== */
-  #pet{position:fixed;right:14px;bottom:6px;width:140px;height:150px;z-index:60;cursor:grab;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none;transition:transform .35s,opacity .35s,right .28s,filter .3s}
+  #pet{position:fixed;right:14px;bottom:6px;width:140px;height:150px;z-index:60;cursor:grab;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none;transition:transform .35s,opacity .35s,right .28s,filter .3s;transform-origin:50% 100%}
+  /* 大小三档：用 --pet-scale 承载倍率，不碰 #pet 自己的 transform（.dot/.min 要用） */
+  #pet.pet-sz-small{--pet-scale:.78}
+  #pet.pet-sz-normal{--pet-scale:1}
+  #pet.pet-sz-large{--pet-scale:1.28}
+  /* 鼠标穿透：整只鱼与气泡都不吃事件，点击落到下面的窗口 */
+  #pet.passthrough{pointer-events:none}
+  #pet.passthrough .pet-bubble,#pet.passthrough .pet-ctx{pointer-events:none}
   #pet:active{cursor:grabbing}
   #pet.dragging{cursor:grabbing;z-index:9999}
   #pet.shifted{right:calc(min(436px,96vw) + 10px)}
@@ -322,7 +329,7 @@
   #pet.dot .pshadow,#pet.dot .pet-fx,#pet.dot .pet-bubble{display:none}
   #pet.min{transform:scale(.16) translateY(260px);opacity:.55}
   #pet.min:hover{transform:scale(.55) translateY(60px);opacity:1}
-  #petSvg{overflow:visible;transition:transform .18s ease-out}
+  #petSvg{overflow:visible;transform:scale(var(--pet-scale,1));transform-origin:50% 100%;transition:transform .28s ease-out,opacity .18s linear}
   @keyframes petFloat{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(-2deg)}75%{transform:translateY(-3px) rotate(2deg)}}
   #pet-float{animation:petFloat 3.4s ease-in-out infinite;transform-origin:50% 92%}
   #pet.thinking #pet-float{animation-duration:2.3s}

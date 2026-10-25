@@ -6,12 +6,13 @@ package platform
 
 // TrayActions 与 Windows 版保持同一形状（main 不需要分平台写代码）。
 type TrayActions struct {
-	OpenConsole  func()
-	OpenConfig   func()
-	OpenLogs     func()
-	Exit         func()
-	Ready        func()
-	ToggleWindow func() bool
+	OpenConsole    func()
+	OpenConfig     func()
+	OpenLogs       func()
+	Exit           func()
+	Ready          func()
+	CreateShortcut func()
+	ToggleWindow   func() bool
 }
 
 // RunTray 非 Windows 直接返回，main 会回到正常的阻塞式服务循环。
