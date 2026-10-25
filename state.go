@@ -114,9 +114,16 @@ type PetConfig struct {
 	// WeatherEnabled 是否允许桌宠查询天气（默认 false）。
 	WeatherEnabled bool `json:"weather_enabled"`
 	// WeatherCity 城市名（wttr.in 的 location 段，支持拼音或中文，留空 = 按 IP 猜）。
-	// 建议显式填写："Shantou" / "汕头" 均可。
+	// 建议显式填写："Shanghai" / "上海" 均可。未填时默认"上海"（见 defaultWeatherCity）。
 	WeatherCity string `json:"weather_city,omitempty"`
 }
+
+// defaultWeatherCity 天气城市的默认值。
+//
+// 放在这里而不是写死在 config.dist.json：用户已有的 config.json 里
+// weather_city 是空串，改分发模板对他们无效——只有代码里的默认值
+// 才能让"老配置 + 新版本"也吃到这个默认。
+const defaultWeatherCity = "上海"
 
 // RecoveryConfig 恢复事务的两层节制参数（v3.0 T1.5，修 G5/G6）。
 // 两层分工见 txbudget.go：MaxActions 防"不同策略连环自动执行刷爆环境"，

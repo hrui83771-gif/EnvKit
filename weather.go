@@ -122,6 +122,7 @@ func handlePetConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		cfgMu.Lock()
 		pc := cfg.Pet
+		pc.WeatherCity = effectiveWeatherCity(pc.WeatherCity)
 		cfgMu.Unlock()
 		writeJSON(w, pc)
 		return
@@ -146,7 +147,7 @@ func handlePetConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.Pet.WeatherEnabled = *body.WeatherEnabled
 	}
 	if body.WeatherCity != nil {
-		// 城市名允许留空（= 按 IP 猜测）；去掉首尾空白并限长，
+		// 城市名允许留空（= 回到默认城市）；去掉首尾空白并限长，
 		// 防止把一整段文本塞进 URL 路径。
 		c := strings.TrimSpace(*body.WeatherCity)
 		if r := []rune(c); len(r) > 32 {
@@ -155,6 +156,9 @@ func handlePetConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.Pet.WeatherCity = c
 	}
 	after := cfg.Pet
+	// 回报生效值而不是原始值：用户清空输入框时，界面上该显示
+	// "上海"（实际查询用的地方），而不是一片空白。
+	after.WeatherCity = effectiveWeatherCity(after.WeatherCity)
 	saved := cfg
 	cfgMu.Unlock()
 
@@ -176,7 +180,7 @@ func handlePetWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	city := strings.TrimSpace(pc.WeatherCity)
+	city := effectiveWeatherCity(pc.WeatherCity)
 	text, resp, err := fetchWeather(city)
 	if err != nil {
 		writeJSON(w, weatherResp{Enabled: true, City: city, Error: err.Error()})
@@ -187,7 +191,20 @@ func handlePetWeather(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// fetchWeather 拉 wttr.in 并压成一句中文。city 为空时由上游按 IP 定位。
+// effectiveWeatherCity 决定这次查哪里：用户填了就按用户的，没填就用默认城市。
+//
+// 为什么不"留空就让上游按 IP 猜"：wttr.in 的 IP 定位经常落在机房所在地，
+// 对国内用户基本是错的，而且结果不可复现。给一个有名字的默认值，
+// 至少用户一眼能看出"这是默认值，可以改"。
+func effectiveWeatherCity(c string) string {
+	if c = strings.TrimSpace(c); c != "" {
+		return c
+	}
+	return defaultWeatherCity
+}
+
+// fetchWeather 拉 wttr.in 并压成一句中文。city 为空时由上游按 IP 定位
+// （正常路径不会走到：调用方已用 effectiveWeatherCity 兜了默认城市）。
 func fetchWeather(city string) (string, weatherResp, error) {
 	var out weatherResp
 
