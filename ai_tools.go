@@ -52,6 +52,16 @@ type aiConfirmReq struct {
 	Tool       string         `json:"tool"`
 	Args       map[string]any `json:"args"`
 	Approved   bool           `json:"approved"`
+	// Batch = 用户勾选了"本任务内后续同类操作不再询问"（v3.2）。
+	// 只有服务启停类工具认这个开关，其余工具一律逐次确认。
+	Batch bool `json:"batch,omitempty"`
+}
+
+// aiRecovered 回退头里的一条消息（只保留角色与截断后的正文）。
+// 用短字段名是为了压小请求头：这条路径本身就是为了对付"body 被吃、只剩头"的环境。
+type aiRecovered struct {
+	Role    string `json:"r"`
+	Content string `json:"c"`
 }
 
 type aiChatReq struct {

@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="app.ico" width="72" alt="EnvKit" />
 
@@ -160,6 +160,7 @@ SSE 原文与对话历史原样不动——判据读的就是原文，剥错了�
 
 ```bash
 go test ./...                              # 单元测试（481 项含子测试，0 FAIL）
+python tools/web_build.py --check          # 前端产物与 web/src 是否一致（改前端后必跑）
 python tools/recovery_selftest.py          # 判分器自检（196 条断言，纯离线）
 node tools/cdp_verify_test.js              # 浏览器回归（需先启动 EnvKit）
 python tools/e2e_agent_test.py             # 端到端 AI 行为验收（需配置模型 API Key）
@@ -167,6 +168,10 @@ python tools/recovery_sandbox.py --allow-writes --repeat 3   # 七维故障恢�
 python tools/eval_gate.py                  # CI 门禁：快门禁（秒级）/ --set-baseline 冻结基线
 python tools/dist_check.py                 # 分发包泄漏扫描
 ```
+
+> 前端自 v3.2 起拆成 `web/src/`（`index.tpl.html` + `app.css` + `app.js`），
+> `web/index.html` 是拼出来的产物（`go:embed` 要它）。改前端只改 `web/src/`，
+> 然后 `python tools/web_build.py` 重拼；直接改 `web/index.html` 会在下次构建时被覆盖。
 
 > 故障恢复评测需配置模型 API Key。`--allow-writes` 只自动批准白名单内的
 > `start_service`（沙箱中的一次性服务），**永不批准触碰用户数据与进程的操作**。

@@ -62,17 +62,25 @@ func clientGone(ctx context.Context, w http.ResponseWriter) bool {
 //
 // usage 也在这里记：它是回合内累加的（跨多轮工具调用），
 // 只有收尾时才是最终值。
+// sseUsage 带上"提供方 / 模型"：用量卡要显示是哪一次调用花的钱与缓存。
+// 不加字段的话前端只能去猜当前配置——而配置可以在会话中途被改，
+// 事后回看历史卡片就会张冠李戴。
+func sseUsage(u *aiUsage) map[string]any {
+	ac := aiSnap()
+	return map[string]any{"type": "usage", "usage": *u, "model": ac.Model, "provider": ac.Provider}
+}
+
 func sseDoneUsage(w http.ResponseWriter, fl http.Flusher, u *aiUsage) {
 	recordTurnUsage(u)
 	if u.Prompt > 0 || u.Completion > 0 {
-		sseWrite(w, fl, map[string]any{"type": "usage", "usage": *u})
+		sseWrite(w, fl, sseUsage(u))
 	}
 	sseWrite(w, fl, map[string]any{"type": "done"})
 }
 func sseDoneConfirm(w http.ResponseWriter, fl http.Flusher, u *aiUsage) {
 	recordTurnUsage(u)
 	if u.Prompt > 0 || u.Completion > 0 {
-		sseWrite(w, fl, map[string]any{"type": "usage", "usage": *u})
+		sseWrite(w, fl, sseUsage(u))
 	}
 	// 待用户确认：这不是失败也不是成功，**不写 outcome**——
 	// 让它留在 aborted 兜底上，等确认后的下一段回合再定。

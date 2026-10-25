@@ -58,6 +58,13 @@ var (
 // aiArgsSHA 参数的规范哈希：Go 的 json.Marshal 对 map 的键排序输出，
 // 因此同一参数的两次序列化结果稳定（与字段顺序无关）。
 func aiArgsSHA(args map[string]any) string {
+	// nil 与空 map 必须同哈希：两者语义都是"没有参数"，而 JSON 里分别序列化成
+	// null 与 {}。不归一化的话，"工具本来就没有参数、客户端回执里干脆不带 args"
+	// 会被判成 args_mismatch（篡改），用户看到的是"确认了但没执行"。
+	// 注意这**不放宽**任何边界：登记里真有参数时，空 map 的哈希依然对不上。
+	if args == nil {
+		args = map[string]any{}
+	}
 	b, err := json.Marshal(args)
 	if err != nil {
 		// 参数不可序列化（理论上 json.Unmarshal 产不出这种值）：
@@ -165,6 +172,10 @@ type aiConfirmDecision struct {
 	Level   string         // 授权档位文本（审计用；no_pending/args_mismatch 时为空串）
 	Rule    string         // 命中规则（审计用）
 	ArgsSHA string         // 登记的原始参数哈希（无登记时为空串）
+	// Batch = 用户在同一张卡上勾选了"后续同类不再询问"（v3.2）。
+	// **不由 aiConfirmGate 判定**（它是纯函数，只看"能不能执行"），
+	// 由两个入口（handleAIConfirm / handleAIChat 的 confirm 分支）在放行时带上。
+	Batch bool
 }
 
 // aiConfirmGate 确认回执裁决（**纯函数**：不落审计、不执行、不写 SSE）。

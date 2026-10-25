@@ -55,6 +55,10 @@ type Lesson struct {
 	Fail       int     `json:"fail,omitempty"`
 	Stale      bool    `json:"stale,omitempty"`     // 已因环境变化失效
 	StaleWhy   string  `json:"stale_why,omitempty"` // 为什么失效（界面要能解释）
+	// Injected 本轮是否会进提示词（视图字段，不落盘）。
+	// 界面要回答"这条经验为什么没被用上"，只给 enabled/stale 不够——
+	// 还有"没命中当前任务"和"被更高置信度的挤出前 5 条"两种情况。
+	Injected bool `json:"injected,omitempty"`
 }
 
 // 经验类型
@@ -553,24 +557,44 @@ func kindKeywords(kind string) []string {
 }
 
 // lessonsForTask 返回与当前任务最相关的 n 条（0 = 不限）。
-// 全量注入会让上下文爆炸——5 条规则产出的经验通常 90% 与当前任务无关。
+//
+// 两条规则是这一版专门修的：
+//  1. **先滤掉失效/被否决的**。旧实现先挑前 n 再在 lessonBrief 里过滤，
+//     结果 5 个名额可能被 5 条失效经验占满，最后一条都不剩。
+//  2. **任务非空但没命中时返回空**。旧实现 `return all[:n]` 会把这辈子最不相关的
+//     经验按失败次数硬塞进提示词——"经验像噪声"主要就是这一步造成的。
+//     空任务（recall_lessons 不带 task、或快照无法提取任务）才返回全量前 n 条。
 func lessonsForTask(task string, n int) []Lesson {
 	all := lessonsFor()
-	if n <= 0 || len(all) <= n {
-		return all
+	off := loadLessonOff()
+	ok := make([]Lesson, 0, len(all))
+	for _, l := range all {
+		if l.Stale || off[l.ID] {
+			continue
+		}
+		ok = append(ok, l)
+	}
+	if n <= 0 {
+		n = len(ok)
+	}
+	if strings.TrimSpace(task) == "" {
+		if len(ok) > n {
+			return ok[:n]
+		}
+		return ok
 	}
 	type scored struct {
 		l     Lesson
 		score int
 	}
 	var hits []scored
-	for _, l := range all {
+	for _, l := range ok {
 		if s := lessonMatchScore(l, task); s > 0 {
 			hits = append(hits, scored{l, s})
 		}
 	}
 	if len(hits) == 0 {
-		return all[:n]
+		return nil
 	}
 	sort.Slice(hits, func(i, j int) bool {
 		if hits[i].score != hits[j].score {

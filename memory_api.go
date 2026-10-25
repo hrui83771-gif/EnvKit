@@ -26,23 +26,48 @@ func handleLaunch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "plan": currentLaunchPlan()})
 }
 
-// handleLessons GET：返回自动经验（可禁用状态）+ 用户记忆全量。
+// handleLessons GET：返回自动经验 + 用户记忆（含**本轮**注入状态）。
+//
+// ?task= 可以传一句话任务，接口会用它跑一次真实的选择逻辑，告诉界面
+// "这条记忆/经验本轮会不会被注入、为什么没注入"。界面上的「试算」用的就是它——
+// 预览与真正注入共用 memoriesView / lessonsForTask，不存在两套口径。
 func handleLessons(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	task := strings.TrimSpace(r.URL.Query().Get("task"))
+	views := memoriesView(task, 12)
 	ls := lessonsFor()
+	inj := map[string]bool{}
+	for _, l := range lessonsForTask(task, 5) {
+		inj[l.ID] = true
+	}
+	for i := range ls {
+		ls[i].Injected = inj[ls[i].ID]
+	}
 	sort.Slice(ls, func(i, j int) bool {
 		if ls[i].Enabled != ls[j].Enabled {
 			return ls[i].Enabled // 未禁用的排前面
 		}
+		if ls[i].Injected != ls[j].Injected {
+			return ls[i].Injected
+		}
 		return ls[i].Hits > ls[j].Hits
 	})
+	nMem := 0
+	for _, v := range views {
+		if v.Injected {
+			nMem++
+		}
+	}
 	writeJSON(w, map[string]any{
-		"ok":       true,
-		"lessons":  ls, // 恒为数组，前端不必判空
-		"memories": loadMemories(),
+		"ok":                true,
+		"task":              task,
+		"lessons":           ls,     // 恒为数组，前端不必判空
+		"memories":          views,  // 带 injected / reason / stale，界面直接展示
+		"injected_memories": nMem,
+		"injected_lessons":  len(inj),
 	})
 }
 

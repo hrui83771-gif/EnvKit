@@ -33,6 +33,11 @@ var (
 //go:embed web/index.html
 var indexHTML string
 
+// 托盘图标：直接嵌入仓库里的 app.ico，不依赖 exe 同目录是否还留着这个文件。
+//
+//go:embed app.ico
+var appIcon []byte
+
 // xterm.js 内嵌终端静态资源
 var (
 	//go:embed web/xterm/xterm.js
@@ -41,6 +46,16 @@ var (
 	xtermFitJS []byte
 	//go:embed web/xterm/xterm.css
 	xtermCSS []byte
+)
+
+// marked（Markdown 渲染）与 highlight.js（代码高亮）——与 xterm 同样的离线内嵌，
+// 不走外网 CDN：本工具经常在没外网的客户现场跑，缺这两个文件只是少点样式，
+// 但页面不能因此报警或白屏。
+var (
+	//go:embed web/vendor/marked.min.js
+	markedJS []byte
+	//go:embed web/vendor/highlight.min.js
+	highlightJS []byte
 )
 
 func main() {
@@ -109,6 +124,8 @@ func main() {
 	http.HandleFunc("/xterm/xterm.js", staticBytes("application/javascript; charset=utf-8", xtermJS))
 	http.HandleFunc("/xterm/addon-fit.js", staticBytes("application/javascript; charset=utf-8", xtermFitJS))
 	http.HandleFunc("/xterm/xterm.css", staticBytes("text/css; charset=utf-8", xtermCSS))
+	http.HandleFunc("/vendor/marked.min.js", staticBytes("application/javascript; charset=utf-8", markedJS))
+	http.HandleFunc("/vendor/highlight.min.js", staticBytes("application/javascript; charset=utf-8", highlightJS))
 	http.HandleFunc("/api/config/export", handleConfigExport)
 	http.HandleFunc("/api/config/import", handleConfigImport)
 	http.HandleFunc("/api/program/db-test", handleDBTest)
@@ -140,6 +157,8 @@ func main() {
 	http.HandleFunc("/api/ai/debug", handleAIDebug)
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/confirm", handleAIConfirm) // v3.2：确认卡就地等待的投递口
+	http.HandleFunc("/api/ai/echo", handleAIEcho)       // v3.2：传输自检（请求体有没有被吃）
 	http.HandleFunc("/api/ai/explain", handleAIExplain)
 	http.HandleFunc("/api/ai/providers", handleAIProviders)
 	http.HandleFunc("/api/ai/models", handleAIModels)
@@ -186,13 +205,63 @@ func main() {
 	fmt.Println("======================================================")
 	fmt.Println("  此窗口是 EnvKit 的服务进程，请保持开启！")
 	fmt.Println("  · 关闭它会导致网页无法访问；右上角的 × 已禁用，误点不会出事")
-	fmt.Println("  · 退出方法：按 Ctrl+C，会先自动停止前端/后端服务再退出")
+	fmt.Println("  · 退出方法：按 Ctrl+C，或右键任务栏托盘图标选「退出 EnvKit」（都会先停服务）")
+	fmt.Println("  · 托盘右键还能：打开控制台 / 程序配置 / 打开日志目录 / 隐藏窗口到托盘")
 	fmt.Println("  控制台页面：" + openURL + "（浏览器未自动打开时，复制此地址访问）")
 	fmt.Println("======================================================")
 	fmt.Println()
 	// 本机 API 鉴权：/api/* 需携带随机令牌（页面注入），防浏览器内其它网页 CSRF
 	startTaskWatchdog()
-	if err := http.ListenAndServe(addr, securityMW(recoverMW(authMW(http.DefaultServeMux)))); err != nil {
+	// 服务放到后台跑：Windows 的托盘消息循环必须占用主 goroutine
+	//（systray 在 init 里 LockOSThread），否则托盘图标会出现但点击无反应。
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- http.ListenAndServe(addr, securityMW(recoverMW(authMW(http.DefaultServeMux))))
+	}()
+	go func() {
+		if err := <-serveErr; err != nil {
+			fail(scSys, "服务", "启动失败：%v", err)
+			os.Exit(1)
+		}
+	}()
+	// 托盘：非 Windows / 图标缺失时立即返回，退化为原来的纯控制台模式。
+	// 「退出」必须在这里停子进程——托盘没有 Ctrl+C，少了这一步就会留一堆孤儿。
+	platform.RunTray(appIcon, platform.TrayActions{
+		OpenConsole: func() { openBrowser(openURL) },
+		OpenConfig:  func() { openBrowser(openURL + "#config") },
+		OpenLogs:    func() { platform.OpenFolder(exeDir()) },
+		Ready: func() {
+			info(scSys, "服务", "托盘菜单已就绪：右键图标可打开控制台 / 配置 / 日志，或退出")
+			cfgMu.Lock()
+			hidden := cfg.TrayHidden
+			cfgMu.Unlock()
+			if hidden {
+				// 上次是"后台运行"状态：沿用，但必须等托盘就绪后再藏窗口——
+				// 托盘没起来就藏窗口，用户将没有任何入口能把窗口找回来。
+				platform.HideConsole()
+				info(scSys, "服务", "按上次的选择隐藏窗口到托盘；右键托盘图标可显示窗口或退出")
+			}
+		},
+		ToggleWindow: func() bool {
+			if platform.ConsoleVisible() {
+				platform.HideConsole()
+				setTrayHidden(true)
+				info(scSys, "服务", "窗口已隐藏到托盘（后台运行），右键托盘图标可恢复或退出")
+				return true
+			}
+			platform.ShowConsole()
+			setTrayHidden(false)
+			info(scSys, "服务", "控制台窗口已恢复")
+			return false
+		},
+		Exit: func() {
+			info(scSys, "服务", "从托盘退出：正在停止前端/后端服务")
+			shutdownChildren()
+			os.Exit(0)
+		},
+	})
+	// 没有托盘（非 Windows 或托盘不可用）：阻塞在服务循环上，行为与旧版一致。
+	if err := <-serveErr; err != nil {
 		fail(scSys, "服务", "启动失败：%v", err)
 		os.Exit(1)
 	}
@@ -276,6 +345,20 @@ func staticBytes(ct string, b []byte) http.HandlerFunc {
 		w.Header().Set("Content-Type", ct)
 		_, _ = w.Write(b)
 	}
+}
+
+// setTrayHidden 记住窗口显隐状态（下次启动沿用）。
+// 只在真正变化时写盘，避免托盘来回点时反复重写 config.json。
+func setTrayHidden(on bool) {
+	cfgMu.Lock()
+	if cfg.TrayHidden == on {
+		cfgMu.Unlock()
+		return
+	}
+	cfg.TrayHidden = on
+	snap := cfg
+	cfgMu.Unlock()
+	saveExternalConfig(snap)
 }
 
 func findPort(start int) int {

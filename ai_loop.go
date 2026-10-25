@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,14 +36,34 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	fl, ok := aiChatReady(w)
-	if !ok {
-		return
-	}
 	usage := aiUsage{} // 空请求错误路径不会产生用量，这里只为复用统一的收尾 helper
 	var body aiChatReq
-	decErr := json.NewDecoder(r.Body).Decode(&body)
+	// ===== 读取顺序是**有讲究的**：先读体，再动响应头 =====
+	//
+	// 真实故障（2026-10-25，修了一整轮才定位）：这里原来第一行就是 aiChatReady()，
+	// 它会把 SSE 响应头 flush 出去，**然后**才去读请求体。实测（浏览器 + 真实网络）：
+	//   · 先读体后响应：发送 5476 / 收到 5476  ✅
+	//   · 先响应后读体：发送 5476 / 收到 0    ❌（响应先到，Go 丢弃未读的请求体，
+	//                                        浏览器也不再发送剩余部分）
+	// 于是每一条对话请求都"头到了、body 0 字节"，服务端只能用兜底头恢复 6 条消息 →
+	// 模型失忆（表现为反复问"你要我做什么"）+ 缓存命中率被钉死在 85%。
+	// httptest 复现不了它：没有真实网络，body 早已在内存里。
+	//
+	// 结论：**任何"先写响应、后读 body"的 handler 都有这个坑**，读体必须排在第一位。
+	raw, readErr := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+	if readErr != nil {
+		warn(scSys, "AI", "读取请求体失败（%v）：已读到 %d 字节 / Content-Length=%d —— 连接在传输中途断了",
+			readErr, len(raw), r.ContentLength)
+	}
+	decErr := json.Unmarshal(raw, &body)
 	msgs := body.Messages
+	declaredLen := strings.TrimSpace(r.Header.Get("X-EnvKit-Body-Len"))
+	if declaredLen != "" && len(raw) > 0 {
+		if n, cerr := strconv.Atoi(declaredLen); cerr == nil && n != len(raw) {
+			warn(scSys, "AI", "请求体长度不符：客户端声明 %d 字节，服务端实收 %d 字节（Content-Length=%d）——中间层可能在截断",
+				n, len(raw), r.ContentLength)
+		}
+	}
 
 	// v2.2 M9：一次 AI 对话 = 一条任务轨迹。此后本次会话内的所有审计记录
 	// 自动带上 trace_id，"AI 是不是在瞎试"才成为可统计的问题。
@@ -58,12 +79,28 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// 实测：某些本机代理/预览容器会剥掉 POST body（服务端表现为 decode 出 0 条消息，
 	// 模型因此对着"空输入+环境状态"自说自话，用户以为 AI 不听话）。鉴权令牌走请求头
-	// 能完好穿过，所以前端把"最后一条用户消息 + 确认回执"也放进 X-EnvKit-Chat-Fallback
-	// 头兜底；body 丢失时据此恢复，保证对话和确认流程在代理环境下依然可用。
+	// 能完好穿过，所以前端把"最近几条消息 + 确认回执"放进 X-EnvKit-Chat-Fallback 头兜底。
+	//
+	// v3.2：兜底从"只恢复最后一句"升级为"恢复最近若干条"。
+	// 原因很实在：只恢复一句 = 模型当场失忆，于是它会**重新问一遍**（实测那些
+	// "检测到菜单式无效回复"就是它失忆后的反应），而这一轮的缓存也全废。
+	// 顺带把两种丢失分开记日志：空 body / 解析失败，否则永远查不出是哪一种。
+	recovered := 0
 	if (decErr != nil || len(msgs) == 0) && body.Confirm == nil {
+		// 这一行是**判决书**：客户端说它发了 N 字节，服务端实际只收到 M 字节。
+		// N>0 且 M==0 → 中间层整个吃掉；N>M>0 → 截断；N==0 → 客户端自己发的空 body。
+		if declaredLen == "" {
+			declaredLen = "（未声明）"
+		}
+		warn(scSys, "AI", "请求体未到达：客户端声明 %s 字节，服务端实收 %d 字节（Content-Length=%d）",
+			declaredLen, len(raw), r.ContentLength)
+		if decErr != nil {
+			warn(scSys, "AI", "请求体解析失败（%v）——按丢失处理", decErr)
+		}
 		if fbRaw, ferr := url.QueryUnescape(r.Header.Get("X-EnvKit-Chat-Fallback")); ferr == nil && fbRaw != "" {
 			var fb struct {
 				Last    string        `json:"last"`
+				Recent  []aiRecovered `json:"recent"`
 				Confirm *aiConfirmReq `json:"confirm"`
 				Lang    string        `json:"lang"`
 			}
@@ -72,12 +109,35 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 				if body.Lang == "" {
 					body.Lang = fb.Lang
 				}
-				if len(msgs) == 0 && fb.Last != "" {
-					msgs = []aiMsg{{Role: "user", Content: fb.Last}}
-					warn(scSys, "AI", "请求体未到达（被本机代理/预览容器拦截），已用回退头恢复对话")
+				if len(msgs) == 0 {
+					// 优先用 recent（能续上上下文）；没有就退回 last（至少能答这一句）
+					if n := len(fb.Recent); n > 0 {
+						for _, m := range fb.Recent {
+							if m.Role != "user" && m.Role != "assistant" {
+								continue
+							}
+							if strings.TrimSpace(m.Content) == "" {
+								continue
+							}
+							msgs = append(msgs, aiMsg{Role: m.Role, Content: m.Content})
+						}
+						recovered = len(msgs)
+					}
+					if recovered == 0 && fb.Last != "" {
+						msgs = []aiMsg{{Role: "user", Content: fb.Last}}
+						recovered = 1
+					}
+					if recovered > 0 {
+						warn(scSys, "AI", "请求体未到达（被本机代理/预览容器拦截），已用回退头恢复 %d 条消息", recovered)
+					}
 				}
 			}
 		}
+	}
+	// 请求体已经读完（这一步绝不能提到前面去，见函数开头那段注释），现在才动响应头。
+	fl, ok := aiChatReady(w)
+	if !ok {
+		return
 	}
 	// 仍然拿不到任何用户内容：显式报错，绝不静默地把空输入丢给模型空转
 	if len(msgs) == 0 && body.Confirm == nil {
@@ -85,6 +145,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			"（通常是被本机代理或嵌入预览容器拦截）。请用系统浏览器直接打开控制台地址后重试。"})
 		sseDoneUsage(w, fl, &usage)
 		return
+	}
+	if recovered > 0 {
+		// 让界面知道"这次是降级恢复的"：用户有权知道他刚才那段上下文没送达。
+		sseWrite(w, fl, map[string]any{"type": "body_recovered", "messages": recovered})
 	}
 	// 悬挂的 assistant(tool_calls)（用户无视确认卡片直接发新消息、或确认续接的历史回传）
 	// 会让上游 OpenAI 协议报 400，统一剥掉（协议里工具结果一律走 aiToolResultAsUser）。
@@ -104,11 +168,22 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// 授权依据、参数防篡改、闸门重过全在 aiConfirmGate 里，可单测。
 		d := aiConfirmGate(body.Confirm.Tool, body.Confirm.ToolCallID,
 			body.Confirm.Approved, body.Confirm.Args)
+		d.Batch = body.Confirm.Batch && d.Proceed
 		result = aiConfirmApply(w, fl, body.Confirm.Tool, d)
+		if d.Batch {
+			// 旧路径（客户端没走原地等待）上开批量授权：本请求内后续同类步骤不再弹卡。
+			// 这条路径每次确认都是一个新请求，所以授权实际只在"确认后的那一段"有效——
+			// 仍然比没有好，但主战场是新路径。
+			if left, ok := aiGrantOpen(body.Confirm.Tool); ok {
+				auditNow(actAI, "ai_grant_open", body.Confirm.Tool, "", resOK, "left="+itoa(left))
+				sseWrite(w, fl, map[string]any{"type": "grant_open", "tool": body.Confirm.Tool,
+					"left": left, "label": aiGrantLabel(body.Confirm.Tool)})
+			}
+		}
 		// 不合成 assistant(tool_calls)+tool（thinking 模型要求回传 reasoning_content，合成消息会 400），
 		// 改为剥掉该回合并用一条 user 消息把结果交给模型。
 		msgs = aiTrimLastToolTurn(msgs)
-		msgs = append(msgs, aiToolResultAsUser(body.Confirm.Tool, firstLines(result, 3000)))
+		msgs = append(msgs, aiToolResultAsUser(body.Confirm.Tool, aiClampToolResult(body.Confirm.Tool, result)))
 		sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": body.Confirm.Tool, "result": firstLines(result, 300)})
 		// 确定性结果行：不让"到底成没成"取决于模型怎么描述
 		name := aiToolCnName(body.Confirm.Tool, body.Confirm.Args)
@@ -239,7 +314,82 @@ type aiUsage struct {
 	Miss       int64 `json:"cache_miss"`
 }
 
+// menuRetryWorth 判断"该动手却反问"是否真的成立。
+//
+// 判据只有一条：**意图路由能从用户最后一句解析出可执行动作**。
+//
+//	· 解析得出来 = 用户要的事是明确的，模型反问就是没做该做的事 → 值得重答一次；
+//	· 解析不出来 = 用户可能只是在问问题（"这套系统怎么部署的？"），
+//	  模型的反问是合理的，重试只会把一次正常回答变成两次上游请求。
+//
+// 这条判据是为修一个体感问题：老实现只看回复像不像菜单，于是"如果需要我继续，
+// 请告诉我"这类合法收尾也会被重答一次——用户看到的是"它又问了一遍"。
+func menuRetryWorth(lastUser string, msgs []aiMsg) bool {
+	if strings.TrimSpace(lastUser) == "" {
+		return false
+	}
+	tool, _, _ := aiBacktrackIntent(lastUser, msgs)
+	return tool != ""
+}
+
+// aiClampTools 需要截断返回的工具：它们的共同点是**结果可重查**。
+//
+// 为什么必须截：一次工具结果会永久留在历史里，并跟着后面每一轮前缀一起重算；
+// 3000 字符 ≈ 600~900 token，5 步任务就是 3~4k。而这类结果全都自带重查手段。
+//
+// 为什么不截全部：`read_file` 的契约就是"把文件读给模型"，砍掉等于毁掉能力；
+// `get_system_state` / `verify_environment` 是判据来源，截成半截会让模型
+// 对着不完整的证据下结论——那比多花 token 贵得多。
+var aiClampTools = map[string]bool{
+	"get_logs": true, "db_query": true, "search_files": true,
+	"list_project": true, "get_audit_log": true, "get_diag_report": true,
+}
+
+// aiToolResultMax 可重查类工具结果的字节上限（约 400~600 token）。
+const aiToolResultMax = 1200
+
+// aiClampToolResult 截断可重查工具的返回，并把"怎么继续查"直接写给模型。
+// 只截不提示等于让它猜；提示里点名工具参数，它下一轮才知道怎么补。
+func aiClampToolResult(tool, res string) string {
+	if !aiClampTools[tool] || len(res) <= aiToolResultMax {
+		return res
+	}
+	cut := aiToolResultMax
+	for cut > 0 && (res[cut]&0xC0) == 0x80 { // 不要切在 UTF-8 续字节上，否则半个汉字入 JOSN
+		cut--
+	}
+	return res[:cut] + "\n…（已截断，原始结果 " + itoa(len(res)) + " 字节）" +
+		"需要更多请缩小范围重查：日志用 get_logs(lines=…/scope=…) 分段；SQL 用 db_query 加 LIMIT / WHERE；" +
+		"文件搜索收窄关键词。**不要凭这半截结果下结论。**"
+}
+
+// aiIsAbortErr 判断一条上游读取错误是否只是"我们自己收尾"的产物。
+//
+// 背景：流式读取跑在独立 goroutine 里扫 resp.Body；主循环在客户端断开 / 单轮超时 /
+// 心跳失败时会 close 这个 body。扫描方随之拿到 net.ErrClosed（"use of closed
+// network connection"）或 context canceled。这不是上游故障，不该弹成红色错误。
+//
+// 注意只匹配**本地主动关闭**这一类，不要把真正的上游错误（EOF、502、超时读）吞掉。
+func aiIsAbortErr(s string) bool {
+	l := strings.ToLower(s)
+	for _, k := range []string{
+		"use of closed network connection",
+		"context canceled",
+		"context deadline exceeded",
+		"operation was canceled",
+		"the request was aborted",
+	} {
+		if strings.Contains(l, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// aiRunLoop 一次对话回合的主循环：Observe → Reason → Act → Verify。
 func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs []aiMsg, confirmed bool, preflight bool, lang string) {
+	// 批量授权只在本请求内有效：进来先清空，绝不让上一个任务的授权漏到这一个
+	aiGrantReset()
 	usage := aiUsage{} // 本回合 token 用量累计（跨多轮工具调用）
 	// 预检快通道：不依赖模型，确定性识别明确指令并直接执行（写操作仍走确认卡片）。
 	// 这样即使模型"只会念菜单"，用户的明确需求也一定会被执行。
@@ -264,23 +414,34 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			preChecked = true
 			info(scSys, "AI", "预检命中：%q \u2192 %s（写操作=%v）", firstLines(lastUser, 30), tool, isWrite)
 			callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())
+			var res string
+			var exErr error
 			if isWrite {
 				// 先给一句文字反馈，避免用户只看到卡片以为没反应
 				sseWrite(w, fl, map[string]any{"type": "delta", "text": "好的，准备执行：" + aiToolCnName(tool, args) + "。请在下方点「确认执行」。\n"})
+				// 旧实现这里**只发卡、不登记**：用户一点确认就撞上 aiConfirmGate 的
+				// no_pending（"该确认请求已过期"），这两条预检路径的卡永远执行不了。
+				// 发卡与登记必须成对，判据只有 aiConfirmGate 一份。
+				aiRememberPending(callID, tool, args)
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": callID, "tool": tool, "args": args,
 					"reason": "intent", "text": aiToolCnName(tool, args)})
-				sseDoneConfirm(w, fl, &usage)
-				return
+				// v3.2：原地等用户决定，不结束回合（等到就继续，等不到才退回旧路径）
+				d, ok := aiAwaitConfirm(ctx, w, fl, callID)
+				if !ok {
+					sseDoneConfirm(w, fl, &usage)
+					return
+				}
+				res = aiConfirmApply(w, fl, tool, d)
+			} else {
+				res, exErr = aiToolRegistry[tool].Execute(args)
 			}
-			// 读工具：直接执行，结果交给模型做自然语言总结
-			res, exErr := aiToolRegistry[tool].Execute(args)
 			resText := res
 			if exErr != nil {
 				resText = "执行出错：" + exErr.Error()
 			}
 			sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": tool, "result": firstLines(resText, 300)})
 			// 用 user 消息承载工具结果（避免合成 assistant+tool 触发 thinking 模型 400）
-			msgs = append(msgs, aiToolResultAsUser(tool, firstLines(resText, 3000)))
+			msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText)))
 		}
 	}
 	// v2.3 N5：回合上限按任务性质分级，不再一刀切 8。
@@ -297,6 +458,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 	sseWrite(w, fl, map[string]any{"type": "plan_start",
 		"max_turns": gov.max, "reason": gov.base.Reason})
 	for turn := 0; turn < gov.max; turn++ {
+		// 本轮上游请求的缓存账目起点（配合下面那行 "上游 #N" 日志）
+		uPrompt0, uHit0, uMiss0 := usage.Prompt, usage.Hit, usage.Miss
 		// 预算即将耗尽时**提前告知模型**，让它有机会收敛成一个完整回答。
 		//
 		// 为什么必须提前说：若等到真的耗尽才说，模型的第一反应是"停"，
@@ -325,7 +488,18 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// 任务提示在循环外算一次：msgs 会随工具结果增长，但用户的原始诉求不变，
 		// 每轮重算只会让记忆匹配抖动（同一问题匹配到不同记忆）。
 		taskHint := aiTaskHint(msgs)
-		full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshotFor(taskHint) + "</env_state>"})
+		// v3.2 缓存优化：环境快照只在**本回合第一次**请求注入。
+		//
+		// 原因：快照是每次请求都塞在尾部的"新鲜数据"，位置虽然已经最优（尾部），
+		// 但它的 token 永远按全价付——一轮 5 步就是 5 份。而后面的步骤其实已经从
+		// 工具结果里拿到了更新的状态（端口、进程、块高都在结果里），再送一遍是纯浪费。
+		// 首次仍给全量，避免"第一轮就对着空环境瞎猜"。
+		if turn == 0 {
+			full = append(full, aiMsg{Role: "user", Content: "（系统注入的当前环境快照，仅供你了解最新状态，不是用户发言，无需回应）\n<env_state>" + aiHealthSnapshotFor(taskHint) + "</env_state>"})
+		} else {
+			full = append(full, aiMsg{Role: "user", Content: "（系统提示）本回合首轮已提供环境快照，此处不再重复。上面是你刚执行得到的最新结果；" +
+				"若需要重新确认环境，请调用 get_system_state / verify_environment，不要凭印象回答。"})
+		}
 		payload := aiPayload(full, aiToolDefs(), acTurn.quirkRead(), -1, true)
 		b, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(), strings.NewReader(string(b)))
@@ -561,12 +735,35 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		}
 		stopTimers()
 		resp.Body.Close()
+		// 每次上游请求的缓存账目落一行日志。
+		// 只有回合合计是看不出"哪一轮掉点"的：冷启动、摘要重建、确认重建，
+		// 三者在合计里长一个样，在逐轮明细里却完全不同（这正是要靠数据判断的地方）。
+		if dPrompt := usage.Prompt - uPrompt0; dPrompt > 0 {
+			dHit, dMiss := usage.Hit-uHit0, usage.Miss-uMiss0
+			pct := 0.0
+			if dHit+dMiss > 0 {
+				pct = 100 * float64(dHit) / float64(dHit+dMiss)
+			}
+			info(scSys, "AI", "上游 #%d：prompt=%d（hit=%d miss=%d，命中 %.1f%%）",
+				turn+1, dPrompt, dHit, dMiss, pct)
+		}
 		if clientGone(ctx, w) {
 			warn(scSys, "AI", "客户端已断开，已中断本轮上游流式响应")
 			return
 		}
 		if readErr != nil {
 			upErr = readErr.Error()
+		}
+		// 「连接是被我们自己关掉的」不算上游故障。
+		//
+		// 读取 goroutine 在扫描 resp.Body，而主循环在客户端断开 / 超时 / 心跳失败时
+		// 会 close 这个 body —— 于是扫描方拿到 net.ErrClosed（"use of closed network
+		// connection"）。把它当"AI 服务返回错误"报给用户，是把**我们主动收尾**说成了
+		// 上游故障：用户看到一条红色错误，实际什么也没坏。
+		if upErr != "" && aiIsAbortErr(upErr) {
+			info(scSys, "AI", "上游读取被本地中断（%s）——按正常收尾处理", upErr)
+			sseDoneUsage(w, fl, &usage)
+			return
 		}
 		if upErr != "" {
 			sseWrite(w, fl, map[string]any{"type": "error", "text": "AI 服务返回错误：" + upErr})
@@ -601,25 +798,44 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				tool, args, isWrite := aiBacktrackIntent(lastUser, msgs)
 				if tool != "" {
 					callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())
+					var res string
+					var exErr error
 					if isWrite {
-						sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": callID, "tool": tool, "args": args})
-						sseDoneConfirm(w, fl, &usage)
-						return
+						// 与预检路径同样的问题：只发卡不登记 → 确认必然 no_pending。这里一并修掉。
+						aiRememberPending(callID, tool, args)
+						sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": callID, "tool": tool, "args": args,
+							"reason": "intent", "text": aiToolCnName(tool, args)})
+						d, ok := aiAwaitConfirm(ctx, w, fl, callID)
+						if !ok {
+							sseDoneConfirm(w, fl, &usage)
+							return
+						}
+						res = aiConfirmApply(w, fl, tool, d)
+					} else {
+						res, exErr = aiToolRegistry[tool].Execute(args)
 					}
-					res, exErr := aiToolRegistry[tool].Execute(args)
 					resText := res
 					if exErr != nil {
 						resText = "执行出错：" + exErr.Error()
 					}
 					sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": tool, "result": firstLines(resText, 300)})
-					msgs = append(msgs, aiToolResultAsUser(tool, firstLines(resText, 3000)))
+					msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText)))
 					continue // 让模型基于工具结果作答
 				}
 			}
-			// 菜单/反问式无效回复：丢弃该段（用户看不到）并强令重答（最多 2 次）
-			if menuRetried < 2 && (holdMenu || aiLooksLikeMenu(contentB.String())) {
+			// 菜单/反问式无效回复：丢弃该段（用户看不到）并强令重答。
+			//
+			// v3.2 收窄：**只重试 1 次，且必须先证明"这一句确实该动手"**。
+			// 老实现只要命中短语表就重试、最多两次；而"如果需要我继续，请告诉我"
+			// 这类合法收尾也会命中短语表——于是白烧一到两轮上游请求，
+			// 用户体感就是"又问了一遍、又转了一圈"。
+			// 现在的判据：意图路由能从用户最后一句解析出可执行动作（说明该做），
+			// 模型却在反问（说明该做没做）——这才是真无效。
+			if menuRetried < 1 && (holdMenu || aiLooksLikeMenu(contentB.String())) && menuRetryWorth(lastUser, msgs) {
 				menuRetried++
 				warn(scSys, "AI", "检测到菜单式无效回复（第 %d 次，已屏蔽不显示），要求模型重新作答", menuRetried)
+				// 落一条审计：这类"自我纠正"以前只能从日志里数，看不出它对成功率有没有贡献
+				auditNow(actAI, "ai_menu_retry", "", "", resFail, "模型该动手却反问，已要求重答")
 				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统强制要求）你上一条回复无效：禁止罗列能力清单、禁止编号菜单、禁止反问用户。" +
 					"现在必须直接给出结论：如果上面已有工具结果，就基于它总结现状与建议；" +
 					"如果需要执行操作，就立即发起对应工具调用，不要先问。"})
@@ -677,6 +893,19 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			// v2.3 N1：裁决与选型进轨迹。plan 记"为什么选这个动作"，
 			// policy 记"被判成什么档位、依据哪条规则"——归因到 rule 才谈得上改。
 			tracePlanFromTool(a.Name, args)
+			// v3.2 批量授权：用户在本任务里已经批准过"同类操作不再问"。
+			// 这里把**生效档位**降为 auto —— 不是绕过 PolicyGate：授权本身就是用户给的，
+			// 且范围被钉死在「本请求 / 同一工具族 / 剩余次数」三件事上，请求结束即失效。
+			// 降档之后，下面的写工具分支不再命中（它要求 NeedsConfirm），直接落到执行。
+			if verdict.Level == PolicyConfirm && !verdict.OptIn && aiGrantAllows(a.Name) {
+				left := aiGrantTake(a.Name)
+				auditNow(actAI, actAuthorize, a.Name, policyTargetOf(a.Name, args), resOK,
+					"batch_grant left="+itoa(left))
+				sseWrite(w, fl, map[string]any{"type": "grant_used", "tool": a.Name, "left": left,
+					"label": aiGrantLabel(a.Name), "text": aiToolCnName(a.Name, args)})
+				verdict.Level = PolicyAuto
+				verdict.Reason = verdict.Reason + "（本任务内已批量授权）"
+			}
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
@@ -705,8 +934,13 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				}
 				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统）不要发起用户没有要求的操作。请直接回答用户刚才的问题。"})
 				continue
-			case def.Write:
-				// 写工具：转确认流程，本轮结束，等用户在 UI 确认后带 confirm 重新提交
+			case def.Write && verdict.NeedsConfirm():
+				// 写工具：转确认流程。v3.2 起**不再结束回合**——就地等用户点按，
+				// 等到就接着执行、继续同一个循环；等不到（超时/断开/旧前端）才退回
+				// 「发 done(awaiting_confirm) 结束、客户端带 confirm 重新提交」的老路。
+				//
+				// 为什么值得改：老路每一次确认都要重发 system + 26 个工具定义 + 全部历史，
+				// 一次三步任务要重建三次上下文——**丢缓存、丢预算、还把一次任务切成三段**。
 				// v2.3 N1：confirm 档也进轨迹。与 forbidden 不同，它不是"拒绝"，
 				// 而是"用户有机会点头"——两者的区别在归因时很关键：
 				// forbidden 说明规则太严，confirm 说明档位合适但用户没批。
@@ -725,22 +959,43 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					aiPreconfirmExplain(ctx, w, fl, msgs, aiToolCnName(a.Name, args), lang, &usage)
 				}
 				// T1.1：发卡即登记原始参数——确认回来时服务端按登记的副本执行，
-				// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 handleAIChat）。
+				// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 aiConfirmGate）。
 				aiRememberPending(a.ID, a.Name, args)
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
 					"text": aiToolCnName(a.Name, args)})
-				// 把未完成的 assistant 消息保留在本地 msgs（供确认后续接），并结束本次 SSE
-				msgs[assistantIdx].ToolCalls = append(msgs[assistantIdx].ToolCalls, func() aiToolCall {
-					var t aiToolCall
-					t.ID = a.ID
-					t.Type = "function"
-					t.Function.Name = a.Name
-					t.Function.Arguments = argsStr
-					return t
-				}())
-				_ = toolMsg
-				sseDoneConfirm(w, fl, &usage)
-				return
+				// 把带 tool_calls 的 assistant 消息留在 msgs 里：协议要求工具结果跟随它；
+				// 若最终退回旧路径，下次请求开头会被 aiTrimDanglingToolCalls 剥掉。
+				// **注意：这里只登记"要等的是一个工具"，真正的 append 交给循环末尾的
+				// 公共尾巴**——两边各 append 一次会让同一条 assistant 消息里出现两个
+				// 相同 tool_call_id，上游直接 400（实测：Duplicate value for
+				// 'tool_call_id' of call_xxx in message[5]）。append 只能有一个地方。
+				d, ok := aiAwaitConfirm(ctx, w, fl, a.ID)
+				if !ok {
+					sseDoneConfirm(w, fl, &usage)
+					return
+				}
+				// 执行/拒绝都发生在**这一侧**（w/fl 是本次请求的）：审计、SSE 与旧路径一致
+				confirmRes := aiConfirmApply(w, fl, a.Name, d)
+				// 用户勾了"后续同类不再问"：开一条本请求内的授权（仅服务启停族，2 次）
+				if d.Batch {
+					if left, opened := aiGrantOpen(a.Name); opened {
+						auditNow(actAI, "ai_grant_open", a.Name, policyTargetOf(a.Name, args), resOK, "left="+itoa(left))
+						sseWrite(w, fl, map[string]any{"type": "grant_open", "tool": a.Name, "left": left,
+							"label": aiGrantLabel(a.Name)})
+					}
+				}
+				if d.Proceed {
+					sseWrite(w, fl, map[string]any{"type": "delta",
+						"text": "✓ 已执行：" + aiToolCnName(a.Name, args) + " —— " + firstLines(strings.TrimSpace(confirmRes), 160) + "\n\n"})
+				} else {
+					sseWrite(w, fl, map[string]any{"type": "delta",
+						"text": "✗ 已取消：" + aiToolCnName(a.Name, args) + "\n\n"})
+				}
+				// 结果交给公共尾巴统一 append（role=tool + tool_call_id 成对出现）
+				toolMsg.Content = aiClampToolResult(a.Name, confirmRes)
+				if !d.Proceed {
+					hasToolFailure = true
+				}
 			default:
 				t0 := time.Now()
 				// v2.3 N5：执行前先把"正在做什么"告诉用户。
@@ -773,7 +1028,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					"target": tgt, "text": planLine(a.Name, tgt)})
 				res, exErr := def.Execute(args)
 				toolDur := time.Since(t0).Milliseconds()
-				toolMsg.Content = res
+				// 只截"可重查"的工具（日志/SQL/搜索/审计/诊断），且截断时把"怎么继续查"
+				// 一起写给模型；read_file 与判据类工具不截——砍它们等于砍能力。
+				// 工具结果会永久留在历史里，每轮前缀都要重算它，这是命中率之外的第二笔账。
+				toolMsg.Content = aiClampToolResult(a.Name, res)
 				// v2.3 M9：每次工具执行记一步轨迹。"无效操作次数"这个指标
 				// 就是从这里算的——同一 action 连续失败 ≥2 次、denied 后仍重试、
 				// 只读工具读了个与任务无关的东西，都能在轨迹里看出来。

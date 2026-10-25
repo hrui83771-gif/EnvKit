@@ -29,7 +29,43 @@ var (
 	modUser32      = syscall.NewLazyDLL("user32.dll")
 	procGetSysMenu = modUser32.NewProc("GetSystemMenu")
 	procEnableMI   = modUser32.NewProc("EnableMenuItem")
+	procShowWindow = modUser32.NewProc("ShowWindow")
+	procIsVisible  = modUser32.NewProc("IsWindowVisible")
+	procSetFgWnd   = modUser32.NewProc("SetForegroundWindow")
 )
+
+const (
+	swHide = 0
+	swShow = 5
+)
+
+// ConsoleVisible 控制台窗口当前是否可见（托盘菜单据此切换文案）。
+func ConsoleVisible() bool {
+	hwnd, _, _ := procGetConWnd.Call()
+	if hwnd == 0 {
+		return false
+	}
+	vis, _, _ := procIsVisible.Call(hwnd)
+	return vis != 0
+}
+
+// HideConsole 把控制台窗口藏到托盘；进程与子服务继续运行。
+func HideConsole() {
+	hwnd, _, _ := procGetConWnd.Call()
+	if hwnd != 0 {
+		procShowWindow.Call(hwnd, swHide)
+	}
+}
+
+// ShowConsole 把控制台窗口恢复出来并置于前台。
+func ShowConsole() {
+	hwnd, _, _ := procGetConWnd.Call()
+	if hwnd == 0 {
+		return
+	}
+	procShowWindow.Call(hwnd, swShow)
+	procSetFgWnd.Call(hwnd)
+}
 
 // InstallConsoleHook 注册控制台事件处理器并把 X 按钮灰掉（进程生命周期内调一次）。
 //

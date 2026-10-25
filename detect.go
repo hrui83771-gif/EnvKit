@@ -154,5 +154,11 @@ func firstLines(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	return s[:max] + "..."
+	// 不要切在多字节字符中间：s[:max] 可能正好落在汉字/表情的续字节上，
+	// 截出来的半个字符在 JSON 里会变成 U+FFFD（"日志被截成乱码"的常见来源）。
+	cut := max
+	for cut > 0 && (s[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return s[:cut] + "..."
 }

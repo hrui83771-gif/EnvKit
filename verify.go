@@ -27,6 +27,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ---------- 复验超时窗口 ----------
@@ -546,6 +548,55 @@ func shortSum(s string) string {
 // verifyChain 复验链端：节点端口 + 节点进程数 + 共识是否还在推进。
 // 前两项证明"活着"，第三项证明"共识在转"——只活不共识的链，对业务而言和死链没区别。
 // 块高刻意不作为判据：无交易时空块只共识不落盘，块高静止是正常的（详见 chainConsensus）。
+// 链端节点探针的接缝：单测要在没有 SSH 的环境里验证「并发 + 判据不变」，
+// 所以把两次外部调用收成变量（默认仍是真实实现，生产路径零变化）。
+var (
+	probePortOpenFn = sshLocalPortOpen
+	probeProcsFn    = func() (string, error) {
+		return sshRunCapture("ps -ef | grep fisco-bcos | grep -v grep | wc -l")
+	}
+)
+
+// chainNodeProbes 并发采集节点端口与进程数。
+//
+// 返回值与原来的串行版本逐字一致：portOK / probeErr 只描述端口那一路；
+// procs 在「未探测」时保持 -1（调用方据此区分「没探到」和「探到 0 个」）。
+// 两个 goroutine 各写各的变量，Wait 之后才读，不存在数据竞争。
+//
+// 为什么用 errgroup 而不是裸 WaitGroup：语义上就是「等全部探针完成」，
+// 两个包装现在等价；用 errgroup 是为了以后给某一路加「失败即取消兄弟探针」
+// 时不用重写结构（这里既有的探针错误都是**证据**，不是中止信号，所以返回 nil）。
+func chainNodeProbes(c ChainConfig, host string) (portOK bool, probeErr string, procs int) {
+	procs = -1
+	var eg errgroup.Group
+	eg.Go(func() error {
+		if c.SSHHost != "" {
+			if up, err := probePortOpenFn(c.ChainPort); err == nil {
+				portOK = up
+			} else {
+				probeErr = "SSH 探测失败：" + firstLines(err.Error(), 60)
+			}
+			return nil
+		}
+		// 没配 SSH：只能从本机直连链端口（纯 WeBASE 复验路径）
+		portOK, _ = tcpCheck(host, c.ChainPort)
+		return nil
+	})
+	eg.Go(func() error {
+		if c.SSHHost == "" {
+			return nil
+		}
+		if out, err := probeProcsFn(); err == nil {
+			if n, e := strconv.Atoi(strings.TrimSpace(out)); e == nil && n >= 0 {
+				procs = n
+			}
+		}
+		return nil
+	})
+	_ = eg.Wait()
+	return portOK, probeErr, procs
+}
+
 func verifyChain(growth time.Duration) OpResult {
 	action := "verify_chain"
 	c := chainCfg()
@@ -579,18 +630,13 @@ func verifyChain(growth time.Duration) OpResult {
 		ev = append(ev, "reach=skipped（未配置 SSH，按 WeBASE 判据复验）")
 	}
 
-	// 1) 节点端口：优先经 SSH 到远程本机探（节点可能已加固为仅本地监听）
-	portOK := false
-	var probeErr string
-	if c.SSHHost != "" {
-		if up, err := sshLocalPortOpen(c.ChainPort); err == nil {
-			portOK = up
-		} else {
-			probeErr = "SSH 探测失败：" + firstLines(err.Error(), 60)
-		}
-	} else {
-		portOK, _ = tcpCheck(host, c.ChainPort)
-	}
+	// 1) 节点探针：端口 + 进程数（并发，见 chainNodeProbes）。
+	//
+	// 以前这两步是串行的：两次独立的 SSH 往返，等于白等一整轮网络延迟。
+	// 它们互不依赖（端口是否在听 / 有几个 fisco-bcos 进程），可以同时跑；
+	// 但都以"主机可达"为前提，所以门禁（上一段）仍然先跑——否则连不上时
+	// 两次探测各自超时，会把"连接问题"拖成十几秒的"链端未恢复"。
+	portOK, probeErr, procs := chainNodeProbes(c, host)
 	if !portOK {
 		return opFail(action, c.SSHHost, errKindVerifyFail,
 			fmt.Sprintf("节点端口 %d 未在监听，链端未恢复", c.ChainPort),
@@ -599,14 +645,6 @@ func verifyChain(growth time.Duration) OpResult {
 	ev = append(ev, "port="+strconv.Itoa(c.ChainPort)+" listening")
 
 	// 2) 节点进程数：端口活着但进程一个没有，多半是端口被别的东西占着
-	procs := -1
-	if c.SSHHost != "" {
-		if out, err := sshRunCapture("ps -ef | grep fisco-bcos | grep -v grep | wc -l"); err == nil {
-			if n, e := strconv.Atoi(strings.TrimSpace(out)); e == nil && n >= 0 {
-				procs = n
-			}
-		}
-	}
 	switch {
 	case procs < 0:
 		ev = append(ev, "node_procs=未探测（SSH 不可用）")

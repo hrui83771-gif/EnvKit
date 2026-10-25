@@ -6,9 +6,9 @@
 
 ## internal/platform —— 操作系统平台层（叶子包）
 
-控制台生命周期、磁盘指标、DPAPI 加密、单实例互斥、气泡通知、Job Object。
-不 import 任何业务代码；业务依赖经回调注入（`InstallConsoleHook(onClose)`、
-`KeepJobAlive(alivePid)`）。
+控制台生命周期、托盘图标与右键菜单（systray）、磁盘指标、DPAPI 加密、单实例互斥、
+气泡通知、Job Object。不 import 任何业务代码；业务依赖经回调注入
+（`InstallConsoleHook(onClose)`、`KeepJobAlive(alivePid)`、`RunTray(icon, TrayActions)`）。
 
 ## 启动与装配
 
@@ -53,7 +53,7 @@
 （主循环）· `ai_history.go` · `ai_intent.go`（L1 本地意图路由）· `ai_confirm.go` /
 `ai_preconfirm.go`（确认卡）· `ai_tools.go`（工具注册表/执行器）· `ai_dbquery.go`
 （只读 DB 查询）· `aibackup.go`（AI 备份助手）· `aidebug.go` · `memory.go`/
-`memory_api.go`（AI 记忆）· `lesson.go` · `plan.go`/`replan.go` · `explore.go`/
+`memory_api.go`（AI 记忆 + 本轮注入视图）· `lesson.go` · `plan.go`/`replan.go` · `explore.go`/
 `filesel.go`/`projectbrief.go`（项目画像/文件探索）· `dbbrowse.go` · `webterm.go`
 
 > 注：`aiVerify*`/`aiAudit*`/`aiSafePath`/`aiArgInt` 等前缀带 ai 的函数**定义在
@@ -62,8 +62,22 @@
 ## 文档 / 评测 / 分发
 
 `docs/`（设计文档、评测装置、原型 `docs/prototypes/`、图片 `docs/assets/`）·
-`eval/`（评测 fixture）· `tools/`（评测脚本/i18n）· `web/`（前端，embed 进 exe）·
-`dist/`、`distassets/`（分发产物）
+`eval/`（评测 fixture）· `tools/`（评测脚本/i18n）· `dist/`、`distassets/`（分发产物）
+
+### 前端（v3.2 起已拆分）
+
+| 路径 | 是什么 | 能不能直接改 |
+|---|---|---|
+| `web/src/index.tpl.html` | HTML 骨架，含 `<!--@css-->` / `<!--@appjs-->` 两个占位符 | **改这里** |
+| `web/src/app.css` | 全部样式 | **改这里** |
+| `web/src/app.js` | 全部逻辑 + `I18N_EN` 字典 | **改这里** |
+| `web/index.html` | 三件套拼出来的单文件（`go:embed` 的对象） | ❌ 生成物，别手改 |
+
+改完跑 `python tools/web_build.py`（`i18n_build.py` 会自动代跑）；提交前可跑
+`python tools/web_build.py --check` 确认产物与源一致。
+**为什么仍保留单文件产物**：`go:embed` 决定交付物必须是单文件（exe 里那一份）；
+拆的只是维护面，不是产物。
+
 
 ## 根目录运行时产物（勿挪，路径为代码约定）
 

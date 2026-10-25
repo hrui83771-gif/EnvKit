@@ -98,6 +98,10 @@ type Config struct {
 	// UpdateURL 自版本检查地址（返回 {"version":"x.y.z","notes":"..."} 的 JSON）。
 	// 留空 = 关闭检查。无公开发布渠道时保持为空即可。
 	UpdateURL string `json:"update_url"`
+	// TrayHidden 上次退出前的窗口状态：true = 启动后直接隐藏到托盘（后台运行）。
+	// 由托盘菜单「隐藏窗口到托盘 / 显示控制台窗口」写入，下次启动沿用，
+	// 这样"挂机跑"不用每次开机都手动收一次窗口。
+	TrayHidden bool `json:"tray_hidden,omitempty"`
 }
 
 // RecoveryConfig 恢复事务的两层节制参数（v3.0 T1.5，修 G5/G6）。

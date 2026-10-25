@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -86,9 +87,13 @@ func loadMemories() []Memory {
 }
 
 // saveMemories 原子写 + 备份（与配置同样的保护级别：记忆丢了用户会心疼）。
+//
+// **超过上限必须报错，不能静默截断**：旧实现 `ms[:memMaxCount]` 会把刚 append
+// 进来的新记忆直接切掉，接口却仍回"已保存"——这是最坏的一种数据丢失：
+// 用户以为存上了，实际下次对话就没了。
 func saveMemories(ms []Memory) error {
 	if len(ms) > memMaxCount {
-		ms = ms[:memMaxCount]
+		return fmt.Errorf("记忆条数已达上限 %d，请先删除不用的条目再添加", memMaxCount)
 	}
 	p := memoryFile()
 	var sb strings.Builder
@@ -279,97 +284,162 @@ func parseImport(s string) []importItem {
 
 // ---------- 注入 ----------
 
+// MemoryView 记忆 + **本轮**注入状态。Injected/Reason 是视图字段，不落盘：
+// 界面需要回答"我写的这条为什么没生效"，而落盘只会让文件里多出会过期的假状态。
+type MemoryView struct {
+	Memory
+	Injected bool   `json:"injected"`
+	Reason   string `json:"reason,omitempty"`
+}
+
 // memoriesFor 返回要注入的记忆：always 的全给，其余按任务相关性给。
+//
+// 顺序与上限的规则都收在 memoriesView 里——**界面看到的和模型收到的必须是同一次计算**，
+// 否则"预览说会注入、实际没注入"就是新的不信任来源。
 func memoriesFor(task string, max int) []Memory {
+	vs := memoriesView(task, max)
+	out := make([]Memory, 0, len(vs))
+	for _, v := range vs {
+		if v.Injected {
+			out = append(out, v.Memory)
+		}
+	}
+	return out
+}
+
+// memoriesView 计算全量记忆的注入状态与原因。
+//
+// 三个修过的坑（都来自"写了却不生效"）：
+//  1. 作用域失效只算在内存里、从不返回给界面 → 用户看不到"已失效"，以为功能坏了；
+//  2. always 超过上限时按创建时间**升序**截断，被丢的反而是刚写的新规矩；
+//  3. 相关性只看 2-gram 是否出现（s>0 即命中），"先"这种字就能误召回。
+func memoriesView(task string, max int) []MemoryView {
 	ms := loadMemories()
 	if max <= 0 {
 		max = 20
 	}
-	// v2.3 N2：作用域过滤。Global 的记忆任何项目都注入；
-	// 非 global 的记忆只在指纹仍匹配时注入，**不匹配则标 Stale 并跳过**——
-	// 把"上次那台机器"的经验套到当前项目上，是"AI 越用越笨"的主要来源。
-	//
-	// 指纹存哪：用户不该手填一串哈希，所以存在 scopeFingerprint 字段里，
-	// 由程序在创建时写入。老条目（该字段为空）视为"无指纹"→ 仍然注入，
-	// 因为把已有记忆静默作废比"记忆跨项目"更糟。
 	cur := projectFingerprint()
+	views := make([]MemoryView, 0, len(ms))
+	var alwaysIdx, restIdx []int
 	for i := range ms {
-		m := &ms[i]
-		if m.Global || m.ScopeFP == "" {
+		v := MemoryView{Memory: ms[i]}
+		if st, why := memStaleOf(ms[i], cur); st {
+			v.Stale, v.StaleWhy = true, why
+			v.Reason = "已失效：" + why
+			views = append(views, v)
 			continue
 		}
-		if m.ScopeFP != cur {
-			m.Stale = true
-			m.StaleWhy = "创建时属于另一个项目（" + currentScopeDirLabel() + " 已不同）"
+		views = append(views, v)
+		ix := len(views) - 1
+		if ms[i].Always {
+			alwaysIdx = append(alwaysIdx, ix)
+		} else {
+			restIdx = append(restIdx, ix)
 		}
 	}
 
-	always := make([]Memory, 0, len(ms))
-	var rest []Memory
-	for _, m := range ms {
-		if m.Stale {
+	// always：新的排前面。旧实现升序截断，超过上限时丢掉的是"最新写的规矩"，
+	// 用户完全无从得知——这里改成保留最新，并把落选的写成可见原因。
+	sort.SliceStable(alwaysIdx, func(a, b int) bool {
+		return views[alwaysIdx[a]].Created > views[alwaysIdx[b]].Created
+	})
+	picked := 0
+	for _, vi := range alwaysIdx {
+		if picked < max {
+			views[vi].Injected = true
+			picked++
 			continue
 		}
-		if m.Always {
-			always = append(always, m)
-		} else {
-			rest = append(rest, m)
-		}
+		views[vi].Reason = "超过每轮注入上限（" + strconv.Itoa(max) + " 条），本条未注入"
 	}
-	if len(always) >= max {
-		sort.Slice(always, func(i, j int) bool { return always[i].Created < always[j].Created })
-		return always[:max]
-	}
-	// 相关性：任务文本命中标签或记忆正文关键词才算相关
-	t := strings.ToLower(task)
-	type scored struct {
-		m     Memory
+
+	// 相关记忆：标签命中算强信号，正文 2-gram 算弱信号，累计到 2 分才算命中。
+	t := strings.ToLower(strings.TrimSpace(task))
+	type hit struct {
+		vi    int
 		score int
 	}
-	var hits []scored
-	for _, m := range rest {
-		s := 0
-		for _, tag := range strings.Split(m.Tags, ",") {
-			tag = strings.ToLower(strings.TrimSpace(tag))
-			if tag != "" && strings.Contains(t, tag) {
-				s += 2
+	var hits []hit
+	if t != "" {
+		for _, vi := range restIdx {
+			if s := memScore(views[vi].Memory, t); s >= 2 {
+				hits = append(hits, hit{vi, s})
 			}
-		}
-		// 正文关键词：取长度>=2 的中文片段做朴素包含判断
-		for _, kw := range memKeywords(m.Text) {
-			if strings.Contains(t, kw) {
-				s++
-			}
-		}
-		if s > 0 {
-			hits = append(hits, scored{m, s})
 		}
 	}
-	sort.Slice(hits, func(i, j int) bool {
-		if hits[i].score != hits[j].score {
-			return hits[i].score > hits[j].score
+	sort.SliceStable(hits, func(a, b int) bool {
+		if hits[a].score != hits[b].score {
+			return hits[a].score > hits[b].score
 		}
-		return hits[i].m.Created < hits[j].m.Created
+		return views[hits[a].vi].Created > views[hits[b].vi].Created
 	})
 	for _, h := range hits {
-		if len(always) >= max {
-			break
+		if picked >= max {
+			views[h.vi].Reason = "超过每轮注入上限（" + strconv.Itoa(max) + " 条），本条未注入"
+			continue
 		}
-		always = append(always, h.m)
+		views[h.vi].Injected = true
+		picked++
 	}
-	return always
+	for _, vi := range restIdx {
+		if !views[vi].Injected && views[vi].Reason == "" {
+			if t == "" {
+				views[vi].Reason = "仅相关时注入；本轮任务为空"
+			} else {
+				views[vi].Reason = "与本轮任务不相关（未命中标签/关键词）"
+			}
+		}
+	}
+	return views
+}
+
+// memStaleOf 判断一条记忆的作用域是否已经失效（Global 与老数据恒为适用）。
+func memStaleOf(m Memory, cur string) (bool, string) {
+	if m.Global || m.ScopeFP == "" {
+		return false, ""
+	}
+	if m.ScopeFP != cur {
+		return true, "创建时属于另一个项目（" + currentScopeDirLabel() + " 已不同）"
+	}
+	return false, ""
+}
+
+// memScore 相关性打分：标签 3 分、正文关键词每命中一个 1 分。
+// 阈值 2 分意味着"一个标签"或"两个不同关键词"才注入——比旧版"出现一个二字组合就注入"稳得多。
+func memScore(m Memory, taskLower string) int {
+	s := 0
+	for _, tag := range strings.Split(m.Tags, ",") {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag != "" && strings.Contains(taskLower, tag) {
+			s += 3
+		}
+	}
+	for _, kw := range memKeywords(m.Text) {
+		if strings.Contains(taskLower, kw) {
+			s++
+		}
+	}
+	return s
+}
+
+// memStop 高频但无区分度的二字组合：任务里出现它们不该把记忆拉进来。
+var memStop = map[string]bool{
+	"的先": true, "前先": true, "时候": true, "可以": true, "不要": true,
+	"一个": true, "这个": true, "那个": true, "如果": true, "然后": true,
+	"我们": true, "你们": true, "什么": true, "怎么": true, "已经": true,
 }
 
 // memKeywords 从记忆正文里取少量高信息量词（朴素切分，不引 NLP 依赖）。
 func memKeywords(text string) []string {
-	var out []string
+	out := make([]string, 0, 12)
+	seen := map[string]bool{}
 	runes := []rune(text)
 	for i := 0; i+1 < len(runes); i++ {
 		w := string(runes[i : i+2])
-		// 去掉含标点/空白的二字组合
-		if strings.ContainsAny(w, "，。；、：？！\n\t ,.;:?!") {
+		if strings.ContainsAny(w, "，。；、：？！\n\t ,.;:?!()（）：") || memStop[w] || seen[w] {
 			continue
 		}
+		seen[w] = true
 		out = append(out, w)
 		if len(out) >= 12 {
 			break
