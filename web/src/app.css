@@ -57,13 +57,20 @@
   /* 桌宠设置：小标题 + 复选行 + 城市输入。整体收紧行距，别把面板撑太长 */
   .pp-pet{display:flex;flex-direction:column;gap:7px}
   .pp-sub{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-  /* 选择器必须比全局 `label{display:block;margin:8px 0 4px}` 更具体（.pp-pet .pp-check），
-     否则勾选框和文字会上下堆叠——单类选择器和 label 同权重，谁写在后面谁赢，改顺序就会回归。 */
+  /* 这两条选择器都必须比全局规则更具体，否则会连环踩两个坑：
+     1) 全局 `label{display:block;margin:8px 0 4px}` → 勾选框和文字上下堆叠；
+     2) 全局 `input,select{width:100%;padding:8px 10px;…}` → checkbox 被拉成整行宽，
+        文字被挤到右边竖排（这才是"布局歪了"的真正主因，只修 display 不够）。
+     所以这里除了 display:flex 还必须显式写 width:auto 与自己的 padding/border，
+     不能只靠 flex:none（那是 flex 布局里的尺寸约束，管不了 width:100%）。 */
   .pp-pet .pp-check{display:flex;align-items:center;gap:7px;margin:0;width:auto;font-size:12.5px;font-weight:400;color:var(--text);cursor:pointer}
-  .pp-pet .pp-check input{margin:0;flex:none;accent-color:var(--brand)}
+  .pp-pet .pp-check input[type="checkbox"]{
+    flex:none;width:auto;height:auto;margin:0;padding:0;border:0;background:none;
+    accent-color:var(--brand);vertical-align:middle;
+  }
   .pp-weather-city{display:flex;flex-direction:column;gap:4px;padding-left:23px}
   .pp-weather-city[hidden]{display:none}
-  .pp-weather-city input{font-size:12.5px;padding:6px 8px}
+  .pp-weather-city input{font-size:12.5px;padding:6px 8px;width:100%}
   .pp-weather-city input:disabled{opacity:.55;cursor:not-allowed}
   .pp-pet-note{padding-left:23px;line-height:1.45}
   @media(max-width:900px){ .pname{display:none} }
