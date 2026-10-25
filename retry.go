@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -63,8 +64,12 @@ func runRetry(p retryPolicy, attempt func(wrap bool) (bool, error)) (bool, error
 			case hasOut:
 				warn(p.Scope, p.Tag, "%s执行失败，%s后自动重试（第 %d/%d 次）...", p.Label, p.Backoff, i+1, p.Attempts)
 			default:
-				warn(p.Scope, p.Tag, "%s无任何输出即退出（疑似杀毒软件拦截），%s后自动重试（第 %d/%d 次）...",
-					p.Label, p.Backoff, i+1, p.Attempts)
+				// v3.3：这里原先直接断言"疑似杀毒软件拦截"。那是错的——
+				// 零输出也可能是一个坏掉的启动器（例如 npm.cmd 找不到自身的
+				// npm-cli.js，报错写在一个没人读的管道里），把用户引向白名单
+				// 排查等于让他去改一件本来就没错的事。只陈述看到的事实。
+				warn(p.Scope, p.Tag, "%s未产生任何输出就退出（退出码 %v），%s后自动重试（第 %d/%d 次）...",
+					p.Label, exitCodeText(err), p.Backoff, i+1, p.Attempts)
 			}
 			time.Sleep(p.Backoff)
 		}
@@ -153,4 +158,17 @@ func cmdFor(newCmd func(string, ...string) *exec.Cmd, wrap bool, name string, ar
 // 三个条件同时满足才算——真实报错会写 stderr，正常退出不会有错误。
 func fastExit(err error, hasOut bool, started time.Time, window time.Duration) bool {
 	return err != nil && !hasOut && time.Since(started) < window
+}
+
+// exitCodeText 从 exec 的错误里取出退出码，取不到就原样返回错误的简述。
+// 日志里写"退出码 1"比写"exit status 1"更容易和进程自己的报错对上。
+func exitCodeText(err error) string {
+	if err == nil {
+		return "0"
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() >= 0 {
+		return strconv.Itoa(ee.ExitCode())
+	}
+	return err.Error()
 }

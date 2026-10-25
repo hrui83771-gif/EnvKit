@@ -125,11 +125,15 @@ func configureLanguageProxy(c Component) {
 			ok(scInstall, "代理", "GOPROXY=%s", cfg.GoProxy)
 		}
 	case "Node.js":
-		exe := findExe("npm.cmd", "npm")
-		if exe == "" {
+		// v3.3：用解析器而不是 findExe——刚装完的 Node 可能不是 PATH 上的第一个，
+		// 而第一个可能是别的目录里留下的残壳（写 registry 会写到坏的那一个上）。
+		cand, _ := resolveNpm(true)
+		if cand.Exe == "" {
+			warn(scInstall, "代理", "未找到可用的 npm，跳过 registry 设置")
 			return
 		}
-		if _, err := runIn(filepath.Dir(exe), exe, "config", "set", "registry", cfg.NpmRegistry); err != nil {
+		exe, args := npmInvocation(cand, "config", "set", "registry", cfg.NpmRegistry)
+		if _, err := runIn(filepath.Dir(exe), exe, args...); err != nil {
 			warn(scInstall, "代理", "npm registry 设置失败：%v", err)
 		} else {
 			ok(scInstall, "代理", "npm registry=%s", cfg.NpmRegistry)

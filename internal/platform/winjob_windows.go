@@ -8,6 +8,8 @@ package platform
 // 整棵子进程树，避免孤儿 node/main.exe 继续占用端口。
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -23,6 +25,7 @@ var (
 	procAssignProcessToJobObject = kernel32.NewProc("AssignProcessToJobObject")
 	procDuplicateHandle          = kernel32.NewProc("DuplicateHandle")
 	procGetCurrentProcess        = kernel32.NewProc("GetCurrentProcess")
+	procIsProcessInJob           = kernel32.NewProc("IsProcessInJob")
 )
 
 const (
@@ -86,16 +89,52 @@ func jobObject() uintptr {
 	return jobHnd
 }
 
-// AssignToJob 把子进程加入 Job（失败静默，不影响正常启动流程）。
-func AssignToJob(pid int) {
+// AssignToJob 把子进程加入 Job。返回 nil 表示兜底生效；
+// 返回 errAlreadyInJob 表示环境限制（父 Job 存在，无法嵌套加入）。
+//
+// v3.3：**先确认它不在任何 Job 里**再加入。Windows 8 起进程一旦属于某个
+// Job（VS Code / WorkBuddy / 任务计划 / 容器里启动 EnvKit 就会被塞进一个
+// 父 Job），AssignProcessToJobObject 返回 ERROR_ACCESS_DENIED——旧实现失败
+// 静默，于是"崩溃不留孤儿"的兜底在这些环境下**从来没生效过**，而日志里
+// 一个字的线索都没有。现在把这个事实交回调用方记一行告警。
+func AssignToJob(pid int) error {
 	hProc, err := syscall.OpenProcess(processSetQuota|processTerminate, false, uint32(pid))
 	if err != nil || hProc == 0 {
-		return
+		return fmt.Errorf("OpenProcess(pid=%d) 失败：%v", pid, err)
 	}
 	defer syscall.CloseHandle(syscall.Handle(hProc))
-	if h := jobObject(); h != 0 {
-		_, _, _ = procAssignProcessToJobObject.Call(h, uintptr(hProc))
+	h := jobObject()
+	if h == 0 {
+		return fmt.Errorf("CreateJobObject 失败")
 	}
+	// 已经在别的 Job 里：嵌套加入会被拒（ERROR_ACCESS_DENIED），旧实现
+	// 把这条静默吞掉，"EnvKit 退出即连带杀子进程"在这些环境里其实一直没生效，
+	// 而日志里没有任何线索。这里返回一个可识别的原因，让调用方记一行告警。
+	// 先查再试，是为了不把真正的权限问题伪装成"环境限制"。
+	if in, known := processInJob(hProc); known && in {
+		return errAlreadyInJob
+	}
+	if r, _, e := procAssignProcessToJobObject.Call(h, uintptr(hProc)); r == 0 {
+		return fmt.Errorf("AssignProcessToJobObject(pid=%d) 失败：%v", pid, e)
+	}
+	return nil
+}
+
+// errAlreadyInJob 表示子进程已属于别的 Job（嵌套 Job 在 Win8+ 需要显式
+// 设置 JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK，本程序不擅自拆别人的 Job）。
+var errAlreadyInJob = errors.New("进程已在其它 Job 内")
+
+// IsAlreadyInJob 供调用方区分"环境限制"与"真的失败"。
+func IsAlreadyInJob(err error) bool { return errors.Is(err, errAlreadyInJob) }
+
+// processInJob 查进程是否已在某个 Job 内。第二个返回值 false = 查询本身不可用。
+func processInJob(hProc syscall.Handle) (bool, bool) {
+	var in int32
+	r, _, _ := procIsProcessInJob.Call(uintptr(hProc), 0, uintptr(unsafe.Pointer(&in)))
+	if r == 0 {
+		return false, false
+	}
+	return in != 0, true
 }
 
 // KeepJobAlive 让 Job 在 EnvKit 退出后继续存在：网页「退出程序」选"只退出助手、

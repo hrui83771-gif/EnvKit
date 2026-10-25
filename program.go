@@ -487,18 +487,32 @@ func handleWebInstall(w http.ResponseWriter, r *http.Request) {
 			fin(resFail, "未指定前端目录")
 			return
 		}
-		exe := findExe("npm.cmd", "npm")
-		if exe == "" {
-			setProg("web-install", false, false, "未找到 npm")
-			fail(scConfig, "前端", "未找到 npm，请先安装 Node.js")
-			fin(resFail, "未找到 npm")
+		// v3.3：npm 不能靠 findExe——PATH 上第一个 npm.cmd 可能是个
+		// node_modules 已被删掉、每次必失败的残壳。这里逐个校验真身再选。
+		cand, broken := resolveNpm(true)
+		if cand.Exe == "" {
+			setProg("web-install", false, false, "未找到可用的 npm")
+			fail(scConfig, "前端", "未找到可用的 npm，请先安装 Node.js")
+			if hint := npmBrokenHint(broken); hint != "" {
+				fail(scConfig, "前端", "%s", hint)
+			}
+			fin(resFail, "未找到可用的 npm")
 			return
 		}
+		if len(broken) > 0 {
+			warn(scConfig, "前端", "%s", npmBrokenHint(broken))
+		}
 		info(scConfig, "前端", "npm install @ %s", dir)
-		if err := execStreamed(scConfig, "", "前端", dir, npmEnvExtra(), exe, "install", "--registry", cfg.NpmRegistry); err != nil {
-			setProg("web-install", false, false, err.Error())
-			fail(scConfig, "前端", "npm install 失败：%v", err)
-			fin(resFail, err.Error())
+		nm, nargs := npmInvocation(cand, "install", "--registry", cfg.NpmRegistry)
+		res, err := execStreamedDetail(scConfig, "", "前端", dir, npmEnvExtra(), nm, nargs...)
+		if err != nil {
+			why := explainExit(res, err)
+			setProg("web-install", false, false, why)
+			fail(scConfig, "前端", "npm install 失败：%s", why)
+			if hint := npmBrokenHint(broken); hint != "" {
+				fail(scConfig, "前端", "%s", hint)
+			}
+			fin(resFail, why)
 		} else {
 			setProg("web-install", false, true, "成功")
 			ok(scConfig, "前端", "npm install 完成")
@@ -764,23 +778,35 @@ func opStartWeb(dir, script, actor string) OpResult {
 			"dir="+dir, "hint=在「程序配置」的前端启动脚本字段手动填写",
 			"candidates="+strings.Join(plan.WebAll, ","))
 	}
-	exe := findExe("npm.cmd", "npm")
-	if exe == "" {
-		setProg("web-start", false, false, "未找到 npm")
-		failS(scStart, "web", "前端", "未找到 npm")
-		fin(resFail, "未找到 npm")
+	// v3.3：与「安装依赖」走同一个解析器（见 exec.go resolveNpm）。
+	// 旧实现两处都用 findExe("npm.cmd")：PATH 上第一个是残壳时，
+	// 安装必失败、启动则"看似能跑"——因为 npm.cmd 壳仍能被 cmd 解析起来，
+	// 真正失败发生在 node 里，且只在深一层才报错。
+	cand, broken := resolveNpm(true)
+	if cand.Exe == "" {
+		setProg("web-start", false, false, "未找到可用的 npm")
+		failS(scStart, "web", "前端", "未找到可用的 npm")
+		if hint := npmBrokenHint(broken); hint != "" {
+			failS(scStart, "web", "前端", "%s", hint)
+		}
+		fin(resFail, "未找到可用的 npm")
 		return opFail("start_service", "web", errKindMissingDep,
-			"未找到 npm：请先在「环境安装」安装 Node.js", "need=npm")
+			"未找到可用的 npm：请在「环境安装」重新安装 Node.js", "need=npm",
+			"broken="+strings.Join(broken, ","))
+	}
+	if len(broken) > 0 {
+		warnS(scStart, "web", "前端", "%s", npmBrokenHint(broken))
 	}
 	infoS(scStart, "web", "前端", "npm run %s（%s） @ %s", script, scriptSrc, dir)
-	if err := execBackground(scStart, "web", "web-start", "前端", dir, npmEnvExtra(), exe, "run", script); err != nil {
+	nm, nargs := npmInvocation(cand, "run", script)
+	if err := execBackground(scStart, "web", "web-start", "前端", dir, npmEnvExtra(), nm, nargs...); err != nil {
 		setProg("web-start", false, false, err.Error())
 		failS(scStart, "web", "前端", "启动失败：%v", err)
 		fin(resFail, err.Error())
 		return opFail("start_service", "web", errKindSpawnFail,
 			"npm 进程派生失败："+firstLines(err.Error(), 200),
 			"dir="+dir, "script="+script, "source="+scriptSrc,
-			"hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
+			"hint=先看「启动」日志里 npm 自己打印的报错；确无任何输出时才考虑安全软件拦截")
 	}
 	okS(scStart, "web", "前端", "已启动（npm run %s）", script)
 	fin(resOK, script+"（"+scriptSrc+"）")
@@ -937,7 +963,7 @@ func opStartBackend(dir, actor string) OpResult {
 		fin(resFail, err.Error())
 		return opFail("start_service", "backend", errKindSpawnFail,
 			"go run 进程派生失败："+firstLines(err.Error(), 200),
-			"dir="+dir, "entry="+entry, "hint=零输出秒退通常是杀毒软件拦截，可用 apply_whitelist 加入 Defender 白名单")
+			"dir="+dir, "entry="+entry, "hint=先看「启动」日志里 go 自己打印的报错；确无任何输出时才考虑安全软件拦截")
 	}
 	okS(scStart, "backend", "后端", "已启动（go run main.go）")
 	fin(resOK, "backend")

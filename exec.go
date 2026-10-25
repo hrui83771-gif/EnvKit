@@ -37,6 +37,188 @@ func findExe(names ...string) string {
 	return ""
 }
 
+// ---------- npm 解析（v3.3） ----------
+//
+// 为什么不能直接用 findExe("npm.cmd")：
+//
+//	Windows 上的 npm.cmd 只是一层批处理壳，真身在
+//	<npm 目录>\node_modules\npm\bin\npm-cli.js。壳本身不会检查真身在不在，
+//	所以"npm.cmd 存在"完全不代表 npm 能用。残留的 Node 安装目录
+//	（node.exe 还在、node_modules 被清掉）会让这个壳一直存在。
+//
+//	findExe 取的是 PATH 顺序里的**第一个**，一旦那个是坏的，就会拿到一个
+//	每次必失败的候选——而失败发生在 node 里，表现为
+//	`Error: Cannot find module '...npm-cli.js'` + exit 1，
+//	与"杀毒软件零输出秒退"长得完全一样，于是被误判、被重试、被包装，
+//	最后只留下"疑似杀毒软件拦截"这句错得离谱的结论。
+//	（v1.0 起就反复遇到，v3.3 才定位到根因。）
+//
+// 因此 npm 走自己的解析：逐个候选校验真身，跳过坏的；并且优先用
+// `node.exe + npm-cli.js` 直接执行——绕过批处理壳，少一层 cmd，
+// 报错与退出码都更干净（壳在某些环境下还会丢 stderr）。
+
+// npmCandidate 一个 npm 候选：命令行前缀 + 人类可读的来源说明。
+type npmCandidate struct {
+	Exe   string   // 要执行的文件（node.exe 或 npm.cmd）
+	Args  []string // 固定前缀参数（node 时是 npm-cli.js 的路径）
+	Why   string   // 来源说明，进日志
+	Shell bool     // true = 批处理壳（cmd 解析），false = 直接执行 exe
+}
+
+// npmInvocation 拼出一次完整调用（把用户参数接在前缀之后）。
+func npmInvocation(c npmCandidate, args ...string) (string, []string) {
+	return c.Exe, append(append([]string{}, c.Args...), args...)
+}
+
+// npmSearchDirs 按优先级列出所有"可能放着 npm"的目录。
+//
+// 顺序即信任度：组件安装目录（EnvKit 自己装的，最可控）→ PATH 上的 npm →
+// PATH 上 node.exe 所在目录的兄弟 node_modules → npm 的全局前缀
+// （%APPDATA%\npm，以及万一存在的 node 安装目录下的 node_global）。
+func npmSearchDirs() []string {
+	var dirs []string
+	seen := map[string]bool{}
+	add := func(d string) {
+		if d == "" {
+			return
+		}
+		k := strings.ToLower(filepath.Clean(d))
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		dirs = append(dirs, d)
+	}
+	for _, c := range cfg.Components {
+		add(componentBinDir(c))
+	}
+	// PATH 上的 npm：LookPath 只给第一个，这里自己把所有命中都收进来
+	for _, n := range []string{"npm.cmd", "npm"} {
+		for _, d := range lookPathAll(n) {
+			add(filepath.Dir(d))
+		}
+	}
+	// 相邻的 node 安装目录：npm 与 node 通常同级
+	for _, d := range lookPathAll("node.exe") {
+		add(filepath.Dir(d))
+	}
+	if app := os.Getenv("APPDATA"); app != "" {
+		add(filepath.Join(app, "npm"))
+	}
+	return dirs
+}
+
+// lookPathAll 返回 PATH 中所有命中 name 的绝对路径（去重，保持顺序）。
+//
+// exec.LookPath 只返回第一个；而"第一个恰好是坏的"正是本 bug 的触发条件，
+// 所以必须自己遍历。Windows 下同时尝试 PATHEXT 里的扩展名。
+func lookPathAll(name string) []string {
+	var out []string
+	seen := map[string]bool{}
+	exts := []string{""}
+	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
+		exts = []string{".cmd", ".exe", ".bat", ""}
+	}
+	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+		if d == "" {
+			continue
+		}
+		for _, e := range exts {
+			p := filepath.Join(d, name+e)
+			k := strings.ToLower(p)
+			if seen[k] {
+				continue
+			}
+			if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+				seen[k] = true
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// npmCandidateFrom 在 dir 里找出可用的 npm 调用方式；找不到返回 ok=false。
+//
+// 关键校验：`<dir>\node_modules\npm\bin\npm-cli.js` 必须存在。
+// 这是 npm 批处理壳真正会执行的文件——它不在，壳一定失败。
+func npmCandidateFrom(dir string) (npmCandidate, bool) {
+	cli := filepath.Join(dir, "node_modules", "npm", "bin", "npm-cli.js")
+	if fi, err := os.Stat(cli); err != nil || fi.IsDir() {
+		return npmCandidate{}, false
+	}
+	// 优先 node.exe 直跑，绕开 cmd 层；找不到 node 才退回批处理壳。
+	for _, n := range []string{"node.exe", "node"} {
+		p := filepath.Join(dir, n)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return npmCandidate{Exe: p, Args: []string{cli}, Why: "node+npm-cli.js", Shell: false}, true
+		}
+	}
+	for _, n := range []string{"npm.cmd", "npm"} {
+		p := filepath.Join(dir, n)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return npmCandidate{Exe: p, Why: "npm.cmd 壳", Shell: true}, true
+		}
+	}
+	// npm-cli.js 在，但既没 node 也没 npm 壳：仍可执行（本程序的 node 在别处时
+	// 由 PATH 兜底），但没有 node 时绝对不能猜——猜错就是又一次"零输出秒退"。
+	if p := findExe("node.exe", "node"); p != "" {
+		return npmCandidate{Exe: p, Args: []string{cli}, Why: "PATH node + npm-cli.js", Shell: false}, true
+	}
+	return npmCandidate{}, false
+}
+
+// resolveNpm 挑出第一个**真能跑**的 npm。
+//
+// report 为 false 时不写日志（版本探测等只读路径用，避免刷屏）。
+// 返回的 broken 列表用于告诉用户"你 PATH 上有几个 npm 是坏的"——
+// 这类环境问题不该只体现在一句 exit status 1 里。
+func resolveNpm(report bool) (npmCandidate, []string) {
+	var broken []string
+	for _, d := range npmSearchDirs() {
+		if c, ok := npmCandidateFrom(d); ok {
+			if report {
+				info(scConfig, "前端", "使用 npm：%s（%s，来源 %s）", c.Exe, c.Why, d)
+				for _, b := range broken {
+					warn(scConfig, "前端", "已跳过一个坏掉的 npm：%s（缺少 node_modules\\npm\\bin\\npm-cli.js）", b)
+				}
+			}
+			return c, broken
+		}
+		// 只有当目录里确实有 npm 的痕迹时才算"坏掉"，否则只是没装 npm。
+		if hasNpmShim(d) {
+			broken = append(broken, d)
+		}
+	}
+	if report {
+		for _, b := range broken {
+			warn(scConfig, "前端", "坏掉的 npm：%s（缺少 node_modules\\npm\\bin\\npm-cli.js）", b)
+		}
+	}
+	return npmCandidate{}, broken
+}
+
+// hasNpmShim 目录里是否有 npm 的可执行入口（有 ⇒ 用户以为它能用）。
+func hasNpmShim(dir string) bool {
+	for _, n := range []string{"npm.cmd", "npm", "npx.cmd"} {
+		if fi, err := os.Stat(filepath.Join(dir, n)); err == nil && !fi.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// npmBrokenHint 把"npm 坏了"翻译成用户能照做的一句话。
+func npmBrokenHint(broken []string) string {
+	if len(broken) == 0 {
+		return ""
+	}
+	return "检测到损坏的 npm 安装（" + strings.Join(broken, "、") +
+		"）：这些目录里 npm 的启动脚本还在，但 node_modules\\npm 已经被删掉了，" +
+		"所以每次调用都必定失败。请在「环境安装」里重新安装 Node.js，" +
+		"或把上面这些目录从 PATH 中移除后重试"
+}
+
 func toolEnv(extra map[string]string) []string {
 	var bins []string
 	for _, c := range cfg.Components {
@@ -107,14 +289,55 @@ type lineWriter struct {
 	mu     sync.Mutex
 	buf    []byte
 	last   string
-	n      int // 已产出行数（用于判断子进程是否"零输出秒退"）
+	n      int      // 已产出行数（用于判断子进程是否"零输出秒退"）
+	tail   []string // 最近若干行（给失败摘要用：真实报错必须能原样引用）
 }
+
+// 保留多少行用于失败摘要。npm/node 的报错通常是一段栈，前几行是
+// "node:internal/..."，最有价值的那句 `Error: Cannot find module '...'`
+// 往往在第 4~8 行，所以只留末尾 3 行会漏掉它。
+const lineTailKeep = 16
 
 // hasOutput 是否捕获到任何输出行。
 func (w *lineWriter) hasOutput() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.n > 0 || len(w.buf) > 0
+}
+
+// errSummary 从已捕获的输出里挑出最能说明问题的一行。
+//
+// 为什么不直接把最后一行丢给用户：node 崩溃时最后一行通常是
+// `Node.js v24.21.0` 或一个空行，真正的原因在中间。这里优先找
+// `Error:` / `npm ERR!` 这类签名行，找不到才退回最后一行。
+func (w *lineWriter) errSummary() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.tail) == 0 {
+		return ""
+	}
+	for _, l := range w.tail {
+		for _, sig := range []string{"Error:", "npm ERR!", "error ", "错误", "No such file"} {
+			if strings.Contains(l, sig) {
+				return clip280(l)
+			}
+		}
+	}
+	return clip280(w.tail[len(w.tail)-1])
+}
+
+// clip280 截到 280 字符（日志行不该被一段栈占满，原因放前面）。
+func clip280(s string) string {
+	const max = 280
+	if len(s) <= max {
+		return s
+	}
+	// 按 rune 截，避免切断 UTF-8
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 func (w *lineWriter) Write(p []byte) (int, error) {
@@ -147,6 +370,10 @@ func (w *lineWriter) emitLine() {
 	}
 	w.n++
 	w.last = line
+	w.tail = append(w.tail, line)
+	if len(w.tail) > lineTailKeep {
+		w.tail = w.tail[len(w.tail)-lineTailKeep:]
+	}
 	logfSrc(w.scope, w.svcKey, "INFO", w.tag, "%s", line)
 	if w.svcKey == "" {
 		return
@@ -168,11 +395,19 @@ func (w *lineWriter) emitLine() {
 }
 
 func execStreamed(scope, src, step, dir string, extra map[string]string, name string, args ...string) error {
+	_, err := execStreamedDetail(scope, src, step, dir, extra, name, args...)
+	return err
+}
+
+// execStreamedDetail 与 execStreamed 同一条路径，额外回报输出摘要，
+// 让调用方能把**真实报错**写进失败结论（而不是只有一句 exit status 1）。
+func execStreamedDetail(scope, src, step, dir string, extra map[string]string, name string, args ...string) (streamResult, error) {
 	// v3.0 T1.4：前台命令注册到"可按 key 杀"的注册表，任务看门狗超时时
 	// 能真正终止它——旧实现只放任务锁不杀子进程，go build 挂死后
 	// 锁放了、编译还在跑，之后任何人都拿不到 backend 组锁。
 	fgKey := scope + "/" + src
 	// 策略：零输出秒退 → 2s 后重试一次 → 仍零输出则改用 cmd /c 包装（见 retry.go）
+	var last streamResult
 	_, err := runRetry(retryPolicy{
 		Attempts: 3,
 		Backoff:  2 * time.Second,
@@ -194,9 +429,30 @@ func execStreamed(scope, src, step, dir string, extra map[string]string, name st
 		defer fgUnregister(fgKey, cmd)
 		err := cmd.Run()
 		w.flush()
+		// 留最后一次尝试的摘要：重试把前几次覆盖掉是对的（最后一次才是真相）
+		last = streamResult{Summary: w.errSummary(), Lines: w.n}
 		return w.hasOutput(), err
 	})
-	return err
+	return last, err
+}
+
+// streamResult 一次前台执行的可引用结果。
+type streamResult struct {
+	Summary string // 最能说明问题的一行输出（空 = 确实没输出）
+	Lines   int    // 捕获到的行数
+}
+
+// explainExit 把"命令失败"翻译成人话：有真实报错就引用它，
+// 只有确实零输出时才提环境拦截——措辞不含"一定"，因为无输出也可能
+// 是进程被策略直接终止，本程序看不到更多证据。
+func explainExit(r streamResult, err error) string {
+	if r.Summary != "" {
+		return r.Summary
+	}
+	if err == nil {
+		return ""
+	}
+	return err.Error() + "（子进程没有任何输出；若反复如此，可能是安全软件拦截了该程序）"
 }
 
 func execBackground(scope, key, progKey, step, dir string, extra map[string]string, name string, args ...string) error {
@@ -222,7 +478,9 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 		return err
 	}
 	// 绑定到 Job Object：EnvKit 任何方式退出都会连带终止整个子进程树，防止孤儿占端口
-	platform.AssignToJob(cmd.Process.Pid)
+	// v3.3：不再静默——宿主把它塞进父 Job 时这里会失败，用户有权知道
+	// "关掉 EnvKit 后服务可能还活着"。
+	reportJobBind(scope, key, step, cmd.Process.Pid)
 	procMu.Lock()
 	activeProcs[key] = cmd
 	delete(stoppingProcs, key) // 新进程与上一次停止无关，别让残留标记吞掉真实崩溃上报
@@ -262,7 +520,8 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 				infoS(scope, key, step, "进程已停止")
 				break
 			}
-			// 静默秒退：疑似被杀毒软件拦截（真实错误一定有输出），自动重启
+			// 静默秒退：零输出 + 秒退，才走自动重启。可能是安全软件拦截，
+			// 也可能是可执行文件本身坏了——所以这里不断言原因，只记录事实。
 			if attempt < maxRestarts && fastExit(err, w.hasOutput(), started, fastExitWindow) {
 				// v3.0 T1.9：秒退重试也是无人值守的自动重启，过同一道断路器。
 				// 漏了这条，"拒绝一切自动重启"就只掐了 AI 和守护——
@@ -278,10 +537,11 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 				}
 				wrap := attempt == maxRestarts-1
 				if wrap {
-					warnS(scope, key, step, "子进程仍无输出秒退，1 秒后改用 cmd /c 包装重启...")
+					warnS(scope, key, step, "子进程仍未产生输出就退出，1 秒后改用 cmd /c 包装重启...")
 					time.Sleep(1 * time.Second)
 				} else {
-					warnS(scope, key, step, "子进程无任何输出即秒退（疑似杀毒软件拦截），2 秒后自动重启...")
+					warnS(scope, key, step, "子进程未产生任何输出就退出（退出码 %s），2 秒后自动重启...",
+						exitCodeText(err))
 					time.Sleep(2 * time.Second)
 				}
 				prev := cmd // spawn 失败时 cmd 已被换成没起来的那个：清理要按旧进程来
@@ -308,8 +568,16 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 			procDropIfCurrent(key, cmd)
 			svcMarkStoppedIfCurrent(key, cmd)
 			if err != nil {
-				setProg(progKey, false, false, "已退出（"+err.Error()+"）")
-				warnS(scope, key, step, "进程已退出：%v", err)
+				// v3.3：把孩子们最后说的话带上。旧实现只说 exit status 1，
+				// 而真正的原因（`Cannot find module … ` / `端口被占用`）就在日志
+				// 正文里某一行——用户不该自己去 2000 行日志里找。
+				if sum := w.errSummary(); sum != "" {
+					setProg(progKey, false, false, "已退出（"+sum+"）")
+					warnS(scope, key, step, "进程已退出：%v —— %s", err, sum)
+				} else {
+					setProg(progKey, false, false, "已退出（"+err.Error()+"）")
+					warnS(scope, key, step, "进程已退出：%v（无任何输出）", err)
+				}
 			} else {
 				setProg(progKey, false, false, "已退出")
 				infoS(scope, key, step, "进程已退出")
@@ -320,8 +588,35 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 	return nil
 }
 
-// ---------- 进程条目的身份守卫（v3.0 T1.3，修 G3 的另一半） ----------
+// reportJobBind 把 Job Object 绑定结果落进日志（每个 key 只报一次"受限"，
+// 免得秒退/重启循环把同一句话刷满）。
 //
+// 为什么要报：绑定失败意味着"EnvKit 退出时连带杀掉服务"这条承诺不成立。
+// 静默失败等于让用户以为兜底还在，关掉 EnvKit 之后发现 node 还占着端口。
+var jobWarnedMu sync.Mutex
+var jobWarned = map[string]bool{}
+
+func reportJobBind(scope, key, step string, pid int) {
+	err := platform.AssignToJob(pid)
+	if err == nil {
+		return
+	}
+	jobWarnedMu.Lock()
+	already := jobWarned[key]
+	jobWarned[key] = true
+	jobWarnedMu.Unlock()
+	if already {
+		return
+	}
+	if platform.IsAlreadyInJob(err) {
+		warnS(scope, key, step,
+			"本进程已在某个父 Job 内（常见于从 IDE/终端启动），无法再嵌套绑定：关掉 EnvKit 时该服务可能不会被连带终止")
+		return
+	}
+	warnS(scope, key, step, "子进程未纳入 Job 管理：%v（关掉 EnvKit 时可能留孤儿进程）", err)
+}
+
+// ---------- 进程条目的身份守卫（v3.0 T1.3，修 G3 的另一半） ----------
 // 背景：监控 goroutine 在进程退出时无条件 delete(activeProcs, key) 并写
 // Running=false。但 Wait 返回是异步的——这期间完全可能已经起了新进程
 // （restart = 停+起，两段同组锁；自动重启也在循环里换进程）。

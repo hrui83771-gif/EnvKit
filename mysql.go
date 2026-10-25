@@ -64,7 +64,7 @@ func runMysqlOut(args ...string) (string, error) {
 	if msg != "" {
 		return msg, lastErr
 	}
-	return "", fmt.Errorf("%v；子进程无任何输出，疑似被杀毒软件拦截（可点顶部「杀软白名单」，或把 EnvKit 目录加入杀软排除项）", lastErr)
+	return "", fmt.Errorf("%v；子进程没有任何输出就退出（可能是安全软件拦截，也可能是 mysql 客户端本身起动失败）", lastErr)
 }
 
 func createDatabase() error {

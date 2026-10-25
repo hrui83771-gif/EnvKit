@@ -294,7 +294,7 @@ func doBackup(actor string, h *TaskHandle) string {
 	if err != nil {
 		hint := ""
 		if strings.TrimSpace(lastErrText) == "" {
-			hint = "；子进程无任何输出即退出，疑似被杀毒软件拦截——可点击顶部「杀软白名单」一键加入 Defender 排除项"
+			hint = "；子进程没有任何输出就退出——可能是安全软件拦截，也可能是该程序本身起动失败；确认白名单已加过就别再在这上面花时间"
 		}
 		fail(scConfig, "备份", "mysqldump 失败（已自动重试 %d 次）：%v：%s%s", attemptIdx-1, err, firstLines(lastErrText, 400), hint)
 		// 失败产物必须清掉：留着 0 字节/半截文件会让人误以为"有备份"
@@ -546,7 +546,7 @@ func handleDBRestore(w http.ResponseWriter, r *http.Request) {
 		if err := runErr; err != nil {
 			hint := ""
 			if strings.TrimSpace(stderr.String()) == "" && strings.TrimSpace(stdout.String()) == "" {
-				hint = "；子进程无任何输出即退出，疑似被杀毒软件拦截——可点击顶部「杀软白名单」一键加入"
+				hint = "；子进程没有任何输出就退出——可能是安全软件拦截，也可能是该程序本身起动失败"
 			}
 			fail(scConfig, "还原", "还原失败（注意：部分数据可能已写入）：%v：stderr=%s stdout=%s%s", err, firstLines(stderr.String(), 300), firstLines(stdout.String(), 300), hint)
 			fin(resFail, firstLines(stderr.String(), 200))
