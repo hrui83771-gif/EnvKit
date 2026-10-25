@@ -70,6 +70,8 @@
             <button class="ghost" id="btn-avclean" style="display:none" title="检测到流氓软件残留时才显示">深度清除</button>
             <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
           </div>
+          <div class="pp-sep"></div>
+          <button class="pp-exit" id="btn-exit-app">退出程序</button>
         </div>
       </div>
     </div>
@@ -688,39 +690,42 @@
 
   <aside class="sidebar">
     <div class="navcard">
-      <div class="nav active" data-panel="install"><span class="dot" id="nd-install"></span>环境安装<span class="lbl" id="nl-install"></span></div>
-      <div class="nav" data-panel="config"><span class="dot" id="nd-config"></span>程序配置<span class="lbl" id="nl-config"></span></div>
-      <div class="nav" data-panel="chain"><span class="dot" id="nd-chain"></span>链端校验<span class="lbl" id="nl-chain"></span></div>
-      <div class="nav" data-panel="start"><span class="dot" id="nd-start"></span>程序启动<span class="lbl" id="nl-start"></span></div>
-      <div class="nav" data-panel="ai"><span class="dot" id="nd-ai"></span>AI 助手<span class="lbl" id="nl-ai"></span></div>
-      <div class="nav" data-panel="audit"><span class="dot" id="nd-audit"></span>操作审计<span class="lbl" id="nl-audit"></span></div>
+      <div class="nav active" data-panel="install">环境安装</div>
+      <div class="nav" data-panel="config">程序配置</div>
+      <div class="nav" data-panel="chain">链端校验</div>
+      <div class="nav" data-panel="start">程序启动</div>
+      <div class="nav-sep"></div>
+      <div class="nav" data-panel="ai">AI 助手</div>
+      <div class="nav" data-panel="audit">操作审计</div>
     </div>
     <div class="svc">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <span class="muted" style="font-weight:700">运行状态</span>
-        <button class="mini" id="btn-stop-all">停止全部</button><button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+      <div class="svc-head">
+        <span class="svc-title">运行状态</span>
+        <span class="svc-actions">
+          <button class="mini" id="btn-stop-all">停止全部</button>
+          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+        </span>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-web"></span><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
+        <div class="svcitem-top"><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
         <a class="svclink" id="sl-web" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-web" style="display:none">
           <button class="mini" id="btn-brk-web" data-brk="web">复位断路器</button>
         </div>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-backend"></span><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
+        <div class="svcitem-top"><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
         <a class="svclink" id="sl-backend" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-backend" style="display:none">
           <button class="mini" id="btn-brk-backend" data-brk="backend">复位断路器</button>
         </div>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-webase"></span><span>WeBASE-Front</span><span class="svcstate" id="su-webase">未检测</span></div>
+        <div class="svcitem-top"><span>WeBASE-Front</span><span class="svcstate" id="su-webase">未检测</span></div>
         <a class="svclink" id="sl-webase" target="_blank" style="display:none"></a>
       </div>
     </div>
-    <button class="ghost" id="btn-about" style="width:100%;margin-top:4px">关于 / 免责声明</button>
-    <button class="ghost" id="btn-exit-app" style="width:100%;margin-top:6px">退出程序</button>
+    <button class="side-link" id="btn-about">关于 / 免责声明</button>
   </aside>
 </div>
 

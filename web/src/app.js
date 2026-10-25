@@ -446,6 +446,7 @@ const I18N_EN = {
   "打开 AI 抽屉": "Open AI drawer",
   "打开 SSH 终端": "Open SSH terminal",
   "打开 {0}": "Open {0}",
+  "打开 ↗": "Open ↗",
   "打开对话面板": "Open chat panel",
   "打开数据浏览": "Open data browser",
   "执行": "Run",
@@ -2276,7 +2277,7 @@ function launchSrc(s){
   return s === 'config' ? t('你指定的') : (s === 'package.json' ? t('package.json 推断') : t('未识别'));
 }
 
-function navState(id, dotCls, label){ const d=$('#'+id); if(d) d.className='dot '+dotCls; }
+/* 侧栏导航不再用状态点：状态看顶部胶囊、步骤条和右侧运行状态卡。 */
 
 // ---------- 记忆与经验（M1 自动经验 / M3 用户记忆） ----------
 
@@ -2486,23 +2487,17 @@ async function pollHealth(){
   /* 权限 */
   $('#chip-admin').style.display = h.admin?'':'none';
   $('#btn-elevate').style.display = h.admin?'none':'';
-  /* 侧栏状态点 */
-  navState('nd-install', h.env.hasResults ? (h.env.ready?'ok':'warn') : '');
-  const cfgOk = h.db.dbExists && depsOk;
-  const cfgBad = (h.db.connected && !h.db.dbExists) || (h.env.hasResults && !depsOk);
-  navState('nd-config', cfgOk?'ok':(cfgBad?'warn':''));
-  navState('nd-start', svcState.cls==='ok'?'ok':(depsOk?'warn':''));
+  /* 侧栏导航已不再用状态点：状态看顶部胶囊、步骤条和右侧运行状态卡 */
   /* 服务卡：同样以 verified 为条件 */
   const w=h.services.web, b=h.services.backend;
-  $('#sd-web').className='dot'+svcDotCls(w);
-  $('#sd-backend').className='dot'+svcDotCls(b);
-  $('#su-web').textContent = svcLabel(w);
-  $('#su-backend').textContent = svcLabel(b);
+  const sw=$('#su-web'), sb=$('#su-backend');
+  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w);
+  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b);
   const lw=$('#sl-web');
-  if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 {0}', w.url); lw.title=w.url; }
+  if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 ↗'); lw.title=w.url; }
   else { lw.style.display='none'; }
   const lb=$('#sl-backend');
-  if(b.running && b.url){ lb.style.display=''; lb.href=b.url; lb.textContent=t('打开 {0}', b.url); lb.title=b.url; }
+  if(b.running && b.url){ lb.style.display=''; lb.href=b.url; lb.textContent=t('打开 ↗'); lb.title=b.url; }
   else { lb.style.display='none'; }
   applyBreaker('web', w);
   applyBreaker('backend', b);
@@ -2654,9 +2649,10 @@ function updateChain(ch){
   document.getElementById('ssh-node').textContent = ch.nodeInfo || '';
   dot('sd-webase', ch.checked && ch.port5002);
   const su=document.getElementById('su-webase');
-  if(su) su.textContent = !ch.checked ? '未检测' : (ch.port5002 ? (ch.webaseOk?'正常':'可达') : '不通');
+  if(su){ su.textContent = !ch.checked ? '未检测' : (ch.port5002 ? (ch.webaseOk?'正常':'可达') : '不通');
+    su.className = 'svcstate' + (!ch.checked ? '' : (ch.port5002 ? ' ok' : ' err')); }
   const sl=document.getElementById('sl-webase');
-  if(sl){ if(ch.webaseUrl && ch.checked && ch.port5002){ sl.style.display=''; sl.href=ch.webaseUrl; sl.textContent=t('打开 {0}', ch.webaseUrl); sl.title=ch.webaseUrl; } else { sl.style.display='none'; } }
+  if(sl){ if(ch.webaseUrl && ch.checked && ch.port5002){ sl.style.display=''; sl.href=ch.webaseUrl; sl.textContent=t('打开 ↗'); sl.title=ch.webaseUrl; } else { sl.style.display='none'; } }
   const nd=document.getElementById('nd-chain');
   if(nd) nd.className='dot'+(ch.checked ? (ch.port20200 ? (ch.port5002?' ok':' warn') : ' fail') : '');
 }

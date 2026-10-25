@@ -10,14 +10,14 @@
   :root{
     --bg:#f5f7fa; --card:#ffffff; --soft:#fbfcfe; --soft2:#f2f6f4; --off:#eef2f6; --hover:#e2e8ef;
     --line:#e3e8ef; --text:#1f2933; --muted:#6b7785;
-    --brand:#2f7d4f; --brand2:#3a9d63;
+    --brand:#2f7d4f; --brand2:#3a9d63; --brand-weak:#e9f4ee;
     --ok:#1f9d55; --okbg:#e6f6ec; --warn:#b07800; --warnbg:#fdf3e0; --err:#d64545; --errbg:#fdeaea; --info:#3b6fb0; --infobg:#eaf2fb;
     --dotoff:#c7cede; --focusbg:#ffffff;
   }
   body[data-theme="dark"]{
     --bg:#0f1520; --card:#161e2b; --soft:#1c2534; --soft2:#232e40; --off:#232c3b; --hover:#2b3850;
     --line:#2a3547; --text:#e4eaf2; --muted:#8b96a8;
-    --brand:#2e8f58; --brand2:#3fae73;
+    --brand:#2e8f58; --brand2:#3fae73; --brand-weak:#1a3025;
     --ok:#37b56a; --okbg:#12301f; --warn:#d99a26; --warnbg:#32260f; --err:#e05a5a; --errbg:#3a1a1a; --info:#5b93d6; --infobg:#15243a;
     --dotoff:#3a4658; --focusbg:#1c2534;
   }
@@ -69,20 +69,21 @@
   .chip.admin{background:var(--infobg);color:var(--info);cursor:default}
   .layout{max-width:1160px;margin:0 auto;padding:14px 22px 40px;display:flex;gap:18px;align-items:flex-start}
   .content{flex:1;min-width:0}
-  .sidebar{width:228px;flex:none;position:sticky;top:62px;display:flex;flex-direction:column;gap:12px}
-  .navcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px}
-  .nav{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:13px;transition:.15s}
-  .nav:hover{background:var(--soft2);color:var(--brand)}
-  .nav.active{background:var(--brand);color:#fff}
-  .nav .dot{width:7px;height:7px;border-radius:50%;background:var(--dotoff);flex:none}
-  .nav .dot.ok{background:var(--ok)}.nav .dot.warn{background:var(--warn)}.nav .dot.err{background:#fff}
-  .nav.active .dot{background:#fff;opacity:.85}
-  .nav .lbl{margin-left:auto;font-size:12px;opacity:.8}
+  .sidebar{width:240px;flex:none;position:sticky;top:62px;display:flex;flex-direction:column;gap:10px}
+  .navcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px}
+  /* 导航：靠浅底 + 左侧细条表示"你在哪"，不再整条实心填充抢主按钮的注意力 */
+  .nav{position:relative;display:flex;align-items:center;padding:9px 12px 9px 14px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;transition:.15s;user-select:none}
+  .nav:hover{background:var(--soft2);color:var(--text)}
+  .nav.active{background:var(--brand-weak);color:var(--brand);font-weight:600}
+  .nav.active::before{content:'';position:absolute;left:5px;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--brand)}
+  .nav-sep{height:1px;background:var(--line);margin:7px 6px}
+  .side-link{display:block;width:100%;padding:9px 12px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:12.5px;text-align:left;cursor:pointer}
+  .side-link:hover{background:var(--soft2);color:var(--text)}
   .panel{display:none;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
   .panel.show{display:block;animation:ekfade .18s ease}
   @keyframes ekfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
   @keyframes ekpulse{0%,100%{box-shadow:0 0 0 0 rgba(48,164,95,.4)}55%{box-shadow:0 0 0 5px rgba(48,164,95,0)}}
-  .nav .dot.ok,.svcitem .dot.ok,.logbar .dot.ok{animation:ekpulse 2.4s ease-out infinite}
+  .svcitem .dot.ok,.logbar .dot.ok{animation:ekpulse 2.4s ease-out infinite}
   .phead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 14px}
   .phead h2{margin:0}
   .stepno{font-size:12px;color:var(--muted);font-weight:600}
@@ -236,14 +237,23 @@
   details{margin-top:10px}
   summary{cursor:pointer;color:var(--info);font-size:12px;user-select:none}
   .grp{border:1px dashed var(--line);border-radius:8px;padding:12px;margin-top:10px}
-  .svc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
-  .svcitem{padding:8px 0;border-top:1px solid var(--line)}
+  .svc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+  .svc-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .svc-title{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+  .svc-actions{display:flex;gap:4px}
+  .svcitem{padding:9px 0;border-top:1px solid var(--line)}
+  .svc-head+.svcitem{border-top:0;padding-top:6px}
   .svcitem-top{display:flex;align-items:center;gap:8px;font-size:13px}
   .svcitem .dot{width:7px;height:7px;border-radius:50%;background:var(--dotoff);flex:none}
   .svcitem .dot.ok{background:var(--ok)}
-  .svcstate{margin-left:auto;color:var(--muted);font-size:12px}
-  .svclink{display:block;margin-top:7px;padding:5px 9px;background:var(--info);color:#fff;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .svclink:hover{filter:brightness(1.06)}
+  .svc .svcstate{margin-left:auto;color:var(--muted);font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--off);white-space:nowrap}
+  .svc .svcstate.ok{background:var(--okbg);color:var(--ok)}
+  .svc .svcstate.warn{background:var(--warnbg);color:var(--warn)}
+  .svc .svcstate.err{background:var(--errbg);color:var(--err)}
+  .svclink{display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:none;color:var(--info);font-size:12px;font-weight:600;text-decoration:none;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .svclink:hover{text-decoration:underline}
+  .pp-exit{width:100%;padding:8px 10px;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--err);font-size:12.5px;font-weight:600}
+  .pp-exit:hover{background:var(--errbg);border-color:var(--err)}
   /* 熔断行：红色左边条 + 说明 + 复位按钮。熔断是"产品在故意拒绝自动重启"，
    * 必须和"服务没起来"在视觉上分开——否则用户只会看到红，不知道是谁拦的。 */
   .brk-row{margin-top:7px;padding:6px 8px;border-left:3px solid var(--err);background:var(--errbg);border-radius:0 8px 8px 0}
@@ -741,6 +751,8 @@
             <button class="ghost" id="btn-avclean" style="display:none" title="检测到流氓软件残留时才显示">深度清除</button>
             <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
           </div>
+          <div class="pp-sep"></div>
+          <button class="pp-exit" id="btn-exit-app">退出程序</button>
         </div>
       </div>
     </div>
@@ -1359,39 +1371,42 @@
 
   <aside class="sidebar">
     <div class="navcard">
-      <div class="nav active" data-panel="install"><span class="dot" id="nd-install"></span>环境安装<span class="lbl" id="nl-install"></span></div>
-      <div class="nav" data-panel="config"><span class="dot" id="nd-config"></span>程序配置<span class="lbl" id="nl-config"></span></div>
-      <div class="nav" data-panel="chain"><span class="dot" id="nd-chain"></span>链端校验<span class="lbl" id="nl-chain"></span></div>
-      <div class="nav" data-panel="start"><span class="dot" id="nd-start"></span>程序启动<span class="lbl" id="nl-start"></span></div>
-      <div class="nav" data-panel="ai"><span class="dot" id="nd-ai"></span>AI 助手<span class="lbl" id="nl-ai"></span></div>
-      <div class="nav" data-panel="audit"><span class="dot" id="nd-audit"></span>操作审计<span class="lbl" id="nl-audit"></span></div>
+      <div class="nav active" data-panel="install">环境安装</div>
+      <div class="nav" data-panel="config">程序配置</div>
+      <div class="nav" data-panel="chain">链端校验</div>
+      <div class="nav" data-panel="start">程序启动</div>
+      <div class="nav-sep"></div>
+      <div class="nav" data-panel="ai">AI 助手</div>
+      <div class="nav" data-panel="audit">操作审计</div>
     </div>
     <div class="svc">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <span class="muted" style="font-weight:700">运行状态</span>
-        <button class="mini" id="btn-stop-all">停止全部</button><button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+      <div class="svc-head">
+        <span class="svc-title">运行状态</span>
+        <span class="svc-actions">
+          <button class="mini" id="btn-stop-all">停止全部</button>
+          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+        </span>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-web"></span><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
+        <div class="svcitem-top"><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
         <a class="svclink" id="sl-web" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-web" style="display:none">
           <button class="mini" id="btn-brk-web" data-brk="web">复位断路器</button>
         </div>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-backend"></span><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
+        <div class="svcitem-top"><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
         <a class="svclink" id="sl-backend" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-backend" style="display:none">
           <button class="mini" id="btn-brk-backend" data-brk="backend">复位断路器</button>
         </div>
       </div>
       <div class="svcitem">
-        <div class="svcitem-top"><span class="dot" id="sd-webase"></span><span>WeBASE-Front</span><span class="svcstate" id="su-webase">未检测</span></div>
+        <div class="svcitem-top"><span>WeBASE-Front</span><span class="svcstate" id="su-webase">未检测</span></div>
         <a class="svclink" id="sl-webase" target="_blank" style="display:none"></a>
       </div>
     </div>
-    <button class="ghost" id="btn-about" style="width:100%;margin-top:4px">关于 / 免责声明</button>
-    <button class="ghost" id="btn-exit-app" style="width:100%;margin-top:6px">退出程序</button>
+    <button class="side-link" id="btn-about">关于 / 免责声明</button>
   </aside>
 </div>
 
@@ -2025,6 +2040,7 @@ const I18N_EN = {
   "打开 AI 抽屉": "Open AI drawer",
   "打开 SSH 终端": "Open SSH terminal",
   "打开 {0}": "Open {0}",
+  "打开 ↗": "Open ↗",
   "打开对话面板": "Open chat panel",
   "打开数据浏览": "Open data browser",
   "执行": "Run",
@@ -3855,7 +3871,7 @@ function launchSrc(s){
   return s === 'config' ? t('你指定的') : (s === 'package.json' ? t('package.json 推断') : t('未识别'));
 }
 
-function navState(id, dotCls, label){ const d=$('#'+id); if(d) d.className='dot '+dotCls; }
+/* 侧栏导航不再用状态点：状态看顶部胶囊、步骤条和右侧运行状态卡。 */
 
 // ---------- 记忆与经验（M1 自动经验 / M3 用户记忆） ----------
 
@@ -4065,23 +4081,17 @@ async function pollHealth(){
   /* 权限 */
   $('#chip-admin').style.display = h.admin?'':'none';
   $('#btn-elevate').style.display = h.admin?'none':'';
-  /* 侧栏状态点 */
-  navState('nd-install', h.env.hasResults ? (h.env.ready?'ok':'warn') : '');
-  const cfgOk = h.db.dbExists && depsOk;
-  const cfgBad = (h.db.connected && !h.db.dbExists) || (h.env.hasResults && !depsOk);
-  navState('nd-config', cfgOk?'ok':(cfgBad?'warn':''));
-  navState('nd-start', svcState.cls==='ok'?'ok':(depsOk?'warn':''));
+  /* 侧栏导航已不再用状态点：状态看顶部胶囊、步骤条和右侧运行状态卡 */
   /* 服务卡：同样以 verified 为条件 */
   const w=h.services.web, b=h.services.backend;
-  $('#sd-web').className='dot'+svcDotCls(w);
-  $('#sd-backend').className='dot'+svcDotCls(b);
-  $('#su-web').textContent = svcLabel(w);
-  $('#su-backend').textContent = svcLabel(b);
+  const sw=$('#su-web'), sb=$('#su-backend');
+  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w);
+  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b);
   const lw=$('#sl-web');
-  if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 {0}', w.url); lw.title=w.url; }
+  if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 ↗'); lw.title=w.url; }
   else { lw.style.display='none'; }
   const lb=$('#sl-backend');
-  if(b.running && b.url){ lb.style.display=''; lb.href=b.url; lb.textContent=t('打开 {0}', b.url); lb.title=b.url; }
+  if(b.running && b.url){ lb.style.display=''; lb.href=b.url; lb.textContent=t('打开 ↗'); lb.title=b.url; }
   else { lb.style.display='none'; }
   applyBreaker('web', w);
   applyBreaker('backend', b);
@@ -4233,9 +4243,10 @@ function updateChain(ch){
   document.getElementById('ssh-node').textContent = ch.nodeInfo || '';
   dot('sd-webase', ch.checked && ch.port5002);
   const su=document.getElementById('su-webase');
-  if(su) su.textContent = !ch.checked ? '未检测' : (ch.port5002 ? (ch.webaseOk?'正常':'可达') : '不通');
+  if(su){ su.textContent = !ch.checked ? '未检测' : (ch.port5002 ? (ch.webaseOk?'正常':'可达') : '不通');
+    su.className = 'svcstate' + (!ch.checked ? '' : (ch.port5002 ? ' ok' : ' err')); }
   const sl=document.getElementById('sl-webase');
-  if(sl){ if(ch.webaseUrl && ch.checked && ch.port5002){ sl.style.display=''; sl.href=ch.webaseUrl; sl.textContent=t('打开 {0}', ch.webaseUrl); sl.title=ch.webaseUrl; } else { sl.style.display='none'; } }
+  if(sl){ if(ch.webaseUrl && ch.checked && ch.port5002){ sl.style.display=''; sl.href=ch.webaseUrl; sl.textContent=t('打开 ↗'); sl.title=ch.webaseUrl; } else { sl.style.display='none'; } }
   const nd=document.getElementById('nd-chain');
   if(nd) nd.className='dot'+(ch.checked ? (ch.port20200 ? (ch.port5002?' ok':' warn') : ' fail') : '');
 }

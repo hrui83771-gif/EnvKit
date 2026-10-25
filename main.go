@@ -26,7 +26,7 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.1.0"
+	appVersion = "3.2.0"
 	buildDate  = "2026-10-19"
 )
 
