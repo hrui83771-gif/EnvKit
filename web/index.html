@@ -63,8 +63,10 @@
   /* 桌宠设置：小标题 + 复选行 + 城市输入。整体收紧行距，别把面板撑太长 */
   .pp-pet{display:flex;flex-direction:column;gap:7px}
   .pp-sub{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-  .pp-check{display:flex;align-items:center;gap:7px;margin:0;font-size:12.5px;font-weight:400;color:var(--text);cursor:pointer}
-  .pp-check input{margin:0;flex:none;accent-color:var(--brand)}
+  /* 选择器必须比全局 `label{display:block;margin:8px 0 4px}` 更具体（.pp-pet .pp-check），
+     否则勾选框和文字会上下堆叠——单类选择器和 label 同权重，谁写在后面谁赢，改顺序就会回归。 */
+  .pp-pet .pp-check{display:flex;align-items:center;gap:7px;margin:0;width:auto;font-size:12.5px;font-weight:400;color:var(--text);cursor:pointer}
+  .pp-pet .pp-check input{margin:0;flex:none;accent-color:var(--brand)}
   .pp-weather-city{display:flex;flex-direction:column;gap:4px;padding-left:23px}
   .pp-weather-city[hidden]{display:none}
   .pp-weather-city input{font-size:12.5px;padding:6px 8px}
@@ -770,8 +772,8 @@
               <span>允许查询天气</span>
             </label>
             <div class="pp-weather-city" id="pet-weather-city-wrap" hidden>
-              <input id="pet-weather-city" maxlength="32" placeholder="城市，如 汕头 / Shantou" />
-              <span class="hint">留空则按网络位置猜测</span>
+              <input id="pet-weather-city" maxlength="32" placeholder="城市，如 上海 / Shanghai" />
+              <span class="hint">留空则用默认城市（上海）</span>
             </div>
             <div class="hint pp-pet-note">开启后桌宠会向 wttr.in 发一次请求，其余功能均不出网。</div>
           </div>
