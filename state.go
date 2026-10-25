@@ -91,6 +91,7 @@ type Config struct {
 	Services   []Service   `json:"services,omitempty"`
 	Components []Component `json:"components"`
 	AI         *AIConfig   `json:"ai,omitempty"`
+	Pet        PetConfig   `json:"pet"`
 	Alert      AlertConfig `json:"alerts"`
 	// Recovery 恢复事务的两层节制参数（v3.0 T1.5）。零值 = 内置默认
 	//（窗口 10 分钟 / 12 次 / per-target 3 次）。见 txbudget.go。
@@ -102,6 +103,19 @@ type Config struct {
 	// 由托盘菜单「隐藏窗口到托盘 / 显示控制台窗口」写入，下次启动沿用，
 	// 这样"挂机跑"不用每次开机都手动收一次窗口。
 	TrayHidden bool `json:"tray_hidden,omitempty"`
+}
+
+// PetConfig 桌宠配置（config.json 的 "pet" 段）。
+//
+// 天气是可选能力：开启后桌宠会按需请求 wttr.in 查询当前城市天气。
+// **默认关闭**——EnvKit 其余功能都不出网，只有这一个例外，
+// 所以必须由用户显式打开，不能在后台悄悄外连。
+type PetConfig struct {
+	// WeatherEnabled 是否允许桌宠查询天气（默认 false）。
+	WeatherEnabled bool `json:"weather_enabled"`
+	// WeatherCity 城市名（wttr.in 的 location 段，支持拼音或中文，留空 = 按 IP 猜）。
+	// 建议显式填写："Shantou" / "汕头" 均可。
+	WeatherCity string `json:"weather_city,omitempty"`
 }
 
 // RecoveryConfig 恢复事务的两层节制参数（v3.0 T1.5，修 G5/G6）。

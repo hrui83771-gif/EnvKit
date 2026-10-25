@@ -60,6 +60,16 @@
   .pp-sep{height:1px;background:var(--line);margin:11px 0}
   .pp-row{display:flex;gap:8px;flex-wrap:wrap}
   .pp-row button{flex:1;min-width:96px;padding:7px 10px;font-size:12.5px}
+  /* 桌宠设置：小标题 + 复选行 + 城市输入。整体收紧行距，别把面板撑太长 */
+  .pp-pet{display:flex;flex-direction:column;gap:7px}
+  .pp-sub{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+  .pp-check{display:flex;align-items:center;gap:7px;margin:0;font-size:12.5px;font-weight:400;color:var(--text);cursor:pointer}
+  .pp-check input{margin:0;flex:none;accent-color:var(--brand)}
+  .pp-weather-city{display:flex;flex-direction:column;gap:4px;padding-left:23px}
+  .pp-weather-city[hidden]{display:none}
+  .pp-weather-city input{font-size:12.5px;padding:6px 8px}
+  .pp-weather-city input:disabled{opacity:.55;cursor:not-allowed}
+  .pp-pet-note{padding-left:23px;line-height:1.45}
   @media(max-width:900px){ .pname{display:none} }
   .chip{font-size:12px;padding:3px 10px;border-radius:999px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap}
   .chip.ok{background:var(--okbg);color:var(--ok)}
@@ -751,6 +761,19 @@
           <div class="pp-row">
             <button class="ghost" id="btn-lang" data-no-i18n title="Switch to English">EN</button>
             <button class="ghost" id="btn-theme">暗色</button>
+          </div>
+          <div class="pp-sep"></div>
+          <div class="pp-pet">
+            <div class="pp-sub">桌宠</div>
+            <label class="pp-check">
+              <input type="checkbox" id="pet-weather-on" />
+              <span>允许查询天气</span>
+            </label>
+            <div class="pp-weather-city" id="pet-weather-city-wrap" hidden>
+              <input id="pet-weather-city" maxlength="32" placeholder="城市，如 汕头 / Shantou" />
+              <span class="hint">留空则按网络位置猜测</span>
+            </div>
+            <div class="hint pp-pet-note">开启后桌宠会向 wttr.in 发一次请求，其余功能均不出网。</div>
           </div>
           <div class="pp-sep"></div>
           <div class="pp-row">
@@ -1535,9 +1558,9 @@
 <div class="pet-ctx" id="pet-ctx">
   <button data-act="home">归位</button>
   <button data-act="hide">收起一会儿</button>
-  <button data-act="dot">缩成小圆点</button>
   <div class="sep"></div>
   <button data-act="say">听我说一句</button>
+  <button data-act="weather" id="pet-act-weather" hidden>查看天气</button>
   <div class="sep"></div>
   <button data-act="mode-still">原地待着</button>
   <button data-act="mode-wander">溜达</button>
@@ -1772,6 +1795,7 @@ const I18N_EN = {
   "停止全部": "Stop all",
   "停止服务": "stop services",
   "停止生成": "Stop generating",
+  "允许查询天气": "Allow weather lookups",
   "先备份，再生效…": "Backup first, then apply…",
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "免责声明": "Disclaimer",
@@ -1888,6 +1912,7 @@ const I18N_EN = {
   "回到本回合": "Back to this turn",
   "团子": "Dango",
   "在呢~": "Here~",
+  "城市，如 汕头 / Shantou": "City, e.g. Shantou",
   "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
   "备份数据库": "back up database",
   "复位断路器": "Reset breaker",
@@ -1900,6 +1925,9 @@ const I18N_EN = {
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
   "大肥鱼坐得住": "A chubby fish knows how to sit tight",
+  "天气查询没开，去个人中心打开": "Weather is off — turn it on in your profile",
+  "天气没查到：": "Couldn't get the weather: ",
+  "天气没查到：连不上服务": "Couldn't get the weather: service unreachable",
   "失效不删除": "Expiry does not delete",
   "失败": "Failed",
   "失败：": "Failed: ",
@@ -2019,6 +2047,7 @@ const I18N_EN = {
   "建库并执行 SQL": "Create DB and apply SQL",
   "建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Run EnvKit as administrator to skip the UAC prompt. Reboot once when done.",
   "建议：{0}": "Suggestion: {0}",
+  "开启后桌宠会向 wttr.in 发一次请求，其余功能均不出网。": "When on, the pet makes one request to wttr.in. Everything else stays offline.",
   "开始安装": "Start installation",
   "开始安装缺失组件，进度看下方安装日志": "Installing missing components — see progress in the install log below",
   "开始执行": "Start",
@@ -2050,6 +2079,7 @@ const I18N_EN = {
   "我就在这儿待着": "I'll stay right here",
   "我搞砸了.....好消息是数据还在你的脑子里。": "I messed up... good news: the data is still in your head.",
   "我的记忆": "My memories",
+  "我瞅瞅天…": "Let me check the sky…",
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：\n": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
   "或 JSON 数组；重复内容自动更新而非新增": "or a JSON array; duplicate content updates in place instead of adding a new entry",
@@ -2194,6 +2224,7 @@ const I18N_EN = {
   "杀软：第三方": "AV: third-party",
   "松手交给我~": "Drop it to me~",
   "构建并启动": "Build & start",
+  "查看天气": "Show weather",
   "查看日志": "View logs",
   "查看结果": "view result",
   "查看证据": "View evidence",
@@ -2206,6 +2237,8 @@ const I18N_EN = {
   "标签（可选）": "Tags (optional)",
   "标签（可选，逗号分隔）": "Tags (optional, comma separated)",
   "核心功能": "Key features",
+  "桌宠": "Desktop pet",
+  "桌宠设置没保存成功": "Couldn't save the pet setting",
   "桌面助手": "Desktop assistant",
   "检查更新": "Check for updates",
   "检查请求体是否能完整到达服务端（不调用模型，不花钱）": "Check whether the request body reaches the server intact (no model call, no cost)",
@@ -2234,6 +2267,7 @@ const I18N_EN = {
   "每行一条，支持": "One per line; supports ",
   "每轮注入": "every turn",
   "每轮都注入": "Always inject",
+  "没拿到天气数据": "No weather data came back",
   "没接到文件呢": "Hmm, no file received",
   "没有可导出的数据": "Nothing to export",
   "没有命中": "No matches",
@@ -2277,6 +2311,7 @@ const I18N_EN = {
   "留空 = 0.3（部分模型只接受 1，会自动适配）": "Empty = 0.3 (some models only accept 1; auto-adapted)",
   "留空 = 由 EnvKit 按项目结构自动推断": "Leave blank to auto-detect from the project structure",
   "留空=同 SSH 主机": "Empty = same as SSH host",
+  "留空则按网络位置猜测": "Leave blank to guess from your network location",
   "留空则用私钥": "Empty = use private key",
   "目录 · 数据库 · 依赖": "Directories · Database · Deps",
   "目录与库": "Directories & DB",
@@ -2334,8 +2369,6 @@ const I18N_EN = {
   "缓存命中 {0}%　输入 {1} · 输出 {2}": "cache hit {0}% · in {1} · out {2}",
   "缓存命中率 {0}%": "cache hit rate {0}%",
   "缓存读取": "Cache read",
-  "缩成小圆点": "Shrink to a dot",
-  "缩成小圆点啦，点我一下就恢复": "Now a tiny dot — click me to restore",
   "缺失": "Missing",
   "缺少：前端目录": "Missing: frontend directory",
   "缺少：后端目录": "Missing: backend directory",
@@ -2530,6 +2563,17 @@ const I18N_EN = {
 
 let EK_LANG = 'zh';
 try{ EK_LANG = localStorage.getItem('ek-lang') || 'zh'; }catch(e){}
+/* 桌宠天气开关（默认关闭）。必须放在这里而不是和 petWeather() 一起：
+   个人中心那段 IIFE（第 ~1466 行）比桌宠 IIFE（第 ~3111 行）先执行，
+   它对 petWeatherOn 赋值 —— 如果 let 声明留在后面，就是暂时性死区
+   （ReferenceError: Cannot access before initialization），
+   现象是"勾选开关没反应、菜单项也不出现"，而控制台只报一句看不懂的错。 */
+let petWeatherOn = false;
+/* 右键菜单里的「查看天气」跟着开关走：关着就藏起来，别留一个点了只会报错的死链。 */
+function petWeatherMenuSync(){
+  const b = document.getElementById('pet-act-weather');
+  if(b) b.hidden = !petWeatherOn;
+}
 const EK_ZH_OF = {};   // 译文 → 原文（切回中文时按译文找回）
 for(const k in I18N_EN){
   const v = I18N_EN[k];
@@ -3109,6 +3153,51 @@ function ekGreetText(){
   });
   const reset = document.getElementById('profile-avatar-reset');
   if(reset) reset.onclick = ()=>{ ekProfile.avatar = '🐟'; ekProfileSave(); ekProfilePaint(); };
+
+  // ---------- 桌宠：天气开关（默认关闭，需用户显式打开） ----------
+  // 独立接口 /api/pet/config，不走程序配置页的表单保存。
+  const won  = document.getElementById('pet-weather-on');
+  const wcity = document.getElementById('pet-weather-city');
+  const wwrap = document.getElementById('pet-weather-city-wrap');
+  let wSaveTimer = null;
+  function petCfgPush(patch){
+    clearTimeout(wSaveTimer);
+    wSaveTimer = setTimeout(async ()=>{
+      try{
+        const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+        if(!r.ok) throw new Error('http ' + r.status);
+      }catch(e){ toast(t('桌宠设置没保存成功'), 'err'); }
+    }, 400);
+  }
+  function petWeatherFromPanel(){
+    if(!won) return;
+    if(wcity){
+      // 城市复选框没开时不用显示输入框，避免"填了但不生效"的困惑
+      if(wwrap) wwrap.hidden = !won.checked;
+      wcity.disabled = !won.checked;
+    }
+  }
+  if(won){
+    fetch('/api/pet/config').then(r=>r.json()).then(j=>{
+      won.checked = !!(j && j.weather_enabled);
+      if(wcity) wcity.value = (j && j.weather_city) || '';
+      petWeatherOn = won.checked;
+      petWeatherMenuSync();
+      petWeatherFromPanel();
+    }).catch(()=>{ /* 读不到就按"关"显示，用户自己打开即可 */ petWeatherFromPanel(); });
+    won.addEventListener('change', ()=>{
+      petWeatherOn = won.checked;
+      petWeatherMenuSync(); petWeatherFromPanel();
+      petCfgPush({weather_enabled: won.checked});
+    });
+  }
+  if(wcity){
+    // 输入防抖：每敲一个字存一次太吵，停手 600ms 再落盘
+    wcity.addEventListener('input', ()=>{
+      clearTimeout(wcity._t);
+      wcity._t = setTimeout(()=> petCfgPush({weather_city: wcity.value}), 600);
+    });
+  }
 })();
 
 
@@ -4908,10 +4997,10 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   ctxmenu.addEventListener('click', e=>{
     const act = e.target.dataset && e.target.dataset.act; if(!act) return;
     ctxmenu.classList.remove('show');
-    if(act==='home'){ pet.classList.remove('dot'); petHome(); }
+    if(act==='home'){ petHome(); }
     if(act==='hide'){ pet.classList.add('min'); setTimeout(()=>say(t('先收起来，需要时悬停右下角找我')), 420); }
-    if(act==='dot'){ pet.classList.remove('min'); pet.classList.add('dot'); say(t('缩成小圆点啦，点我一下就恢复')); }
     if(act==='say'){ say(fishLine(FISH_LINES)); }
+    if(act==='weather'){ petWeather(); }
     if(act==='mode-still'){ setPetMode('still'); say(t('我就在这儿待着')); }
     if(act==='mode-wander'){ setPetMode('wander'); say(t('溜达溜达～')); }
     if(act==='mode-follow'){ setPetMode('follow'); say(t('跟上你的鼠标')); }
@@ -5014,6 +5103,24 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     }
   }
   function setPassthrough(on){ applyPassthrough(on); }
+
+  /* ---------- 天气（可选，默认关闭；开关在个人中心） ---------- */
+  /* 前端不直连 wttr.in：统一走 /api/pet/weather，由 Go 侧控制超时与外连出口。
+     petWeatherOn 与 petWeatherMenuSync 都声明在文件顶部（个人中心那段 IIFE
+     比这个 IIFE 先执行，留在里面会撞暂死区）。 */
+  async function petWeather(){
+    if(!petWeatherOn) return;
+    say(t('我瞅瞅天…'), true);
+    try{
+      const r = await fetch('/api/pet/weather');
+      const j = await r.json();
+      if(!j || j.enabled === false){ petWeatherOn = false; petWeatherMenuSync(); say(t('天气查询没开，去个人中心打开')); return; }
+      if(j.error){ say(t('天气没查到：') + j.error); return; }
+      say(j.text || t('没拿到天气数据'));
+    }catch(e){
+      say(t('天气没查到：连不上服务'));
+    }
+  }
   /* 待机小动作（原版 _maybe_idle_action：蹦跳/摇摆/伸懒腰/日常台词/心声） */
   function petHop(){ pet.classList.add('hop'); setTimeout(()=>pet.classList.remove('hop'), 660); }
   function petStretch(){ pet.classList.add('stretch'); setTimeout(()=>pet.classList.remove('stretch'), 920); }
@@ -5031,11 +5138,11 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     requestAnimationFrame(petMotion);
     const dt = Math.min(.05, (now - lastFrame) / 1000); lastFrame = now;
     if(REDUCED || drag){ if(petWalking){ petWalking = false; pet.classList.remove('walking'); } return; }
-    if(!petPosReady && !pet.classList.contains('min') && !pet.classList.contains('dot')){ petReadPos(); petPosReady = true; }
+    if(!petPosReady && !pet.classList.contains('min')){ petReadPos(); petPosReady = true; }
     if(!isFinite(petX) || !isFinite(petVX)){ petReadPos(); petVX = 0; }   // 防御：位置/速度一旦成 NaN 立即从实际矩形恢复
     const drawerOpen = document.getElementById('ai-drawer').classList.contains('open');
     const canMove = st === 'idle' && !drawerOpen && petMode !== 'still'
-      && !pet.classList.contains('min') && !pet.classList.contains('dot');
+      && !pet.classList.contains('min');
     if(!canMove){ petTargetX = null; if(petWalking){ petWalking = false; pet.classList.remove('walking'); setView('front'); } return; }
     if(petMode === 'follow'){
       if(mouseX !== null) petTargetX = petClampX(mouseX - PET_W / 2);
@@ -5151,7 +5258,6 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   /* ---------- 点击：开抽屉 / 恢复 / 深链 / 批确认 / 连击彩蛋 ---------- */
   let combo = 0, comboT = 0, pendingOpen = null;
   pet.addEventListener('click', e=>{
-    if(pet.classList.contains('dot')){ pet.classList.remove('dot'); say(t('我回来啦')); return; }
     if(pet.classList.contains('min')){ pet.classList.remove('min'); say(t('我回来啦')); return; }
     if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
     if(pet.dataset.pat==='1'){ pet.dataset.pat=''; return; }
@@ -5179,7 +5285,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(combo >= 15){ combo = 0; spoutMode(); }
   });
   pet.addEventListener('dblclick', ()=>{
-    if(pet.classList.contains('min') || pet.classList.contains('dot')) return;   // 收起态交给 click 恢复
+    if(pet.classList.contains('min')) return;   // 收起态交给 click 恢复
     if(st === 'confirm' || st === 'busy') return;
     openFood();   // 还原原版「双击喂食」
   });

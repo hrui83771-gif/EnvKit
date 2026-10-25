@@ -112,5 +112,9 @@
     "webhook": "",
     "cooldown_secs": 300
   },
+  "pet": {
+    "weather_enabled": false,
+    "weather_city": ""
+  },
   "update_url": ""
 }

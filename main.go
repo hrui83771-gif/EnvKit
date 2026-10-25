@@ -106,6 +106,8 @@ func main() {
 	http.HandleFunc("/", serveIndex)
 	http.HandleFunc("/api/config", handleConfig)
 	http.HandleFunc("/api/check", handleCheck)
+	http.HandleFunc("/api/pet/weather", handlePetWeather)
+	http.HandleFunc("/api/pet/config", handlePetConfig) // 桌宠开关（天气默认关闭）
 	http.HandleFunc("/api/install", handleInstall)
 	http.HandleFunc("/api/state", handleState)
 	http.HandleFunc("/api/events", handleEvents)
