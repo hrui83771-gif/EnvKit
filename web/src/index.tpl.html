@@ -26,14 +26,52 @@
       <span class="chip off" id="chip-deps" data-goto="config">依赖 未检测</span>
       <span class="chip off" id="chip-svc" data-goto="start">服务 未启动</span>
     </div>
-    <!-- 右侧操作区：整组靠右、内部不拆行（英文文案更长时整组换行，避免按钮被拆散） -->
+    <!-- 右侧：状态胶囊 + 个人中心。语言/主题/杀软/提权都收进个人中心，
+         顶栏只留"我是谁"和状态，避免一排同权重按钮抢注意力。 -->
     <div class="hactions">
       <span class="chip admin" id="chip-admin" style="display:none">管理员</span>
-      <button class="ghost" id="btn-av" style="padding:6px 12px">杀软白名单</button>
-      <button class="ghost" id="btn-avclean" style="padding:6px 12px;display:none" title="检测到流氓软件残留时才显示">深度清除</button>
-      <button class="ghost" id="btn-lang" data-no-i18n style="padding:6px 12px" title="Switch to English">EN</button>
-      <button class="ghost" id="btn-theme" style="padding:6px 12px">暗色</button>
-      <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
+      <div class="profile" id="profile">
+        <button class="profile-btn" id="btn-profile" title="个人中心">
+          <span class="pavatar" id="profile-avatar">🐟</span>
+          <span class="pname" id="profile-name">我</span>
+          <span class="pcaret">▾</span>
+        </button>
+        <div class="profile-pop" id="profile-pop" hidden>
+          <div class="pp-title">个人中心</div>
+          <div class="pp-user">
+            <div class="pavatar lg" id="profile-avatar-big">🐟</div>
+            <div class="pp-fields">
+              <label for="profile-nick">昵称</label>
+              <input id="profile-nick" maxlength="16" placeholder="怎么称呼你？（可留空）" />
+            </div>
+          </div>
+          <div class="pp-avatars" id="profile-presets">
+            <button data-avatar="🐟" title="小鱼">🐟</button>
+            <button data-avatar="🐳" title="鲸鱼">🐳</button>
+            <button data-avatar="🦊" title="狐狸">🦊</button>
+            <button data-avatar="🐼" title="熊猫">🐼</button>
+            <button data-avatar="🐱" title="猫">🐱</button>
+            <button data-avatar="🦉" title="猫头鹰">🦉</button>
+          </div>
+          <div class="pp-uploadrow">
+            <label class="mini pp-upload" for="profile-avatar-file">上传头像</label>
+            <input type="file" id="profile-avatar-file" accept="image/*" hidden />
+            <button class="mini" id="profile-avatar-reset">恢复默认</button>
+            <span class="hint" style="margin-left:auto">只存在本机</span>
+          </div>
+          <div class="pp-sep"></div>
+          <div class="pp-row">
+            <button class="ghost" id="btn-lang" data-no-i18n title="Switch to English">EN</button>
+            <button class="ghost" id="btn-theme">暗色</button>
+          </div>
+          <div class="pp-sep"></div>
+          <div class="pp-row">
+            <button class="ghost" id="btn-av">杀软白名单</button>
+            <button class="ghost" id="btn-avclean" style="display:none" title="检测到流氓软件残留时才显示">深度清除</button>
+            <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -806,7 +844,6 @@
   <button data-act="hide">收起一会儿</button>
   <button data-act="dot">缩成小圆点</button>
   <div class="sep"></div>
-  <button data-act="feed">投喂</button>
   <button data-act="say">听我说一句</button>
   <div class="sep"></div>
   <button data-act="mode-still">原地待着</button>

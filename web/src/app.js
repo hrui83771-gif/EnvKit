@@ -77,6 +77,7 @@ const I18N_EN = {
   "{0} 条": "{0} entries",
   "{0} 步": "{0} steps",
   "{0} 行": "{0} rows",
+  "{0}，{1}！环境很健康": "{0}, {1}! Environment looks healthy",
   "{0}，环境很健康": "{0}, environment looks healthy",
   "‹ 上一页": "‹ Prev",
   "① 环境安装": "1. Install",
@@ -93,6 +94,7 @@ const I18N_EN = {
   "七月中出ds正式版！": "The DS official version drops in mid-July!",
   "三色团子！软乎乎～": "Tricolor dango! So fluffy~",
   "上一级": "Up",
+  "上传头像": "Upload avatar",
   "上级目录": "Parent",
   "上限 {0} 轮": "max {0} turns",
   "上限放宽到 {0} 轮": "Turn cap raised to {0}",
@@ -108,6 +110,7 @@ const I18N_EN = {
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
   "不通": "Unreachable",
   "与 EnvKit 的连接已断开（可能已重启），点击确定刷新页面。": "Connection to EnvKit was lost (it may have restarted). Click OK to refresh.",
+  "个人中心": "Profile",
   "中": "Med",
   "中午好": "Good noon",
   "主体": "Actor",
@@ -232,6 +235,7 @@ const I18N_EN = {
   "发送": "Send",
   "发送 {0} / 收到 {1}": "sent {0} / received {1}",
   "取消": "Cancel",
+  "只存在本机": "Stored on this device only",
   "只收 .sql 文件哦，「{0}」先还给你": "I only take .sql files — \"{0}\" is returned to you",
   "只看异常": "Issues only",
   "可达": "Reachable",
@@ -338,6 +342,7 @@ const I18N_EN = {
   "将通过 SSH 在链端目录执行启动脚本：\n{0} && {1}\n\n可能耗时较久。": "Start script to run over SSH in the chain directory:\n{0} && {1}\n\nThis may take a while.",
   "将通过 UAC 申请管理员权限，把 EnvKit 所在目录和 EnvKit.exe\n加入 Windows Defender 排除项，防止 go / npm / mysqldump 子进程被误拦。\n\n弹出 UAC 窗口时请点「是」。": "This requests administrator rights via UAC and adds the EnvKit folder and EnvKit.exe\nto the Windows Defender exclusions, so go / npm / mysqldump child processes are not blocked by mistake.\n\nClick “Yes” when the UAC prompt appears.",
   "将重新走一遍安装流程：重新下载并解压所有组件（已装的会跳过）。\n可能耗时较久。": "This runs the install flow again: download and unpack every component (already-installed ones are skipped).\nIt may take a while.",
+  "小鱼": "Little fish",
   "小鱼干": "Dried fish",
   "小鱼干！我的最爱！": "Small dried fish — my favorite!",
   "尚未检测": "Not checked yet",
@@ -415,12 +420,15 @@ const I18N_EN = {
   "当前待处理": "Needs attention",
   "影子": "Shadow",
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
+  "怎么称呼你？（可留空）": "What should I call you? (optional)",
   "思考中": "Thinking",
   "恢复演练": "Restore drill",
+  "恢复默认": "Reset",
   "慢路径": "Slow path",
   "成功": "OK",
   "成功 {0} · 部分 {1} · 失败 {2}": "{0} ok · {1} partial · {2} failed",
   "成败": "Pass/Fail",
+  "我": "Me",
   "我不可能告诉你任何事情！": "I won't tell you anything!",
   "我不评价这个了，这是你的私人癖好。": "I won't judge — that's your private taste.",
   "我先去吃饭啦！这个你测一下~": "Off to lunch! You test this one~",
@@ -500,6 +508,7 @@ const I18N_EN = {
   "时间": "Time",
   "是你写给助手的规矩，它必须遵守；": "are the rules you give the assistant and it must follow them;",
   "是系统从操作审计里统计出的失败模式，只是建议，你可以逐条否决。\n          优先级：": "are failure patterns computed from the audit log — suggestions only, and you can dismiss each one.\n          Priority: ",
+  "昵称": "Nickname",
   "显示": "Show",
   "晕了晕了…别晃了~": "So dizzy… stop shaking~",
   "晕着呢…让我缓一缓": "Dizzy… give me a second",
@@ -635,9 +644,13 @@ const I18N_EN = {
   "演练安装": "Dry-run install",
   "点开看本轮用量明细": "Click for this turn's token breakdown",
   "点我确认！": "Click me to confirm!",
+  "熊猫": "Panda",
   "版本：": "Version: ",
   "状态": "Status",
   "状态：": "Status: ",
+  "狐狸": "Fox",
+  "猫": "Cat",
+  "猫头鹰": "Owl",
   "玩法说明": "Play guide",
   "环境 就绪": "Env ready",
   "环境 未检测": "Env not checked",
@@ -812,6 +825,7 @@ const I18N_EN = {
   "这也太虐了吧？！我心里堵得慌！！": "So brutal... my chest feels tight!!",
   "这些家伙真粘人，赶都赶不走": "So clingy — can't even scare them off",
   "这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓": "Not backing down this time... though you led me astray a few times. 😓",
+  "这张图读不出来，换一张试试": "Couldn't read that image — try another one",
   "这用户发的啥啊，": "What is this user even sending,",
   "进程名": "Process",
   "远程主机 · 选择根目录": "Remote host · pick root",
@@ -875,6 +889,7 @@ const I18N_EN = {
   "高危 SQL 要二次确认": "Risky SQL needs a second confirmation",
   "高级选项（目录 · 自定义启动命令）": "Advanced (directories · custom start command)",
   "高频动作": "Top actions",
+  "鲸鱼": "Whale",
   "默认关闭。启用后助手会记住你写的长期规矩，并从历史操作中学习失败模式以避免重复犯错；关闭时不再向模型注入任何记忆内容": "Off by default. When on, the assistant remembers the long-term rules you write and learns failure patterns from past actions to avoid repeating mistakes; when off, no memory content is injected into the model.",
   "默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。": "Applies to this project only by default and expires when you switch projects — another machine's lessons rarely fit the current one. Check this only for truly general rules (e.g. stop the backend before backing up).",
   "默认库": "default DB",
@@ -1384,6 +1399,103 @@ function applyTheme(mode){   // 注意：参数不能叫 t，会遮蔽全局翻�
   ekSetLang(EK_LANG, false);
 })();
 $('#btn-theme').onclick = ()=> applyTheme(document.body.dataset.theme==='dark' ? 'light' : 'dark');
+
+/* ---------- 个人中心：昵称 / 头像 / 快捷设置 ----------
+   存 localStorage 而不是 config.json：这是"这台浏览器上的我"，不是环境配置；
+   也不进 exe 的分发包。头像上传在 canvas 里裁成 128×128，避免原图把 localStorage 撑爆。 */
+let ekProfile = { name: '', avatar: '🐟' };
+try{
+  const p = JSON.parse(localStorage.getItem('ek-profile') || 'null');
+  if(p && typeof p === 'object'){
+    if(typeof p.name === 'string') ekProfile.name = p.name.slice(0, 16);
+    if(typeof p.avatar === 'string' && p.avatar) ekProfile.avatar = p.avatar;
+  }
+}catch(_){}
+
+function ekProfileSave(){ try{ localStorage.setItem('ek-profile', JSON.stringify(ekProfile)); }catch(_){} }
+
+function ekProfilePaint(){
+  const paint = el=>{
+    if(!el) return;
+    el.innerHTML = '';
+    if(/^data:image\//.test(ekProfile.avatar)){
+      const img = document.createElement('img');
+      img.alt = ''; img.src = ekProfile.avatar; el.appendChild(img);
+    } else {
+      el.textContent = ekProfile.avatar || '🐟';
+    }
+  };
+  paint(document.getElementById('profile-avatar'));
+  paint(document.getElementById('profile-avatar-big'));
+  const nm = document.getElementById('profile-name');
+  if(nm) nm.textContent = ekProfile.name || t('我');
+  // 预选头像高亮：上传自定义图时没有预设命中，全部取消高亮
+  document.querySelectorAll('#profile-presets [data-avatar]').forEach(b=>{
+    b.classList.toggle('on', b.dataset.avatar === ekProfile.avatar);
+  });
+  const inp = document.getElementById('profile-nick');
+  if(inp && document.activeElement !== inp) inp.value = ekProfile.name;
+}
+
+/* 开场问候文案抽成函数：单测/CDP 可以直接读它，不必等 1.2 秒看气泡。 */
+function ekGreetText(){
+  const h = new Date().getHours();
+  const g = t(h<5?'夜深了，注意休息':h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好');
+  const nm = (ekProfile.name || '').trim();
+  return nm ? t('{0}，{1}！环境很健康', g, nm) : t('{0}，环境很健康', g);
+}
+
+(function(){
+  ekProfilePaint();
+  const btn = document.getElementById('btn-profile');
+  const pop = document.getElementById('profile-pop');
+  if(btn && pop){
+    btn.onclick = e=>{ e.stopPropagation(); pop.hidden = !pop.hidden; };
+    document.addEventListener('click', e=>{
+      if(!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) pop.hidden = true;
+    });
+    document.addEventListener('keydown', e=>{ if(e.key === 'Escape') pop.hidden = true; });
+    // 工具类动作点完就收；语言/主题留在面板里（用户常连着切）
+    ['btn-av','btn-avclean','btn-elevate'].forEach(id=>{
+      const b = document.getElementById(id);
+      if(b) b.addEventListener('click', ()=>{ pop.hidden = true; });
+    });
+  }
+  const nick = document.getElementById('profile-nick');
+  if(nick) nick.addEventListener('input', ()=>{
+    ekProfile.name = nick.value.trim().slice(0, 16);
+    ekProfileSave(); ekProfilePaint();
+  });
+  document.querySelectorAll('#profile-presets [data-avatar]').forEach(b=>{
+    b.onclick = ()=>{ ekProfile.avatar = b.dataset.avatar; ekProfileSave(); ekProfilePaint(); };
+  });
+  const file = document.getElementById('profile-avatar-file');
+  if(file) file.addEventListener('change', ()=>{
+    const f = file.files && file.files[0];
+    if(!f) return;
+    const rd = new FileReader();
+    rd.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const s = Math.min(img.width, img.height) || 1;
+        const cv = document.createElement('canvas');
+        cv.width = 128; cv.height = 128;
+        const cx = cv.getContext('2d');
+        cx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 128, 128);
+        let url = cv.toDataURL('image/png');
+        if(url.length > 200000) url = cv.toDataURL('image/jpeg', 0.85);
+        ekProfile.avatar = url; ekProfileSave(); ekProfilePaint();
+      };
+      img.onerror = ()=> toast(t('这张图读不出来，换一张试试'), 'err');
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+    file.value = '';
+  });
+  const reset = document.getElementById('profile-avatar-reset');
+  if(reset) reset.onclick = ()=>{ ekProfile.avatar = '🐟'; ekProfileSave(); ekProfilePaint(); };
+})();
+
 
 /* ---------- 内嵌 SSH 终端（xterm.js + WebSocket 桥接） ---------- */
 let term=null, fitAddon=null, termWS=null, termRO=null;
@@ -3189,7 +3301,6 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(act==='home'){ pet.classList.remove('dot'); petHome(); }
     if(act==='hide'){ pet.classList.add('min'); setTimeout(()=>say(t('先收起来，需要时悬停右下角找我')), 420); }
     if(act==='dot'){ pet.classList.remove('min'); pet.classList.add('dot'); say(t('缩成小圆点啦，点我一下就恢复')); }
-    if(act==='feed'){ openFood(); }
     if(act==='say'){ say(fishLine(FISH_LINES)); }
     if(act==='mode-still'){ setPetMode('still'); say(t('我就在这儿待着')); }
     if(act==='mode-wander'){ setPetMode('wander'); say(t('溜达溜达～')); }
@@ -3572,9 +3683,8 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   setTimeout(()=>{
     if(st!=='idle') return;
     if(document.body.classList.contains('pet-gone')) return;   // 已被彻底隐藏就不开口
-    const h = new Date().getHours();
-    const g = t(h<5?'夜深了，注意休息':h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好');
-    say(t('{0}，环境很健康', g));
+    // 有人设了昵称就带上：问候是唯一适合直呼其名的场景
+    say(ekGreetText());
   }, 1200);
 })();
 
