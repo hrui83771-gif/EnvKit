@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // aiTrimDanglingToolCalls：剥离历史中所有"没有紧跟 tool 结果"的 assistant(tool_calls)。
 // 场景：确认卡片弹出后用户无视，直接发新消息 → 悬挂的 tool_calls 留在历史中段，
@@ -43,41 +46,74 @@ func TestAITrimDanglingToolCalls_Noop(t *testing.T) {
 	}
 }
 
-// aiSummaryCut：短历史不摘要；切分点必须按 aiSumQuantum 量化，
-// 否则每来一条新消息边界就移动一次，摘要缓存永远不命中、每回合多打一次上游。
-func TestAISummaryCut(t *testing.T) {
-	if got := aiSummaryCut(aiSummarizeAfter); got != 0 {
-		t.Errorf("边界条数(%d)不应触发摘要，cut = %d", aiSummarizeAfter, got)
+// aiSummaryCut：按 token 触发、按条数量化边界。
+//
+// 两个都要钉住：
+//   - 触发不能只看条数（少量巨型工具结果也该摘要）；
+//   - 切分点不能每条消息都动，否则摘要缓存永远不命中、每回合多打一次上游。
+func msgsWithApproxTokens(n, tokensEach int) []aiMsg {
+	out := make([]aiMsg, n)
+	for i := range out {
+		// aiApproxTokens：ASCII 约 4 字符 = 1 token
+		out[i] = aiMsg{Role: "user", Content: strings.Repeat("a", tokensEach*4)}
 	}
-	if got := aiSummaryCut(aiSummarizeKeep); got != 0 {
+	return out
+}
+
+func TestAISummaryCut(t *testing.T) {
+	// 短历史 / 小消息量都不摘要
+	if got := aiSummaryCut([]aiMsg{{Role: "user", Content: "启动前端"}, {Role: "assistant", Content: "好的"}}); got != 0 {
 		t.Errorf("短历史不应摘要，cut = %d", got)
 	}
-	c := aiSummaryCut(aiSummarizeAfter + 2)
-	if c <= 0 {
-		t.Fatalf("超过阈值应触发摘要，cut = %d", c)
+	if got := aiSummaryCut(msgsWithApproxTokens(10, 50)); got != 0 {
+		t.Errorf("500 token 的历史不该摘要，cut = %d", got)
 	}
-	if c%aiSumQuantum != 0 {
-		t.Errorf("切分点必须按 %d 量化，got %d", aiSumQuantum, c)
+
+	// 大历史：必须按 6 条量化，且至少给尾部留 6 条
+	big := msgsWithApproxTokens(40, 200) // ≈ 8000 token
+	cut := aiSummaryCut(big)
+	if cut <= 0 {
+		t.Fatalf("8000 token 的历史应触发摘要，cut = %d", cut)
 	}
-	// 量化稳定性：逐条增长时，切分点多数回合保持不变（缓存命中）
-	stable := 0
-	prev := aiSummaryCut(aiSummarizeAfter + 1)
-	for i := aiSummarizeAfter + 2; i <= aiSummarizeAfter+12; i++ {
-		c := aiSummaryCut(i)
-		if c%aiSumQuantum != 0 {
-			t.Fatalf("n=%d 切分点 %d 未量化", i, c)
-		}
-		if c == prev {
-			stable++
+	if cut%aiSumQuantum != 0 {
+		t.Fatalf("切分点必须按 %d 条量化，got %d", aiSumQuantum, cut)
+	}
+	if len(big)-cut < aiSumQuantum {
+		t.Fatalf("尾部至少保留 %d 条，实际 %d", aiSumQuantum, len(big)-cut)
+	}
+
+	// 量化稳定性：逐条追加 12 条小消息，切分点最多移动 2 次
+	moves := 0
+	prev := cut
+	for i := 0; i < 12; i++ {
+		big = append(big, aiMsg{Role: "user", Content: "继续"})
+		c := aiSummaryCut(big)
+		if c != prev {
+			moves++
 		}
 		prev = c
 	}
-	if stable < 6 {
-		t.Errorf("11 步增长中切分点仅 %d 次不变（%d），量化粒度疑似失效", stable, prev)
+	if moves > 2 {
+		t.Fatalf("12 条追加中切分点移动了 %d 次，量化粒度疑似失效", moves)
 	}
-	// 保留量：摘要后最近消息不会被切走（cut 量化只会让保留变多，不会变少）
-	if got := aiSummaryCut(200); 200-got < aiSummarizeKeep {
-		t.Errorf("cut=%d 会把最近消息切到不足 %d 条", got, aiSummarizeKeep)
+
+	// 一条巨型结果也能触发摘要（旧实现要等满 24 条）
+	huge := append(msgsWithApproxTokens(6, 50), aiMsg{Role: "tool", Content: strings.Repeat("b", 40000)})
+	if c := aiSummaryCut(huge); c <= 0 || c >= len(huge) {
+		t.Fatalf("巨型工具结果应触发摘要且保留最后一条，cut = %d / %d", c, len(huge))
+	}
+}
+
+// aiApproxTokens：中文按字、ASCII 按 4 字符估；只要求单调且量级正确。
+func TestAIApproxTokens(t *testing.T) {
+	if got := aiApproxTokens("你好世界"); got != 4 {
+		t.Fatalf("4 个汉字应估 4 token，实际 %d", got)
+	}
+	if got := aiApproxTokens("abcd"); got != 1 {
+		t.Fatalf("4 个 ASCII 应估 1 token，实际 %d", got)
+	}
+	if aiApproxTokens(strings.Repeat("x", 400)) <= aiApproxTokens(strings.Repeat("x", 40)) {
+		t.Fatal("token 估算必须随长度单调增长")
 	}
 }
 

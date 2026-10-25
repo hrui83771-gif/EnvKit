@@ -49,6 +49,17 @@ func TestClampKeepsShortResultVerbatim(t *testing.T) {
 	}
 }
 
+// 分档上限：诊断报告（结论型材料）留得比目录线索多。
+func TestClampUsesPerToolBudgets(t *testing.T) {
+	body := strings.Repeat("x", 2500)
+	if got := aiClampToolResult("get_diag_report", body); got != body {
+		t.Fatalf("诊断报告 3000 字节上限下 2500 字节应原样保留，实际 %d", len(got))
+	}
+	if got := aiClampToolResult("list_project", body); len(got) >= len(body) {
+		t.Fatalf("目录线索 1000 字节上限应截断 2500 字节，实际 %d", len(got))
+	}
+}
+
 func TestMenuRetryOnlyWhenActionIsKnown(t *testing.T) {
 	menu := "我可以帮你：1. 启动服务 2. 备份数据库 3. 查看日志，请问需要哪个？"
 	msgs := []aiMsg{{Role: "user", Content: "帮我备份数据库"}}

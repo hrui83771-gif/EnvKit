@@ -45,16 +45,81 @@ func aiTrimLastToolTurn(msgs []aiMsg) []aiMsg {
 	return msgs
 }
 
+// aiApproxTokens 粗估一段文本的 token 数（不引 tokenizer 依赖）。
+//
+// 用途只有一个：判断"历史是不是已经太大"。判据不需要精确到个位，
+// 但必须**单调**且对中文敏感——1 个汉字≈1 token，4 个 ASCII≈1 token。
+// 旧实现只看消息条数（24 条），一条 3000 字的工具结果和一句"好的"被当成一样大。
+func aiApproxTokens(s string) int {
+	cjk, other := 0, 0
+	for _, r := range s {
+		if r > 127 {
+			cjk++
+		} else {
+			other++
+		}
+	}
+	return cjk + (other+3)/4
+}
+
+// aiMsgTokens 一条消息的估算 token 数（含 tool_calls 参数与固定开销）。
+func aiMsgTokens(m aiMsg) int {
+	n := aiApproxTokens(m.Content) + 8
+	for _, tc := range m.ToolCalls {
+		n += aiApproxTokens(tc.Function.Arguments) + 12
+	}
+	return n
+}
+
 // aiSummaryCut 返回摘要切分点：<=0 表示无需摘要。
-// 边界量化是缓存的关键：cut 随消息增长每回合 +1~2，若直接做切分点，
-// 缓存永远不命中、每回合多一次上游调用；对 aiSumQuantum 取整后，
-// 只有累计满 6 条新消息边界才前移一次。
-func aiSummaryCut(n int) int {
-	if n <= aiSummarizeAfter {
+//
+// 两道判据叠加（v3.3）：
+//  1. **按 token 触发**：估算总量超过 aiSummaryAfterTokens 才摘要。
+//     只按条数会在"24 条小消息"时白打一次摘要调用，在"10 条巨型工具结果"时又太晚。
+//  2. **按条数量化边界**：切分点固定对齐 aiSumQuantum（6 条）。
+//     边界每来一条消息就移动的话，摘要前缀每回合都变、缓存永远不命中。
+func aiSummaryCut(msgs []aiMsg) int {
+	n := len(msgs)
+	if n <= 2 {
 		return 0
 	}
-	cut := n - aiSummarizeKeep
-	return cut - cut%aiSumQuantum
+	total := 0
+	for i := range msgs {
+		total += aiMsgTokens(msgs[i])
+	}
+	if total <= aiSummaryAfterTokens {
+		return 0
+	}
+	// 初始按"保留最近 aiSummarizeKeepMsgs 条"（与旧行为一致），再按 token 预算前移。
+	keep := aiSummarizeKeepMsgs
+	if n-keep < aiSumQuantum {
+		keep = n - aiSumQuantum
+	}
+	if keep < 1 {
+		// 历史很短但单条极重（巨型工具结果）：至少保留最新一条
+		keep = 1
+	}
+	cut := n - keep
+	cut -= cut % aiSumQuantum
+	if cut <= 0 {
+		return 0
+	}
+	// 尾部仍然过大（大工具结果）→ 每次再切 aiSumQuantum 条，宁可多压一点。
+	// 不按 1 条微调：那样切分点连续移动，摘要缓存等于没有。
+	for cut+aiSumQuantum < n {
+		tail := 0
+		for i := cut; i < n; i++ {
+			tail += aiMsgTokens(msgs[i])
+		}
+		if tail <= aiSummaryKeepTokens {
+			break
+		}
+		cut += aiSumQuantum
+	}
+	if cut >= n {
+		return 0
+	}
+	return cut
 }
 
 // aiHistoryKey 历史前缀指纹（FNV-1a）：头部内容不变 → 摘要缓存命中。
@@ -72,7 +137,7 @@ func aiHistoryKey(head []aiMsg) string {
 // aiMaybeSummarize 把 msgs 的较早部分替换成一条摘要消息；摘要失败时静默降级为原始历史
 // （宁可上下文长一点，也不能因为摘要挂掉而且回合）。
 func aiMaybeSummarize(msgs []aiMsg) []aiMsg {
-	cut := aiSummaryCut(len(msgs))
+	cut := aiSummaryCut(msgs)
 	if cut <= 0 {
 		return msgs
 	}

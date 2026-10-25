@@ -272,14 +272,18 @@ var aiActionFamilies = []struct {
 // ---------- 滚动摘要（上下文智能化） ----------
 // 痛点：客户端每回合回传全部历史，此前只做"留最近 40 条"的硬裁剪——最早的用户目标、
 // 已确认的关键操作会被无感截断，长对话里模型显得健忘、反复确认。
-// 方案：历史超过 aiSummarizeAfter 条时，把较早部分压缩成一条要点备忘放在开头，
-// 最近 aiSummarizeKeep 条原样保留。摘要结果按"前缀指纹"缓存 + 边界按 aiSumQuantum
-// 条量化，保证摘要调用频率被压到约每 3 个用户回合一次，而不是每条消息都多打一次上游。
+// 方案：历史**按估算 token** 超过阈值时，把较早部分压缩成一条要点备忘放在开头，
+// 最近一段时间原样保留。摘要结果按"前缀指纹"缓存 + 边界按 aiSumQuantum 条量化，
+// 保证摘要调用频率被压到约每 3 个用户回合一次，而不是每条消息都多打一次上游。
+//
+// v3.3：触发从"24 条消息"改成"约 5000 token"。条数会把一条 3000 字工具结果
+// 和一句"好的"当成一样大——大结果场景下摘要来得太晚，小消息场景下又白打调用。
 
 const (
-	aiSummarizeAfter = 24 // 历史超过该条数才启用摘要
-	aiSummarizeKeep  = 12 // 摘要后最近原样保留的条数
-	aiSumQuantum     = 6  // 摘要边界量化粒度（条）
+	aiSummaryAfterTokens = 5000 // 历史估算超过该值才启用摘要
+	aiSummaryKeepTokens  = 3000 // 摘要后尾部原样保留的估算上限
+	aiSummarizeKeepMsgs  = 12   // 摘要后至少原样保留的条数（最近上下文别被切碎）
+	aiSumQuantum         = 6    // 摘要边界量化粒度（条）：切分点只按 6 条前移
 )
 
 var (
@@ -332,7 +336,7 @@ func menuRetryWorth(lastUser string, msgs []aiMsg) bool {
 	return tool != ""
 }
 
-// aiClampTools 需要截断返回的工具：它们的共同点是**结果可重查**。
+// aiClampTools 需要截断返回的工具：tool → 字节上限。
 //
 // 为什么必须截：一次工具结果会永久留在历史里，并跟着后面每一轮前缀一起重算；
 // 3000 字符 ≈ 600~900 token，5 步任务就是 3~4k。而这类结果全都自带重查手段。
@@ -340,21 +344,25 @@ func menuRetryWorth(lastUser string, msgs []aiMsg) bool {
 // 为什么不截全部：`read_file` 的契约就是"把文件读给模型"，砍掉等于毁掉能力；
 // `get_system_state` / `verify_environment` 是判据来源，截成半截会让模型
 // 对着不完整的证据下结论——那比多花 token 贵得多。
-var aiClampTools = map[string]bool{
-	"get_logs": true, "db_query": true, "search_files": true,
-	"list_project": true, "get_audit_log": true, "get_diag_report": true,
+//
+// v3.3：从"所有工具一律 1200 字节"改成按信息密度分档——日志/诊断是排障主证据，
+// 给多一点；目录/搜索只是线索，少给一点。固定一刀切会让日志丢关键行、目录又太肥。
+var aiClampTools = map[string]int{
+	"get_logs":        2000,
+	"db_query":        1600,
+	"search_files":    1200,
+	"list_project":    1000,
+	"get_audit_log":   1600,
+	"get_diag_report": 3000,
 }
 
-// aiToolResultMax 可重查类工具结果的字节上限（约 400~600 token）。
-const aiToolResultMax = 1200
-
 // aiClampToolResult 截断可重查工具的返回，并把"怎么继续查"直接写给模型。
-// 只截不提示等于让它猜；提示里点名工具参数，它下一轮才知道怎么补。
 func aiClampToolResult(tool, res string) string {
-	if !aiClampTools[tool] || len(res) <= aiToolResultMax {
+	limit, ok := aiClampTools[tool]
+	if !ok || len(res) <= limit {
 		return res
 	}
-	cut := aiToolResultMax
+	cut := limit
 	for cut > 0 && (res[cut]&0xC0) == 0x80 { // 不要切在 UTF-8 续字节上，否则半个汉字入 JOSN
 		cut--
 	}
@@ -744,8 +752,17 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			if dHit+dMiss > 0 {
 				pct = 100 * float64(dHit) / float64(dHit+dMiss)
 			}
-			info(scSys, "AI", "上游 #%d：prompt=%d（hit=%d miss=%d，命中 %.1f%%）",
-				turn+1, dPrompt, dHit, dMiss, pct)
+			// 新增占比 = 本步 miss / 本次 prompt。它是"10% 预算"的直接读数：
+			// 想让命中率维持 90%，每步新增就必须压到上下文的 10% 以内。
+			newPct := 100 * float64(dMiss) / float64(dPrompt)
+			info(scSys, "AI", "上游 #%d：prompt=%d（hit=%d miss=%d，命中 %.1f%%，新增占 %.1f%%）",
+				turn+1, dPrompt, dHit, dMiss, pct, newPct)
+			// 新增过半说明前缀被打断（摘要重建 / 确认重建 / 超大工具结果）。
+			// 这是唯一值得当场报警的形态；10% 是目标值，只展示、不刷警告。
+			if turn > 0 && newPct > 50 {
+				warn(scSys, "AI", "上游 #%d 新增占 %.0f%%，前缀可能被打断（摘要/确认/大结果）",
+					turn+1, newPct)
+			}
 		}
 		if clientGone(ctx, w) {
 			warn(scSys, "AI", "客户端已断开，已中断本轮上游流式响应")
