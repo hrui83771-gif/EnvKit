@@ -282,7 +282,7 @@ const I18N_EN = {
   "回到本回合": "Back to this turn",
   "团子": "Dango",
   "在呢~": "Here~",
-  "城市，如 汕头 / Shantou": "City, e.g. Shantou",
+  "城市，如 上海 / Shanghai": "City, e.g. Shanghai",
   "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
   "备份数据库": "back up database",
   "复位断路器": "Reset breaker",
@@ -295,6 +295,9 @@ const I18N_EN = {
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
   "大肥鱼坐得住": "A chubby fish knows how to sit tight",
+  "天气数据不完整": "Incomplete weather data",
+  "天气数据格式异常": "Unexpected weather data format",
+  "天气服务返回非 200": "Weather service returned an error status",
   "天气查询没开，去个人中心打开": "Weather is off — turn it on in your profile",
   "天气没查到：": "Couldn't get the weather: ",
   "天气没查到：连不上服务": "Couldn't get the weather: service unreachable",
@@ -378,6 +381,7 @@ const I18N_EN = {
   "已开启": "Enabled",
   "已开启批量授权：{0} · 本任务内最多 {1} 次": "Batch grant opened: {0} · up to {1} more in this task",
   "已归位 ✨": "Back home ✨",
+  "已得出结论": "Reached a conclusion",
   "已恢复上次的对话（{0} 条）": "Restored previous conversation ({0} messages)",
   "已打开": "Open",
   "已执行·未确认": "Executed, not confirmed",
@@ -390,6 +394,8 @@ const I18N_EN = {
   "已收藏脚本 {0}": "Saved script {0}",
   "已整理": "Tidied",
   "已是最新": "Up to date",
+  "已有一条 AI 对话在进行中（另一个标签页？），请等它结束或点「停止」": "Another AI conversation is already running (another tab?) — wait for it or press Stop",
+  "已有一条 AI 对话在进行中，请等它结束或点「停止」": "Another AI conversation is already running — wait for it or press Stop",
   "已用批量授权执行：{0}（剩余 {1} 次）": "Executed under batch grant: {0} ({1} left)",
   "已确认，继续执行…": "Confirmed — continuing…",
   "已经加过了": "Already attached",
@@ -548,6 +554,7 @@ const I18N_EN = {
   "服务 未启动": "Services stopped",
   "服务 未复验": "Services unverified",
   "服务 运行中": "Services running",
+  "服务启停": "Service start/stop",
   "服务商": "Provider",
   "服务商与密钥": "Provider & API key",
   "服务商返回 HTTP {0}": "Provider returned HTTP {0}",
@@ -594,6 +601,7 @@ const I18N_EN = {
   "杀软：第三方": "AV: third-party",
   "松手交给我~": "Drop it to me~",
   "构建并启动": "Build & start",
+  "构造请求失败": "Couldn't build the request",
   "查看天气": "Show weather",
   "查看日志": "View logs",
   "查看结果": "view result",
@@ -602,6 +610,7 @@ const I18N_EN = {
   "查询中（探测官方最新版本，约几秒）...": "Checking the upstream latest version (a few seconds)…",
   "查询失败：{0}": "Query failed: {0}",
   "查询完成。升级完成后点「检查更新」刷新状态。": "Done. Click “Check for updates” after upgrading to refresh.",
+  "查询超时": "Query timed out",
   "标「已失效」的项目/环境变了，该条不会注入——失效不删除，因为你需要知道它为什么不再被采纳。": "Items marked Stale changed project/environment and are no longer injected. Stale items are not deleted, so you can see why they stopped being applied.",
   "标签": "Tags",
   "标签（可选）": "Tags (optional)",
@@ -627,6 +636,7 @@ const I18N_EN = {
   "模型地址不存在（HTTP 404）：检查 Base URL 是否少了 /v1 或多了路径": "Models endpoint not found (HTTP 404): check the Base URL — usually a missing /v1 or an extra path segment",
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
   "次数": "Hits",
+  "正在压缩较早的对话历史（一次性，约十几秒）…": "Compacting earlier conversation history (one-time, ~10s)…",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
   "正在检测…": "Detecting…",
   "正在退出…": "Exiting…",
@@ -681,8 +691,8 @@ const I18N_EN = {
   "留空 = 0.3（部分模型只接受 1，会自动适配）": "Empty = 0.3 (some models only accept 1; auto-adapted)",
   "留空 = 由 EnvKit 按项目结构自动推断": "Leave blank to auto-detect from the project structure",
   "留空=同 SSH 主机": "Empty = same as SSH host",
-  "留空则按网络位置猜测": "Leave blank to guess from your network location",
   "留空则用私钥": "Empty = use private key",
+  "留空则用默认城市（上海）": "Leave blank to use the default city (Shanghai)",
   "目录 · 数据库 · 依赖": "Directories · Database · Deps",
   "目录与库": "Directories & DB",
   "目标": "Target",
@@ -801,7 +811,9 @@ const I18N_EN = {
   "请输入要执行的命令": "Type a command to run",
   "读取中": "Loading",
   "读取中…": "Reading…",
+  "读取天气数据失败": "Couldn't read the weather data",
   "读取失败": "Failed to load",
+  "读取失败：{0}": "Failed to read: {0}",
   "读取审计…": "Loading audit…",
   "读取文件失败：": "Failed to read file: ",
   "读取日志": "read logs",
@@ -810,6 +822,7 @@ const I18N_EN = {
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
+  "账户已停用": "Account disabled",
   "起飞咯——": "Takeoff —",
   "跟上你的鼠标": "I'll follow your cursor",
   "跟随鼠标": "Follow cursor",
@@ -849,6 +862,7 @@ const I18N_EN = {
   "远程执行命令": "Run remote command",
   "远程目录（Linux · 经 SSH）：": "Remote directory (Linux · over SSH):",
   "连不上": "Unreachable",
+  "连不上天气服务，请检查网络或代理": "Couldn't reach the weather service — check your network or proxy",
   "连接中断：": "Connection lost: ",
   "连接失败": "Connection failed",
   "连接成功": "Connected",
@@ -1218,6 +1232,9 @@ function configBody(){
     /* ai 由「AI 助手」页单独保存（/api/ai/config）：这里必须原样回传，
        否则程序配置页的自动保存会把 API Key 抹掉（后端也有兜底合并） */
     ai:cfg.ai
+    /* pet（桌宠天气）**不回传**：它同样由独立接口 /api/pet/config 保存，
+       且表单页没有对应控件。后端 mergeFormConfig 会无条件保留 cur.Pet，
+       两侧都别改 —— 少了任何一侧，改一下"安装目录"就会把天气开关抹成关闭 */
   };
 }
 function markDirty(){
@@ -1529,14 +1546,23 @@ function ekGreetText(){
   const won  = document.getElementById('pet-weather-on');
   const wcity = document.getElementById('pet-weather-city');
   const wwrap = document.getElementById('pet-weather-city-wrap');
-  let wSaveTimer = null;
+  /* 保存合并：开关和城市共用一个"待发补丁"，而不是各自一个定时器。
+     旧实现是"清掉上一个再排新一个"——用户输完城市在几百毫秒里点了开关，
+     开关那次保存就被城市的回调取消掉了：界面显示已切换，落盘的还是旧值，
+     刷新后开关"自己弹回去"。现在每次推新补丁是**合并字段**，谁都不会顶掉谁。 */
+  let wPending = null, wSaveTimer = null;
   function petCfgPush(patch){
+    wPending = Object.assign({}, wPending, patch);
     clearTimeout(wSaveTimer);
     wSaveTimer = setTimeout(async ()=>{
+      const body = wPending; wPending = null;
       try{
-        const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+        const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         if(!r.ok) throw new Error('http ' + r.status);
-      }catch(e){ toast(t('桌宠设置没保存成功'), 'err'); }
+      }catch(e){
+        wPending = Object.assign({}, body, wPending); // 保存失败把补丁还回去，下次改动时一并重发，别静默丢
+        toast(t('桌宠设置没保存成功'), 'err');
+      }
     }, 400);
   }
   function petWeatherFromPanel(){
@@ -1562,11 +1588,9 @@ function ekGreetText(){
     });
   }
   if(wcity){
-    // 输入防抖：每敲一个字存一次太吵，停手 600ms 再落盘
-    wcity.addEventListener('input', ()=>{
-      clearTimeout(wcity._t);
-      wcity._t = setTimeout(()=> petCfgPush({weather_city: wcity.value}), 600);
-    });
+    // 不再自己套一层 600ms 定时器：petCfgPush 已经在做防抖，两层叠加会让
+    // "停手到落盘"变成 1 秒；直接推给它即可。
+    wcity.addEventListener('input', ()=> petCfgPush({weather_city: wcity.value}));
   }
 })();
 
@@ -3869,9 +3893,18 @@ const AI_BATCH_TOOLS = {start_service:1, stop_service:1, restart_service:1};
 function aiOpen(){ $ai('ai-drawer').classList.add('open'); $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight; petShift(true);
   // 放大态：打开时把当前 tab 重画一遍（轨迹是流式追加的，重开抽屉要能接上）
   if(aiBigOn){ if(aiSideTab === 'trace') aiTraceRender(); if(aiSideTab === 'usage') aiUsageRender(); }
+  // 焦点跟进输入框：抽屉是类 dialog 的浮层，打开后键盘焦点若留在下面的页面，
+  // Tab 会"穿"到看不见的元素上（键盘用户直接迷路）。
+  try{ $ai('ai-in').focus(); }catch(_){}
 }
 $ai('ai-close').onclick = ()=>{ $ai('ai-drawer').classList.remove('open'); aiPickClose(); petShift(false); };
-$ai('ai-clear').onclick = ()=>{ aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
+$ai('ai-clear').onclick = ()=>{
+  // 正在流式输出时点清空：必须先掐断流。不清的话，后续 SSE 事件会继续往
+  // 已脱离文档的孤儿节点上贴卡片（表现为"清空后凭空冒出确认卡"），
+  // aiBusy 也仍然为 true 直到流自然结束。
+  if(aiCtrl){ try{ aiCtrl.abort(); }catch(_){} aiCtrl = null; }
+  if(aiPending){ try{ aiPending.card.remove(); }catch(_){} aiPending = null; }
+  aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
   aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat(''); };
 
 /* ---------- 彻底隐藏桌面助手（AI 设置页勾选项，localStorage 记忆） ---------- */
@@ -3923,6 +3956,13 @@ async function aiBalanceRefresh(){
     else { aiBal = {state:'err', total:'', currency:'', available:null}; }
   }catch(e){ aiBal = {state:'err', total:'', currency:'', available:null}; }
 }
+/* j.available 是 DeepSeek 的 is_available：false = 账户被停用/欠费冻结，
+   此时余额数字再好看也调不动模型。显示上必须把它单独说出来，
+   否则用户看到"余额 ¥12.5"以为一切正常，实际每次请求都被上游拒。 */
+function aiBalText(){
+  const base = aiBal.currency === 'CNY' ? t('余额 ¥{0}', aiBal.total) : t('余额 {0} {1}', aiBal.total, aiBal.currency);
+  return (aiBal.available === false) ? base + ' · ' + t('账户已停用') : base;
+}
 function petUsageRender(){
   const box = document.getElementById('pet-tipUsage'); if(!box) return;
   const u = aiUsageAcc();
@@ -3940,7 +3980,8 @@ function petUsageRender(){
   }
   const l3 = document.createElement('span');
   if(aiBal.state === 'ok'){
-    l3.textContent = (aiBal.currency === 'CNY' ? t('余额 ¥{0}', aiBal.total) : t('余额 {0} {1}', aiBal.total, aiBal.currency));
+    l3.textContent = aiBalText();
+    if(aiBal.available === false) l3.style.color = 'var(--muted)';
   } else if(aiBal.state === 'no'){
     l3.textContent = t('仅 DeepSeek 支持');
     l3.style.color = 'var(--muted)';
@@ -3988,6 +4029,11 @@ function aiFill(d, text, opts){
 function aiAdd(cls, text, ts, reask){
   const d = document.createElement('div');
   d.className = 'ai-msg ' + cls;
+  /* data-no-i18n：模型/用户的原文不进翻译管线。
+     两个收益：① 全局 i18n Observer 不再对每次流式 innerHTML 重建后的新子树
+     整棵重扫（长回答下这是 O(n) 每帧，体感卡顿）；② 模型输出恰好和字典键
+     撞车时不会被"顺手"翻成英文。静态界面文案照常翻译（它们不在这个容器里）。 */
+  d.setAttribute('data-no-i18n', '');
   if(aiTsOk(ts)) d.dataset.ts = ts;
   // 本回合第一条助手消息：确认续接轮会再建一条，轨迹要挂回第一条才不会缺前半段
   if(cls === 'ai' && !aiTurnAnchor) aiTurnAnchor = d;
@@ -3996,6 +4042,7 @@ function aiAdd(cls, text, ts, reask){
     // 复制给用户的也必须是剥干净的文本——结论块是调试信息，不进剪贴板
     d.dataset.raw = aiStripVerdict(text || '');
     const w = document.createElement('div'); w.className = 'ai-wrap';
+    w.setAttribute('data-no-i18n', '');
     w.appendChild(d);
     w.appendChild(aiToolbar(d, reask));
     $ai('ai-msgs').appendChild(w);
@@ -4131,7 +4178,11 @@ function aiHighlight(root){
     });
   }catch(e){}
 }
-function aiErr(t){ aiAdd('err', t); }
+/* aiErr(msg)：参数名不能叫 t —— 那会遮蔽 i18n 的全局 t()，同作用域里
+   一旦调用 t('…') 就变成对字符串取下标，静默返回 undefined。
+   t(msg)：后端推下来的错误文案是中文原文，英文界面下按词表翻译；
+   查不到的键 t() 原样返回，不会更糟。 */
+function aiErr(msg){ aiAdd('err', t(msg)); }
 
 /* ---------- 对话历史持久化：localStorage 存取，刷新/重开页面不丢 ---------- */
 function aiHistSave(){
@@ -4226,7 +4277,10 @@ function aiTraceEvent(ev){
       {detail: ev.target ? ('target: ' + ev.target) : ''});
   } else if(ev.type === 'tool_result'){
     const rs = String(ev.result || '');
-    const bad = /^(错误|执行出错)|失败|拒绝|不在白名单/.test(rs);
+    /* 成败判据优先用服务端的 ok 字段（v3.3 起 tool_result 带上）。
+       旧的中文正则只作旧版本后端的兜底 —— 它连 "connection refused"
+       这种英文报错都标不红，而且和"前端不重新判定结果"的原则相悖。 */
+    const bad = (typeof ev.ok === 'boolean') ? !ev.ok : /^(错误|执行出错)|失败|拒绝|不在白名单/.test(rs);
     aiTraceAdd('result', aiToolName(ev.tool), {cls: bad ? 'bad' : '', detail: rs});
   } else if(ev.type === 'verify_result'){
     aiTraceAdd('ver', ev.ok ? (ev.verified ? t('已复验通过') : t('已执行·未确认')) : t('复验未通过'), {
@@ -4480,7 +4534,9 @@ function aiUsageCard(u, title, note){
   row(t('缓存命中'), pct === null ? '—' : pct.toFixed(1) + '%', pct !== null && pct >= 50 ? 'hi' : '');
   row(t('未缓存输入'), aiNum(uncached) + ' tok');
   row(t('缓存读取'), aiNum(hit) + ' tok');
-  row(t('缓存写入'), '0 tok');
+  // 「缓存写入」行已删除（v3.3）：后端 usage 里根本没有这个字段，
+  // 原来那行 '0 tok' 是画出来的假数据 —— 展示一个永远为 0 的编造值，
+  // 不如不展示（DeepSeek 的计费说明已在卡片底部的 note 里）。
   row(t('输出'), aiNum(out) + ' tok');
   if(note){ const n = document.createElement('div'); n.className = 'uc-note'; n.textContent = note; card.appendChild(n); }
   return card;
@@ -4723,10 +4779,13 @@ async function aiDecide(approved){
       if(j && j.ok) return;   // 同一个流会继续吐 delta / tool_result / usage
     }
   }catch(_){}
-  // 兜底：404=没有等待者（旧版本、已超时、或卡来自旧路径）→ 走回原路
+  // 兜底：404=没有等待者（旧版本、已超时、或卡来自旧路径）→ 走回原路。
+  // 这里原来是"abort → 睡 150ms 等旧流的 finally 复位 aiBusy → 不 await 地开新流"。
+  // 150ms 是竞态赌注：旧流 finally 晚于它执行就会把新流刚设的 aiBusy/按钮态冲掉。
+  // v3.3 起 aiConsume 有代际计数（aiGen）：新流一开跑，旧流的 finally 就无权复位，
+  // 睡眠可以整个删掉。
   if(aiCtrl){ try{ aiCtrl.abort(); }catch(_){} }
-  await new Promise(r=>setTimeout(r, 150));   // 等旧回合的 finally 把 aiBusy 复位
-  aiConsume('/api/ai/chat', {messages: aiMessages,
+  await aiConsume('/api/ai/chat', {messages: aiMessages,
     confirm: {tool_call_id: p.id, tool: p.tool, args: p.args || {}, approved: !!approved, batch: wantBatch}});
 }
 
@@ -5084,7 +5143,14 @@ const AI_TOOL_CN = {get_system_state:'读取环境状态', get_logs:'读取日�
   restart_service:'重启服务', apply_whitelist:'加入 Defender 白名单', db_check:'检测数据库连接',
   cleanup_processes:'清理后台进程', get_project_brief:'读取项目画像', list_project:'查看项目目录',
   search_files:'搜索项目文件', read_file:'读取项目文件', verify_environment:'复验环境状态',
-  sync_chain_ip:'同步链地址到 config.toml'};
+  sync_chain_ip:'同步链地址到 config.toml',
+  // v3.3 补漏：以下 9 个工具后端注册表里真实存在，此前没进这张表 ——
+  // 中文界面上它们会以英文裸名出现在轨迹/确认卡里（"→ db_query"）。
+  db_query:'只读查询业务数据库', db_list:'列出数据库与表',
+  get_audit_log:'读取审计日志', list_backups:'列出备份',
+  get_env_snapshot:'读取环境快照', check_env_req:'检查项目版本要求',
+  get_chain_guard:'读取链守护状态', recall_lessons:'检索经验教训',
+  manage_memories:'管理长期记忆'};
 function aiToolName(name){ return t(AI_TOOL_CN[name] || name) + '（' + name + '）'; }
 
 // v2.9：把 verify_environment 的客观结果渲染成状态徽章。
@@ -5122,7 +5188,12 @@ function aiRenderVerify(ev){
   const head = document.createElement('div'); head.className = 'v-head';
   const b = document.createElement('span'); b.className = 'v-badge'; b.textContent = badge;
   head.appendChild(b);
-  const tgt = document.createElement('span'); tgt.textContent = aiToolName('verify_environment').replace(/（[^）]*）$/, '');
+  /* 归因要用后端专门传来的 ev.tool：v3.0 让 start/restart_service 的
+     "启动即复验"也发 verify_result 并带上 tool 字段，就是为了让下游分辨
+     这条结论是哪次动作产生的。写死 verify_environment 会把归因丢掉
+     （用户看到「复验环境：已复验通过」，其实是「重启后端」的复验）。 */
+  const tgt = document.createElement('span');
+  tgt.textContent = aiToolName(ev.tool || 'verify_environment').replace(/（[^）]*）$/, '');
   head.appendChild(tgt);
   if(ev.msg){
     const m = document.createElement('span'); m.className = 'v-msg'; m.textContent = ev.msg;
@@ -5143,9 +5214,15 @@ function aiRenderVerify(ev){
 }
 
 let aiCtrl = null;      // AbortController：手动"停止生成"用
+// aiGen 代际计数：abort 旧流后立刻开新流（确认投递失败的兜底路径就是这样），
+// 旧流的 finally 若晚于新流执行，会把新流刚设的 aiBusy/按钮态冲掉——
+// 流式进行中输入框又可再发一条，两条流交错往同一容器贴消息。
+// 规则：finally 里先比对代际，不是当前代就整段跳过复位。
+let aiGen = 0;
 let aiPending = null;   // {asst, card}：待确认的写操作卡片。用户无视卡片直接发新消息时清理悬挂回合
 
 async function aiConsume(path, body){
+  const gen = ++aiGen;   // 本次流的代际：finally 里只有当代际匹配才允许复位全局态
   aiOpen(); aiBusy = true; $ai('ai-send').disabled = true; $ai('ai-stop').style.display = '';
   petAIState('thinking');   // 桌宠联动：立即进思考态（确认后续接轮也走这里，状态从 confirm → thinking）
   body = Object.assign({}, body || {}, {lang: EK_LANG});   // 让助手跟随界面语言作答
@@ -5164,7 +5241,7 @@ async function aiConsume(path, body){
   // 触发本回合的那条用户原话——回合末尾工具栏的「重新提问」用它
   let reaskText = '';
   for(let i = aiMessages.length - 1; i >= 0; i--){ if(aiMessages[i] && aiMessages[i].role === 'user'){ reaskText = String(aiMessages[i].content || ''); break; } }
-  let think = null, rsnText = '', rsnEl = null, renderQueued = false;
+  let think = null, rsnText = '', rsnEl = null, renderQueued = false, rsnQueued = false;
   // v2.3 N5：计划面板。同一轮里所有步骤归到一个可折叠块内，
   // 结束后自动收起——用户中途能看，收完不占屏。
   let planEl = null, planList = null, planN = 0;
@@ -5236,10 +5313,41 @@ async function aiConsume(path, body){
     aiCtrl = new AbortController();
     // 声明"我发了多少字节"：服务端据此判断请求体是**没到**还是**被截断**。
     // 长度按 UTF-8 字节算（不是 JS 的字符数，中文一个字 3 字节，用字符数会假报不符）。
-    const _bodyStr = JSON.stringify(body);
+    //
+    // 发送前裁剪 + 剥冗余字段（v3.3）：aiMessages 只在**落盘**时截 60 条，内存里
+    // 一个长会话是无限增长的——每轮都整体 JSON.stringify 两次（长度头 + body），
+    // 请求体随会话线性膨胀。后端反正会裁到 40 条，客户端先裁到 60 条再发，
+    // 省的是传输与两侧序列化的钱。ts 是前端本地渲染时间戳用的，后端 aiMsg
+    // 没有该字段，纯浪费字节。tool_calls / reasoning_content 必须保留——
+    // 思考型模型要求原样回传，确认续接路径靠 tool_calls 对齐。
+    const _msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-60).map(m => {
+      const o = {role: m.role, content: String(m.content == null ? '' : m.content)};
+      if(m.reasoning_content) o.reasoning_content = m.reasoning_content;
+      if(m.tool_calls) o.tool_calls = m.tool_calls;
+      if(m.tool_call_id) o.tool_call_id = m.tool_call_id;
+      if(m.name) o.name = m.name;
+      return o;
+    });
+    const _bodyStr = JSON.stringify(Object.assign({}, body, {messages: _msgs}));
     const _bodyLen = new TextEncoder().encode(_bodyStr).length;
-    const resp = await fetch(path, {method:'POST', signal: aiCtrl.signal, headers:{'Content-Type':'application/json', 'X-EnvKit-Body-Len': String(_bodyLen), 'X-EnvKit-Chat-Fallback': encodeURIComponent(JSON.stringify(fb))}, body: _bodyStr});
-    if(!resp.ok){ const t = await resp.text(); aiErr(t); return; }
+    /* 整体超时兜底：后端的 aiTurnTimeout 是**每轮** 6 分钟，多轮任务叠加可以
+       让界面转十几分钟，期间唯一逃生是手点「停止」。这里给整条请求设 15 分钟
+       硬上限，到点自动 abort，界面至少会说出"连接中断"而不是永远三点动画。
+       AbortSignal.any 在老浏览器不存在 → 手动联动两个信号。 */
+    const _deadline = AbortSignal.timeout ? AbortSignal.timeout(15*60*1000) : null;
+    const _sig = (_deadline && AbortSignal.any) ? AbortSignal.any([aiCtrl.signal, _deadline]) : aiCtrl.signal;
+    if(_deadline && !AbortSignal.any){
+      _deadline.addEventListener('abort', ()=>{ try{ aiCtrl.abort(); }catch(_){} }, {once:true});
+    }
+    const resp = await fetch(path, {method:'POST', signal: _sig, headers:{'Content-Type':'application/json', 'X-EnvKit-Body-Len': String(_bodyLen), 'X-EnvKit-Chat-Fallback': encodeURIComponent(JSON.stringify(fb))}, body: _bodyStr});
+    if(!resp.ok){
+      /* 后端失败时回的是 JSON（如 {"type":"error","text":"AI 助手未配置：…"}），
+         直接把 resp.text() 甩到气泡里 = 用户看到一整行 JSON。
+         解出 text 字段；结构对不上就退回到状态码，至少是句人话。 */
+      let msg = 'HTTP ' + resp.status;
+      try{ const j = await resp.json(); if(j && j.text) msg = j.text; }catch(_){}
+      aiErr(msg); return;
+    }
     const reader = resp.body.getReader(); const dec = new TextDecoder();
     let buf = '';
     // 流式渲染节流：每个 delta 全量 innerHTML 重排是 O(n²)，合并到每帧一次。
@@ -5280,13 +5388,16 @@ async function aiConsume(path, body){
             if(!rsnEl || rsnEl.parentNode !== think){
               rsnEl = document.createElement('div'); rsnEl.className = 'ai-think-txt'; think.appendChild(rsnEl);
             }
-            rsnEl.textContent = '…' + rsnText.slice(-140);
-            $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+            /* 与正文同一个 rAF 节流：思考流一次回合能来上千条，逐条
+               textContent + scrollTop 是强制同步布局，网络 pace 会直接打到
+               layout 上（比正文流更糟，正文好歹合并过）。 */
+            if(!rsnQueued){ rsnQueued = true; requestAnimationFrame(()=>{
+              rsnQueued = false;
+              if(!rsnEl || rsnEl.parentNode !== think) return; // 气泡被删：放弃这次写入
+              rsnEl.textContent = '…' + rsnText.slice(-140);
+              $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+            }); }
           }
-        } else if(ev.type === 'tool_call'){
-          dropThink();
-          petAIState('busy');
-          aiAdd('sys', '\u2192 ' + aiToolName(ev.tool));
         } else if(ev.type === 'plan_start'){
           // v2.3 N5：开跑前告诉用户这一轮的上限与理由。
           // 以前是静默开始、跑到 8 轮静默停下，用户两头都不知道。
@@ -5302,8 +5413,13 @@ async function aiConsume(path, body){
           planExtend(ev.max_turns, ev.reason);
         } else if(ev.type === 'tool_result'){
           dropThink();
+          petAIState('busy'); // 桌宠联动：工具真正在执行了。原来这行挂在死的 tool_call 分支上（后端从不发那个事件），等于从没生效过
           const d = document.createElement('details'); d.className = 'ai-tool';
-          const sm = document.createElement('summary'); sm.textContent = '\u2713 ' + aiToolName(ev.tool) + ' \u00b7 ' + t('查看结果');
+          /* 图标跟服务端 ok 走：失败还顶着绿勾是最糟的一种误导
+             （用户扫一眼觉得"工具都成功了"，实际全是红字）。 */
+          const tokOk = (typeof ev.ok === 'boolean') ? ev.ok : true;
+          const sm = document.createElement('summary');
+          sm.textContent = (tokOk ? '\u2713 ' : '\u2717 ') + aiToolName(ev.tool) + ' \u00b7 ' + t('查看结果');
           const pre = document.createElement('pre'); pre.textContent = ev.result || '';
           d.appendChild(sm); d.appendChild(pre);
           $ai('ai-msgs').appendChild(d);
@@ -5350,6 +5466,9 @@ async function aiConsume(path, body){
           btns.appendChild(by); btns.appendChild(bn); card.appendChild(btns);
           $ai('ai-msgs').appendChild(card);
           $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+          // 键盘可达：卡弹出后把焦点放到"确认执行"，Tab 两次就能批/拒。
+          // 不移焦点的话，键盘用户要从输入框 Tab 过十几步才能摸到这两个按钮。
+          try{ by.focus(); }catch(_){}
           aiPending = {asst, card, id: ev.tool_call_id, tool: ev.tool, args: ev.args || {},
             batchOf: ()=> !!(batchBox && batchBox.checked)};
           aiHstat(t('等你确认'));
@@ -5388,6 +5507,16 @@ async function aiConsume(path, body){
           aiTraceAdd('grant', t('批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left), {cls:''});
           aiAdd('sys', t('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left));
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
+        } else if(ev.type === 'info'){
+          // 服务端阶段性提示（如"正在压缩较早的对话历史"）：换掉思考气泡的文案。
+          // 不发这种提示时，摘要那次前置调用最长 60s 里用户只看到三点动画，
+          // 第一反应就是"卡死了"去刷新，白烧一次 token。
+          dropThink(); mkThink();
+          const tip = document.createElement('div'); tip.className = 'ai-think-txt';
+          // 后端发的是中文原文；t() 查不到键时原样返回，不会更糟
+          tip.textContent = t(ev.text || '');
+          think.appendChild(tip);
+          $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
         } else if(ev.type === 'error'){
           dropThink(); aiErr(ev.text);
         }      }
@@ -5399,12 +5528,16 @@ async function aiConsume(path, body){
       const fin = {role:'assistant', content: curText}; if(rsnText) fin.reasoning_content = rsnText; if(curTs) fin.ts = curTs; aiMessages.push(fin);
     }
   }catch(e){
+    if(gen !== aiGen) return; // 已有新流开跑：这次 abort 是被取代的旧流，别再贴"已停止"消息
     if(e && e.name === 'AbortError'){ aiAdd('sys', t('已停止生成')); }
     else { if(think && think.parentNode) think.remove(); aiErr(t('连接中断：') + e); }
   }
   finally{
-    if(think && think.parentNode) think.remove();
-    aiBusy = false; aiCtrl = null;
+    // 只有**当代际**才复位全局态：旧流晚到的 finally 不能把新流的
+    // aiBusy/按钮态冲掉（那会让输入框在流式中途重新可用，两条流交错贴消息）。
+    if(gen === aiGen){
+      if(think && think.parentNode) think.remove();
+      aiBusy = false; aiCtrl = null;
     // 轨迹与用量**挂到消息元素上**：工具栏的「轨迹/导出」按元素取，
     // 不依赖"当前指向哪一轮"的全局指针——用户回头看历史回合时才不会串。
     const _dur = aiTurnStartAt ? (Date.now() - aiTurnStartAt) : 0;
@@ -5427,6 +5560,7 @@ async function aiConsume(path, body){
     aiHistSave();   // 回合结束落盘（含确认卡决定后的回合）
     // 回合结束：思考/干活状态回待机；等确认或出错的状态保留（由用户决定/看日志后复位）
     petAIIdle();
+    } // if(gen === aiGen)
   }
 }
 /* 手动停止：中断上游流式请求（服务端检测到断开会同步中止） */
@@ -5438,14 +5572,10 @@ $ai('ai-send').onclick = async ()=>{
   if(!raw) return;
   // 已选文件只以"路径引用"的形式并入这条消息（读取由 read_file 在沙箱内完成）
   const tx = aiFileRef() + raw;
-  // 用户无视确认卡片直接发新消息：把悬挂的 assistant(tool_calls) 从历史里剥掉，
-  // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
-  if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
   $ai('ai-in').value = '';
-  const sendTs = aiNow();
-  aiAdd('user', tx, sendTs);
-  aiMessages.push({role:'user', content:tx, ts:sendTs});
-  await aiConsume('/api/ai/chat', {messages: aiMessages});
+  // 复用 aiSendText（剥悬挂卡、记时间戳、进历史、起流式回合都在里面）——
+  // 这里原先把那套动作又抄了一遍，改一处漏一处的事故已经发生过一次。
+  await aiSendText(tx);
 };
 $ai('ai-in').addEventListener('keydown', e=>{
   // isComposing：中文输入法里按 Enter 是确认候选词，不是发送（否则拼音还没上屏消息就飞出去了）
@@ -5473,6 +5603,7 @@ async function aiAnalyzeError(){
 
 /* 诊断报告 AI 解读 */
 $ai('btn-ai-explain').onclick = ()=>{
+  if(aiBusy) return;   // 连点两次会并发两条流（aiConsume 入口原本不设防）
   aiMessages = [];
   aiConsume('/api/ai/explain', {});
 };

@@ -343,9 +343,8 @@
   #pet.dragging{cursor:grabbing;z-index:9999}
   #pet.shifted{right:calc(min(436px,96vw) + 10px)}
   #pet.drop-hint{filter:brightness(1.25) drop-shadow(0 0 6px rgba(255,255,255,.25))}
-  #pet.dot{transform:scale(.16) translateY(260px);opacity:.55}
-  #pet.dot:hover{transform:scale(.16) translateY(260px);opacity:.55}   /* 小圆点不展开，点击恢复 */
-  #pet.dot .pshadow,#pet.dot .pet-fx,#pet.dot .pet-bubble{display:none}
+  /* 「缩成小圆点」已在 12393ac 移除（菜单项/JS/CSS/i18n 一并删），
+     现在只有「收起一会儿」(.min) —— hover 会放大回来，不会"找不到它" */
   #pet.min{transform:scale(.16) translateY(260px);opacity:.55}
   #pet.min:hover{transform:scale(.55) translateY(60px);opacity:1}
   #petSvg{overflow:visible;transform:scale(var(--pet-scale,1));transform-origin:50% 100%;transition:transform .28s ease-out,opacity .18s linear}
@@ -470,6 +469,10 @@
   .pet-ctx{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;display:none;min-width:150px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
   .pet-ctx.show{display:block}
   .pet-ctx button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-size:13px;padding:8px 12px;border-radius:7px;cursor:pointer}
+  /* 必须比 .pet-ctx button 更具体，否则盖不住它：[hidden] 的 UA 默认规则
+     （display:none）会被这条作者规则覆盖掉，表现为"天气没开，菜单里却一直
+     有个『查看天气』，点了没反应"。hidden 属性只能靠显式规则压回来。 */
+  .pet-ctx button[hidden]{display:none}
   .pet-ctx button:hover{background:var(--soft2)}
   .pet-ctx .sep{height:1px;background:var(--line);margin:4px 6px}
   #ai-drawer{display:none;position:fixed;top:0;right:0;bottom:0;width:min(430px,94vw);background:var(--card);border-left:1px solid var(--line);z-index:65;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
