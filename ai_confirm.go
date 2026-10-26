@@ -286,6 +286,7 @@ func aiConfirmApply(w http.ResponseWriter, fl http.Flusher, tool string, d aiCon
 	// 工具名是动作，不是结论——同一个 start_service 也可能返回
 	// 「起来了但没证明恢复」。判据必须读结论。
 	if vr, ok := aiTakeVerify(); ok {
+		aiMissionVerify(vr) // 写工具走确认续跑时，复验结论同样要给行动记账
 		sseWrite(w, fl, aiVerifyEvent(tool, vr))
 	}
 	if err != nil {

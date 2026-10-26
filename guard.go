@@ -265,6 +265,9 @@ func guardOne(svc Service, all []Service, failed map[string]Observation, first b
 		guardMark("recover", "已拉起但复验未完成："+vr.Msg, false)
 		warn(scSys, "守护", "%s 已拉起但复验未完成：%s", svc.Label, vr.String())
 		svcRecordCrash(svc.ID, errKindVerifyFail, firstLines(vr.Msg, 120), 0)
+		// 升级为待批行动候选（Phase 1 T5）：guard 快路径不改，
+		// 这里只把「接不住的事件」准备好等人批（红线 2）。
+		missionFromGuard(svc.ID, svc.Label+"恢复待确认", "已拉起但复验未通过："+vr.Msg)
 		if svc.Guard.Notify {
 			alertDispatch(svc.Label+"恢复待确认", "已拉起但复验未通过："+vr.Msg)
 		}
@@ -272,6 +275,8 @@ func guardOne(svc Service, all []Service, failed map[string]Observation, first b
 		guardMark("recover", "自动恢复失败："+vr.Msg, false)
 		fail(scSys, "守护", "%s 自动恢复失败：%s", svc.Label, vr.String())
 		svcRecordCrash(svc.ID, vr.ErrKind, firstLines(vr.Msg, 120), 0)
+		// 同上：恢复失败也升级为候选（去重见 missionFromGuard）
+		missionFromGuard(svc.ID, svc.Label+"恢复失败", "自动恢复失败："+vr.Msg)
 		if svc.Guard.Notify {
 			alertDispatch(svc.Label+"恢复失败", "自动重启未成功，请打开 EnvKit 检查")
 		}

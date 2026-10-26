@@ -68,6 +68,10 @@ type aiChatReq struct {
 	Messages []aiMsg       `json:"messages"`
 	Confirm  *aiConfirmReq `json:"confirm,omitempty"`
 	Lang     string        `json:"lang,omitempty"` // 界面语言（zh/en）：让模型用同一种语言回答
+	// MissionID 绑定的行动 ID（Phase 1）：非空时本回合是该行动的执行回合，
+	// 步骤与复验结论落盘、回合结束按结局收口（见 ai_mission.go）。
+	// 为空 = 普通对话，不产生行动记录。
+	MissionID string `json:"mission_id,omitempty"`
 }
 
 // aiLangDirective 让助手跟随界面语言作答（仅英文界面时需要额外指令，

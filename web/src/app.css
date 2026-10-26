@@ -679,6 +679,30 @@
   .us-bars{display:flex;align-items:flex-end;gap:3px;height:44px;margin:6px 0 4px;justify-content:flex-start}
   .us-bar{flex:0 1 26px;max-width:26px;background:var(--brand);opacity:.55;border-radius:2px 2px 0 0;min-height:1px}
   .us-bar:hover{opacity:1}
+  /* 行动（Mission）：一行 = 徽章 + 来源 + 时间 + 目标 + 说明 + 操作。
+     状态色只由服务端字段映射（AI_MS_CLS），前端不重新判定成败（红线 1）。 */
+  .ai-ms-row{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;border:1px solid var(--line);margin-bottom:6px}
+  .ai-ms-row.run{border-color:var(--info)}
+  .ai-ms-row.warn{border-left:3px solid var(--warn)}
+  .ai-ms-row.ok{border-left:3px solid var(--ok)}
+  .ai-ms-row.bad{border-left:3px solid var(--err)}
+  .ai-ms-row.dim{opacity:.6}
+  .ai-ms-main{flex:1;min-width:0}
+  .ai-ms-head{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .ai-ms-badge{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid currentColor;flex:none;line-height:1.5}
+  .ai-ms-badge.ok{color:var(--ok)}
+  .ai-ms-badge.bad{color:var(--err)}
+  .ai-ms-badge.warn{color:var(--warn)}
+  .ai-ms-badge.run{color:var(--info)}
+  .ai-ms-badge.dim{color:var(--muted)}
+  .ai-ms-kind{font-size:10px;flex:none}
+  .ai-ms-at{font-size:10px;margin-left:auto;font-variant-numeric:tabular-nums;flex:none}
+  .ai-ms-goal{color:var(--text);word-break:break-word;margin-top:2px}
+  .ai-ms-note{font-size:11px;word-break:break-word;margin-top:2px}
+  .ai-ms-acts{display:flex;flex-direction:column;gap:4px;flex:none}
+  .ai-ms-acts button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:11px;padding:2px 9px;cursor:pointer;white-space:nowrap}
+  .ai-ms-acts button:hover{color:var(--brand)}
+  .ai-ms-acts button.danger:hover{color:var(--err);border-color:var(--err)}
   /* 选中待引用的文件 */
   .ai-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 6px}
   .ai-chips[hidden]{display:none}

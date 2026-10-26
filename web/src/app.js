@@ -312,6 +312,25 @@ const I18N_EN = {
   "守护": "Guard",
   "守护运行状态": "Guard runtime status",
   "守护间隔": "Guardian interval",
+  "行动": "Actions",
+  "巡检": "Patrol",
+  "晨报": "Morning brief",
+  "入站": "Inbound",
+  "手动": "Manual",
+  "待执行": "Queued",
+  "待确认": "Awaiting confirm",
+  "待你继续": "Waiting for you",
+  "已取消": "Canceled",
+  "已过期": "Expired",
+  "完成": "Done",
+  "暂停": "Pause",
+  "继续": "Continue",
+  "继续执行该行动": "Continue this action",
+  "新建行动": "New action",
+  "操作失败": "Operation failed",
+  "读取行动…": "Loading actions…",
+  "暂无行动。可在下方新建，或由巡检/入站触发自动产出。": "No actions yet. Create one below, or let patrol / inbound triggers produce them.",
+  "描述要让助手做什么…": "Describe what the assistant should do…",
   "安全与可靠": "Security & reliability",
   "安装": "Install",
   "安装中": "Installing…",
@@ -3884,6 +3903,10 @@ let aiAuditRows = null;
 let aiAuditWin = null;     // 审计时间窗：从「轨迹」跳过来时只看本轮
 let aiFiles = [];          // 待引用的文件路径
 let aiPickPath = '';
+let aiCurMission = null;   // 当前绑定的行动 ID（Phase 1）：随 /api/ai/chat 带 mission_id；
+                           // 由 aiSendText 第二参设置，普通对话会清掉它
+let aiMissionRows = null;  // 行动列表缓存（SSE 推送直接更新它）
+let aiMissionES = null;    // 行动 SSE 句柄（只订阅一次，EventSource 自动重连）
 const AI_KIND = {plan:'计划', step:'执行', result:'结果', ver:'复验', human:'等确认', grant:'授权', body:'传输', done:'结论'};
 /* 允许"本任务内不再逐次询问"的工具（与服务端 aiGrantFamily 一一对应）。
    放在前端是为了**只在能批量的卡上显示那个勾选**——数据类/系统类动作不给这个选项，
@@ -3905,6 +3928,7 @@ $ai('ai-clear').onclick = ()=>{
   if(aiCtrl){ try{ aiCtrl.abort(); }catch(_){} aiCtrl = null; }
   if(aiPending){ try{ aiPending.card.remove(); }catch(_){} aiPending = null; }
   aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
+  aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
   aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat(''); };
 
 /* ---------- 彻底隐藏桌面助手（AI 设置页勾选项，localStorage 记忆） ---------- */
@@ -4091,10 +4115,13 @@ function aiToolbar(d, reask){
 /* 发送一段用户文本：发送按钮与「重新提问」共用。
    抽成函数是因为重新提问要复刻发送的全套动作——剥悬挂确认卡、记时间戳、进历史、
    起流式回合；两处各写一遍，迟早只改一处（确认卡悬挂那次事故就是这么来的）。 */
-async function aiSendText(tx){
+async function aiSendText(tx, missionId){
   if(aiBusy) return;
   tx = String(tx || '').trim();
   if(!tx) return;
+  // 行动绑定（Phase 1）：带 missionId = 本回合是该行动的执行回合；
+  // 不带 = 普通对话，清掉旧绑定（一次对话只属于一个行动，红线 5 同源）。
+  aiCurMission = missionId || null;
   aiTurnReset();   // 新的一轮用户发言 = 新的一条轨迹（确认续接轮不重置）
   // 用户无视确认卡片直接发新消息：把悬挂的 assistant(tool_calls) 从历史里剥掉，
   // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
@@ -4234,10 +4261,11 @@ function aiSide(tab){
   }
   aiSideTab = tab || 'trace';
   document.querySelectorAll('#ai-tabs button').forEach(x=>x.classList.toggle('on', x.dataset.tab === aiSideTab));
-  ['trace','audit','usage'].forEach(k=>{ const p = $ai('ai-pane-'+k); if(p) p.hidden = (k !== aiSideTab); });
+  ['trace','audit','usage','missions'].forEach(k=>{ const p = $ai('ai-pane-'+k); if(p) p.hidden = (k !== aiSideTab); });
   if(aiSideTab === 'trace') aiTraceRender();
   if(aiSideTab === 'audit') aiAuditLoad();
   if(aiSideTab === 'usage') aiUsageRender();
+  if(aiSideTab === 'missions') aiMissionsLoad();
 }
 function aiBig(on){
   const dr = $ai('ai-drawer'); if(!dr) return;
@@ -4616,6 +4644,179 @@ function aiUsageRender(){
   const note = document.createElement('div'); note.className = 'muted'; note.style.marginTop = '8px'; note.style.lineHeight = '1.5';
   note.textContent = t('会话统计只在本次页面打开期间累积；今日统计写在本机 localStorage。');
   box.appendChild(note);
+}
+
+/* ---------- 行动（Mission）：Agent 闭环 Phase 1 ----------
+   数据源 GET /api/missions；实时 /api/missions/events SSE（EventSource 自动重连，
+   「刷新」兜底）。状态徽章**只显示服务端字段**——前端不重新判定成败（红线 1），
+   与 tool_result/verify_result 徽章同一哲学。 */
+const AI_MS_STATE = {
+  pending:'待执行', awaiting_confirm:'待确认', running:'执行中', paused:'待你继续',
+  done:'完成', failed:'失败', canceled:'已取消', expired:'已过期'
+};
+const AI_MS_CLS = {
+  pending:'', awaiting_confirm:'warn', running:'run', paused:'warn',
+  done:'ok', failed:'bad', canceled:'dim', expired:'dim'
+};
+const AI_MS_TRIGGER = {manual:'手动', patrol:'巡检', schedule:'晨报', webhook:'入站', guard:'守护'};
+
+function aiMissionsShell(){
+  const box = $ai('ai-pane-missions'); if(!box) return null;
+  if(!box.dataset.shell){
+    box.dataset.shell = '1';
+    box.innerHTML =
+      '<div class="pbar">' +
+        '<input id="ai-ms-goal" placeholder="' + esc(t('描述要让助手做什么…')) + '">' +
+        '<button id="ai-ms-new">' + esc(t('新建行动')) + '</button>' +
+        '<button id="ai-ms-re">' + esc(t('刷新')) + '</button>' +
+      '</div>' +
+      '<div id="ai-ms-list"></div>';
+    $ai('ai-ms-new').onclick = aiMissionsCreate;
+    $ai('ai-ms-re').onclick = ()=>aiMissionsLoad(true);
+    $ai('ai-ms-goal').addEventListener('keydown', e=>{ if(e.key === 'Enter') aiMissionsCreate(); });
+  }
+  return box;
+}
+
+function aiMissionsLoad(force){
+  const box = aiMissionsShell(); if(!box) return;
+  aiMissionsSubscribe();
+  const list = $ai('ai-ms-list');
+  if(list && aiMissionRows == null) list.textContent = t('读取行动…');
+  if(aiMissionRows && !force){ aiMissionsRender(); return; }
+  fetch('/api/missions').then(r=>r.json()).then(d=>{
+    aiMissionRows = (d && d.missions) || [];
+    aiMissionsRender();
+  }).catch(()=>{ if(list) list.textContent = t('读取失败'); });
+}
+
+function aiMissionsSubscribe(){
+  if(aiMissionES) return;
+  try{
+    aiMissionES = new EventSource('/api/missions/events?t=' + encodeURIComponent(window.__EK_TOKEN__));
+    aiMissionES.onmessage = e=>{
+      try{
+        const j = JSON.parse(e.data);
+        if(j && j.type === 'missions'){
+          aiMissionRows = j.missions || [];
+          if(aiSideTab === 'missions') aiMissionsRender();
+        }
+      }catch(_){}
+    };
+    // onerror 不处理：EventSource 自动重连；连不上时靠「刷新」按钮兜底
+  }catch(_){ aiMissionES = null; }
+}
+
+function aiMissionsRender(){
+  const list = $ai('ai-ms-list'); if(!list) return;
+  list.textContent = '';
+  const rows = aiMissionRows || [];
+  if(!rows.length){
+    const p = document.createElement('div'); p.className = 'muted';
+    p.textContent = t('暂无行动。可在下方新建，或由巡检/入站触发自动产出。');
+    list.appendChild(p);
+    return;
+  }
+  rows.forEach(m=>{
+    const row = document.createElement('div');
+    row.className = 'ai-ms-row' + (AI_MS_CLS[m.state] ? ' ' + AI_MS_CLS[m.state] : '');
+    const main = document.createElement('div'); main.className = 'ai-ms-main';
+
+    const head = document.createElement('div'); head.className = 'ai-ms-head';
+    const badge = document.createElement('span');
+    badge.className = 'ai-ms-badge';
+    badge.textContent = t(AI_MS_STATE[m.state] || m.state);
+    head.appendChild(badge);
+    const kind = document.createElement('span'); kind.className = 'ai-ms-kind muted';
+    kind.textContent = t((AI_MS_TRIGGER[(m.trigger||{}).kind]) || (m.trigger||{}).kind || '');
+    head.appendChild(kind);
+    const at = document.createElement('span'); at.className = 'ai-ms-at muted';
+    const ts = Date.parse(String(m.updated_at || '').replace(' ', 'T'));
+    at.textContent = isFinite(ts) ? new Date(ts).toLocaleTimeString() : '';
+    head.appendChild(at);
+    main.appendChild(head);
+
+    const goal = document.createElement('div'); goal.className = 'ai-ms-goal';
+    goal.textContent = m.goal || '';
+    main.appendChild(goal);
+
+    // 说明行：暂停原因 / 终态结论 / 断点——全部是服务端原文，esc 由 textContent 保证
+    let note = '';
+    if(m.state === 'paused' || m.state === 'awaiting_confirm') note = m.pause_why || '';
+    else if(m.result && m.result.msg) note = (m.result.verified ? '✓ ' : '✗ ') + m.result.msg;
+    if(note){
+      const n = document.createElement('div'); n.className = 'ai-ms-note muted';
+      n.textContent = note;
+      main.appendChild(n);
+    }
+    row.appendChild(main);
+
+    const acts = document.createElement('div'); acts.className = 'ai-ms-acts';
+    const canRun = ['pending','paused','awaiting_confirm'].indexOf(m.state) >= 0;
+    const isRun = m.state === 'running';
+    const open = !['done','failed','canceled','expired'].includes(m.state);
+    if(canRun){
+      const b = document.createElement('button');
+      b.textContent = t('继续'); b.title = t('继续执行该行动');
+      b.onclick = ()=>aiMissionsResume(m);
+      acts.appendChild(b);
+    }
+    if(isRun){
+      const b = document.createElement('button');
+      b.textContent = t('暂停');
+      b.onclick = ()=>aiMissionsOp('pause', m.id);
+      acts.appendChild(b);
+    }
+    if(open){
+      const c = document.createElement('button');
+      c.textContent = t('取消'); c.className = 'danger';
+      c.onclick = ()=>aiMissionsOp('cancel', m.id);
+      acts.appendChild(c);
+    }
+    row.appendChild(acts);
+    list.appendChild(row);
+  });
+}
+
+function aiMissionsOp(op, id){
+  // 正在跑的行动被暂停/取消：先掐断流，让服务端 settle 按中断收口（落 paused）
+  if(aiCurMission === id && aiCtrl){ try{ aiCtrl.abort(); }catch(_){} }
+  fetch('/api/missions', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({op: op, id: id})})
+    .then(r=>r.json()).then(d=>{
+      if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+      // 本地立刻更新（SSE 会再推一次全量，两相对齐）
+      if(aiMissionRows){
+        const i = aiMissionRows.findIndex(x=>x.id === id);
+        if(i >= 0 && d.mission) aiMissionRows[i] = d.mission;
+        aiMissionsRender();
+      }
+      if(op === 'cancel' && aiCurMission === id) aiCurMission = null;
+    }).catch(()=>toast(t('读取失败'), 'err'));
+}
+
+function aiMissionsResume(m){
+  if(aiBusy){ toast(t('助手正在忙，稍后再试'), 'err'); return; }
+  aiSide('trace');
+  // 绑定交给 aiSendText 第二参；消息内容只是"继续"，
+  // 真正的上下文（目标/已完成步骤/断点）由服务端注入 system（定案 3）
+  aiSendText(t('继续执行该行动'), m.id);
+}
+
+function aiMissionsCreate(){
+  const input = $ai('ai-ms-goal');
+  const goal = String((input && input.value) || '').trim();
+  if(!goal){ if(input) input.focus(); return; }
+  if(aiBusy){ toast(t('助手正在忙，稍后再试'), 'err'); return; }
+  fetch('/api/missions', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({op:'create', goal: goal})})
+    .then(r=>r.json()).then(d=>{
+      if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+      if(input) input.value = '';
+      // 手动新建 = 立即走 AI 对话通道执行（设计 2.3）
+      aiSide('trace');
+      aiSendText(goal, d.mission && d.mission.id);
+    }).catch(()=>toast(t('读取失败'), 'err'));
 }
 
 /* ---------- 文件引用：只产出路径，不读内容 ---------- */
@@ -5226,6 +5427,9 @@ async function aiConsume(path, body){
   aiOpen(); aiBusy = true; $ai('ai-send').disabled = true; $ai('ai-stop').style.display = '';
   petAIState('thinking');   // 桌宠联动：立即进思考态（确认后续接轮也走这里，状态从 confirm → thinking）
   body = Object.assign({}, body || {}, {lang: EK_LANG});   // 让助手跟随界面语言作答
+  // 行动绑定（Phase 1）：aiCurMission 非空时本回合是该行动的执行回合。
+  // 放在 aiConsume 统一注入：确认续接轮（body.confirm）也自动带上，断点才接得回去。
+  if(aiCurMission) body.mission_id = aiCurMission;
   // 回退头：某些本机代理/预览容器会剥掉 POST body（实测表现为服务端 decode 出 0 条消息，
   // 模型对着空输入自说自话）。令牌走请求头能完好穿过，所以把"最后一条用户消息 + 确认回执"
   // 也放进请求头兜底，body 丢失时服务端据此恢复。

@@ -93,6 +93,9 @@ type Config struct {
 	AI         *AIConfig   `json:"ai,omitempty"`
 	Pet        PetConfig   `json:"pet"`
 	Alert      AlertConfig `json:"alerts"`
+	// Mission 行动（Agent 闭环 Phase 1，2026-10-26 定案）：
+	// 巡检/晨报类只读能力默认开，入站触发端点默认关。见 mission.go MissionConfig。
+	Mission MissionConfig `json:"missions"`
 	// Recovery 恢复事务的两层节制参数（v3.0 T1.5）。零值 = 内置默认
 	//（窗口 10 分钟 / 12 次 / per-target 3 次）。见 txbudget.go。
 	Recovery RecoveryConfig `json:"recovery,omitempty"`

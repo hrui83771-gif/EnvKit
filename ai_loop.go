@@ -109,7 +109,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// 任何依赖结局的统计（成功率/恢复率/失败率）恒等于同一个值。
 	traceID := beginTrace(aiLastUserText(msgs), actAI)
 	defer endTrace(outAborted)
-	_ = traceID
+
+	// 行动绑定（Phase 1 T2）：请求带 mission_id 时，本回合就是该行动的执行回合。
+	// settle 注册在 endTrace 之后 → LIFO 先于 endTrace 跑，能读到结局 box。
+	// 绑定失败只告警不阻断（见 aiMissionBind 注释）。
+	if aiMissionBind(body.MissionID, traceID) {
+		defer aiMissionSettle()
+	}
 
 	// 实测：某些本机代理/预览容器会剥掉 POST body（服务端表现为 decode 出 0 条消息，
 	// 模型因此对着"空输入+环境状态"自说自话，用户以为 AI 不听话）。鉴权令牌走请求头
@@ -224,6 +230,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		msgs = aiTrimLastToolTurn(msgs)
 		msgs = append(msgs, aiToolResultAsUser(body.Confirm.Tool, aiClampToolResult(body.Confirm.Tool, result), body.Lang))
 		sseToolResult(w, fl, body.Confirm.Tool, firstLines(result, 300), body.Confirm.Approved && aiToolOKFromText(result))
+		// 行动落盘（T2）：旧路径确认执行的这一步同样记账（断点随之清掉）
+		aiMissionStep(body.Confirm.Tool, policyTargetOf(body.Confirm.Tool, body.Confirm.Args),
+			planLine(body.Confirm.Tool, policyTargetOf(body.Confirm.Tool, body.Confirm.Args)),
+			body.Confirm.Approved && aiToolOKFromText(result), result)
 		// 确定性结果行：不让"到底成没成"取决于模型怎么描述
 		name := aiToolCnName(body.Confirm.Tool, body.Confirm.Args)
 		if body.Confirm.Approved {
@@ -478,6 +488,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// no_pending（"该确认请求已过期"），这两条预检路径的卡永远执行不了。
 				// 发卡与登记必须成对，判据只有 aiConfirmGate 一份。
 				aiRememberPending(callID, tool, args)
+				aiMissionAwaitConfirm(tool, aiToolCnName(tool, args)) // 断点登记（T3）
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": callID, "tool": tool, "args": args,
 					"reason": "intent", "text": aiToolCnName(tool, args)})
 				// v3.2：原地等用户决定，不结束回合（等到就继续，等不到才退回旧路径）
@@ -494,7 +505,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			if exErr != nil {
 				resText = "执行出错：" + exErr.Error()
 			}
+			tgt := policyTargetOf(tool, args)
 			sseToolResult(w, fl, tool, firstLines(resText, 300), exErr == nil)
+			aiMissionStep(tool, tgt, planLine(tool, tgt), exErr == nil, resText)
 			// 用 user 消息承载工具结果（避免合成 assistant+tool 触发 thinking 模型 400）
 			msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText), lang))
 		}
@@ -538,7 +551,13 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// 让 DeepSeek 前缀缓存在 system 处即分叉，导致全部对话历史反复重算（命中率 60~70%）。
 		acTurn := aiSnap()
 		full := make([]aiMsg, 0, len(msgs)+2)
-		full = append(full, aiMsg{Role: "system", Content: aiSystemPrompt + aiLangDirective(lang)})
+		sysPrompt := aiSystemPrompt + aiLangDirective(lang)
+		// 续作上下文（Phase 1 T3）：有已完成步骤时把行动记录注入 system——
+		// 摘要 + 关键结果全量，不回传对话原文（定案 3）。
+		if mc := aiMissionResumeContext(); mc != "" {
+			sysPrompt += mc
+		}
+		full = append(full, aiMsg{Role: "system", Content: sysPrompt})
 		full = append(full, msgs...)
 		// 任务提示在循环外算一次：msgs 会随工具结果增长，但用户的原始诉求不变，
 		// 每轮重算只会让记忆匹配抖动（同一问题匹配到不同记忆）。
@@ -658,7 +677,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		ticker := time.NewTicker(10 * time.Second)
 		turnTimer := time.NewTimer(aiTurnTimeout) // 单轮上游最长等待（见 aiTurnTimeout 注释）
 		stopTimers := func() {
-			ticker.Stop(); turnTimer.Stop()
+			ticker.Stop()
+			turnTimer.Stop()
 			// close(done) 必须幂等：下面三个提前 return 分支 + 正常收尾都会走到这里。
 			select {
 			case <-done:
@@ -1042,6 +1062,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// T1.1：发卡即登记原始参数——确认回来时服务端按登记的副本执行，
 				// 客户端回传的 args 只用于哈希比对（不一致即拒绝，见 aiConfirmGate）。
 				aiRememberPending(a.ID, a.Name, args)
+				aiMissionAwaitConfirm(a.Name, aiToolCnName(a.Name, args)) // 断点登记（T3）
 				sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": a.ID, "tool": a.Name, "args": args,
 					"text": aiToolCnName(a.Name, args)})
 				// 把带 tool_calls 的 assistant 消息留在 msgs 里：协议要求工具结果跟随它；
@@ -1074,6 +1095,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				}
 				// 结果交给公共尾巴统一 append（role=tool + tool_call_id 成对出现）
 				toolMsg.Content = aiClampToolResult(a.Name, confirmRes)
+				// 行动落盘（T2）：写工具经确认执行的这一步同样记账
+				aiMissionStep(a.Name, policyTargetOf(a.Name, args),
+					planLine(a.Name, policyTargetOf(a.Name, args)),
+					d.Proceed && aiToolOKFromText(confirmRes), confirmRes)
 				if !d.Proceed {
 					hasToolFailure = true
 				}
@@ -1123,6 +1148,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
 				sseToolResult(w, fl, a.Name, firstLines(toolMsg.Content, 300), exErr == nil)
+				// 行动落盘（Phase 1 T2）：每个步骤完成即写 PlanStepRecord，
+				// 断流时已发生的步骤不丢——续作靠它回放。
+				aiMissionStep(a.Name, tgt, planLine(a.Name, tgt), exErr == nil, toolMsg.Content)
 				// ---- v2.9：复验结果上界面 ----
 				//
 				// 以前用户看到的是**模型对复验结果的转述** ——
@@ -1139,6 +1167,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				// 不记录它，判据就只能靠工具名猜——那是把动作当结果。
 				// 多发的 `tool` 字段让下游能分辨结论是哪次动作产生的。
 				if vr, ok := aiTakeVerify(); ok {
+					aiMissionVerify(vr) // 行动收口判据（红线 1）：结论先记账再发事件
 					// **类名由 Go 侧算**：三态判定只有一份实现。
 					// 让 JS 自己判的话，两处会独立演化 ——
 					// 一处改了另一处没改，徽章就会显示错误状态，

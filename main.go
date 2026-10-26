@@ -180,6 +180,10 @@ func main() {
 	http.HandleFunc("/api/memory", handleMemory)
 	http.HandleFunc("/api/memory/import", handleMemoryImport)
 	http.HandleFunc("/api/lesson/toggle", handleLessonToggle)
+	// 行动（Agent 闭环 Phase 1 T4）：列表/操作、SSE、入站触发（默认关）
+	http.HandleFunc("/api/missions", handleMissions)
+	http.HandleFunc("/api/missions/events", handleMissionEvents)
+	http.HandleFunc("/api/trigger", handleMissionTrigger)
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
 
@@ -188,9 +192,11 @@ func main() {
 	openURL := "http://" + addr + "/"
 	go openBrowser(openURL)
 	startGuardLoop()
+	startMissionScheduler() // 行动定时产出（巡检/晨报，只读；配置 missions.enabled）
 	cleanupOldLogs()
 	cleanupOldAudits()
-	cleanupOldShadows() // v3.0 T2.8：影子流与审计同保留策略
+	cleanupOldShadows()   // v3.0 T2.8：影子流与审计同保留策略
+	missionStartupSweep() // Agent 闭环 Phase 1：重启降级 running→paused + 过期清理
 	loadPersistedState()
 	startStatePersister()
 	// 启动后异步检查杀软白名单，未加则提示（点击顶部按钮一键加入）

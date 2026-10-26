@@ -147,6 +147,15 @@ func applyConfigDefaults() {
 		cfg.AI.MaxTokens = 2048
 	}
 	// chain_autorecover 默认 false（不自动重启，避免误伤）；用户开启后检测发现宕机即自动拉起
+	// 行动（Phase 1）：巡检/晨报默认开——**代码内默认值**，理由同 defaultWeatherCity：
+	// 老配置里没有 missions 段，改分发模板对已有用户无效。
+	// Enabled 是指针：nil = 没设 = 开（见 MissionConfig.on）。
+	if cfg.Mission.PatrolIntervalMin == 0 {
+		cfg.Mission.PatrolIntervalMin = 60
+	}
+	if cfg.Mission.BriefingAt == "" {
+		cfg.Mission.BriefingAt = "08:30"
+	}
 }
 
 // mergeFormConfig 把"页面表单提交的配置"合并到当前配置上：
@@ -172,6 +181,9 @@ func mergeFormConfig(form, cur Config) Config {
 	if form.Alert.Webhook == "" && form.Alert.CooldownSecs == 0 {
 		form.Alert = cur.Alert // 界面暂无告警配置区，防止表单保存把 webhook 抹掉
 	}
+	// 行动段（Phase 1）只有 API 没有配置页 UI，同 Pet/Alert 无条件保留——
+	// 否则程序配置页一次自动保存就把巡检开关/入站开关抹成零值。
+	form.Mission = cur.Mission
 	if strings.TrimSpace(form.UpdateURL) == "" {
 		form.UpdateURL = cur.UpdateURL // 同上：表单没有该字段，别让保存把它抹成空
 	}
