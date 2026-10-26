@@ -52,6 +52,7 @@ lesson-outcomes.json
 tools/_*
 tools/_cdptmp*/
 tools/_jscheck/
+/_*.txt
 
 # ---------- 本地评审 / 内部文档（不入库）----------
 REVIEW-*

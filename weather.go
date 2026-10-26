@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,11 @@ var weatherUpstream = "https://wttr.in/"
 // weatherTimeout 单次查询超时。wttr.in 偶尔 10 秒以上，给宽一点但不无限等。
 const weatherTimeout = 15 * time.Second
 
+// weatherCacheTTL 同一城市的播报缓存时长。
+// 没有缓存时"右键菜单连点两下"就会连打两次 wttr.in —— 它有频率限制，
+// 打太密会被 429/限流页拒绝；天气本来就 5 分钟不会变，缓存住最省事。
+const weatherCacheTTL = 5 * time.Minute
+
 // weatherResp 返回给前端的结构。
 type weatherResp struct {
 	Enabled bool   `json:"enabled"`
@@ -38,7 +44,43 @@ type weatherResp struct {
 	City    string `json:"city,omitempty"`   // 实际查询的城市
 	TempC   string `json:"temp_c,omitempty"` // 当前温度
 	Desc    string `json:"desc,omitempty"`   // 天气描述
-	Error   string `json:"error,omitempty"`  // 失败原因（人话）
+	Error   string `json:"error,omitempty"`  // 失败原因（人话，英文界面下查不到译文时的保底）
+	ErrCode string `json:"err_code,omitempty"` // 稳定错误键（不含数字），前端按它查词表翻译
+}
+
+// weatherCache 最近一次成功的播报（单城市、单条即可：右键菜单一次只查一个
+// 城市，城市改了 key 就变，旧条目自然过期）。
+var weatherCache = struct {
+	mu   sync.Mutex
+	key  string // upstream+city：测试会替换 upstream，把它算进 key 避免串味
+	got  time.Time
+	text string
+	resp weatherResp
+}{}
+
+// weatherCacheGet 命中且未过期时返回 true。
+func weatherCacheGet(key string) (string, weatherResp, bool) {
+	weatherCache.mu.Lock()
+	defer weatherCache.mu.Unlock()
+	if weatherCache.key != key || weatherCache.got.IsZero() || time.Since(weatherCache.got) > weatherCacheTTL {
+		return "", weatherResp{}, false
+	}
+	return weatherCache.text, weatherCache.resp, true
+}
+
+// weatherCachePut 只缓存成功结果：失败多半是瞬时网络问题，缓存住反而让
+// 用户以为"天气功能坏了"，下一次点击就该重试。
+func weatherCachePut(key, text string, resp weatherResp) {
+	weatherCache.mu.Lock()
+	weatherCache.key, weatherCache.got, weatherCache.text, weatherCache.resp = key, time.Now(), text, resp
+	weatherCache.mu.Unlock()
+}
+
+// resetWeatherCache 清空缓存（供测试：换桩/换配置后不能吃到上一次的结果）。
+func resetWeatherCache() {
+	weatherCache.mu.Lock()
+	weatherCache.key, weatherCache.got = "", time.Time{}
+	weatherCache.mu.Unlock()
 }
 
 // wttrJ1 只取 wttr.in 的 j1 格式里需要的字段。
@@ -171,6 +213,13 @@ func handlePetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePetWeather(w http.ResponseWriter, r *http.Request) {
+	// 与 handlePetConfig 同一条规矩：只有 GET。少了这条检查，浏览器误发 POST
+	// 也会真的去打 wttr.in —— 一个查询接口不该被任何写方法触发。
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
 	cfgMu.Lock()
 	pc := cfg.Pet
 	cfgMu.Unlock()
@@ -181,14 +230,50 @@ func handlePetWeather(w http.ResponseWriter, r *http.Request) {
 	}
 
 	city := effectiveWeatherCity(pc.WeatherCity)
-	text, resp, err := fetchWeather(city)
-	if err != nil {
-		writeJSON(w, weatherResp{Enabled: true, City: city, Error: err.Error()})
+	key := weatherUpstream + "|" + city
+	if text, resp, ok := weatherCacheGet(key); ok {
+		resp.Enabled = true
+		resp.Text = text
+		writeJSON(w, resp)
 		return
 	}
+
+	// 用请求自带的 context：客户端（右键菜单点开又关掉）取消时，
+	// 出网请求跟着停，不会白等满 15 秒占着上游连接。
+	text, resp, err := fetchWeather(r.Context(), city)
+	if err != nil {
+		writeJSON(w, weatherResp{Enabled: true, City: city, Error: err.Error(), ErrCode: errKeyOf(err)})
+		return
+	}
+	weatherCachePut(key, text, resp)
 	resp.Enabled = true
 	resp.Text = text
 	writeJSON(w, resp)
+}
+
+// errKeyOf 把 fetchWeather 的错误翻译成稳定键（不含数字/动态部分）。
+// 前端用它查 I18N_EN —— "天气服务返回 500" 这种带数字的原话没法直接当键。
+func errKeyOf(err error) string {
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "查询超时"):
+		return "查询超时"
+	case strings.Contains(s, "连不上天气服务"):
+		return "连不上天气服务，请检查网络或代理"
+	case strings.Contains(s, "天气服务返回"):
+		return "天气服务返回非 200"
+	case strings.Contains(s, "构造请求失败"):
+		return "构造请求失败"
+	case strings.Contains(s, "读取天气数据失败"):
+		return "读取天气数据失败"
+	case strings.Contains(s, "天气数据格式异常"):
+		return "天气数据格式异常"
+	case strings.Contains(s, "天气数据不完整"):
+		return "天气数据不完整"
+	case strings.Contains(s, "没拿到天气数据"):
+		return "没拿到天气数据"
+	}
+	return s
 }
 
 // effectiveWeatherCity 决定这次查哪里：用户填了就按用户的，没填就用默认城市。
@@ -205,7 +290,9 @@ func effectiveWeatherCity(c string) string {
 
 // fetchWeather 拉 wttr.in 并压成一句中文。city 为空时由上游按 IP 定位
 // （正常路径不会走到：调用方已用 effectiveWeatherCity 兜了默认城市）。
-func fetchWeather(city string) (string, weatherResp, error) {
+// ctx 来自 HTTP 请求：客户端取消时上游请求立即停止（原来用 context.Background()，
+// 关掉菜单后 Go 侧还会傻等满 15 秒）。
+func fetchWeather(ctx context.Context, city string) (string, weatherResp, error) {
 	var out weatherResp
 
 	target := weatherUpstream
@@ -215,10 +302,12 @@ func fetchWeather(city string) (string, weatherResp, error) {
 	}
 	target += "?format=j1&lang=zh"
 
-	ctx, cancel := context.WithTimeout(context.Background(), weatherTimeout)
+	// 把请求 context 套在超时里：客户端断开 → ctx 取消 → 请求立刻停；
+	// 客户端一直等着 → 到 15 秒自动放弃。
+	cctx, cancel := context.WithTimeout(ctx, weatherTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, target, nil)
 	if err != nil {
 		return "", out, fmt.Errorf("构造请求失败")
 	}
@@ -228,7 +317,7 @@ func fetchWeather(city string) (string, weatherResp, error) {
 
 	res, err := httpShort.Do(req)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if cctx.Err() == context.DeadlineExceeded {
 			return "", out, fmt.Errorf("查询超时（%d 秒）", int(weatherTimeout.Seconds()))
 		}
 		return "", out, fmt.Errorf("连不上天气服务，请检查网络或代理")

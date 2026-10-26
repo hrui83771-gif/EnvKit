@@ -34,6 +34,15 @@ const (
 	processSetQuota                 = 0x0100
 	processTerminate                = 0x0001
 	processDupHandle                = 0x0040
+	// processQueryLimitedInformation：IsProcessInJob 要求句柄带
+	// PROCESS_QUERY_INFORMATION 或 PROCESS_QUERY_LIMITED_INFORMATION 之一，
+	// 少了它调用直接失败（known=false），"先查是否已在别的 Job 里"就成了摆设：
+	// 现象是"已在父 Job 内"这条最有用的线索永远查不出来，用户只会看到一句
+	// 泛泛的 Access is denied。（实测：同进程同 pid，只差这个权限位，
+	// known 从 false 变 true。）
+	processQueryLimitedInformation = 0x1000
+	// jobOpenAccess 打开子进程要用的权限集合：加入 Job + 终止 + 查询状态。
+	jobOpenAccess = processSetQuota | processTerminate | processQueryLimitedInformation
 )
 
 type ioCounters struct {
@@ -98,7 +107,7 @@ func jobObject() uintptr {
 // 静默，于是"崩溃不留孤儿"的兜底在这些环境下**从来没生效过**，而日志里
 // 一个字的线索都没有。现在把这个事实交回调用方记一行告警。
 func AssignToJob(pid int) error {
-	hProc, err := syscall.OpenProcess(processSetQuota|processTerminate, false, uint32(pid))
+	hProc, err := syscall.OpenProcess(jobOpenAccess, false, uint32(pid))
 	if err != nil || hProc == 0 {
 		return fmt.Errorf("OpenProcess(pid=%d) 失败：%v", pid, err)
 	}

@@ -183,6 +183,26 @@ func TestMergeFormConfigKeepsMissingSections(t *testing.T) {
 	}
 }
 
+// TestMergeFormConfigKeepsPet 桌宠段无条件保留（P0 回归）。
+// 真实事故：configBody() 不回传 pet、mergeFormConfig 也不兜底 →
+// 用户在个人中心开了天气，再回「程序配置」改一下安装目录（800ms 自动保存），
+// 天气开关和城市就被抹成零值，且界面上毫无提示。
+func TestMergeFormConfigKeepsPet(t *testing.T) {
+	cur := Config{Pet: PetConfig{WeatherEnabled: true, WeatherCity: "汕头"}}
+
+	// 表单完全不带 pet（前端 configBody 就是这个形状）
+	got := mergeFormConfig(Config{InstallDir: `C:\EnvKit`}, cur)
+	if got.Pet != cur.Pet {
+		t.Fatalf("表单未提交 pet 时应保留原桌宠配置，实际 %+v", got.Pet)
+	}
+	// 即使表单带了一个零值 pet（旧前端/第三方客户端），也不能把配置抹掉：
+	// 桌宠开关只有 /api/pet/config 一个出入口，表单没有途径表达"关掉它"。
+	got2 := mergeFormConfig(Config{Pet: PetConfig{}}, cur)
+	if got2.Pet != cur.Pet {
+		t.Fatalf("表单提交零值 pet 时也应保留原桌宠配置，实际 %+v", got2.Pet)
+	}
+}
+
 // ---------- 命令构造 ----------
 
 func TestBuildCmdShape(t *testing.T) {

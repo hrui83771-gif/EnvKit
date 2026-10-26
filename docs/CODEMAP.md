@@ -14,6 +14,7 @@
 
 `main.go`（路由注册+启动序列）· `state.go`（全局 cfg/token/scope 常量）·
 `runtime.go` · `lifecycle.go`（退出路径）· `install.go` · `av.go`（杀软检测/白名单）
+· `weather.go`（桌宠天气：/api/pet/config + /api/pet/weather，默认关闭、短 TTL 缓存）
 · 平台分支 `console_*/disk_*/secrets_*/winjob_*/notify_*` 已收进 internal/platform
 
 ## 配置与持久化

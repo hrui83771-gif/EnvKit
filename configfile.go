@@ -157,6 +157,12 @@ func mergeFormConfig(form, cur Config) Config {
 		cp := *cur.AI // 深拷贝：避免表单配置与全局配置共享同一个 AI 结构体
 		form.AI = &cp
 	}
+	// 桌宠段（天气开关/城市）只有 /api/pet/config 一个出入口，程序配置页
+	// 既不显示也不提交它 —— 不无条件保留的话，改一下"安装目录"触发自动保存，
+	// 就会把用户已开启的天气设置抹成零值（configBody() 同理不回传 pet）。
+	// 用无条件保留而不是"零值才保留"：表单里没有任何途径表达"把桌宠关掉"，
+	// 判断零值反而会误判成"表单想清空"。
+	form.Pet = cur.Pet
 	if len(form.Components) == 0 {
 		form.Components = cur.Components
 	}
