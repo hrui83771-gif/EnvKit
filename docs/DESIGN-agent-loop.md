@@ -1,0 +1,318 @@
+# DESIGN：Agent 闭环 —— 行动化 · 主动化 · 记忆化（A+B+C）
+
+> 文档状态：**评审定案**（2026-10-26 拍板，见第六节定案记录；
+> 下一步按 Phase 1/2/3 拆任务卡）
+> 关系：不替代 [ROADMAP.md](ROADMAP.md)（v2.x–v3.1 盘点仍有效），这是 v3.3 之后
+> 的一条新主线（版本号待定，暂不承诺 v4）。
+> 命名约定：本文把新的持久化任务实体叫 **Mission**（代码/JSON 字段名），
+> 以区别于 `state.go` 里已存在的 `TaskHandle`（一次脚本执行的**内存**句柄，
+> 生命周期 = 一次调用）。**对外中文名定为「行动」**（2026-10-26 评审定案）：
+> UI 文案一律写「行动进行中 / 待你继续的行动 / 行动列表」，不叫「任务」，
+> 避免与现有「任务轨迹/任务名」（trace 文案）混淆。
+
+---
+
+## 零、为什么是 A+B+C 一起做
+
+三者是同一个 Agent 循环的三个面，拆开做任何一个都会很快撞墙：
+
+```
+        ┌──────────────────────────────────────────┐
+        │                                          │
+   B 感知/触发                                  C 记忆
+   (巡检、入站告警、晨报)     →   A 规划与执行   →  (经验、画像、预案)
+        ↑                                          │
+        └────────────── Mission 留下的痕迹沉淀 ────┘
+```
+
+- **只做 A**：任务永远等用户开口，做完即焚，处置经验不沉淀，每次都从零推理。
+- **只做 B**：触发了也接不住——现在一轮 SSE 断了整轮作废（无持久化任务实体），
+  主动弹的建议没有「接得住、可续作」的执行容器。
+- **只做 C**：记忆只能在对话里被动召回，没有任务流去**生产**新的高质量经验。
+
+### 现状盘点（锚定源码，全部可复核）
+
+| 循环环节 | 已有地基 | 缺口 |
+|---|---|---|
+| 感知 | `guard.go:246-276` 守护循环已做「检测→自动重启→复验→告警」；`alerts.go:32` `alertDispatch` 出站告警（带抑制窗口） | **入站**触发不存在（外部系统无法让 EnvKit 起一个任务）；需要诊断判断的事件没有进任务系统的通道 |
+| 规划 | `plan.go` `planTrack`/`budgetFor`（回合内步骤跟踪与预算分级）；`ai_loop.go` plan_start/step/end SSE 事件 | 计划只活在一个 SSE 回合内，回合结束即焚；无「任务」跨回合实体 |
+| 执行 | `policy.go` PolicyGate 四档裁决；`ai_confirm.go`/`ai_wait.go` 确认流（就地等待 + 旧路径兜底）；`aiChatMu` 串行化 | 执行与 HTTP 请求同生共死（`aiRunLoop` 写 `http.ResponseWriter`），客户端断开 = 任务死亡 |
+| 验证 | `verify.go` 三态复验 + `verify_result` 结构化事件（判据唯一来源） | 已完备，直接复用 |
+| 记忆 | `lesson.go` Lesson（Scope/Confidence/Succ/Fail/Stale 三件套 + `lesson-outcomes.json`）；`memory.go` Memory（`memories.json`，stale 检测、打分召回） | 只在对话里被动注入；没有「任务结束自动沉淀」的生产线；`Trigger` 字段靠人工描述，无结构化触发特征 |
+| 任务实体 | `state.go:239` `TaskHandle`（互斥组/超时/结果三态）——但它是**内存**的单次执行句柄 | **不存在**可持久化、可恢复、可排队的任务实体 |
+
+---
+
+## 一、设计红线（与全库既有哲学一致，先立住再写代码）
+
+1. **判据来自系统记录，不来自模型转述**（红线 R3 的延伸）：
+   Mission 成败由 `verify_result`（`verify.go` `aiVerifyEvent`）判定；
+   预案是否「有效」由历史执行的复验证据统计，不由模型打分。
+2. **写操作永远过确认**：自动化的上限是「把方案准备好 + 一键执行」，
+   不是「不问就做」。预案执行同样过 `PolicyGate` + `aiConfirmGate`；
+   批量授权沿用现有族分级（`ai_grant.go`，目前仅服务启停族）。
+3. **会写状态的主动能力默认关闭**（opt-in，与 `MemoryEnabled` 同哲学）：
+   **动作类** Mission 的自动执行调度、入站触发端点全部默认关，配置显式
+   开启。**纯只读巡检/晨报类默认开**（2026-10-26 定案：只产出报告、
+   不写任何状态，争议最小；若报告里含动作建议，建议本身仍走确认）。
+4. **一切可审计**：每个 Mission 全程带 `trace_id`（`trace.go` 现有机制），
+   自动触发与手动触发在审计链上同权重可追溯。
+5. **后台执行与前台对话共用一把执行锁**：`aiChatMu` 语义升级为
+   「同一时刻只有一个 AI 执行体在跑」，Mission 后台跑时用户对话排队，
+   而不是绕开串行化（绕开就回到了本轮刚修掉的串台问题）。
+
+---
+
+## 二、Phase 1：Mission 成为一等公民（A 的骨架 + B 的容器）
+
+### 2.1 实体与存储
+
+新文件 `mission.go` + `missions.json`（与 `memories.json`/`lesson-outcomes.json`
+同款落盘风格：`var missionsFile = func() string {...}`，测试重定向到 TempDir）。
+
+```go
+// Mission 一个跨回合、可持久化、可恢复的任务实体。
+// 与 TaskHandle 的区别：TaskHandle = 一次脚本执行的内存句柄（秒级，互斥组）；
+// Mission = 用户/触发器交给助手的一个目标（分钟~小时级，含多个 AI 回合）。
+type Mission struct {
+    ID        string    `json:"id"`         // m-<时间>-<短随机>
+    Goal      string    `json:"goal"`       // 自然语言目标（晨报类任务放触发摘要）
+    State     string    `json:"state"`      // 见 2.2 状态机
+    Trigger   Trigger   `json:"trigger"`    // manual | patrol | webhook | schedule
+    TraceID   string    `json:"trace_id"`   // 关联审计轨迹（trace.go 现有机制）
+    Plan      []PlanStepRecord `json:"plan"` // 已完成步骤的落地记录（见 2.4）
+    Pending   *PendingStep `json:"pending,omitempty"` // 断点：待确认/待执行的下一步
+    Playbook  string    `json:"playbook,omitempty"`  // 套用的预案 ID（Phase 2 起）
+    Result    *OpResult `json:"result,omitempty"`    // 终态结论（复验驱动）
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+    ExpiresAt time.Time `json:"expires_at"` // 终态保留期（默认 30 天，对齐审计窗口）
+}
+```
+
+配置面（`config.json` 新增 `"missions"` 段；**巡检类默认开、动作类默认关**，
+2026-10-26 定案）：
+
+```json
+{ "missions": { "enabled": true, "patrol_interval_min": 60,
+                "inbound_hook": false, "briefing_at": "08:30" } }
+```
+
+- `enabled`/`patrol_interval_min`/`briefing_at`：只读巡检与晨报，默认开
+  （产出报告型 Mission，不含写操作）；
+- `inbound_hook`：入站触发端点，默认关；
+- 任何会写状态的动作，无论 Mission 来源，一律过确认（红线 2，不受此配置
+  影响——开关只控制「要不要主动起行动」，不控制「要不要问」）。
+
+### 2.2 状态机（转移表即测试用例）
+
+```
+            ┌──────── 用户取消 ────────┐
+            ↓                          │
+ pending ──确认/批准──▶ running ◀──续作── paused（暂停/EnvKit 重启降级/断流）
+    │                      │  ▲
+    │（触发器产出、待人批）  │  └─ 用户批准续作
+    └──▶ awaiting_confirm ─┘
+                           │
+              ┌────────────┼─────────────┐
+              ▼            ▼             ▼
+            done        failed        expired
+        （复验通过）  （复验未通过/    （超 ExpiresAt
+                       预算耗尽）        未到终态自动收）
+```
+
+规则：
+- `canceled` 是用户取消的终态（2026-10-26 实现时补入：原图只有
+  done/failed/expired 三个终态，但「取消」需要落点，任何非终态都可转）；
+- `running → awaiting_confirm`（2026-10-26 实现时补入）：回合中途弹出确认卡
+  后连接断开时，收口落 `awaiting_confirm` 而不是 `paused`——状态语义更准
+  （卡在确认上 ≠ 主动暂停），续作上下文会提示「待确认 XXX」；
+- `running` 的 Mission 在 EnvKit 启动时一律降级为 `paused`（**绝不自动续跑**：
+  隔夜重启后无人值守地执行写操作违背红线 2）。
+- `awaiting_confirm` 超 30 分钟（对齐 `aiConfirmWaitMax` 的 10 分钟 + 余量）
+  降级为 `paused`，不作废——卡片登记 TTL 本来就有 30 分钟。
+- `done`/`failed` 的判定**只认** `verify_result` 三态（红线 1），
+  没有复验证据的一律 `failed` 而不是 `done`（宁可错杀，不发假徽章）。
+
+### 2.3 API 面
+
+```
+GET    /api/missions            列表（含 paused 的「待你继续」）
+POST   /api/missions            手动新建（body: {goal}）→ 走 AI 对话通道执行
+POST   /api/missions/:id/{pause|resume|cancel}
+POST   /api/trigger             入站触发端点（schedule/patrol 与 guard 降级挂钩共用
+                               入口，`inbound_hook` 默认关）。**只服务本机调用**：
+                               Web 本来就只听本机，不新增暴露面，鉴权沿用现有
+                               API 机制。body: {kind, title, detail} → 产出 pending 行动
+GET    /api/missions/events     SSE：行动列表实时状态（前端轮询降级兼容）
+```
+
+> 入口（2026-10-26 定案）：行动列表只放 **AI 抽屉新增一个 tab**，不进桌宠
+> 右键菜单（入口收敛、改动最小；右键菜单入口 Phase 2 视使用反馈再议）。
+
+> 已定案（2026-10-26 评审）：无企微/外部系统接入计划，入站触发不做对外暴露、
+> 不做回调鉴权设计。外部告警将来若要接，走「出站 Webhook 的格式适配层」
+> （`alerts.go` 现有通道反向复用），而不是入站端点公网化。
+
+### 2.4 与执行层的关系（关键架构决策：Phase 1 **不动** `aiRunLoop`）
+
+现状 `aiRunLoop(ctx, w, fl, ...)` 直接写 `http.ResponseWriter`——执行与请求
+同生共死。Phase 1 不做「脱离浏览器的后台执行」，而是先解决 80% 的问题：
+
+- **Mission 记录回放点**：每个 plan step 完成即落盘（`PlanStepRecord`），
+  断流后「续作」= 从最后完成的步骤接着跑（把 `PendingStep` 交给新一轮
+  `/api/ai/chat`），而不是整任务重头再来。这同时消掉两轮复审都点名的
+  「网络抖动断流 = 整轮白烧」。
+- **续作时的模型上下文**（2026-10-26 定案）：**摘要 + 关键结果全量**——
+  复用现有摘要通道传前半段压缩摘要，`PlanStepRecord` 里每步的
+  `verify_result`/工具结论**全量**带上（成败判据与关键事实不丢），
+  中间过程对话原文不回传。请求体可控、缓存友好，且符合红线 1
+  （判据来自系统记录，全量带的就是记录本身）。
+- **执行仍绑定一个 HTTP 请求**：SSE 断开 = 该回合失败 → Mission 落
+  `paused`（带失败原因），用户回来点「继续」。
+- 收益：`aiChatMu`、确认流、预算治理全部原样复用，Phase 1 改动面收敛在
+  「加实体 + 加记录点 + 加触发入口」。
+
+Phase 2 再评估「脱离请求的后台 runner」（`context.Background()` + 事件落盘 +
+前端 SSE 订阅），前提是 Phase 1 的续作数据结构已被证明够用。
+
+### 2.5 触发框架（B 的第一块）
+
+- **schedule 类（巡检/晨报）**：固定间隔或 `briefing_at` 时刻产出「巡检
+  Mission」——内容是只读诊断（`get_system_state`/`get_diag_report`/
+  崩溃记录/磁盘趋势），产出**报告型**结果，不含写操作。默认开。
+- **入站 webhook**：`POST /api/trigger`（`inbound_hook` 默认关；带本机令牌
+  校验，与现有 API 同款）。调用方（本机脚本/监控）投递事件 → 产出
+  `pending` Mission，**等人批**才执行任何动作（红线 2）。
+- **与 guard.go 的分工**（防重复建设，最重要的一条）：
+  guard 是**确定性快路径**（死了就重启，已有完整闭环），继续原样跑；
+  触发器只接 guard **接不住**的事件——「重启了但复验没过」「恢复未确认」
+  （`guard.go:269/276` 这两类告警）才是需要诊断判断的，转 Mission。
+  即：guard 降级/失败的告警自动升级为 Mission 候选。
+
+### Phase 1 验收
+
+1. 中途杀掉 EnvKit 重启：Mission 还在、状态正确降级为 paused；
+2. 断流后续作：从最后完成的步骤接着跑，不重头（可用桩上游验证）；
+3. 发一条 `POST /api/trigger`，行动列表出现 pending 项，批准后执行；
+4. guard 复验失败的告警自动变成 Mission 候选；
+5. 状态机转移表 100% 有单测（表驱动）。
+
+---
+
+## 三、Phase 2：预案库 + 主动闭环（A 纵深 + B 兑现）
+
+### 3.1 Playbook（预案）
+
+新文件 `playbook.go` + `playbooks.json`。**不是** Lesson 的替代品：
+Lesson 是「一句话经验」（给模型看的提示词素材），Playbook 是「结构化动作
+序列 + 验证模板」（给系统执行的）。两者互相引用：
+
+```go
+type Playbook struct {
+    ID        string   `json:"id"`
+    Title     string   `json:"title"`       // 「后端反复崩溃：清端口→重启→复验」
+    // 触发特征：结构化，供触发器匹配（告警标题模式 + 关键症状）。
+    // 这是 Lesson.Trigger 自由文本的结构化版本——自动沉淀必须有机器可匹配的键。
+    Matcher   PlaybookMatcher `json:"matcher"`
+    Steps     []PlaybookStep  `json:"steps"`  // {tool, args_template, expect_verify}
+    LessonIDs []string  `json:"lesson_ids,omitempty"` // 关联经验（注入提示词）
+    Stats     PbkStats  `json:"stats"`       // used/succ/fail（succ 只认复验通过）
+    State     string    `json:"state"`       // active | review | retired
+}
+```
+
+- **沉淀入口（人工确认制，Phase 2 不做全自动）**：
+  Mission 终态后，界面出「存为预案」按钮——把 `PlanStepRecord` 序列 +
+  复验证据模板打包。自动沉淀（Phase 3）须等成功率统计攒够再说。
+- **执行仍是「预案起草 + 用户确认」**：套预案只是省掉「推理怎么修」，
+  不省确认（红线 2）。套用时每个写步骤照常过 PolicyGate。
+- **质量衰减**：连续 3 次执行复验未通过 → `state=review`（界面标黄
+  「待复审」，不再推荐套用），复用 `lesson.go` 的 stale 哲学。
+
+### 3.2 告警闭环与晨报
+
+- **闭环**：入站/守护告警 → 匹配 Playbook（有）→ Mission 预填步骤，
+  桌宠举徽标「检测到 X，建议执行 Y（预案 Z）」→ 用户确认 → 执行 →
+  `verify_result` 徽章。无预案 → 走完整 AI 诊断（就是现在的对话能力）。
+- **晨报**：`briefing_at` 配置时刻，产出一个报告型 Mission（只读）：
+  昨晚崩溃记录（`svcRecord`）、磁盘趋势、组件状态漂移、到期项。
+  聚合的数据源全部已存在，无新采集面。
+
+### Phase 2 验收
+
+1. 人为制造后端崩溃（guard 重启失败场景）→ 桌宠主动弹建议 →
+   确认后套预案执行 → 复验徽章；
+2. 同场景第二次：Mission 直接预填预案步骤，处置步数显著下降；
+3. 预案连败 3 次自动进 review 态；
+4. 晨报在配置时刻产出，内容全部来自系统记录（无模型编造空间）。
+
+---
+
+## 四、Phase 3：记忆闭环 + 成长可度量（C 兑现）
+
+### 4.1 生产线：Mission → Lesson/Memory 自动沉淀
+
+- 终态 Mission 自动产出 Lesson 候选（复用现有 kind 体系）：
+  连败路径 → `repeat_fail`；用户否了 AI 方案后手动修好 → `user_fix`；
+  复验分歧 → `verify_fail`。沉淀须过现有防摆锤阈值（`lsRepeatMin` 等），
+  不是每个任务都写一条。
+- 项目画像（`get_project_brief`）吸收 Mission 历史：端口布局漂移、
+  组件版本变化、故障模式——画像从「静态登记」变「自动生长」。
+  观察与推断分层照旧（`Source=config|probe|infer` 不破）。
+- **预案与记忆互检**：预案执行失败的证据回流到关联 Lesson 的
+  `Fail` 计数（`lesson-outcomes.json` 现有成败统计通道）。
+
+### 4.2 成长指标（把「越用越聪明」变成曲线）
+
+复用 `docs/eval` 评测框架 + 真实任务数据，按周出报表：
+
+| 指标 | 定义 | 数据源 |
+|---|---|---|
+| 首次解决率 | 无人工修正即 done 的 Mission 占比 | missions.json |
+| 平均步数/时长 | 同 Matcher 分组环比 | PlanStepRecord |
+| 用户修正率 | `user_fix` Lesson 增速（越低越好） | lesson-outcomes.json |
+| 预案命中率 | 告警中能匹配到 active 预案的占比 | missions + playbooks |
+| 预案有效率 | 套预案后复验通过率（红线 1：只认复验） | verify 结果 |
+
+### Phase 3 验收
+
+1. 一次完整崩溃处置后，相关 Lesson/Memory 自动出现且带 Scope/Confidence；
+2. 周报指标可从数据直接算出（不依赖模型转述）；
+3. `ab_memory` 评测集纳入 Mission 续作场景（断流续作不丢上下文）。
+
+---
+
+## 五、与现有代码的映射（复用 vs 新建）
+
+| 复用（原样接上） | 新建 |
+|---|---|
+| `verify.go` 三态复验 + `aiVerifyEvent`（成败唯一判据） | `mission.go` + `missions.json`（实体/状态机/续作） |
+| `policy.go` PolicyGate、`ai_confirm.go`/`ai_wait.go` 确认流 | `trigger.go`（入站端点 + patrol 调度） |
+| `plan.go` `planTrack`（回合内步骤 → 落盘成 `PlanStepRecord`） | `playbook.go` + `playbooks.json`（Phase 2） |
+| `lesson.go` Scope/Confidence/Stale + 防摆锤阈值 | Mission→Lesson 沉淀管道（Phase 3） |
+| `memory.go` 打分召回/stale | 成长指标报表（Phase 3，消费 eval 框架） |
+| `alerts.go` 抑制窗口（出站告警不变） | 入站触发（方向相反，独立端点） |
+| `guard.go` 确定性快路径（不动） | guard 降级事件 → Mission 候选的挂钩 |
+| `trace.go` trace_id、`aiChatMu` 串行化 | —— |
+
+明确**不做**（防 scope 膨胀）：
+- Phase 1 不做脱离浏览器的后台执行器（先用续作拿 80% 收益）；
+- 不做多用户/权限（EnvKit 是本机单用户工具）；
+- 不动 guard 的自动重启语义（它已验证可靠，职责边界清晰）；
+- 不做预案的全自动沉淀（Phase 2 人工确认制）。
+
+---
+
+## 六、评审定案记录（2026-10-26 全部拍板）
+
+1. **命名**：对外中文名 **「行动」**（见文档头命名约定）；代码实体仍叫
+   Mission。不与「任务轨迹/任务名」（trace 文案）混淆。
+2. **入站触发的鉴权**：无企微/外部系统接入计划，只做本机面，
+   不新增暴露面、鉴权沿用现有 API 机制（见 API 节说明块）。
+3. **续作的模型上下文**：**摘要 + 关键结果全量**（见 2.4），
+   中间过程对话原文不回传。
+4. **晨报默认配置**：**巡检类默认开、动作类默认关**（见红线 3 与配置面）；
+   动作类永远过确认，开关不豁免红线 2。
+5. **行动列表入口**：**AI 抽屉加一个 tab**，不进桌宠右键菜单
+   （见 API 节入口说明）。
