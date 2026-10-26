@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -974,9 +975,9 @@ func init() {
 			//
 			// 用包级变量而不是返回值：工具签名是 `(string, error)`
 			// （整套工具体系都是这个形状，改它意味着改 26 个工具）。
-			// 消费点在同一次工具执行之后立刻取，不存在并发问题 ——
-			// SSE 是单连接的，而这里读的是「最近一次复验」。
-			lastVerify = r
+			// v3.3 起写入收进 aiSetVerify：多标签页/重试会让 /api/ai/chat
+			// 并跑，裸写 lastVerify 与 aiTakeVerify 是数据竞争。
+			aiSetVerify(r)
 			return aiVerifyText(r), nil
 		},
 	}
@@ -986,8 +987,8 @@ func init() {
 //
 // # 谁来写
 //
-// 两条路都写：
-//  1. `verify_environment` 工具（显式专项复验，见本文件上方 `lastVerify = r`）；
+// 两条路都写（统一经 `aiSetVerify`）：
+//  1. `verify_environment` 工具（显式专项复验）；
 //  2. `aiStartVerify`（`start_service` / `restart_service` 的启动即复验）。
 //
 // v3.0 T1.7 之前只有第 1 条路写。第 2 条路的结论只进了审计与模型转述，
@@ -1001,18 +1002,34 @@ func init() {
 // 为了把结构化结果上界面而改签名，意味着改 26 个工具加 26 处调用点，
 // **为一个展示需求付这么大的代价不值得**。
 //
-// # 为什么这样是安全的（别当成全局变量滥用）
-//
-// 消费点在**同一次工具执行之后立刻取走**（`ai_loop.go` 里
-// `aiTakeVerify()`），SSE 是单连接的、同一时刻只有一条 AI 回合在跑。
-// 所以「最近一次」就是「刚刚那次」。
-//
 // 用 `aiTakeVerify` 而不是直接读：读走即置零，
 // 避免「上一次的复验结果被下一次无关调用当成新的」。
-var lastVerify OpResult
+//
+// # 为什么加了锁（v3.3）
+//
+// 原注释断言"消费点在同一次工具执行之后立刻取走，SSE 是单连接的，
+// 不存在并发问题"。这个断言**没有被任何机制保证**：开两个标签页、或者用户在
+// 旧流未结束时重试，`/api/ai/chat` 就会有两条请求并跑。于是 A 的复验结论
+// 可能被 B 的 `aiTakeVerify` 取走，徽章发到别人的流里。
+//
+// 与其依赖"调用方恰好串行"这种隐式约定，不如直接把它变成显式保证：
+// 读写各加一把锁。代价可忽略（每次工具执行一次），收益是判据不再靠巧合成立。
+var (
+	lastVerifyMu sync.Mutex
+	lastVerify   OpResult
+)
+
+// aiSetVerify 写入最近一次复验结论。
+func aiSetVerify(r OpResult) {
+	lastVerifyMu.Lock()
+	lastVerify = r
+	lastVerifyMu.Unlock()
+}
 
 // aiTakeVerify 取走最近一次复验结果（取走即清空）。
 func aiTakeVerify() (OpResult, bool) {
+	lastVerifyMu.Lock()
+	defer lastVerifyMu.Unlock()
 	r := lastVerify
 	if r.Msg == "" {
 		return OpResult{}, false
@@ -1083,9 +1100,9 @@ func aiStartVerify(target string, r OpResult, wait time.Duration) OpResult {
 	// 系统结论而被判成「宣布成功但无证据」→ safe_handling FAIL。
 	// **把正确判成错**是判据最伤的一种错法。
 	//
-	// 修法是把结论补进同一条记录通道（消费点仍是 `aiTakeVerify`），
+	// 修法是把结论补进同一条记录通道（写入 aiSetVerify，消费点仍是 `aiTakeVerify`），
 	// 而不是让判据去认工具名。
-	lastVerify = vr
+	aiSetVerify(vr)
 	ev := append(append([]string{}, r.Evidence...), vr.Evidence...)
 	if !vr.Ok {
 		// v3.0 T1.5：启动尝试的硬失败要计入连续失败计数——重试上限的

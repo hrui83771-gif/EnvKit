@@ -31,11 +31,34 @@ import (
 	"time"
 )
 
+// aiChatMu 保证同一时刻只有一条 /api/ai/chat 在跑（见 handleAIChat 内注释）。
+var aiChatMu sync.Mutex
+
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	// ===== 串行化（v3.3）：同一时刻只允许一条对话在跑 =====
+	//
+	// 这不是"怕慢"，是**数据正确性**：主循环依赖多个全局槽位做跨步骤传递——
+	//   · lastVerify（复验结论，取走即清零）；
+	//   · aiGrantReset() 在每个请求开头清空**全局**批量授权；
+	//   · aiWaiter 单槽（ai_wait.go），第二个请求会把第一个的等待者顶掉；
+	//   · aiStartVerify / svcRecordCrash 等服务状态记账。
+	// 两个标签页并发（或旧流未结束时重试）会让 A 的复验徽章发到 B 的流里、
+	// 把 B 正在进行的批量授权清掉、让 A 的确认卡永远等不到。
+	//
+	// 对话本身就是串行交互，第二条并发请求没有正确语义 —— 直接明确拒绝，
+	// 而不是阻塞挂着（SSE 流一跑就是几分钟，挂着只会让用户以为卡死）。
+	// 确认投递走独立端点 /api/ai/confirm，不在这里排队，就地等待不受影响。
+	if !aiChatMu.TryLock() {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"type":"error","text":"已有一条 AI 对话在进行中（另一个标签页？），请等它结束或点「停止」"}`))
+		return
+	}
+	defer aiChatMu.Unlock()
 	usage := aiUsage{} // 空请求错误路径不会产生用量，这里只为复用统一的收尾 helper
 	var body aiChatReq
 	// ===== 读取顺序是**有讲究的**：先读体，再动响应头 =====
@@ -50,10 +73,21 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// httptest 复现不了它：没有真实网络，body 早已在内存里。
 	//
 	// 结论：**任何"先写响应、后读 body"的 handler 都有这个坑**，读体必须排在第一位。
-	raw, readErr := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+	// 读 limit+1：超限**必须显式报错**，不能静默截断——截断后的 JSON 解析
+	// 失败只是让 decErr 变成一行日志，前端会以为"服务端收到了 0 条消息"，
+	// 表现为模型对着半截历史失忆（这个坑上面那段注释已经付过一次学费）。
+	const maxChatBody = 16 << 20
+	raw, readErr := io.ReadAll(io.LimitReader(r.Body, maxChatBody+1))
 	if readErr != nil {
 		warn(scSys, "AI", "读取请求体失败（%v）：已读到 %d 字节 / Content-Length=%d —— 连接在传输中途断了",
 			readErr, len(raw), r.ContentLength)
+	}
+	if len(raw) > maxChatBody {
+		warn(scSys, "AI", "请求体超过上限（%d 字节 > %d），已拒绝", len(raw), maxChatBody)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		_, _ = w.Write([]byte(`{"type":"error","text":"请求体过大（超过 16MB），已拒绝。请新开一个对话（点「清空」）再试"}`))
+		return
 	}
 	decErr := json.Unmarshal(raw, &body)
 	msgs := body.Messages
@@ -155,7 +189,12 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	msgs = aiTrimDanglingToolCalls(msgs)
 	// 滚动摘要：历史变长后把较早的部分压缩成要点备忘（按前缀缓存，不每回合重复生成），
 	// 必须在下面的 40 条硬裁剪之前做——否则最早的用户目标会被无感截断，模型显得健忘。
-	msgs = aiMaybeSummarize(msgs)
+	// 摘要是一次**静默的前置 LLM 调用**（最长 60s）：不发 info 事件的话，
+	// 用户只看到"思考中"三点动画干等，第一反应就是"卡死了，刷新一下"。
+	msgs = aiMaybeSummarize(msgs, func() {
+		sseWrite(w, fl, map[string]any{"type": "info",
+			"text": "正在压缩较早的对话历史（一次性，约十几秒）…"})
+	})
 	if len(msgs) > 40 {
 		msgs = msgs[len(msgs)-40:]
 	}
@@ -183,8 +222,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// 不合成 assistant(tool_calls)+tool（thinking 模型要求回传 reasoning_content，合成消息会 400），
 		// 改为剥掉该回合并用一条 user 消息把结果交给模型。
 		msgs = aiTrimLastToolTurn(msgs)
-		msgs = append(msgs, aiToolResultAsUser(body.Confirm.Tool, aiClampToolResult(body.Confirm.Tool, result)))
-		sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": body.Confirm.Tool, "result": firstLines(result, 300)})
+		msgs = append(msgs, aiToolResultAsUser(body.Confirm.Tool, aiClampToolResult(body.Confirm.Tool, result), body.Lang))
+		sseToolResult(w, fl, body.Confirm.Tool, firstLines(result, 300), body.Confirm.Approved && aiToolOKFromText(result))
 		// 确定性结果行：不让"到底成没成"取决于模型怎么描述
 		name := aiToolCnName(body.Confirm.Tool, body.Confirm.Args)
 		if body.Confirm.Approved {
@@ -205,6 +244,14 @@ func handleAIExplain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	// 同样走 aiRunLoop：与 /api/ai/chat 共用一把锁，别让"解读诊断"和对话互相串台
+	if !aiChatMu.TryLock() {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"type":"error","text":"已有一条 AI 对话在进行中，请等它结束或点「停止」"}`))
+		return
+	}
+	defer aiChatMu.Unlock()
 	var body aiChatReq // 只为了拿界面语言（lang）；messages 由服务端用诊断报告生成
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	fl, ok := aiChatReady(w)
@@ -447,9 +494,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			if exErr != nil {
 				resText = "执行出错：" + exErr.Error()
 			}
-			sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": tool, "result": firstLines(resText, 300)})
+			sseToolResult(w, fl, tool, firstLines(resText, 300), exErr == nil)
 			// 用 user 消息承载工具结果（避免合成 assistant+tool 触发 thinking 模型 400）
-			msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText)))
+			msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText), lang))
 		}
 	}
 	// v2.3 N5：回合上限按任务性质分级，不再一刀切 8。
@@ -588,20 +635,37 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// ③ 心跳同时可防止反向代理/中间层的空闲断连。
 		var readErr error
 		lineCh := make(chan string, 128)
+		// done：主循环提前返回（客户端断开/超时/心跳失败）时通知扫描 goroutine 退出。
+		// 少了它，若此刻 channel 已积满 128 行，`lineCh <- sc.Text()` 会永远阻塞 ——
+		// 每次异常断流泄漏一个 goroutine + 一个 scanner（连同 resp.Body 的引用）。
+		// 正常 Close() 只让 sc.Scan() 失败；卡在**发送**上的 goroutine 是 Close 救不了的。
+		done := make(chan struct{})
 		go func() {
+			defer close(lineCh) // 先写后 close：读侧在 channel 关闭后读取，channel 提供 happens-before
 			sc := bufio.NewScanner(resp.Body)
 			sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 			for sc.Scan() {
-				lineCh <- sc.Text()
+				select {
+				case lineCh <- sc.Text():
+				case <-done:
+					return // 主循环已放弃消费：立刻退出，别堵在这儿
+				}
 			}
-			readErr = sc.Err() // 先写后 close：读侧在 channel 关闭后读取，channel 提供 happens-before
-			close(lineCh)
+			readErr = sc.Err()
 		}()
 
 		rc := http.NewResponseController(w)
 		ticker := time.NewTicker(10 * time.Second)
 		turnTimer := time.NewTimer(aiTurnTimeout) // 单轮上游最长等待（见 aiTurnTimeout 注释）
-		stopTimers := func() { ticker.Stop(); turnTimer.Stop() }
+		stopTimers := func() {
+			ticker.Stop(); turnTimer.Stop()
+			// close(done) 必须幂等：下面三个提前 return 分支 + 正常收尾都会走到这里。
+			select {
+			case <-done:
+			default:
+				close(done)
+			}
+		}
 	reading:
 		for {
 			var line string
@@ -835,8 +899,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					if exErr != nil {
 						resText = "执行出错：" + exErr.Error()
 					}
-					sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": tool, "result": firstLines(resText, 300)})
-					msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText)))
+					sseToolResult(w, fl, tool, firstLines(resText, 300), exErr == nil)
+					msgs = append(msgs, aiToolResultAsUser(tool, aiClampToolResult(tool, resText), lang))
 					continue // 让模型基于工具结果作答
 				}
 			}
@@ -926,13 +990,13 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
-				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": toolMsg.Content})
+				sseToolResult(w, fl, a.Name, toolMsg.Content, false)
 			case verdict.Level == PolicyForbidden:
 				policyRecord(verdict, "denied")
 				tracePolicyDenied(verdict)
 				msg := policyAIView(verdict)
 				warn(scSys, "AI", "策略拒绝 %s：%s", a.Name, verdict.Reason)
-				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": msg})
+				sseToolResult(w, fl, a.Name, msg, false)
 				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统）" + msg})
 				continue
 			case verdict.OptIn && !aiUserAskedFor(a.Name, msgs):
@@ -1032,8 +1096,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 						"同一动作连续失败 "+itoa(rp.fails[key])+" 次，插入换思路引导")
 					// 用 user 消息承载：合成 assistant+tool 会触发 thinking 模型 400
 					toolMsg.Content = hint
-					sseWrite(w, fl, map[string]any{"type": "tool_result",
-						"tool": a.Name, "result": firstLines(hint, 300)})
+					// ok=false：这是"同一动作连续失败"后插入的换思路引导，不是成功结果
+					sseToolResult(w, fl, a.Name, firstLines(hint, 300), false)
 					sseWrite(w, fl, map[string]any{"type": "delta",
 						"text": "\n" + replanUserNotice(a.Name, tgt, rp.fails[key]) + "\n"})
 					toolMsgs = append(toolMsgs, toolMsg)
@@ -1058,7 +1122,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					hasToolFailure = true
 					toolMsg.Content = "执行出错：" + exErr.Error()
 				}
-				sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": a.Name, "result": firstLines(toolMsg.Content, 300)})
+				sseToolResult(w, fl, a.Name, firstLines(toolMsg.Content, 300), exErr == nil)
 				// ---- v2.9：复验结果上界面 ----
 				//
 				// 以前用户看到的是**模型对复验结果的转述** ——

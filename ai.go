@@ -243,7 +243,9 @@ func handleAIBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ac := aiSnap()
-	if !isDeepSeekBase(ac.BaseURL) || ac.APIKey == "" {
+	// Enabled 判断（v3.3）：AI 总开关关着时不该替用户去问上游余额——
+	// 用户关掉 AI 就是要求"别再出网"，每 10 分钟的前端静默刷新不能违背它。
+	if !ac.Enabled || !isDeepSeekBase(ac.BaseURL) || ac.APIKey == "" {
 		_ = json.NewEncoder(w).Encode(map[string]any{"supported": false})
 		return
 	}
@@ -351,13 +353,27 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 var aiCfgMu sync.RWMutex
 
 // aiSnap 返回 AI 配置快照（值拷贝）。读方一律用它，避免与写方竞争。
+//
+// **Quirks 必须深拷贝**：AIConfig 是值类型，但 Quirks 是 map —— 值拷贝只拷了
+// map 头，底层数组还是共享的。quirkRead() 在快照上无锁读这张 map，而
+// aiMutate→setQuirk 在写锁里写同一张：并发 map read and map write 是 Go
+// 运行时 fatal（不可 recover），一次对话 + 一次配置保存就能把进程打死。
+// （AIQuirk 本身是纯值，浅一层拷贝就够。）
 func aiSnap() AIConfig {
 	aiCfgMu.RLock()
 	defer aiCfgMu.RUnlock()
 	if cfg.AI == nil {
 		return AIConfig{}
 	}
-	return *cfg.AI
+	snap := *cfg.AI
+	if len(cfg.AI.Quirks) > 0 {
+		q := make(map[string]AIQuirk, len(cfg.AI.Quirks))
+		for k, v := range cfg.AI.Quirks {
+			q[k] = v
+		}
+		snap.Quirks = q
+	}
+	return snap
 }
 
 // aiMutate 在写锁内修改 AI 配置

@@ -107,7 +107,7 @@ func TestVerifyBadgeClassesAreDistinct(t *testing.T) {
 // 于是界面上冒出一个**根本没跑过**的徽章 ——
 // 而徽章的全部价值就是「它说验了就是真验了」。
 func TestTakeVerifyClearsAfterRead(t *testing.T) {
-	lastVerify = OpResult{Ok: true, Verified: true, Msg: "服务就绪"}
+	aiSetVerify(OpResult{Ok: true, Verified: true, Msg: "服务就绪"})
 	if _, ok := aiTakeVerify(); !ok {
 		t.Fatal("刚写入的复验结果应可取走")
 	}
@@ -118,7 +118,7 @@ func TestTakeVerifyClearsAfterRead(t *testing.T) {
 
 // ---- 6. 空结果不能被当成「有复验」----
 func TestTakeVerifyEmptyIsNotOk(t *testing.T) {
-	lastVerify = OpResult{}
+	aiSetVerify(OpResult{})
 	if _, ok := aiTakeVerify(); ok {
 		t.Fatal("空结果不能算「有复验结果」—— 否则每次工具调用都会冒出一个徽章")
 	}

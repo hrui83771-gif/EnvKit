@@ -122,7 +122,7 @@ func TestStartVerifyPublishesRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读 verify.go 失败：%v", err)
 	}
-	if !strings.Contains(string(src), "lastVerify = vr") {
+	if !strings.Contains(string(src), "aiSetVerify(vr)") {
 		t.Error("aiStartVerify 没把复验结论写入 lastVerify——" +
 			"启动即复验只留在审计里，事件流看不到，判据只能靠工具名猜")
 	}

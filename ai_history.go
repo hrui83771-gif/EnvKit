@@ -136,7 +136,11 @@ func aiHistoryKey(head []aiMsg) string {
 
 // aiMaybeSummarize 把 msgs 的较早部分替换成一条摘要消息；摘要失败时静默降级为原始历史
 // （宁可上下文长一点，也不能因为摘要挂掉而且回合）。
-func aiMaybeSummarize(msgs []aiMsg) []aiMsg {
+//
+// onStart：真正要发起那次**前置 LLM 调用**（最多 60s）之前调用。
+// 它不是可有可无的钩子——没有它，用户在长对话里发一条消息后只能对着
+// 三点动画干等几十秒，没有任何说明，看起来就是"卡死了"。
+func aiMaybeSummarize(msgs []aiMsg, onStart func()) []aiMsg {
 	cut := aiSummaryCut(msgs)
 	if cut <= 0 {
 		return msgs
@@ -148,6 +152,9 @@ func aiMaybeSummarize(msgs []aiMsg) []aiMsg {
 	text := aiSumCache.text
 	aiSumMu.Unlock()
 	if !cached {
+		if onStart != nil {
+			onStart()
+		}
 		var err error
 		text, err = aiSummarizeHistory(head)
 		if err != nil {
@@ -199,10 +206,17 @@ func aiSummarizeHistory(head []aiMsg) (string, error) {
 	return firstLines(strings.TrimSpace(out), 1200), nil
 }
 
-// aiToolResultAsUser 把工具结果包装成一条用户消息（供模型基于结果作答）
-func aiToolResultAsUser(tool, result string) aiMsg {
-	return aiMsg{Role: "user", Content: "[工具 " + tool + " 已执行，结果如下]\n" + result +
-		"\n\n请基于以上结果用简体中文简要回答用户（不要罗列选项菜单，不要重复问我需要什么）。"}
+// aiToolResultAsUser 把工具结果包装成一条用户消息（供模型基于结果作答）。
+//
+// lang：跟随界面语言。以前这里写死"用简体中文回答"，与 aiLangDirective（判断
+// lang=="en" 时要求英文作答）直接打架 —— 英文界面上模型收到两条矛盾指令，
+// 输出经常中英混杂。
+func aiToolResultAsUser(tool, result, lang string) aiMsg {
+	reply := "请基于以上结果用简体中文简要回答用户（不要罗列选项菜单，不要重复问我需要什么）。"
+	if lang == "en" {
+		reply = "Answer the user briefly in English based on the above result (do not list menu options, do not ask what they want again)."
+	}
+	return aiMsg{Role: "user", Content: "[工具 " + tool + " 已执行，结果如下]\n" + result + "\n\n" + reply}
 }
 
 // aiSleepCtx 可被客户端断开打断的退避等待；返回 false 表示上下文已取消

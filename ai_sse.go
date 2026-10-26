@@ -14,12 +14,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 func sseWrite(w http.ResponseWriter, fl http.Flusher, v map[string]any) {
 	b, _ := json.Marshal(v)
 	fmt.Fprintf(w, "data: %s\n\n", b)
 	fl.Flush()
+}
+
+// sseToolResult 发 tool_result 事件，并带上**结构化的成败标志** ok。
+//
+// 为什么必须有这个字段：前端轨迹时间轴以前靠中文正则猜"这条结果是好是坏"
+// （/^(错误|执行出错)|失败|拒绝|不在白名单/），换个措辞、或者上游报一句英文
+// （connection refused）就猜不出来 —— 而这个系统自己的原则是
+// "前端不重新判定结果，判据只来自服务端字段"。猜文本就是自打脸。
+//
+// ok 一律由调用方按真实判据给（exErr / verdict / d.Proceed），
+// 不要在这里从 result 文本反推。
+func sseToolResult(w http.ResponseWriter, fl http.Flusher, tool, result string, ok bool) {
+	sseWrite(w, fl, map[string]any{"type": "tool_result", "tool": tool, "result": result, "ok": ok})
+}
+
+// aiToolOKFromText 没有 exErr 可用时的兜底判据（只认这几类确定失败的前缀）。
+// 用在"结果只有字符串、拿不到 error"的路径上，避免每处各写一遍正则。
+func aiToolOKFromText(res string) bool {
+	t := strings.TrimSpace(res)
+	for _, bad := range []string{"执行出错", "错误：", "错误:", "不在白名单", "策略拒绝", "已拒绝", "已取消"} {
+		if strings.HasPrefix(t, bad) {
+			return false
+		}
+	}
+	return true
 }
 func aiChatReady(w http.ResponseWriter) (http.Flusher, bool) {
 	if !aiSnap().ready() {

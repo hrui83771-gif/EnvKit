@@ -143,12 +143,16 @@ func aiDBQuery(sql, db string, want int) (string, error) {
 			"或用聚合查询直接要统计结果）", want, len(rows)))
 	}
 
-	// 字符上限：超了要说，否则模型会把截断当完整
+	// 字符上限：超了要说，否则模型会把截断当完整。
+	// （v3.3 修两处坑：① 原来用 len(out) 比较/切片——那是**字节**数，
+	// 名字却叫 MaxChars，中文结果实际只留了约 1/3；② out[:6000] 可能正好
+	// 切在 UTF-8 多字节字符中间，产出非法字节流，模型收到乱码尾巴。
+	// 与 aiClampToolResult 同款处理：按 rune 数截，不切碎字符。）
 	out := sb.String()
-	if len(out) > aiDBMaxChars {
-		out = out[:aiDBMaxChars] + fmt.Sprintf(
+	if r := []rune(out); len(r) > aiDBMaxChars {
+		out = string(r[:aiDBMaxChars]) + fmt.Sprintf(
 			"\n（结果过长已截断，实际 %d 字符。要完整结果请缩小查询范围，"+
-				"例如只 SELECT 你需要的列、或用聚合代替拉全表）", len(out))
+				"例如只 SELECT 你需要的列、或用聚合代替拉全表）", len(r))
 	}
 
 	// 结果属数据库内容，包 <untrusted_data> 让模型把它当素材而非指令
