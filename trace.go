@@ -422,11 +422,10 @@ func traceQuery(n int, outcome string) []Trace {
 
 // cleanupOldTraces 清理过期轨迹文件。保留期比审计短——
 // 轨迹用于近期调优，长期没有价值，而它比审计大得多。
-func cleanupOldTraces(days int) {
-	if days <= 0 {
-		days = 14
-	}
-	cutoff := time.Now().AddDate(0, 0, -days)
+// 天数从 v3.4 起由 dev 段配置（trace_retention_days，默认 14）；
+// main.go 启动清理链调用（此前该函数存在但从未被接线）。
+func cleanupOldTraces() {
+	cutoff := time.Now().AddDate(0, 0, -devSnap().traceRetentionDays())
 	files, _ := filepath.Glob(filepath.Join(traceDir(), "trace-*.jsonl"))
 	for _, p := range files {
 		name := filepath.Base(p)

@@ -156,6 +156,14 @@ func applyConfigDefaults() {
 	if cfg.Mission.BriefingAt == "" {
 		cfg.Mission.BriefingAt = "08:30"
 	}
+	// 开发者段（设置页「开发者配置」，v3.4）：老配置里没有 "dev" 段，这里补指针并
+	// 把默认值落实到内存 —— 这样 GET /api/config 与设置页回显的都是真实数字，
+	// 而不是一排空输入框。读取侧各 getter 仍带兜底（手写 0 也不会读出 0）。
+	if cfg.Dev == nil {
+		cfg.Dev = &DevConfig{}
+	}
+	dv := cfg.Dev.resolved()
+	cfg.Dev = &dv
 }
 
 // mergeFormConfig 把"页面表单提交的配置"合并到当前配置上：
@@ -184,6 +192,12 @@ func mergeFormConfig(form, cur Config) Config {
 	// 行动段（Phase 1）只有 API 没有配置页 UI，同 Pet/Alert 无条件保留——
 	// 否则程序配置页一次自动保存就把巡检开关/入站开关抹成零值。
 	form.Mission = cur.Mission
+	// 开发者段（v3.4 设置页）走独立出入口 /api/dev/config：老页面的 configBody()
+	// 不回传 dev，指针为空就沿用原值 —— 否则老页一次自动保存就把新页的调参抹回零值。
+	// 用指针判空而不是无条件保留：将来若整包导出/导入带上了 dev 段，自然放行。
+	if form.Dev == nil {
+		form.Dev = cur.Dev
+	}
 	if strings.TrimSpace(form.UpdateURL) == "" {
 		form.UpdateURL = cur.UpdateURL // 同上：表单没有该字段，别让保存把它抹成空
 	}
@@ -266,10 +280,11 @@ func decryptField(v string) string {
 	return "" // 换机/换用户解不开 → 置空，等用户重填
 }
 
-// cloneConfigDeepAI 值拷贝 Config，并对 AI 指针做深拷贝（含 Quirks map）。
-// Config 是值类型但 AI 是指针 —— 直接 `c := cfg` 后改 c.AI.APIKey 会把全局
-// 内存密钥一起改掉（真实事故：导出诊断包脱敏后 AI 助手当场失联）。
-func cloneConfigDeepAI(c Config) Config {
+// cloneConfigDeep 值拷贝 Config，并对指针段（AI 含 Quirks map、Dev）做深拷贝。
+// Config 是值类型但 AI/Dev 是指针 —— 直接 `c := cfg` 后改 c.AI.APIKey 会把全局
+// 内存密钥一起改掉（真实事故：导出诊断包脱敏后 AI 助手当场失联）；
+// Dev 同理：落盘前 normalizeConfig 的钳制不该顺手改到全局内存（还有并发读）。
+func cloneConfigDeep(c Config) Config {
 	if c.AI != nil {
 		ai := *c.AI
 		if ai.Quirks != nil {
@@ -281,11 +296,15 @@ func cloneConfigDeepAI(c Config) Config {
 		}
 		c.AI = &ai
 	}
+	if c.Dev != nil {
+		dv := *c.Dev
+		c.Dev = &dv
+	}
 	return c
 }
 
 func encryptConfig(c Config) Config {
-	c = cloneConfigDeepAI(c)
+	c = cloneConfigDeep(c)
 	c.MySQL.Password = protectIfPlain(c.MySQL.Password)
 	c.Projects.MySQLPass = protectIfPlain(c.Projects.MySQLPass)
 	c.Chain.SSHPassword = protectIfPlain(c.Chain.SSHPassword)

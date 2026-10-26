@@ -99,6 +99,10 @@ type Config struct {
 	// Recovery 恢复事务的两层节制参数（v3.0 T1.5）。零值 = 内置默认
 	//（窗口 10 分钟 / 12 次 / per-target 3 次）。见 txbudget.go。
 	Recovery RecoveryConfig `json:"recovery,omitempty"`
+	// Dev 开发者配置（设置页「开发者配置」tab，v3.4）。指针段：老配置里没有
+	// "dev" 段时为 nil，所有读取点走 devSnap() + getter 兜底，不判空就崩的写法一律不允许。
+	// 老页面的 configBody() 不回传 dev，靠 mergeFormConfig 的 nil 保护不被自动保存抹掉。
+	Dev *DevConfig `json:"dev,omitempty"`
 	// UpdateURL 自版本检查地址（返回 {"version":"x.y.z","notes":"..."} 的 JSON）。
 	// 留空 = 关闭检查。无公开发布渠道时保持为空即可。
 	UpdateURL string `json:"update_url"`
@@ -140,6 +144,145 @@ type RecoveryConfig struct {
 	MaxAttempts         int `json:"max_attempts,omitempty"`          // per-target 连续失败上限，0 = 3
 	BreakerAfter        int `json:"breaker_after,omitempty"`         // 连续失败达限进熔断，0 = 3
 	BreakerCooldownSecs int `json:"breaker_cooldown_secs,omitempty"` // 熔断冷静期秒数，0 = 300
+}
+
+// DevConfig 开发者配置（config.json 的 "dev" 段，设置页「开发者配置」tab）。
+//
+// 定位：装的全是"调错了不至于坏、且有内置默认兜底"的参数 ——
+// 零值 = 内置默认（与 Recovery/Pet 段同一惯例），所以老配置里没有 dev 段也照常跑；
+// 保存入口是独立的 /api/dev/config（handleDevConfig），老页面的整包表单保存
+// 永远碰不到它（mergeFormConfig 的 nil 保护）。
+// 本段不含任何密码 / APIKey：AI 密钥走 /api/ai/config + DPAPI，别往这里加。
+type DevConfig struct {
+	// —— AI 调参（滚动摘要 + 单轮超时，见 ai_history.go / ai_loop.go）——
+	// SummaryAfterTokens 历史估算 token 超过该值才启用滚动摘要（0 = 默认 5000）。
+	SummaryAfterTokens int `json:"summary_after_tokens,omitempty"`
+	// SummaryKeepTokens 摘要后尾部原样保留的估算上限（0 = 默认 3000）。
+	SummaryKeepTokens int `json:"summary_keep_tokens,omitempty"`
+	// SummarizeKeepMsgs 摘要后至少原样保留的消息条数（0 = 默认 12）。
+	SummarizeKeepMsgs int `json:"summarize_keep_msgs,omitempty"`
+	// TurnTimeoutSecs 单轮上游最长等待秒数（0 = 默认 360 = 6 分钟）。
+	// 调大容忍慢上游，调小更快发现假死 —— 但太小会把正常长推理判成超时。
+	TurnTimeoutSecs int `json:"turn_timeout_secs,omitempty"`
+
+	// —— 数据保留（天；0 = 内置默认）——
+	// AuditRetentionDays 审计文件 audit-*.jsonl 的保留天数（0 = 30）。
+	AuditRetentionDays int `json:"audit_retention_days,omitempty"`
+	// TraceRetentionDays 轨迹文件 trace-*.jsonl 的保留天数（0 = 14）。
+	// 轨迹比审计大得多、长期没有价值，所以默认比审计短。
+	TraceRetentionDays int `json:"trace_retention_days,omitempty"`
+	// ShadowRetentionDays 影子报告的保留天数（0 = 30，与审计同策略）。
+	ShadowRetentionDays int `json:"shadow_retention_days,omitempty"`
+	// MissionDeadlineDays 行动超期未收口自动收成 expired 的天数（0 = 30）。
+	// 这只是防僵尸行动永远挂着的兜底，实际任务远用不到。
+	MissionDeadlineDays int `json:"mission_deadline_days,omitempty"`
+	// MissionKeepDays 终态行动的保留天数（0 = 30）。
+	MissionKeepDays int `json:"mission_keep_days,omitempty"`
+
+	// —— 控制台端口 ——
+	// ServerPort 控制台起始端口（0 = 默认 18765，被占用则 findPort 顺延）。
+	ServerPort int `json:"server_port,omitempty"`
+	// PortScanLimit 端口顺延/单实例探测的上界（不含；0 = 默认 18815，
+	// 即默认给 50 个顺延名额）。必须大于 ServerPort。
+	PortScanLimit int `json:"port_scan_limit,omitempty"`
+}
+
+// 开发者段的内置默认值：与界面上「恢复默认」的目标值是同一份数字，
+// 改这里就等于改默认 —— 不要在别处再写第二份字面量。
+const (
+	devDefaultSummaryAfterTokens = 5000
+	devDefaultSummaryKeepTokens  = 3000
+	devDefaultSummarizeKeepMsgs  = 12
+	devDefaultTurnTimeoutSecs    = 360
+	devDefaultAuditRetentionDays = 30
+	devDefaultTraceRetentionDays = 14
+	devDefaultShadowRetentionDay = 30
+	devDefaultMissionDeadlineDay = 30
+	devDefaultMissionKeepDay     = 30
+	devDefaultServerPort         = 18765
+	devDefaultPortScanSpan       = 50 // 从起始端口起的顺延名额数（上界 = 起始 + 50）
+)
+
+// devOr 取正数，否则回落默认 —— 0 与负数都视为"没设"。
+func devOr(v, def int) int {
+	if v > 0 {
+		return v
+	}
+	return def
+}
+
+// resolved 返回"填好默认值的副本"：给设置页回显用 —— 用户看到的应该是
+// 生效值（数字），而不是一排空输入框。
+func (d DevConfig) resolved() DevConfig {
+	d.SummaryAfterTokens = devOr(d.SummaryAfterTokens, devDefaultSummaryAfterTokens)
+	d.SummaryKeepTokens = devOr(d.SummaryKeepTokens, devDefaultSummaryKeepTokens)
+	d.SummarizeKeepMsgs = devOr(d.SummarizeKeepMsgs, devDefaultSummarizeKeepMsgs)
+	d.TurnTimeoutSecs = devOr(d.TurnTimeoutSecs, devDefaultTurnTimeoutSecs)
+	d.AuditRetentionDays = devOr(d.AuditRetentionDays, devDefaultAuditRetentionDays)
+	d.TraceRetentionDays = devOr(d.TraceRetentionDays, devDefaultTraceRetentionDays)
+	d.ShadowRetentionDays = devOr(d.ShadowRetentionDays, devDefaultShadowRetentionDay)
+	d.MissionDeadlineDays = devOr(d.MissionDeadlineDays, devDefaultMissionDeadlineDay)
+	d.MissionKeepDays = devOr(d.MissionKeepDays, devDefaultMissionKeepDay)
+	d.ServerPort = devOr(d.ServerPort, devDefaultServerPort)
+	d.PortScanLimit = devOr(d.PortScanLimit, d.ServerPort+devDefaultPortScanSpan)
+	return d
+}
+
+// 读取侧兜底（手写 config.json 把某项改成 0/负数时不至于读出 0）。
+// 与 resolved() 分工：resolved 给界面回显，这些给运行时取值。
+func (d DevConfig) summaryAfterTokens() int {
+	return devOr(d.SummaryAfterTokens, devDefaultSummaryAfterTokens)
+}
+func (d DevConfig) summaryKeepTokens() int {
+	return devOr(d.SummaryKeepTokens, devDefaultSummaryKeepTokens)
+}
+func (d DevConfig) summarizeKeepMsgs() int {
+	return devOr(d.SummarizeKeepMsgs, devDefaultSummarizeKeepMsgs)
+}
+func (d DevConfig) turnTimeout() time.Duration {
+	return time.Duration(devOr(d.TurnTimeoutSecs, devDefaultTurnTimeoutSecs)) * time.Second
+}
+func (d DevConfig) auditRetentionDays() int {
+	return devOr(d.AuditRetentionDays, devDefaultAuditRetentionDays)
+}
+func (d DevConfig) traceRetentionDays() int {
+	return devOr(d.TraceRetentionDays, devDefaultTraceRetentionDays)
+}
+func (d DevConfig) shadowRetentionDays() int {
+	return devOr(d.ShadowRetentionDays, devDefaultShadowRetentionDay)
+}
+func (d DevConfig) missionDeadline() time.Duration {
+	return time.Duration(devOr(d.MissionDeadlineDays, devDefaultMissionDeadlineDay)) * 24 * time.Hour
+}
+func (d DevConfig) missionKeep() time.Duration {
+	return time.Duration(devOr(d.MissionKeepDays, devDefaultMissionKeepDay)) * 24 * time.Hour
+}
+func (d DevConfig) serverPort() int {
+	p := devOr(d.ServerPort, devDefaultServerPort)
+	if p > 65535 {
+		return devDefaultServerPort
+	}
+	return p
+}
+func (d DevConfig) portScanLimit() int {
+	start := d.serverPort()
+	if d.PortScanLimit > start {
+		return d.PortScanLimit
+	}
+	return start + devDefaultPortScanSpan
+}
+
+// devSnap 开发者段快照：所有"常量 → 配置"的运行时读取点都走这里。
+// cfgMu 只在取值这一瞬持有、不嵌套任何其它锁；调用点也不得持有
+// cfgMu / aiCfgMu / msMu（T1 锁序审计逐一确认过：不存在反向嵌套路径）。
+func devSnap() DevConfig {
+	cfgMu.Lock()
+	var d DevConfig
+	if cfg.Dev != nil {
+		d = *cfg.Dev
+	}
+	cfgMu.Unlock()
+	return d
 }
 
 type CheckResult struct {

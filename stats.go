@@ -309,7 +309,7 @@ func statsRange(days int) *StatsBoard {
 		}
 	}
 	b.Totals.TraceDaysAvailable = len(traceDaySet)
-	b.Totals.TraceRetentionDays = 14
+	b.Totals.TraceRetentionDays = devSnap().traceRetentionDays() // v3.4：来自 dev 段，看板如实展示
 
 	// ---- 延迟（只有带 dur_ms 的记录才有）----
 	{

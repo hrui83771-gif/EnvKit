@@ -137,6 +137,16 @@ func normalizeConfig(c *Config) {
 		}
 	}
 
+	// 开发者段（v3.4 设置页）：先深拷贝再钳制 —— normalizeConfig 可能作用在
+	// saveExternalConfig 的浅拷贝上，直接写共享指针等于无锁改全局内存
+	// （并发的 devSnap 读会竞态）。resolved() 顺带把空项补成默认值，
+	// 落盘的配置永远是完整可读的一段。
+	if c.Dev != nil {
+		dv := c.Dev.resolved()
+		normalizeDev(&dv)
+		c.Dev = &dv
+	}
+
 	for i := range c.Components {
 		c.Components[i].URL = strings.TrimSpace(c.Components[i].URL)
 		c.Components[i].SHA256 = strings.ToLower(strings.TrimSpace(c.Components[i].SHA256))
@@ -350,6 +360,103 @@ func checkConfig(c Config) []configProblem {
 		if c.AI.MaxTokens < 0 {
 			hard("AI 最大 Tokens", "不能为负数")
 		}
+	}
+
+	// 开发者段（v3.4 设置页）
+	if c.Dev != nil {
+		ps = append(ps, checkDevConfig(*c.Dev)...)
+	}
+	return ps
+}
+
+// normalizeDev 钳制开发者段的脏值：负数一律归零（0 = 内置默认），
+// 秒数/天数压回上下界。端口越界不在这儿"顺手修好" —— 那是硬错误，
+// 交给 checkDevConfig 拒绝（自动把 70000 钳成 65535 会让用户以为自己配对了）。
+func normalizeDev(d *DevConfig) {
+	pos := func(v int) int {
+		if v < 0 {
+			return 0
+		}
+		return v
+	}
+	// 0 = 没设（走默认），非 0 才压界
+	span := func(v, lo, hi int) int {
+		if v == 0 {
+			return 0
+		}
+		if v < lo {
+			return lo
+		}
+		if v > hi {
+			return hi
+		}
+		return v
+	}
+	d.SummaryAfterTokens = pos(d.SummaryAfterTokens)
+	d.SummaryKeepTokens = pos(d.SummaryKeepTokens)
+	d.SummarizeKeepMsgs = pos(d.SummarizeKeepMsgs)
+	d.TurnTimeoutSecs = span(d.TurnTimeoutSecs, 30, 3600)
+	d.AuditRetentionDays = span(d.AuditRetentionDays, 1, 3650)
+	d.TraceRetentionDays = span(d.TraceRetentionDays, 1, 3650)
+	d.ShadowRetentionDays = span(d.ShadowRetentionDays, 1, 3650)
+	d.MissionDeadlineDays = span(d.MissionDeadlineDays, 1, 3650)
+	d.MissionKeepDays = span(d.MissionKeepDays, 1, 3650)
+	d.ServerPort = pos(d.ServerPort)
+	d.PortScanLimit = pos(d.PortScanLimit)
+	// 保留量必须小于触发阈值：尾部预算 ≥ 触发阈值意味着"摘要完还是超标"，
+	// 下一回合又立刻触发，等于把摘要调用变成每回合一次。
+	if d.SummaryAfterTokens > 0 && d.SummaryKeepTokens >= d.SummaryAfterTokens {
+		d.SummaryKeepTokens = d.SummaryAfterTokens * 2 / 3
+	}
+}
+
+// checkDevConfig 开发者段校验（Hard = 拒绝保存）。
+// 运行时各 getter 会把越界值兜底回默认，但**保存时必须拦**：
+// 静默兜底会让"我明明配了 99999"变成最难查的幽灵问题。
+func checkDevConfig(d DevConfig) []configProblem {
+	var ps []configProblem
+	hard := func(field, format string, a ...any) {
+		ps = append(ps, configProblem{Field: field, Msg: fmt.Sprintf(format, a...), Hard: true})
+	}
+	soft := func(field, format string, a ...any) {
+		ps = append(ps, configProblem{Field: field, Msg: fmt.Sprintf(format, a...)})
+	}
+	if d.ServerPort != 0 && (d.ServerPort < 1 || d.ServerPort > 65535) {
+		hard("dev.server_port", "端口需在 1-65535，当前 %d", d.ServerPort)
+	}
+	if d.PortScanLimit != 0 && (d.PortScanLimit < 1 || d.PortScanLimit > 65535) {
+		hard("dev.port_scan_limit", "端口需在 1-65535，当前 %d", d.PortScanLimit)
+	}
+	if d.ServerPort != 0 && d.PortScanLimit != 0 && d.PortScanLimit <= d.ServerPort {
+		hard("dev.port_scan_limit", "必须大于 server_port（%d），否则顺延与单实例探测都没有名额", d.ServerPort)
+	}
+	if d.TurnTimeoutSecs != 0 && (d.TurnTimeoutSecs < 30 || d.TurnTimeoutSecs > 3600) {
+		hard("dev.turn_timeout_secs", "需在 30-3600 秒，当前 %d", d.TurnTimeoutSecs)
+	}
+	for _, f := range []struct {
+		name string
+		v    int
+	}{
+		{"dev.audit_retention_days", d.AuditRetentionDays},
+		{"dev.trace_retention_days", d.TraceRetentionDays},
+		{"dev.shadow_retention_days", d.ShadowRetentionDays},
+		{"dev.mission_deadline_days", d.MissionDeadlineDays},
+		{"dev.mission_keep_days", d.MissionKeepDays},
+	} {
+		if f.v != 0 && (f.v < 1 || f.v > 3650) {
+			hard(f.name, "保留天数需在 1-3650，当前 %d", f.v)
+		}
+	}
+	if d.SummaryAfterTokens != 0 && d.SummaryAfterTokens < 500 {
+		hard("dev.summary_after_tokens", "触发阈值至少 500，当前 %d（太小会每回合都打一次摘要调用）", d.SummaryAfterTokens)
+	}
+	if d.SummaryAfterTokens != 0 && d.SummaryKeepTokens != 0 && d.SummaryKeepTokens >= d.SummaryAfterTokens {
+		// normalizeDev 会把它改对，这里只是提醒"你填的数字自相矛盾"
+		soft("dev.summary_keep_tokens", "保留量(%d) ≥ 触发阈值(%d)，保存时会自动压回阈值的 2/3",
+			d.SummaryKeepTokens, d.SummaryAfterTokens)
+	}
+	if d.SummarizeKeepMsgs != 0 && (d.SummarizeKeepMsgs < 2 || d.SummarizeKeepMsgs > 500) {
+		hard("dev.summarize_keep_msgs", "至少保留条数需在 2-500，当前 %d", d.SummarizeKeepMsgs)
 	}
 	return ps
 }

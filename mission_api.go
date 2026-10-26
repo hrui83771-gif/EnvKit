@@ -206,3 +206,101 @@ func handleMissionEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// ---------- 配置段端点（设置页「基础配置 → 行动」） ----------
+
+// handleMissionConfig 行动配置的独立出入口（/api/missions/config）。
+//
+// 与 handlePetConfig/handleAlertConfig 同范式：GET 回显生效值、POST 指针字段增量提交。
+// 为什么不复用 POST /api/config：那是整包替换，missions 段此前靠 mergeFormConfig
+// 的无条件保留才没被老页面抹掉（MissionConfig.Enabled 是指针，零值表达不了"关"）——
+// 有了独立通道，两处配置面谁写谁的段，互不携带。
+//
+// 生效时机：调度器每轮 tick 读 cfg.Mission（trigger.go msSchedTick），
+// 改完下一轮就按新参数跑，无需重启；正在等待的晨报时刻按新 BriefingAt 重新对表。
+func handleMissionConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		cfgMu.Lock()
+		mc := cfg.Mission
+		cfgMu.Unlock()
+		// 回显生效值（与 applyConfigDefaults 的默认一致）
+		if mc.PatrolIntervalMin == 0 {
+			mc.PatrolIntervalMin = 60
+		}
+		if mc.BriefingAt == "" {
+			mc.BriefingAt = "08:30"
+		}
+		writeJSON(w, mc)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	var body struct {
+		Enabled           *bool   `json:"enabled"`
+		PatrolIntervalMin *int    `json:"patrol_interval_min"`
+		InboundHook       *bool   `json:"inbound_hook"`
+		BriefingAt        *string `json:"briefing_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "参数错误", 400)
+		return
+	}
+	// 晨报时刻沿用调度器的解析口径（trigger.go 用 "15:04"），
+	// 校验放行前而不是事后：写错格式应当场拒绝，而不是保存成功后晨报静默消失。
+	if body.BriefingAt != nil {
+		bt := strings.TrimSpace(*body.BriefingAt)
+		if bt != "" && bt != "off" {
+			if _, err := time.ParseInLocation("15:04", bt, time.Local); err != nil {
+				http.Error(w, "晨报时刻需为 HH:MM（24 小时制）或 off", 400)
+				return
+			}
+		}
+	}
+
+	cfgMu.Lock()
+	before := cfg.Mission
+	if body.Enabled != nil {
+		e := *body.Enabled
+		cfg.Mission.Enabled = &e
+	}
+	if body.PatrolIntervalMin != nil {
+		iv := *body.PatrolIntervalMin
+		if iv < 0 {
+			iv = 0
+		}
+		if iv > 24*60 {
+			iv = 24 * 60 // 巡检间隔上限一天：再大等于关掉巡检，那该用开关表达
+		}
+		cfg.Mission.PatrolIntervalMin = iv
+	}
+	if body.InboundHook != nil {
+		cfg.Mission.InboundHook = *body.InboundHook
+	}
+	if body.BriefingAt != nil {
+		cfg.Mission.BriefingAt = strings.TrimSpace(*body.BriefingAt)
+	}
+	after := cfg.Mission
+	saved := cfg
+	cfgMu.Unlock()
+
+	if !missionCfgEqual(before, after) {
+		saveExternalConfig(saved)
+		auditNow(actUser, "mission_config", "config.json", "missions", resOK,
+			fmt.Sprintf("定时产出=%v 入站=%v 巡检间隔=%dmin 晨报=%s",
+				after.on(), after.inboundOn(), after.PatrolIntervalMin, after.BriefingAt))
+		notifyMissions() // 调度状态展示依赖行动列表刷新的同一通道
+	}
+	writeJSON(w, after)
+}
+
+// missionCfgEqual 按值比较两份行动配置（Enabled 是指针，直接 == 比的是地址）。
+func missionCfgEqual(a, b MissionConfig) bool {
+	on := func(p *bool) bool { return p == nil || *p }
+	return on(a.Enabled) == on(b.Enabled) &&
+		a.PatrolIntervalMin == b.PatrolIntervalMin &&
+		a.InboundHook == b.InboundHook &&
+		a.BriefingAt == b.BriefingAt
+}

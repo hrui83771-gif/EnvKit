@@ -147,12 +147,18 @@ type Mission struct {
 	ExpiresAt time.Time        `json:"expires_at"` // 截止时间：超期未收口 → expired
 }
 
+// 行动的时间参数（超期收口 / 终态保留）从 v3.4 起由 dev 段配置
+// （mission_deadline_days / mission_keep_days，默认都是 30 天），
+// 这里保留零值兜底语义：dev 段缺失或手写 0 时仍是原来的 30 天。
+//
+// msDeadline 创建后多久没走完就自动收成 expired —— 实际任务远用不到这么久，
+// 这只是防僵尸行动永远挂着。
+func msDeadline() time.Duration { return devSnap().missionDeadline() }
+
+// msKeep 终态行动保留期，过期清理。
+func msKeep() time.Duration { return devSnap().missionKeep() }
+
 const (
-	// msDeadline 创建后多久没走完就自动收成 expired（对齐审计 30 天窗口，
-	// 实际任务远用不到——这里只是防僵尸行动永远挂着）。
-	msDeadline = 30 * 24 * time.Hour
-	// msKeep 终态行动保留期，过期清理。
-	msKeep = 30 * 24 * time.Hour
 	// msMaxCount 文件里最多保留的行动数（防无限增长；淘汰最老的**终态**）。
 	msMaxCount = 200
 	// msConfirmTimeout 等确认超时降级为 paused 的时长。
@@ -242,7 +248,7 @@ func missionNew(goal string, tg Trigger) (Mission, error) {
 		Trigger:   tg,
 		CreatedAt: now,
 		UpdatedAt: now,
-		ExpiresAt: now.Add(msDeadline),
+		ExpiresAt: now.Add(msDeadline()),
 	}
 	msMu.Lock()
 	defer msMu.Unlock()
@@ -357,7 +363,7 @@ func missionSweep(ms []Mission, now time.Time, runningIsStale ...bool) ([]Missio
 				m.UpdatedAt = now
 				changed = true
 			}
-		} else if now.Sub(m.UpdatedAt) > msKeep {
+		} else if now.Sub(m.UpdatedAt) > msKeep() {
 			// 终态过保留期：删
 			changed = true
 			continue

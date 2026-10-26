@@ -336,11 +336,12 @@ var aiActionFamilies = []struct {
 // v3.3：触发从"24 条消息"改成"约 5000 token"。条数会把一条 3000 字工具结果
 // 和一句"好的"当成一样大——大结果场景下摘要来得太晚，小消息场景下又白打调用。
 
+// 滚动摘要的三个调参项（触发阈值 / 尾部预算 / 至少保留条数）从 v3.4 起由
+// dev 段配置（设置页「开发者配置」），默认值与读取逻辑见 state.go 的 DevConfig；
+// aiSumQuantum 是**缓存正确性约束**而不是调参项，保持常量。
+
 const (
-	aiSummaryAfterTokens = 5000 // 历史估算超过该值才启用摘要
-	aiSummaryKeepTokens  = 3000 // 摘要后尾部原样保留的估算上限
-	aiSummarizeKeepMsgs  = 12   // 摘要后至少原样保留的条数（最近上下文别被切碎）
-	aiSumQuantum         = 6    // 摘要边界量化粒度（条）：切分点只按 6 条前移
+	aiSumQuantum = 6 // 摘要边界量化粒度（条）：切分点只按 6 条前移
 )
 
 var (
@@ -353,7 +354,10 @@ var (
 
 // aiTurnTimeout 单轮上游最长等待：共享 client（httpStream）不设全局超时，
 // 由这里的计时器兜底，避免上游假死时永久挂住（此前是靠 client 的 120s 超时）。
-const aiTurnTimeout = 6 * time.Minute
+// v3.4 起时长来自 dev 段（turn_timeout_secs，默认 360s），改完下一轮对话生效。
+func aiTurnTimeout() time.Duration {
+	return devSnap().turnTimeout()
+}
 
 // aiSleepCtx 休眠但可被客户端断开打断（避免退出时后台空转）
 func aiSleepCtx(ctx context.Context, d time.Duration) bool {
@@ -675,7 +679,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 
 		rc := http.NewResponseController(w)
 		ticker := time.NewTicker(10 * time.Second)
-		turnTimer := time.NewTimer(aiTurnTimeout) // 单轮上游最长等待（见 aiTurnTimeout 注释）
+		turnTO := aiTurnTimeout() // 单轮上游最长等待（dev 段可调，见 aiTurnTimeout 注释）
+		turnTimer := time.NewTimer(turnTO)
 		stopTimers := func() {
 			ticker.Stop()
 			turnTimer.Stop()
@@ -698,8 +703,8 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			case <-turnTimer.C:
 				stopTimers()
 				resp.Body.Close()
-				warn(scSys, "AI", "上游 %s 内未返回任何数据，已中断本轮请求（可换更快的模型或检查网络/代理）", aiTurnTimeout)
-				sseWrite(w, fl, map[string]any{"type": "error", "text": fmt.Sprintf("AI 上游超时（%s 无数据），已中断本轮", aiTurnTimeout)})
+				warn(scSys, "AI", "上游 %s 内未返回任何数据，已中断本轮请求（可换更快的模型或检查网络/代理）", turnTO)
+				sseWrite(w, fl, map[string]any{"type": "error", "text": fmt.Sprintf("AI 上游超时（%s 无数据），已中断本轮", turnTO)})
 				sseDoneUsage(w, fl, &usage)
 				return
 			case <-ticker.C:

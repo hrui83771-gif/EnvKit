@@ -365,14 +365,15 @@ func handleAudit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// cleanupOldAudits 清理超过 30 天的审计文件（与业务日志分开保留策略）。
+// cleanupOldAudits 清理过期审计文件（与业务日志分开保留策略）。
+// 保留天数从 v3.4 起由 dev 段配置（audit_retention_days，默认 30）。
 func cleanupOldAudits() {
 	dir := exeDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().AddDate(0, 0, -30)
+	cutoff := time.Now().AddDate(0, 0, -devSnap().auditRetentionDays())
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasPrefix(name, "audit-") || !strings.HasSuffix(name, ".jsonl") {

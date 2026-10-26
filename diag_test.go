@@ -39,7 +39,7 @@ func TestConfigCopyKeepsAIKey(t *testing.T) {
 		t.Fatalf("encryptConfig 把原 AI Key 改成了密文：%q", orig.AI.APIKey)
 	}
 
-	san := cloneConfigDeepAI(orig)
+	san := cloneConfigDeep(orig)
 	san.AI.APIKey = ""
 	san.AI.Quirks["m"] = AIQuirk{}
 	if orig.AI.APIKey != "sk-test" {

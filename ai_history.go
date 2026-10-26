@@ -83,15 +83,21 @@ func aiSummaryCut(msgs []aiMsg) int {
 	if n <= 2 {
 		return 0
 	}
+	// v3.4：三个参数从 dev 段读（设置页「开发者配置」可调）。
+	// devSnap 只在取值这一瞬拿 cfgMu，本函数的调用点不持任何锁。
+	dv := devSnap()
+	afterTokens := dv.summaryAfterTokens()
+	keepTokens := dv.summaryKeepTokens()
+	keepMsgs := dv.summarizeKeepMsgs()
 	total := 0
 	for i := range msgs {
 		total += aiMsgTokens(msgs[i])
 	}
-	if total <= aiSummaryAfterTokens {
+	if total <= afterTokens {
 		return 0
 	}
-	// 初始按"保留最近 aiSummarizeKeepMsgs 条"（与旧行为一致），再按 token 预算前移。
-	keep := aiSummarizeKeepMsgs
+	// 初始按"保留最近 keepMsgs 条"（与旧行为一致），再按 token 预算前移。
+	keep := keepMsgs
 	if n-keep < aiSumQuantum {
 		keep = n - aiSumQuantum
 	}
@@ -111,7 +117,7 @@ func aiSummaryCut(msgs []aiMsg) int {
 		for i := cut; i < n; i++ {
 			tail += aiMsgTokens(msgs[i])
 		}
-		if tail <= aiSummaryKeepTokens {
+		if tail <= keepTokens {
 			break
 		}
 		cut += aiSumQuantum

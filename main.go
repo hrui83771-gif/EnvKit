@@ -60,8 +60,11 @@ var (
 
 func main() {
 	if !platform.AcquireSingleInstance() {
-		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）
-		for p := 18765; p < 18815; p++ {
+		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）。
+		// 此刻还没跑 loadConfig()（cfg 为空），而 loadConfig 可能写盘（版本迁移），
+		// 双开时不该两个进程一起写 config.json —— 用 serverPortHint 只读拿端口设置。
+		hintStart, hintLimit := serverPortHint()
+		for p := hintStart; p < hintLimit; p++ {
 			u := fmt.Sprintf("http://127.0.0.1:%d/", p)
 			resp, err := http.Get(u)
 			if err != nil {
@@ -184,10 +187,18 @@ func main() {
 	http.HandleFunc("/api/missions", handleMissions)
 	http.HandleFunc("/api/missions/events", handleMissionEvents)
 	http.HandleFunc("/api/trigger", handleMissionTrigger)
+	// 设置页（v3.4）分段保存端点：告警 / 行动 / 开发者段各走各的通道。
+	// 老页面的整包保存（POST /api/config）永不携带这三段 —— mergeFormConfig
+	// 的保留逻辑兜底，两处配置面因此可以并存而不互相覆盖。
+	http.HandleFunc("/api/alerts/config", handleAlertConfig)
+	http.HandleFunc("/api/missions/config", handleMissionConfig)
+	http.HandleFunc("/api/dev/config", handleDevConfig)
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
 
-	port := findPort(18765)
+	// 控制台端口来自 dev 段（默认 18765，被占用则顺延到 port_scan_limit）
+	dv := devSnap()
+	port := findPort(dv.serverPort(), dv.portScanLimit())
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	openURL := "http://" + addr + "/"
 	go openBrowser(openURL)
@@ -195,6 +206,7 @@ func main() {
 	startMissionScheduler() // 行动定时产出（巡检/晨报，只读；配置 missions.enabled）
 	cleanupOldLogs()
 	cleanupOldAudits()
+	cleanupOldTraces()    // v3.4：轨迹保留期接入 dev 段（此前函数存在但从未被调用）
 	cleanupOldShadows()   // v3.0 T2.8：影子流与审计同保留策略
 	missionStartupSweep() // Agent 闭环 Phase 1：重启降级 running→paused + 过期清理
 	loadPersistedState()
@@ -386,8 +398,14 @@ func setTrayHidden(on bool) {
 	saveExternalConfig(snap)
 }
 
-func findPort(start int) int {
-	for p := start; p < start+50; p++ {
+// findPort 从 start 起找第一个可监听的端口，上界 limit（不含）。
+// start/limit 来自 dev 段（server_port / port_scan_limit，默认 18765 / 18815）。
+// 找不到时回落 start（此时 ListenAndServe 会失败并给出可读报错，而不是静默换端口）。
+func findPort(start, limit int) int {
+	if limit <= start {
+		limit = start + devDefaultPortScanSpan
+	}
+	for p := start; p < limit; p++ {
 		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 		if err == nil {
 			l.Close()

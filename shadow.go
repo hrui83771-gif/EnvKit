@@ -47,9 +47,8 @@ import (
 // 抽成 var 是为了单测能改小——晋升规则的行为不该依赖"真跑 20 轮故障"。
 var shadowPassNeed = 20
 
-// shadowRetentionDays 影子记录保留天数。与审计一致：30 天。
-// 影子流是晋升证据，证据也有保鲜期——无限增长的文件本身会成为事故。
-const shadowRetentionDays = 30
+// 影子记录保留天数从 v3.4 起由 dev 段配置（shadow_retention_days，默认 30，
+// 与审计一致）。影子流是晋升证据，证据也有保鲜期——无限增长的文件本身会成为事故。
 
 // ShadowVerify 预期复验规范：晋升评审时要看"恢复后拿什么证据说话"。
 // 不用他类的判据冒充（链端看 block_height，备份看 file+size+sha256）。
@@ -326,7 +325,7 @@ func cleanupOldShadows() {
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().AddDate(0, 0, -shadowRetentionDays)
+	cutoff := time.Now().AddDate(0, 0, -devSnap().shadowRetentionDays())
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasPrefix(name, "shadow-") || !strings.HasSuffix(name, ".jsonl") {

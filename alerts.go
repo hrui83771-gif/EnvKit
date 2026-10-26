@@ -7,8 +7,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,4 +91,87 @@ func minStr(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ---------- 配置段端点（设置页「基础配置 → 告警」） ----------
+
+// handleAlertConfig 告警配置的独立出入口（/api/alerts/config）。
+//
+// 与 handlePetConfig 同范式：GET 回显生效值、POST 指针字段增量提交。
+// 独立出入口的理由：老页面的表单不含告警字段（mergeFormConfig 有条件保留兜底），
+// 设置页上线后告警配置有了真正的编辑入口，就该有自己的保存通道 —— 不与整包
+// 表单保存混在一起，才不会出现"改个安装目录把 webhook 抹了"这类连带伤害。
+func handleAlertConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		cfgMu.Lock()
+		ac := cfg.Alert
+		cfgMu.Unlock()
+		if ac.CooldownSecs <= 0 {
+			ac.CooldownSecs = 300 // 回显生效值（alertDispatch 里 0 → 300）
+		}
+		writeJSON(w, ac)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	var body struct {
+		Webhook      *string `json:"webhook"`
+		CooldownSecs *int    `json:"cooldown_secs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "参数错误", 400)
+		return
+	}
+
+	cfgMu.Lock()
+	before := cfg.Alert
+	if body.Webhook != nil {
+		h := strings.TrimSpace(*body.Webhook)
+		// 非空时必须是 http(s) 地址：发给 file:// 或裸主机名会在告警那一刻才炸，
+		// 而告警链路恰恰是最不该"用的时候才发现坏"的地方。
+		if h != "" && !(strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://")) {
+			cfgMu.Unlock()
+			http.Error(w, "Webhook 需以 http:// 或 https:// 开头", 400)
+			return
+		}
+		if hs := []rune(h); len(hs) > 500 {
+			h = string(hs[:500])
+		}
+		cfg.Alert.Webhook = h
+	}
+	if body.CooldownSecs != nil {
+		cd := *body.CooldownSecs
+		if cd < 0 {
+			cd = 0
+		}
+		if cd > 86400 {
+			cd = 86400 // 抑制窗口上限一天：再大等于永久闭嘴
+		}
+		cfg.Alert.CooldownSecs = cd
+	}
+	after := cfg.Alert
+	saved := cfg
+	cfgMu.Unlock()
+
+	if saved.Alert != before {
+		saveExternalConfig(saved)
+		auditNow(actUser, "alert_config", "config.json", "alerts", resOK,
+			fmt.Sprintf("webhook=%s 冷却=%ds", maskHook(after.Webhook), after.CooldownSecs))
+	}
+	writeJSON(w, after)
+}
+
+// maskHook 审计/日志里不落完整 Webhook：飞书/企微/钉钉的 webhook URL 自带
+// key，写进审计文件等于把凭据抄一份到旁边。只留"发到哪个主机"。
+func maskHook(u string) string {
+	if u == "" {
+		return "(未设置)"
+	}
+	if p, err := url.Parse(u); err == nil && p.Host != "" {
+		return p.Scheme + "://" + p.Host + "/…"
+	}
+	return "(非法 URL)"
 }

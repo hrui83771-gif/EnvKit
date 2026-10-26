@@ -31,7 +31,7 @@ var distAssets embed.FS
 // 必须深拷贝：浅拷贝写 AI/Quirks 会穿透全局（铁律见 configfile.go）。
 func collectSecrets() []string {
 	cfgMu.Lock()
-	c := cloneConfigDeepAI(cfg)
+	c := cloneConfigDeep(cfg)
 	cfgMu.Unlock()
 	var vals []string
 	add := func(v string) {
