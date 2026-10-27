@@ -86,9 +86,15 @@ func TestWaitPortsFreeEmptyList(t *testing.T) {
 func TestWaitPortsFreeForeignReportedNotWaited(t *testing.T) {
 	port, close := occPort(t)
 	defer close()
-	// ownNames 不含测试进程名 → 第三方：不等待，直接报
+	// ownNames 不含测试进程名 → 第三方：不等待，直接报。
+	//
+	// 预算给 8s、阈值取预算的一半（同 TestWaitPortsFreeWhenFree 的理由）：
+	// 判据的本质是「不等 = 只花一轮快照，等 = 睡满预算」，两者相差数倍。
+	// 早先写 2s 绝对阈值，而本机单轮快照实测 1.5~1.8s —— 全量跑时机器一忙
+	// 就 2.12s 假失败。绝对阈值在这里衡量的是机器有多快，不是实现等没等。
+	const budget = 8 * time.Second
 	start := time.Now()
-	ok, foreign := waitPortsFree([]int{port}, 3*time.Second, []string{"node.exe", "main.exe"}, nil)
+	ok, foreign := waitPortsFree([]int{port}, budget, []string{"node.exe", "main.exe"}, nil)
 	if !ok {
 		t.Error("只有第三方占用时不应判'旧进程没释放'")
 	}
@@ -98,8 +104,8 @@ func TestWaitPortsFreeForeignReportedNotWaited(t *testing.T) {
 	if foreign[0].PID <= 0 {
 		t.Error("占用报告必须带 PID（人工处理时要用）")
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("第三方占用不该被等待，实际耗时 %v", elapsed)
+	if elapsed := time.Since(start); elapsed > budget/2 {
+		t.Errorf("第三方占用不该被等待，实际耗时 %v（预算 %v）", elapsed, budget)
 	}
 }
 

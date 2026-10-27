@@ -350,11 +350,16 @@ def _pending_confirm(events):
     return (last[0], last[1], tid) if last else None
 
 
-def chat_once(messages, confirm=None, timeout=300):
+def chat_once(messages, confirm=None, timeout=300, mission_id=None):
     """发一轮请求，返回 (文本, 事件列表, 耗时秒)。
 
     confirm 非空时走"确认回执"路径：服务端执行该写工具、把结果交给模型、
     然后继续同一轮推理（见 ai_loop.go:97-129）。
+
+    mission_id 非空时把这一回合绑定到一条已有行动（v3.5，Phase 3 验收 3）。
+    绑定后服务端会注入 `<mission_context>`（目标 + 已完成步骤 + 断点），
+    这正是「断流续作不丢上下文」要验的东西 —— 消息正文只有一句「继续」，
+    模型知道目标只能来自服务端注入。
 
     两处必须写对，否则测出来的数是假的：
 
@@ -364,6 +369,9 @@ def chat_once(messages, confirm=None, timeout=300):
        编码方式与前端 `web/index.html:4221` 一致——JSON 后 URL-encode，
        服务端做 `url.QueryUnescape`。
        这是 EnvKit 自己的既有兜底机制（ai_loop.go:57-60），不是为评测新加的。
+
+    注意回退头**不携带 mission_id**：body 真丢时续作会退化成普通对话。
+    续作题判据因此会比实际能力更严格（宁可误判失败，不要误判通过）。
     """
     last_user = ''
     for m in reversed(messages):
@@ -376,6 +384,8 @@ def chat_once(messages, confirm=None, timeout=300):
     payload = {'messages': messages}
     if confirm is not None:
         payload['confirm'] = confirm
+    if mission_id:
+        payload['mission_id'] = mission_id
     req = urllib.request.Request(
         BASE + '/api/ai/chat',
         data=json.dumps(payload).encode('utf-8'), method='POST')
@@ -407,7 +417,7 @@ def chat_once(messages, confirm=None, timeout=300):
     return text, events, time.time() - t0
 
 
-def chat(messages, timeout=300, allow_writes=False, extra_writes=()):
+def chat(messages, timeout=300, allow_writes=False, extra_writes=(), mission_id=None):
     """发一轮对话，返回 (文本, 全部事件, 总耗时秒)。
 
     allow_writes=True 时自动批准确认卡（**仅限 AUTO_APPROVE_WHITELIST**
@@ -442,7 +452,7 @@ def chat(messages, timeout=300, allow_writes=False, extra_writes=()):
     看起来像它什么都没查就动手了。
     """
     t0 = time.time()
-    text, events, _ = chat_once(messages, None, timeout)
+    text, events, _ = chat_once(messages, None, timeout, mission_id)
 
     if allow_writes:
         # 本轮的批准集合 = 全局白名单 ∪ 这一类声明的额外工具。
@@ -461,7 +471,7 @@ def chat(messages, timeout=300, allow_writes=False, extra_writes=()):
                 break
             confirm = {'tool_call_id': tid, 'tool': tool,
                        'args': args, 'approved': True}
-            text2, events2, _ = chat_once(messages, confirm, timeout)
+            text2, events2, _ = chat_once(messages, confirm, timeout, mission_id)
             text += text2
             events += events2
 
@@ -617,6 +627,18 @@ def judge(task, text, events):
             hit = [p for p in BACKTRACK_PHRASES if p in text]
             passed = not hit
             why = f'backtrack={hit}' if hit else 'no backtrack'
+        elif kind == 'mission_goal_recalled':
+            # v3.5（Phase 3 验收 3）：「续作不丢上下文」。
+            #
+            # 这一回合的用户消息正文只有「继续执行该行动」，目标只可能来自
+            # 服务端注入的 <mission_context>。回答里出现目标要素 = 上下文到了。
+            #
+            # 判据刻意宽松（任一关键词命中即可）：目的是**证明上下文存在**，
+            # 不是评价模型怎么表达它。用 requires_all 会让措辞差异变成失败，
+            # 那是把「表达方式」当成「能力」。
+            hit = [v for v in vals if v in text]
+            passed = bool(hit)
+            why = f'hit={hit}' if hit else 'goal not recalled（上下文没传到）'
         else:
             # 判据类型不认识时**必须判失败**，不能默认通过——
             # 否则加一条新判据就会静默变成"永远通过"。
@@ -630,6 +652,22 @@ def judge(task, text, events):
 
 
 # ---------- 主流程 ----------
+def mission_create(goal):
+    """建一条行动（pending），返回行动 ID。
+
+    失败直接 SystemExit 而不是返回空：续作题没有行动就无从验证，
+    而「悄悄跳过」在报表里和「通过」长得一模一样 ——
+    那正是最坏的一种失败（把没测记成测了）。
+    """
+    d = api('/api/missions', {'op': 'create', 'goal': goal})
+    if not d or not d.get('ok'):
+        raise SystemExit(f'建行动失败：{d}')
+    mid = (d.get('mission') or {}).get('id') or ''
+    if not mid:
+        raise SystemExit(f'建行动没返回 ID：{d}')
+    return mid
+
+
 def run_group(name, memory_on, tasks, repeat):
     print(f'\n===== 组 {name}（memory_enabled={memory_on}）=====')
 
@@ -652,7 +690,12 @@ def run_group(name, memory_on, tasks, repeat):
     rows = []
     for t in tasks:
         for i in range(repeat):
-            text, events, dur = chat([{'role': 'user', 'content': t['ask']}])
+            # v3.5（Phase 3 验收 3）：带 mission_goal 的题是**续作题** ——
+            # 先建一条全新行动，再只发一句「继续」。目标能不能传到模型，
+            # 全看服务端有没有在「无已完成步骤」时也注入 <mission_context>
+            # （Phase 2 修掉的那条真实断链）。
+            mid = mission_create(t['mission_goal']) if t.get('mission_goal') else None
+            text, events, dur = chat([{'role': 'user', 'content': t['ask']}], mission_id=mid)
             ok, detail = judge(t, text, events)
             row = {
                 'task': t['id'], 'task_name': t['name'], 'run': i + 1,
@@ -664,6 +707,7 @@ def run_group(name, memory_on, tasks, repeat):
                 'tools': tool_seq(events),
                 'criteria': detail,
                 'answer_head': text[:200],
+                'mission_id': mid,
             }
             rows.append(row)
             flag = 'PASS' if ok else 'FAIL'

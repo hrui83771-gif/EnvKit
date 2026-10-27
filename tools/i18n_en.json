@@ -1256,5 +1256,15 @@
   "未使用": "Never used",
   "已存为预案：{0}": "Saved as playbook: {0}",
   "删除预案": "Delete playbook",
-  "确定删除「{0}」？历史统计会一起丢掉。": "Delete \"{0}\"? Its history stats will be lost too."
+  "确定删除「{0}」？历史统计会一起丢掉。": "Delete \"{0}\"? Its history stats will be lost too.",
+  "成长": "Growth",
+  "首次解决率": "First-try rate",
+  "预案命中率": "Playbook hit rate",
+  "预案有效率": "Playbook success rate",
+  "用户修正率": "User-correction rate",
+  "平均步数": "Avg. steps",
+  "首次": "First",
+  "周": "Week",
+  "数据截至 {0}": "As of {0}",
+  "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}"
 }

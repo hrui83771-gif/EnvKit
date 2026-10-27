@@ -528,7 +528,7 @@ P2 依赖 P1（否则又多一套状态计算），P3 依赖 P2（先验证状�
 | **v3.1** | — | — | — | 手动驾驶权验收 | 自动化 Harness + 指标回退阻断发布 |
 | **v3.2** ✅ | — | 确认流改「服务端就地等待」（`waiting_confirm`） | **AI 记忆/经验第一版**（可见注入） | 界面重组、托盘化、个人中心 | 浏览器回归 |
 | **v3.4** ✅ | 写死常量改运行时配置 | **行动（Mission）Phase 1**：实体 / 断点续作 / 触发框架 | — | **设置页三区二十一卡**、桌宠天气、全局静音、自动更新 | — |
-| **v3.5** 🚧 | — | **预案库 + 告警闭环 + 晨报（Phase 2）** | 预案统计（只认复验）回写 | 行动卡片：预案徽标 / 起草步骤 / 报告查看 | 预案与晨报单测 |
+| **v3.5** ✅ | — | **Agent 闭环 Phase 2/3**：预案库 + 告警闭环 + 晨报；Mission→Lesson 沉淀 + 成长指标 | 预案统计（只认复验）回写；经验 Fail 计数回流 | 行动卡片：预案徽标 / 起草步骤 / 报告查看；成长报表 | 预案/晨报/沉淀/指标单测 + CDP 26 条断言 |
 
 每个版本独立可发布、独立可回滚。**任一版本未达标不进下一版。**
 
@@ -651,8 +651,10 @@ ui/         index.html（内嵌）
 
 ### 已完成
 
-**v3.5（Agent 闭环 Phase 2，代码已合入 main，未发版）**——设计见
-[DESIGN-agent-loop.md](DESIGN-agent-loop.md) §3.3
+**v3.5（Agent 闭环 Phase 2 + Phase 3，2026-10-27 发布）**——设计见
+[DESIGN-agent-loop.md](DESIGN-agent-loop.md) §3.3 与 §4.3
+
+Phase 2 部分：
 
 - [x] 预案库：`playbook.go` + `playbooks.json`，结构化匹配键（AND 门槛 + 关键词加分），
       排序确定（分数 → 成功率 → ID），连败 3 次进 `review`
@@ -661,10 +663,26 @@ ui/         index.html（内嵌）
 - [x] 晨报：`briefing.go` 纯事实聚合（服务/崩溃/磁盘/行动/组件/链端/版本），不调模型，
       产出即 `done`，可读可下载
 - [x] 修 `aiMissionResumeContext` 断链：全新 pending 行动点「继续」时模型收不到目标
-- [x] 单测：`playbook_test.go` / `briefing_test.go`，含状态机 `pending→done` 例外边界
 
-**v3.5 里刻意没做的事**：预案全自动沉淀、预案跨版本迁移、晨报推送。
-Phase 3（Mission→Lesson 自动沉淀 / 成长指标）未开始。
+Phase 3 部分：
+
+- [x] Mission→Lesson 沉淀（`sediment.go`）：终态收口写一条规范化审计
+      （`action=mission_fix`，`target=<服务ID>`），由 R6 规则提取。
+      **不新建经验库**——经验仍是审计的视图（理由见 DESIGN §4.3 偏离 1）
+- [x] R6 只补审计看不见的两类：目标级连败、用户放弃后接手。
+      连败按「从最后一次成功往后数」而非历史累计
+- [x] 取消 ≠ 失败：`canceled` / `expired` 记 `resUnverified`，不进任何失败聚合
+- [x] 预案与记忆互检：`pbkFromMission` 回填 `LessonIDs`；经验 Fail 计数回流走既有
+      `missionSediment→auditNow→recordOutcome`，**未新增写路径**（避免双倍计数），
+      并用 `TestMissionSedimentFeedsLessonOutcome` 把这条隐式链钉住
+- [x] 成长指标（`growth.go` + `GET /api/growth`）：首次解决率 / 平均步数 / 用户修正率 /
+      预案命中率 / 预案有效率，按 ISO 周分桶；分母为 0 返回 `rateNA` 显示「—」
+- [x] 评测集加 T15「续作不丢上下文」：`ab_memory.py` 新增 `mission_create` 前置 +
+      `mission_goal_recalled` 判据；`judge_tasks.py` 明示跳过该类题（它没有 mission 前置）
+
+**v3.5 里刻意没做的事**：预案全自动沉淀、预案跨版本迁移、晨报推送；
+「项目画像吸收 Mission 历史」（要先定观察/推断怎么分层展示，见 DESIGN §4.3）。
+T15 续作题**未在本机实跑**（需真实模型额度），只有静态自检。
 
 **v2.1**
 

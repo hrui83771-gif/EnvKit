@@ -452,7 +452,8 @@ func pbkFromMission(id, title string) (Playbook, error) {
 	}
 
 	matcher := PlaybookMatcher{Triggers: []string{m.Trigger.Kind}}
-	if svc := missionSvcID(m.Trigger.Detail); svc != "" {
+	svc := missionSvcID(m.Trigger.Detail)
+	if svc != "" {
 		matcher.Services = []string{svc}
 	}
 	t := strings.TrimSpace(title)
@@ -468,6 +469,7 @@ func pbkFromMission(id, title string) (Playbook, error) {
 		Title:         truncateRunes(t, 120),
 		Matcher:       matcher,
 		Steps:         steps,
+		LessonIDs:     pbkLessonIDsFor(m, svc),
 		State:         pbkActive,
 		SourceMission: m.ID,
 		CreatedAt:     now,
@@ -485,6 +487,36 @@ func pbkFromMission(id, title string) (Playbook, error) {
 		return Playbook{}, err
 	}
 	return p, nil
+}
+
+// pbkLessonIDsFor 找出这次处置关联到哪些经验（Phase 3.3「预案与记忆互检」）。
+//
+// 复用 lessonIDFor 而不是另写一套匹配：它只认 repeat_fail / verify_fail
+// （「某个做法行不行」类结论），正是会被预案执行结果影响置信度的那些。
+//
+// **只回填，不写计数**。这一点是刻意的：预案执行的成败已经通过
+// missionSediment → auditNow → lessonIDFor → recordOutcome 走过一遍了，
+// 在这里再记一次就是双倍计数，而双倍计数的坏处不是数字难看 ——
+// 是置信度被同一次事件抬高两档，"这条经验靠得住"变成了一句假话。
+func pbkLessonIDsFor(m Mission, svc string) []string {
+	if svc == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, st := range m.Plan {
+		tool := strings.TrimSpace(st.Tool)
+		if tool == "" {
+			continue
+		}
+		id := lessonIDFor(tool, svc)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // pbkCheckSteps 校验步骤里的工具名（设计评审点名的"静默失效"防线）。

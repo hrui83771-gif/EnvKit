@@ -387,6 +387,7 @@ const I18N_EN = {
   "告警设置已保存": "Alert settings saved",
   "告警通知": "Alert notifications",
   "呜呜我再也不不敢了QAQ": "I won't dare do it again, QAQ",
+  "周": "Week",
   "呼…活过来了": "Whew… I'm alive again",
   "命令行执行 python tools/eval_gate.py --set-baseline 冻结；界面不提供，避免误把一次跑坏的结论固化成门禁。": "Freeze it on the command line with python tools/eval_gate.py --set-baseline; the UI deliberately omits that so a bad run cannot be baked into the gate.",
   "咔嚓咔嚓……谢谢投喂！": "Crunch crunch... thanks for the feed!",
@@ -591,6 +592,7 @@ const I18N_EN = {
   "常": "Always",
   "常用：8080 前端 · 8888 后端": "Common: 8080 frontend · 8888 backend",
   "干活中…": "Working…",
+  "平均步数": "Avg. steps",
   "平均每轮": "Avg / turn",
   "应用": "Apply",
   "延迟 p50": "Latency p50",
@@ -635,6 +637,7 @@ const I18N_EN = {
   "成功": "OK",
   "成功 {0} · 部分 {1} · 失败 {2}": "{0} ok · {1} partial · {2} failed",
   "成败": "Pass/Fail",
+  "成长": "Growth",
   "我": "Me",
   "我不可能告诉你任何事情！": "I won't tell you anything!",
   "我不思考了": "I have stopped thinking",
@@ -726,6 +729,7 @@ const I18N_EN = {
   "数据库名": "Database name",
   "数据库备份": "DB backup",
   "数据库还原": "DB restore",
+  "数据截至 {0}": "As of {0}",
   "数据浏览（只读）": "Data browser (read-only)",
   "整理中": "Tidying…",
   "文件超过 64KB，已跳过：{0}": "Over 64KB, skipped: {0}",
@@ -948,6 +952,7 @@ const I18N_EN = {
   "生成诊断报告": "build diagnostic report",
   "生效 SQL 到数据库": "Apply SQL to database",
   "用户": "User",
+  "用户修正率": "User-correction rate",
   "用户彻底怒了，我得乖一点": "The user is furious — better behave",
   "用过 {0} 次，复验通过 {1} 次（{2}%）": "Used {0}x, verified {1}x ({2}%)",
   "用量": "Usage",
@@ -1151,6 +1156,7 @@ const I18N_EN = {
   "近 30 天": "Last 30 days",
   "近 7 天": "Last 7 days",
   "近 {0} 天": "Last {0} days",
+  "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}",
   "还原": "Restore",
   "还原数据库": "Restore database",
   "还原文件": "Restore file",
@@ -1246,13 +1252,17 @@ const I18N_EN = {
   "项目目录": "Project folders",
   "项目目录与数据库": "Project directories & database",
   "顺延上界": "Scan upper bound",
+  "预案命中率": "Playbook hit rate",
   "预案库": "Playbooks",
+  "预案有效率": "Playbook success rate",
   "预案步骤（未执行，需你批准）": "Playbook steps (not run yet — needs your approval)",
   "预案：{0}": "Playbook: {0}",
   "预演": "Dry run",
   "预演：{0}": "Dry run: {0}",
   "预算 {0} 轮": "Budget {0} turns",
   "预算窗口": "Budget window",
+  "首次": "First",
+  "首次解决率": "First-try rate",
   "驱动器": "Drives",
   "高": "High",
   "高危 SQL 要二次确认": "Risky SQL needs a second confirmation",
@@ -4283,6 +4293,7 @@ let aiPbkRows = null;      // 预案库缓存（Phase 2）：行动卡片的预�
                            // 必须声明在文件顶部这一批里 —— 放到使用处（aiPbkLoad 附近）
                            // 会踩 TDZ：渲染函数在声明语句执行前被调用就会 ReferenceError，
                            // 而 node --check 查不出来（本项目已经吃过一次）。
+let aiGrowthData = null;   // 成长报表缓存（Phase 3）：同理，声明必须在顶部。
 const AI_KIND = {plan:'计划', step:'执行', result:'结果', ver:'复验', human:'等确认', grant:'授权', body:'传输', done:'结论'};
 /* 允许"本任务内不再逐次询问"的工具（与服务端 aiGrantFamily 一一对应）。
    放在前端是为了**只在能批量的卡上显示那个勾选**——数据类/系统类动作不给这个选项，
@@ -5052,10 +5063,14 @@ function aiMissionsShell(){
       '<div id="ai-ms-list"></div>' +
       '<div class="ai-ms-sec"><span>' + esc(t('预案库')) + '</span>' +
         '<button id="ai-pbk-re">' + esc(t('刷新')) + '</button></div>' +
-      '<div id="ai-pbk"></div>';
+      '<div id="ai-pbk"></div>' +
+      '<div class="ai-ms-sec"><span>' + esc(t('成长')) + '</span>' +
+        '<button id="ai-gr-re">' + esc(t('刷新')) + '</button></div>' +
+      '<div id="ai-growth"></div>';
     $ai('ai-ms-new').onclick = aiMissionsCreate;
     $ai('ai-ms-re').onclick = ()=>aiMissionsLoad(true);
     $ai('ai-pbk-re').onclick = ()=>aiPbkLoad(true);
+    $ai('ai-gr-re').onclick = ()=>aiGrowthLoad(true);
     $ai('ai-ms-goal').addEventListener('keydown', e=>{ if(e.key === 'Enter') aiMissionsCreate(); });
   }
   return box;
@@ -5065,6 +5080,7 @@ function aiMissionsLoad(force){
   const box = aiMissionsShell(); if(!box) return;
   aiMissionsSubscribe();
   aiPbkLoad(force);
+  aiGrowthLoad(force);
   const list = $ai('ai-ms-list');
   if(list && aiMissionRows == null) list.textContent = t('读取行动…');
   if(aiMissionRows && !force){ aiMissionsRender(); return; }
@@ -5336,6 +5352,105 @@ async function aiPbkDel(p){
     if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
     aiPbkLoad(true);
   }catch(_){ toast(t('操作失败'), 'err'); }
+}
+
+/* ---------- 成长指标（Phase 3） ----------
+   这是**报表**，不是实时数字：只在打开行动 tab 或点「刷新」时重算，
+   并把「数据截至」写在区块底部。
+
+   刻意不跟着 SSE 自动跳动：一场处置刚落一条，所有比率都会跳一格，
+   而这种跳动会引诱人盯着 1/1 = 100% 下结论。报表的诚实来自
+   「说得清分子分母」，不来自「变得快」。 */
+
+function aiGrowthLoad(force){
+  if(aiGrowthData && !force){ aiGrowthRender(); return; }
+  const box = $ai('ai-growth');
+  if(box && !aiGrowthData) box.textContent = t('读取中…');
+  fetch('/api/growth').then(r=>r.json()).then(d=>{
+    aiGrowthData = d || null;
+    aiGrowthRender();
+  }).catch(()=>{
+    aiGrowthData = null;
+    if(!box) return;
+    box.textContent = '';
+    const p = document.createElement('div'); p.className = 'muted';
+    p.textContent = t('读取失败');
+    box.appendChild(p);
+  });
+}
+
+// 服务端用 -1 表示"分母为 0"（rateNA）。这里必须显示成「—」而不是 0%：
+// 0% 会被读成"一次都没成"，那是另一回事。
+function aiRateText(v, suffix){
+  if(v == null || v < 0) return '—';
+  return v + (suffix == null ? '%' : suffix);
+}
+
+function aiGrowthRender(){
+  const box = $ai('ai-growth'); if(!box) return;
+  box.textContent = '';
+  const d = aiGrowthData;
+  if(!d){
+    const p = document.createElement('div'); p.className = 'muted';
+    p.textContent = t('暂无数据');
+    box.appendChild(p);
+    return;
+  }
+  const rates = d.rates || {};
+  const cards = [
+    [t('首次解决率'), aiRateText(rates.first_try_rate)],
+    [t('预案命中率'), aiRateText(rates.pbk_hit_rate)],
+    [t('预案有效率'), aiRateText(rates.pbk_ok_rate)],
+    [t('用户修正率'), aiRateText(rates.user_fix_rate)],
+    [t('平均步数'), aiRateText(rates.avg_steps, '')]
+  ];
+  const grid = document.createElement('div'); grid.className = 'ai-gr-cards';
+  cards.forEach(c=>{
+    const cell = document.createElement('div'); cell.className = 'ai-gr-card';
+    const k = document.createElement('div'); k.className = 'ai-gr-k muted';
+    k.textContent = c[0];
+    const v = document.createElement('div'); v.className = 'ai-gr-v';
+    v.textContent = c[1];
+    cell.appendChild(k); cell.appendChild(v);
+    grid.appendChild(cell);
+  });
+  box.appendChild(grid);
+
+  const tot = d.total || {};
+  // 各桶必须能加回总数——加不回去就是口径出了问题，界面上直接露出来
+  const sum = document.createElement('div'); sum.className = 'muted ai-gr-sum';
+  sum.textContent = t('近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}',
+    d.days, tot.missions || 0, tot.done || 0, tot.failed || 0, tot.canceled || 0, tot.expired || 0);
+  box.appendChild(sum);
+
+  const weeks = d.weeks || [];
+  if(weeks.length){
+    const tb = document.createElement('div'); tb.className = 'ai-gr-table';
+    const head = document.createElement('div'); head.className = 'ai-gr-tr ai-gr-th';
+    [t('周'), t('行动'), t('完成'), t('首次'), t('步数')].forEach(x=>{
+      const c = document.createElement('div'); c.textContent = x; head.appendChild(c);
+    });
+    tb.appendChild(head);
+    weeks.forEach(w=>{
+      const tr = document.createElement('div'); tr.className = 'ai-gr-tr';
+      [w.key, w.missions, w.done, w.first_try, w.steps].forEach(x=>{
+        const c = document.createElement('div'); c.textContent = String(x); tr.appendChild(c);
+      });
+      tb.appendChild(tr);
+    });
+    box.appendChild(tb);
+  }
+
+  if(d.note){
+    const n = document.createElement('div'); n.className = 'muted ai-gr-note';
+    n.textContent = d.note;
+    box.appendChild(n);
+  }
+  if(d.to){
+    const at = document.createElement('div'); at.className = 'muted ai-gr-note';
+    at.textContent = t('数据截至 {0}', d.to);
+    box.appendChild(at);
+  }
 }
 
 function aiMissionsOp(op, id){

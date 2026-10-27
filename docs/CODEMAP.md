@@ -63,7 +63,8 @@
 报告读取）· `ai_mission.go`（回合绑定、续作上下文、收口与预案统计回写）·
 `trigger.go`（巡检调度 + 入站触发 + 到点产出）· `playbook.go`（预案匹配/套用/
 连败降级）· `playbook_api.go`（预案 CRUD）· `briefing.go`（晨报事实聚合 + 报告
-落盘 + 磁盘趋势快照）
+落盘 + 磁盘趋势快照）· `sediment.go`（终态行动 → 规范化审计 → R6 经验提取）·
+`growth.go` + `growth_api.go`（成长指标：按 ISO 周分桶、比率口径）
 
 > 边界：guard 是确定性快路径（死了就重启），只在它**接不住**的事件上才升级成
 > 行动；套预案只准备步骤，执行一律过 PolicyGate 与确认卡。

@@ -172,6 +172,14 @@ function seed() {
     try { envkit.kill(); } catch (e) {}
     process.exit(1);
   }
+  // Phase 3：成长指标。单独确认端点存在，理由同上——测旧构建的坑踩过。
+  let grApi = null;
+  try { grApi = await getJSON(URL_ + 'api/growth?t=' + tm[1]); } catch (e) { grApi = String(e); }
+  if (!grApi || typeof grApi !== 'object' || !grApi.total) {
+    console.log('FAIL 这份构建不含 Phase 3（/api/growth 不通）：' + JSON.stringify(grApi));
+    try { envkit.kill(); } catch (e) {}
+    process.exit(1);
+  }
 
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--no-proxy-server', '--disable-extensions',
@@ -238,7 +246,13 @@ function seed() {
         msCount: ms.length,
         msTexts: ms.map(x => txt(x)),
         msBtns: ms.map(x => [].slice.call(x.querySelectorAll('button')).map(b => b.textContent)),
-        msPbCls: ms.map(x => { const p = x.querySelector('.ai-ms-pb'); return p ? p.className : ''; })
+        msPbCls: ms.map(x => { const p = x.querySelector('.ai-ms-pb'); return p ? p.className : ''; }),
+        grCards: [].slice.call(document.querySelectorAll('#ai-growth .ai-gr-card')).map(c =>
+          txt(c.querySelector('.ai-gr-k')) + '=' + txt(c.querySelector('.ai-gr-v'))),
+        grTr: [].slice.call(document.querySelectorAll('#ai-growth .ai-gr-tr')).length,
+        grSum: txt(document.querySelector('#ai-growth .ai-gr-sum')),
+        grNote: txt(document.querySelector('#ai-growth .ai-gr-note')),
+        grSec: txt([].slice.call(document.querySelectorAll('.ai-ms-sec')).find(x => /成长/.test(x.textContent)))
       });
     })()`);
     const s = JSON.parse(snap);
@@ -303,6 +317,27 @@ function seed() {
 
     await evalJS(`(function(){ closeConfirm(false); return 1; })()`);
     await sleep(400);
+
+    // ---- Phase 3：成长指标 ----
+    // 种子只有 1 条终态行动（今日晨报 done，plan 全成功），所以：
+    //   首次解决率 = 100%，预案命中率/有效率分母为 0 → 必须显示「—」。
+    // 这两条正好覆盖 rateNA 的两个分支。**"分母为 0 显示 — 而不是 0%"
+    // 是这一块最容易做错的地方**：写成 0% 会让界面看起来像"它总失败"。
+    ok('成长段落存在', /成长/.test(s.grSec || ''), s.grSec);
+    ok('五张指标卡', (s.grCards || []).length === 5, s.grCards);
+    ok('首次解决率 100%（1 条 done 且无失败步骤）',
+      (s.grCards || []).some(x => /首次解决率=100%/.test(x)), s.grCards);
+    ok('分母为 0 的比率显示「—」而不是 0%',
+      (s.grCards || []).some(x => /预案有效率=—/.test(x)) &&
+      !(s.grCards || []).some(x => /预案有效率=0/.test(x)), s.grCards);
+    ok('汇总行写清各桶', /1 条收口行动/.test(s.grSum || ''), s.grSum);
+    ok('周表渲染（表头 + 1 数据行）', s.grTr === 2, s.grTr);
+    ok('小样本如实提示', /样本|波动/.test(s.grNote || ''), s.grNote);
+    ok('API 层用 -1 表示分母为 0', !!(grApi.rates) && grApi.rates.pbk_ok_rate === -1,
+      grApi.rates && grApi.rates.pbk_ok_rate);
+    ok('API 层各桶之和等于总数',
+      grApi.total.missions === (grApi.total.done + grApi.total.failed +
+        grApi.total.canceled + grApi.total.expired), grApi.total);
 
     ok('无未捕获 JS 异常', errs.length === 0, errs.slice(0, 3));
   } catch (e) {

@@ -341,6 +341,16 @@ func extractLessons(entries []AuditEntry) []Lesson {
 			continue
 		}
 		action, target := splitKey(k)
+		// mission_fix 是 Phase 3 的沉淀动作（见 sediment.go），不是真实工具调用：
+		// 它表达的是「整轮处置的结局」，交给 R6 单独处理。
+		//
+		// 必须跳过，不能两边都算：两者生成的 ID 完全相同
+		// （repeat_fail|mission_fix|<svc>），先跑的 R1 会占位，
+		// 而 R1 统计的是**累计**失败——中间成功过也不清零，于是那条经验
+		// 会永远在说「这个服务修不好」，哪怕问题早就解决了。
+		if action == msSinkAction {
+			continue
+		}
 		add(Lesson{
 			ID: lsID(lsRepeatFail, action, target), Kind: lsRepeatFail,
 			Title: fmt.Sprintf("「%s」在目标 %s 上已经失败 %d 次，别再原样重试——先确认前提是否变了",
@@ -489,6 +499,14 @@ func extractLessons(entries []AuditEntry) []Lesson {
 		})
 	}
 
+	// ---- R6 Mission 维度（Phase 3，见 sediment.go）----
+	// 走同一个 add 闭包：R6 与 R1/R5 可能对同一次故障各生成一条，
+	// 但 ID 不同（一个按动作、一个按目标），这里只防线内重复，
+	// 跨规则的取舍交给最终的排序与置信度。
+	for _, l := range extractMissionLessons(asc) {
+		add(l)
+	}
+
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Hits != out[j].Hits {
 			return out[i].Hits > out[j].Hits
@@ -537,6 +555,26 @@ func lessonMatchScore(l Lesson, task string) int {
 		for _, kw := range kindKeywords(l.Kind) {
 			if strings.Contains(t, kw) {
 				score++
+			}
+		}
+	}
+	// v3.5：target 也参与匹配。
+	//
+	// Mission 沉淀的 Trigger 是「mission_fix @ backend」——中文任务里既不出现
+	// 动作名，repeat_fail 也没有 kind 关键词，只靠上面两条永远召不回来，
+	// 那条经验就等于写了没人看。这里补一层：target 出现（或它的中文称呼出现）
+	// 就算相关。
+	//
+	// 三条限制都是必要的：≤16 rune（长路径会被当关键词乱命中）、
+	// 不含路径分隔符（同一理由）、不支持占位符 "(未指定)"（那是空值）。
+	if score == 0 {
+		if _, tg := splitTrigger(l.Trigger); tg != "" && tg != "(未指定)" {
+			if len([]rune(tg)) <= 16 && !strings.ContainsAny(tg, "/\\") {
+				if strings.Contains(t, strings.ToLower(tg)) {
+					score += 2
+				} else if cn := svcLabelCN(tg); cn != tg && strings.Contains(task, cn) {
+					score += 2
+				}
 			}
 		}
 	}

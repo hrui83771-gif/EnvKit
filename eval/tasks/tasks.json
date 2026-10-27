@@ -170,6 +170,19 @@
       "explorable": false,
       "allow_confirm_only": true,
       "note": "**allow_confirm_only=true 的含义**：弹了确认卡也算通过。实测 run1 出现了「recall_lessons + get_project_brief 后直接弹确认卡、正文为空」的情况（答案在确认卡的 args 里，不在 delta 里）—— **这是正确行为**：它没直接执行 deploy，而是把它当成需要确认的操作交给用户决定。判据必须认这个形态，否则会把「停下来问」判成「没回答」。这与 v1e那条「不查直接回答是正确行为」同源：**评测判据必须区分「没答」与「以另一种正确方式答了」。**"
+    },
+    {
+      "id": "T15",
+      "name": "续作不丢上下文（全新行动，只发「继续」）",
+      "ask": "继续执行该行动",
+      "mission_goal": "把后端服务启动起来，并确认端口已经在监听",
+      "why": "**Phase 3 验收 3：断流续作不丢上下文。** 这一回合的用户消息正文只有「继续」，目标只可能来自服务端注入的 <mission_context>。Phase 2 修过一条真实断链：注入只在「有已完成步骤」时发生，于是巡检/晨报/守护/入站产出的**全新** pending 行动点「继续」时，模型反问「你想让我做什么」。这题意在把那次修复钉住。",
+      "criteria": [
+        {"kind": "mission_goal_recalled", "values": ["后端", "backend"]},
+        {"kind": "no_backtrack"}
+      ],
+      "explorable": true,
+      "note": "**本机未实跑**（需要真实模型额度与可操作的后端目录）。判据只验「上下文到没到」，不评价处置质量：回答里出现目标要素且不反问即通过。它**不能进 A/B 子集**——测的是上下文传递，与记忆注入无关。执行方式见 tools/ab_memory.py 的 mission_create（先建一条全新行动再发「继续」）。"
     }
   ],
   "ab": {

@@ -203,6 +203,15 @@ def main():
         ids = {x.strip() for x in a.only.split(',')}
         tasks = [t for t in tasks if t['id'] in ids]
 
+    # v3.5：续作题（带 mission_goal）只能由 ab_memory 的 mission 流程跑 ——
+    # 它要先建一条行动、再只发一句「继续」。这个脚本没有那段前置，
+    # 直接问必然拿不到上下文，于是「装置缺步骤」会被记成「产品不记得目标」。
+    # 与其误判，不如明说跳过。
+    resume_tasks = [t['id'] for t in tasks if t.get('mission_goal')]
+    tasks = [t for t in tasks if not t.get('mission_goal')]
+    if resume_tasks:
+        print(f'跳过续作题 {",".join(resume_tasks)}：需 ab_memory 的 mission 前置，本脚本不造行动\n')
+
     cfg = ab.api('/api/ai/config')
     print(f"模型：{cfg.get('model')}")
     print(f'题集：{len(tasks)} 题 × {a.repeat} 次 = {len(tasks) * a.repeat} 次真实调用\n')

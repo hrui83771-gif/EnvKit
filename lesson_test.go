@@ -45,6 +45,11 @@ func withLessonEnv(t *testing.T, entries []AuditEntry) func() {
 	}
 	lessonInvalidate()
 	return func() {
+		// 必须先关审计文件句柄再还原目录：Windows 上删不掉被别人打开的文件，
+		// 少了这一步，凡是**写过**审计的用例都会在 t.TempDir() 清理时失败，
+		// 而失败信息指向 TempDir（"being used by another process"），
+		// 完全不指向真正的原因。
+		closeAuditForTest()
 		auditDir, lessonOffFile = oldAudit, oldOff
 		lessonInvalidate()
 	}

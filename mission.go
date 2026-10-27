@@ -116,6 +116,16 @@ func missionFinish(m *Mission, verified bool, msg string) error {
 type Trigger struct {
 	Kind   string `json:"kind"`             // manual | patrol | schedule | webhook | guard
 	Detail string `json:"detail,omitempty"` // 触发摘要（谁/为什么）
+	// ErrKind 症状类别（v3.5，Phase 3 沉淀用）。
+	//
+	// 存在 Trigger 里而不是 Mission 顶层：它本来就是「为什么触发」的一部分，
+	// 与 Detail 同源（guard 拉起了但复验没过 → verify_fail）。放在这里
+	// 只改一处赋值（missionFromGuard），别的产出路径零改动。
+	//
+	// 为什么不从 Detail 里解析：Detail 是给人看的自由文本，解析它等于
+	// 把「文案」变成「协议」——改一次措辞就静默失效，这个坑在 lesson.go
+	// 的 verifyErrKind 上已经踩过一次。
+	ErrKind string `json:"err_kind,omitempty"`
 }
 
 // PlanStepRecord 一个已完成步骤的落地记录（断点续作的回放点）。
@@ -310,28 +320,51 @@ func missionList() []Mission {
 }
 
 // missionUpdate 按 ID 变更一条行动（fn 内直接改 m），落盘。
+//
+// v3.5：**首次落入终态**时补写一条沉淀审计（Phase 3，见 sediment.go）。
+// 挂在这是唯一不漏的做法：终态入口有四处（AI 收口 / 用户取消 / 调度产出
+// 直接收口 / 手工操作），逐个加调用迟早漏一个，而漏掉的表现是
+// 「有时候没有经验」，看不出来是 bug。
+//
+// 沉淀必须放在**释放 msMu 之后**：它要写审计，而写审计会顺带重算经验
+// （读几 MB 审计文件），抱着行动锁做这件事会让所有行动操作一起等。
 func missionUpdate(id string, fn func(*Mission) error) (Mission, error) {
 	msMu.Lock()
-	defer msMu.Unlock()
+	out, sink, err := missionUpdateLocked(id, fn)
+	msMu.Unlock()
+	if err != nil {
+		return Mission{}, err
+	}
+	if sink {
+		missionSediment(out)
+	}
+	return out, nil
+}
+
+// missionUpdateLocked 变更主体。调用方必须已持 msMu（且返回后自行释放）。
+// 返回 sink=true 表示这次调用让行动**第一次**进入终态。
+func missionUpdateLocked(id string, fn func(*Mission) error) (Mission, bool, error) {
 	all, _ := missionSweep(loadMissions(), time.Now())
 	for i := range all {
 		if all[i].ID != id {
 			continue
 		}
 		m := &all[i]
+		wasTerminal := missionTerminal(m.State)
 		if err := fn(m); err != nil {
-			return Mission{}, err
+			return Mission{}, false, err
 		}
 		m.UpdatedAt = time.Now()
 		if err := missionTrim(&all); err != nil {
-			return Mission{}, err
+			return Mission{}, false, err
 		}
 		if err := saveMissions(all); err != nil {
-			return Mission{}, err
+			return Mission{}, false, err
 		}
-		return *m, nil
+		out := *m
+		return out, !wasTerminal && missionTerminal(out.State), nil
 	}
-	return Mission{}, fmt.Errorf("行动不存在：%s", id)
+	return Mission{}, false, fmt.Errorf("行动不存在：%s", id)
 }
 
 // missionTrim 控制总量：终态优先淘汰（最老的终态先走），不淘汰未收口的。

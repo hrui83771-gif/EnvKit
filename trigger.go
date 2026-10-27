@@ -38,8 +38,9 @@ func missionFromGuard(svcID, svcLabel, errKind, title, detail string) (Mission, 
 		}
 	}
 	m, err := missionNew(title, Trigger{
-		Kind:   "guard",
-		Detail: svcID + " | " + truncateRunes(strings.TrimSpace(detail), 300),
+		Kind:    "guard",
+		Detail:  svcID + " | " + truncateRunes(strings.TrimSpace(detail), 300),
+		ErrKind: errKind,
 	})
 	if err != nil {
 		warn(scSys, "行动", "guard 候选产出失败（%s）：%v", svcID, err)
