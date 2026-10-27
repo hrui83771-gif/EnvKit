@@ -266,3 +266,97 @@ func itoaTest(i int) string {
 	}
 	return string(b)
 }
+
+// ---- 回归：工具把"存在"说成"不存在" ----
+//
+// 用户截图里就是这样：面板上明明有一条「问候语以老板开头」，AI 却答"当前没有记忆条目"。
+// 根因是 list 走 memoriesFor("", 50)，而它对空任务只返回 always 条目（memory.go 的相关性
+// 分支 `if t != ""`）。于是「按需注入、无标签」的记忆永远进不了列表 —— 数据在库里，
+// 回答却说没有。这属于"把对判成错"，比多说一句更伤。
+
+// memLineFor 取输出里**包含某条正文的那一行**。
+//
+// 不能拿整个输出做 strings.Contains("·") 判方向：页眉图例和末尾提示里都带 "·"，
+// 于是"全文含 ·"恒为真，方向反了也照样绿（同全局静音开关那次的教训）。
+func memLineFor(out, sub string) string {
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, sub) {
+			return strings.TrimSpace(ln)
+		}
+	}
+	return ""
+}
+
+func TestManageMemoriesListSeesOnDemandEntries(t *testing.T) {
+	defer withMemoryEnv(t)()
+	if _, _, err := memUpsert("问候语以老板开头", "", false, "manual"); err != nil {
+		t.Fatalf("准备数据失败：%v", err)
+	}
+	registerLessonTools()
+	out, err := aiToolRegistry["manage_memories"].Execute(map[string]any{"op": "list"})
+	if err != nil {
+		t.Fatalf("list 报错：%v", err)
+	}
+	if strings.Contains(out, "没有记忆条目") || strings.Contains(out, "记忆库是空的") {
+		t.Fatalf("库里有 1 条却报空：%q", out)
+	}
+	if !strings.Contains(out, "问候语以老板开头") {
+		t.Fatalf("列表没带出正文：%q", out)
+	}
+	// 按需注入的条目必须标 ·，否则模型会以为它每轮都在生效
+	ln := memLineFor(out, "问候语以老板开头")
+	if !strings.HasPrefix(ln, "·") {
+		t.Fatalf("按需注入的条目应以 · 开头：%q", ln)
+	}
+	// 同时把两条口径的差别钉住：**列表能看见 ≠ 本轮会注入**。
+	// 只改 list 的取数、不去动 memoriesFor，这两个断言必须同时成立；
+	// 哪天有人为了"让列表有内容"把 memoriesFor 也改成返回全部，这里会立刻红。
+	if ms := memoriesFor("", 10); len(ms) != 0 {
+		t.Fatalf("按需注入的条目在空任务下仍不该进提示词，实际 %d 条", len(ms))
+	}
+	// 而且要把"为什么没注入"说清楚，模型才能建议用户改成每轮
+	if !strings.Contains(out, "仅相关时") && !strings.Contains(out, "任务为空") {
+		t.Fatalf("应给出未注入原因：%q", out)
+	}
+}
+
+// always=true 的条目在 list 里要标 ★（与界面"每轮都注入"同向，别标反）
+func TestManageMemoriesListMarksAlways(t *testing.T) {
+	defer withMemoryEnv(t)()
+	if _, _, err := memUpsert("别动生产库", "", true, "manual"); err != nil {
+		t.Fatalf("准备数据失败：%v", err)
+	}
+	registerLessonTools()
+	out, err := aiToolRegistry["manage_memories"].Execute(map[string]any{"op": "list"})
+	if err != nil {
+		t.Fatalf("list 报错：%v", err)
+	}
+	// 断言"方向"而不是"是不是布尔"：★ 与 · 是互斥的两态，标错方向照样能通过
+	// "含 ★" 这种弱断言（参考全局静音开关那次：亮着其实是开着的）。
+	ln := memLineFor(out, "别动生产库")
+	if !strings.HasPrefix(ln, "★") {
+		t.Fatalf("always=true 的条目应以 ★ 开头：%q", ln)
+	}
+	if strings.Contains(ln, "仅任务相关时") {
+		t.Fatalf("always=true 的条目不该被标成按需（方向反了）：%q", ln)
+	}
+}
+
+// recall_lessons 的 schema 写着"task 留空返回全部"，空任务也必须能列出按需注入的条目
+func TestRecallLessonsEmptyTaskListsAllMemories(t *testing.T) {
+	defer withMemoryEnv(t)()
+	if _, _, err := memUpsert("问候语以老板开头", "", false, "manual"); err != nil {
+		t.Fatalf("准备数据失败：%v", err)
+	}
+	registerLessonTools()
+	out, err := aiToolRegistry["recall_lessons"].Execute(map[string]any{})
+	if err != nil {
+		t.Fatalf("recall_lessons 报错：%v", err)
+	}
+	if !strings.Contains(out, "问候语以老板开头") {
+		t.Fatalf("空任务应返回全部记忆，实际：%q", out)
+	}
+	if strings.Contains(out, "没有相关的经验或记忆") {
+		t.Fatalf("库里有记忆却报空：%q", out)
+	}
+}

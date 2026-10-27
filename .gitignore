@@ -45,6 +45,17 @@ lessons-off.json
 # 经验成败统计（v2.3 N2）：本机数据，键里带项目指纹
 lesson-outcomes.json
 
+# ---------- 行动 / 预案 / 晨报（Agent 闭环 Phase 2-3）：本机运行态 ----------
+# missions.json 里是用户自己写的目标与执行步骤，playbooks.json 是预案正文，
+# briefings/ 是导出的报告 —— 都是"用户数据"，不是源码。
+# 原来漏了这几条：只要在本目录跑过 EnvKit 就会冒出来，`git add -A` 会一起入库。
+missions.json
+missions.json.bak*
+playbooks.json
+playbooks.json.bak*
+briefings/
+briefing-hist.jsonl
+
 # ---------- 构建产物（发布走 GitHub Releases，不进 git）----------
 *.exe
 # Windows 上 go build 覆盖正在运行的 exe 时会留下改名备份 EnvKit.exe~，

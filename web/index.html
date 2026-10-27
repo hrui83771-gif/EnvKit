@@ -2243,7 +2243,6 @@ const I18N_EN = {
   "人工确认": "human confirm",
   "仅 DeepSeek 支持": "DeepSeek only",
   "仅执行 SQL": "Apply SQL only",
-  "仅相关时": "When relevant",
   "仅覆盖最近 {0} 天（轨迹保留期）": "Covers last {0} days (trace retention)",
   "今天{0}，出门看一眼天。": "{0} today. Take a look outside before you head out.",
   "今日统计": "Today's usage",
@@ -2773,6 +2772,7 @@ const I18N_EN = {
   "收起": "Collapse",
   "收起一会儿": "Tuck away for a while",
   "收起数据浏览": "Collapse data browser",
+  "改为按需注入": "Only when relevant",
   "改任意一项会立刻保存并重查": "Any change saves and re-checks immediately",
   "改即保存": "Saves on change",
   "改完点下面的「保存基础设置」生效。": "Click \"Save base settings\" below to apply.",
@@ -2967,7 +2967,6 @@ const I18N_EN = {
   "段，不碰其它配置。": " section and never touches the rest of the config.",
   "每一轮都有新信息，上限自动放宽到 {0} 轮": "every turn brought new information — limit raised to {0} turns",
   "每行一条，支持": "One per line; supports ",
-  "每轮注入": "every turn",
   "每轮都注入": "Always inject",
   "沙箱内测得：无人值守场景下恒为 0，仅作对照": "Measured in the sandbox: always 0 in unattended runs, for reference only",
   "没拿到天气数据": "No weather data came back",
@@ -3160,6 +3159,7 @@ const I18N_EN = {
   "记忆与经验面板": "memory panel",
   "记忆内容": "Memory",
   "记忆层当前": "Memory layer is currently ",
+  "设为每轮注入": "Every turn",
   "设置": "Settings",
   "评测": "Evaluation",
   "评测只在开发仓库（含": "Evaluation only works inside the dev repository (with a ",
@@ -4856,7 +4856,9 @@ async function loadMemory(task){
       const td = tr.lastElementChild;
       td.style.whiteSpace = 'nowrap';
       const b1 = document.createElement('button');
-      b1.className = 'mini'; b1.textContent = m.always ? t('仅相关时') : t('每轮注入');
+      // 按钮要写**动作**（点了会发生什么），不能只写状态词：原来 always=false 时显示
+      // 「每轮注入」，读起来像"当前已经在每轮注入"，于是用户以为自己写的规矩一直在生效。
+      b1.className = 'mini'; b1.textContent = m.always ? t('改为按需注入') : t('设为每轮注入');
       b1.style.marginRight = '4px';
       b1.onclick = async ()=>{ await memPost({op:'toggle', id:m.id}); loadMemory(); };
       const b2 = document.createElement('button');

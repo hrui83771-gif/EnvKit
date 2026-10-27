@@ -500,7 +500,26 @@ func registerLessonTools() {
 			task, _ := args["task"].(string)
 			detail, _ := args["detail"].(bool)
 			var sb strings.Builder
-			if ms := memoriesFor(task, 20); len(ms) > 0 {
+			// schema 承诺"留空返回全部"，所以空任务必须按**库**列，而不是按"空任务会注入什么"筛。
+			// 原先两句都走 memoriesFor("")，而它对空任务只返回 always 条目 —— 于是一条
+			// 「按需注入、无标签」的记忆明明躺在库里，这里却输出"没有相关的经验或记忆"。
+			// 列表要回答"有什么"，不是"这一轮会注入什么"；两者混淆就是让模型替用户断定数据不存在。
+			if strings.TrimSpace(task) == "" {
+				if vs := memoriesView("", 0); len(vs) > 0 {
+					sb.WriteString("== 用户记忆（共 " + strconv.Itoa(len(vs)) + " 条；★=每轮都注入，·=仅任务相关时注入）==\n")
+					for _, v := range vs {
+						mark := "· "
+						if v.Always {
+							mark = "★ "
+						}
+						line := mark + v.Text
+						if !v.Injected && v.Reason != "" {
+							line += "  [" + v.Reason + "]"
+						}
+						sb.WriteString(line + "\n")
+					}
+				}
+			} else if ms := memoriesFor(task, 20); len(ms) > 0 {
 				sb.WriteString("== 用户记忆（必须遵守）==\n")
 				for _, m := range ms {
 					mark := "  "
@@ -532,7 +551,10 @@ func registerLessonTools() {
 
 	aiToolRegistry["manage_memories"] = aiTool{
 		Desc: "记录或维护长期记忆（你或用户口述的规矩与事实，下次对话仍然生效）。" +
-			"只增删改记忆条目，不碰 EnvKit 自身配置。写入前会请用户确认。",
+			"只增删改记忆条目，不碰 EnvKit 自身配置。写入前会请用户确认。" +
+			"op=list 会列出**全部**条目并标注「★每轮都注入 / ·仅任务相关时注入」——" +
+			"回答\"你记得什么\"必须先 list，别因为本轮提示词里没出现某条就说没有。" +
+			"标 · 的条目只是本轮未注入，并不等于没记住；用户想让它每轮生效就 toggle 或提醒他点「设为每轮注入」。",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"op":     map[string]any{"type": "string", "description": "add / delete / toggle / list", "enum": []string{"add", "delete", "toggle", "list"}},
 			"text":   map[string]any{"type": "string", "description": "op=add 时的记忆正文（写成一条明确的事实或规矩，不要写成一整段话）"},
@@ -572,18 +594,26 @@ func registerLessonTools() {
 				lessonInvalidate()
 				return "已切换该记忆的「始终注入」开关", nil
 			default:
-				ms := memoriesFor("", 50)
-				if len(ms) == 0 {
-					return "当前没有记忆条目", nil
+				// 同 recall_lessons：list 回答"库里有什么"，不能用 memoriesFor("")
+				// 那种"空任务会注入什么"的口径 —— 否则按需注入的条目会被报成不存在。
+				vs := memoriesView("", 0)
+				if len(vs) == 0 {
+					return "记忆库是空的（还没有任何条目）", nil
 				}
 				var sb strings.Builder
-				for _, m := range ms {
-					mark := " "
-					if m.Always {
+				sb.WriteString("共 " + strconv.Itoa(len(vs)) + " 条记忆（★=每轮都注入，·=仅任务相关时注入）：\n")
+				for _, v := range vs {
+					mark := "·"
+					if v.Always {
 						mark = "★"
 					}
-					sb.WriteString(mark + m.ID + "  " + firstLines(m.Text, 50) + "\n")
+					sb.WriteString(mark + " " + v.ID + "  " + firstLines(v.Text, 50))
+					if !v.Injected && v.Reason != "" {
+						sb.WriteString("  [" + v.Reason + "]")
+					}
+					sb.WriteString("\n")
 				}
+				sb.WriteString("提示：· 的条目在无关任务里不会进上下文；要它每轮都生效用 op=toggle，或让用户点「设为每轮注入」。")
 				return strings.TrimRight(sb.String(), "\n"), nil
 			}
 		},
