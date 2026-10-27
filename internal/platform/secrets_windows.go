@@ -8,6 +8,7 @@ package platform
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -70,9 +71,17 @@ func DPAPIUnprotect(s string) (string, error) {
 }
 
 // AcquireSingleInstance 拿到互斥锁返回 true；已有实例在跑返回 false。
+//
+// ENVKIT_INSTANCE_TAG 非空时给互斥体名加后缀：评测/CDP 脚本要在"用户正在用
+// EnvKit"的机器上起一个隔离实例，否则只能请用户先关掉自己的程序。
+// 未设置时名称与历史完全一致，不影响任何既有语义。
 func AcquireSingleInstance() bool {
-	name, _ := syscall.UTF16PtrFromString(`Local\EnvKit-single-instance`)
-	h, _, err := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(name)))
+	name := `Local\EnvKit-single-instance`
+	if tag := strings.TrimSpace(os.Getenv("ENVKIT_INSTANCE_TAG")); tag != "" {
+		name += "-" + tag
+	}
+	pname, _ := syscall.UTF16PtrFromString(name)
+	h, _, err := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(pname)))
 	if h == 0 {
 		return true // 创建失败不拦截，宁可用端口避让兜底
 	}

@@ -57,6 +57,17 @@
 `memory_api.go`（AI 记忆 + 本轮注入视图）· `lesson.go` · `plan.go`/`replan.go` · `explore.go`/
 `filesel.go`/`projectbrief.go`（项目画像/文件探索）· `dbbrowse.go` · `webterm.go`
 
+## 行动 / 预案 / 晨报（Agent 闭环）
+
+`mission.go`（Mission 实体 + 状态机 + 落盘）· `mission_api.go`（列表/操作/触发/
+报告读取）· `ai_mission.go`（回合绑定、续作上下文、收口与预案统计回写）·
+`trigger.go`（巡检调度 + 入站触发 + 到点产出）· `playbook.go`（预案匹配/套用/
+连败降级）· `playbook_api.go`（预案 CRUD）· `briefing.go`（晨报事实聚合 + 报告
+落盘 + 磁盘趋势快照）
+
+> 边界：guard 是确定性快路径（死了就重启），只在它**接不住**的事件上才升级成
+> 行动；套预案只准备步骤，执行一律过 PolicyGate 与确认卡。
+
 > 注：`aiVerify*`/`aiAudit*`/`aiSafePath`/`aiArgInt` 等前缀带 ai 的函数**定义在
 > verify/audit/explore 等 core 文件**——命名前缀≠文件归属，以本地图为准。
 
@@ -84,5 +95,7 @@
 
 `config.json`+`.bak1-3`（容灾链）· `state.json` · `memories.json` ·
 `lesson-outcomes.json` · `sql_history.json` · `fault-inject-state.json` ·
+`missions.json` · `playbooks.json` · `briefings/`（晨报 .md）·
+`briefing-hist.jsonl`（磁盘趋势快照，只留 30 天）·
 `audit-*.jsonl` · `trace-*.jsonl` · `envkit-*.log` · `av_whitelist.marker` ·
 `backups/`

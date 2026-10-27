@@ -1,7 +1,7 @@
 # DESIGN：Agent 闭环 —— 行动化 · 主动化 · 记忆化（A+B+C）
 
-> 文档状态：**评审定案**（2026-10-26 拍板，见第六节定案记录；
-> 下一步按 Phase 1/2/3 拆任务卡）
+> 文档状态：**评审定案 + Phase 1/2 已落地**（2026-10-26 拍板，见第六节定案记录；
+> Phase 2 的落地细节与偏离见 §3.3，Phase 3 未开始）
 > 关系：不替代 [ROADMAP.md](ROADMAP.md)（v2.x–v3.1 盘点仍有效），这是 v3.3 之后
 > 的一条新主线（版本号待定，暂不承诺 v4）。
 > 命名约定：本文把新的持久化任务实体叫 **Mission**（代码/JSON 字段名），
@@ -246,6 +246,58 @@ type Playbook struct {
 2. 同场景第二次：Mission 直接预填预案步骤，处置步数显著下降；
 3. 预案连败 3 次自动进 review 态；
 4. 晨报在配置时刻产出，内容全部来自系统记录（无模型编造空间）。
+
+### 3.3 落地记录（2026-10-27，代码已合入 main）
+
+**新文件**：`playbook.go` + `playbook_api.go` + `playbooks.json`（复用
+`missionsFile` 同款测试重定向）、`briefing.go` + `briefings/<日>.md` +
+`briefing-hist.jsonl`（磁盘趋势快照）、`playbook_test.go` / `briefing_test.go`。
+
+**预案匹配**（`pbkPick`）：`Matcher{svc, err_kind, keywords}` 里
+`svc`/`err_kind` 是 **AND 门槛**（对不上直接出局），`keywords` 只加分。
+排序完全确定：分数 → 历史成功率 → ID 字典序——没有"随机挑一个"，
+否则同一故障两次点击给出的建议会不一样，用户无法建立信任。
+连败 3 次（`pbkFailReview=3`）自动 `state=review`，界面标黄、不再推荐套用；
+复验通过一次即清零连败计数（不是"总失败率"，久病成医的预案不该被判死）。
+
+**告警闭环**：入站/守护产出 pending 行动的同一处（`trigger.go` `msProduce`）
+套预案 → 写入 `Mission.Playbook` + `Mission.Draft` → 前端在行动卡片上
+列出"预案步骤（未执行，需你批准）"，写操作额外标 `【写操作】`。
+**套预案不产生任何执行入口**：它只把步骤摆好，执行照旧走
+`/api/ai/chat` + PolicyGate + 确认卡（红线 2 未被"省推理"顺带省掉）。
+
+**Draft 与 Plan 严格分开**（设计外的补丁）：`Plan` = 已发生的步骤记录，
+`Draft` = 预案起草的未执行步骤。混进 `Plan` 会让"步骤数"和"续作回放点"
+两个语义同时失真——续作时模型会以为这些步骤已经跑过了。
+
+**晨报**（`briefingGenerate`）：纯函数聚合 `briefingCompose`，七个板块
+（服务状态 / 近 24h 崩溃 / 磁盘趋势 / 未收口行动 / 组件 / 链端 / 版本），
+每条关注项后面直接写判定依据（哪个阈值、哪个快照）。**不调模型**——
+有模型参与就有编造空间，"晨报里那句没依据的话"是最难被发现的错。
+产出即 `done`（报告型行动的收口口径），报告同时挂在 `Mission.Report` 上，
+`GET /api/missions/report?id=` 读、`&download=1` 下载。
+
+**状态机的一处例外**（`missionFinish`）：报告型行动允许 `pending → done`，
+因为晨报没有执行阶段，先转 `running` 再 `done` 是给状态机演戏，而"假
+running"会污染一切按状态统计的东西。**但判据落在事实上**——必须已经挂上
+报告文件名（`m.Report != ""`），不是调用方传的 flag；可执行行动（不会设
+`Report`）依旧被转移表挡在门外。`TestMissionFinishReportTypeFromPending`
+用两条反向断言钉住这条边界，`TestMissionTransitionTable` 里
+`pending → done` 仍记为**非法**。
+
+**顺手修掉的真缺陷**：`aiMissionResumeContext` 原来只在有 `Plan` 时注入
+上下文，于是巡检/晨报/守护/入站产出的**全新 pending 行动**（`Plan` 为空）
+点「继续」时，模型收不到目标——行动一开局就是"你继续，但继续什么我不知道"。
+改为**绑定即注入目标**，有已完成步骤才附摘要。
+
+**测试面**：`playbook_test.go`（门槛 / 并列排序 / 衰减 / 沉淀 / 工具名校验 /
+套用 / 归一化 / SvcID 解析）+ `briefing_test.go`（崩溃与熔断窗口 / 过期忽略 /
+空数据诚实 / 磁盘趋势 / 保留份数 / attach 收口 / humanBytes）。
+`withMissionEnv` 一并隔离 `playbookFile` 与 `notifyFn`——否则单测会往
+真实桌面弹通知。
+
+**未做（照 Phase 2 的边界）**：预案全自动沉淀（仍人工确认制）、
+预案的跨版本迁移、晨报的推送（只挂在行动列表里）。
 
 ---
 

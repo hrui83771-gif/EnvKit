@@ -190,6 +190,9 @@ func main() {
 	http.HandleFunc("/api/missions", handleMissions)
 	http.HandleFunc("/api/missions/events", handleMissionEvents)
 	http.HandleFunc("/api/trigger", handleMissionTrigger)
+	// Agent 闭环 Phase 2：预案库 + 晨报读取/下载
+	http.HandleFunc("/api/playbooks", handlePlaybooks)
+	http.HandleFunc("/api/missions/report", handleMissionReport)
 	// 设置页（v3.4）分段保存端点：告警 / 行动 / 开发者段各走各的通道。
 	// 老页面的整包保存（POST /api/config）永不携带这三段 —— mergeFormConfig
 	// 的保留逻辑兜底，两处配置面因此可以并存而不互相覆盖。

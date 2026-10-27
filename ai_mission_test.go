@@ -261,9 +261,14 @@ func TestAIMissionResumeContext(t *testing.T) {
 	if !aiMissionBind(id, traceID) {
 		t.Fatalf("绑定失败")
 	}
-	// 首回合（无步骤）→ 空：不打扰正常执行
-	if got := aiMissionResumeContext(); got != "" {
-		t.Fatalf("无步骤不该注入上下文，实为 %q", got)
+	// 首回合（无步骤）→ 也要注入：目标必须带上。
+	// 这是 Phase 2 修的断链：巡检/晨报/守护产出的行动没有人替它说目标，
+	// 前端只发一句「继续执行该行动」，不注入目标模型就只能反问。
+	if got := aiMissionResumeContext(); !strings.Contains(got, "测试目标") ||
+		!strings.Contains(got, "第一次执行") {
+		t.Fatalf("首回合也要注入目标，实为 %q", got)
+	} else if strings.Contains(got, "此前中断") {
+		t.Fatalf("首回合不该说「此前中断」：%q", got)
 	}
 
 	aiMissionStep("get_system_state", "", "查看系统状态", true, "端口 3000 监听中")

@@ -38,6 +38,11 @@ func notifyMuted() bool {
 	return n != nil && n.Muted
 }
 
+// notifyFn 平台气泡出口。抽成变量只有一个理由：单测跑一遍会弹出几十个真实
+// 桌面通知（守护/行动相关测试都会走到这里），既拖慢测试又会盖住用户正在看的
+// 东西 —— 测试不该有这种副作用。
+var notifyFn = platform.Notify
+
 // notifyUser 主动推送的统一出口：静音时不发。
 //
 // 所有新增的"主动告诉用户一件事"都要走这里，而不是直接调 platform.Notify；
@@ -46,7 +51,7 @@ func notifyUser(title, msg string) {
 	if notifyMuted() {
 		return
 	}
-	platform.Notify(title, msg)
+	notifyFn(title, msg)
 }
 
 func handleNotifyConfig(w http.ResponseWriter, r *http.Request) {

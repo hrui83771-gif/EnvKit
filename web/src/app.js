@@ -129,6 +129,7 @@ const I18N_EN = {
   "⚠ 请求内容被中间层丢弃": "⚠ Request payload dropped in transit",
   "。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。": ". WeCom / DingTalk / Feishu group-bot custom webhooks can be pasted directly; only generic JSON is sent — their private formats are not supported.",
   "「拉取模型列表」会调用服务商的 /models 接口获取在售模型；拉取失败时仍可用预置列表或自定义模型名。Key 经 DPAPI 加密存储，仅本机可解密。": "\"Fetch model list\" calls the provider's /models endpoint to list available models; if it fails you can still use the built-in list or type a model name. The API key is DPAPI-encrypted and only decryptable on this machine.",
+  "【写操作】": "[write]",
   "【附加文件引用】": "[Attached file references]",
   "一个小时内不打扰你，悬停找我": "I'll stay out of your way for an hour — hover to find me",
   "一键启动": "One-click launch",
@@ -150,8 +151,10 @@ const I18N_EN = {
   "下一页 ›": "Next ›",
   "下午好": "Good afternoon",
   "下载": "Download",
+  "下载 .md": "Download .md",
   "下载代理 HTTPS（可选）": "Download proxy HTTPS (optional)",
   "下载代理 HTTP（可选）": "Download proxy HTTP (optional)",
+  "下载失败": "Download failed",
   "下雪了，路上滑，慢点走。": "It's snowing. Roads are slippery — take it slow.",
   "不主动提示。\n          标「已失效」的项目/环境变了，该条不会注入——": "not surfaced proactively.\n          Items marked \"expired\" changed project or environment and are no longer injected —",
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
@@ -233,6 +236,7 @@ const I18N_EN = {
   "停止失败：": "Stop failed: ",
   "停止服务": "stop services",
   "停止生成": "Stop generating",
+  "停用": "Disable",
   "允许写操作": "Allow writes",
   "允许外部 HTTP 触发": "Allow external HTTP trigger",
   "允许查询天气": "Allow weather lookups",
@@ -274,6 +278,7 @@ const I18N_EN = {
   "刚停止，等 {0} 秒让端口释放后自动启动…": "Just stopped — waiting {0}s for ports to free up, will auto-start…",
   "初始化数据库": "Initialize database",
   "删除": "Delete",
+  "删除预案": "Delete playbook",
   "判分器自检": "Judge self-test",
   "刷新": "Refresh",
   "刷新余额": "Refresh balance",
@@ -442,6 +447,7 @@ const I18N_EN = {
   "如：ls -l /opt/fisco": "e.g. ls -l /opt/fisco",
   "子进程重试次数": "Child-process retries",
   "字段多且互相约束，集中在一处改更安全": "Many interdependent fields; editing them in one place is safer",
+  "存为预案": "Save as playbook",
   "守护": "Guard",
   "守护运行状态": "Guard runtime status",
   "守护间隔": "Guardian interval",
@@ -510,6 +516,7 @@ const I18N_EN = {
   "已停止生成": "Generation stopped",
   "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
   "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
+  "已停用": "Retired",
   "已加白名单": "Whitelisted",
   "已发起检查，几秒后刷新状态": "Check started; status refreshes in a few seconds",
   "已发送到 {0}": "Sent to {0}",
@@ -521,6 +528,7 @@ const I18N_EN = {
   "已复制": "Copied",
   "已复验通过": "Verified OK",
   "已失效": "Stale",
+  "已存为预案：{0}": "Saved as playbook: {0}",
   "已安装": "Installed",
   "已导出 {0}": "Exported {0}",
   "已导出本轮": "Turn exported",
@@ -612,6 +620,7 @@ const I18N_EN = {
   "当前版本": "Current version",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
+  "待复审": "Needs review",
   "必须大于起始端口": "Must be greater than the start port",
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
   "忽略这个版本": "Ignore this version",
@@ -662,9 +671,11 @@ const I18N_EN = {
   "批量导入": "Bulk import",
   "批量授权 · 剩 {0} 次": "Batch grant · {0} left",
   "批量授权执行：{0}（剩余 {1} 次）": "Ran under batch grant: {0} ({1} left)",
+  "把这次的步骤序列存成可复用预案": "Save this run's step sequence as a reusable playbook",
   "投喂": "Feed",
   "折叠": "Collapse",
   "报告": "Report",
+  "报告：{0}": "Report: {0}",
   "拉取失败：": "Fetch failed: ",
   "拉取模型列表": "Fetch model list",
   "拉取模型列表中...": "Fetching model list...",
@@ -779,6 +790,7 @@ const I18N_EN = {
   "服务商与密钥": "Provider & API key",
   "服务商返回 HTTP {0}": "Provider returned HTTP {0}",
   "未产出": "Not produced",
+  "未使用": "Never used",
   "未保存…": "Unsaved…",
   "未发生": "Not yet",
   "未启动": "Not started",
@@ -836,6 +848,7 @@ const I18N_EN = {
   "构建并启动": "Build & start",
   "构造请求失败": "Couldn't build the request",
   "查看天气": "Show weather",
+  "查看报告": "View report",
   "查看日志": "View logs",
   "查看结果": "view result",
   "查看证据": "View evidence",
@@ -883,6 +896,7 @@ const I18N_EN = {
   "正常": "OK",
   "此电脑": "This PC",
   "步数": "Steps",
+  "步骤 {0}": "{0} steps",
   "段，不碰其它配置。": " section and never touches the rest of the config.",
   "每一轮都有新信息，上限自动放宽到 {0} 轮": "every turn brought new information — limit raised to {0} turns",
   "每行一条，支持": "One per line; supports ",
@@ -935,6 +949,7 @@ const I18N_EN = {
   "生效 SQL 到数据库": "Apply SQL to database",
   "用户": "User",
   "用户彻底怒了，我得乖一点": "The user is furious — better behave",
+  "用过 {0} 次，复验通过 {1} 次（{2}%）": "Used {0}x, verified {1}x ({2}%)",
   "用量": "Usage",
   "界面": "Interface",
   "界面与更新": "Appearance & updates",
@@ -958,6 +973,7 @@ const I18N_EN = {
   "知道了": "Got it",
   "破坏性": "Destructive",
   "确定": "OK",
+  "确定删除「{0}」？历史统计会一起丢掉。": "Delete \"{0}\"? Its history stats will be lost too.",
   "确定删除这条记忆？": "Delete this memory?",
   "确定要退出 EnvKit 吗？": "Are you sure you want to exit EnvKit?",
   "确认": "Confirm",
@@ -1142,6 +1158,7 @@ const I18N_EN = {
   "还没有数据。发一条消息后这里会显示 token、步数与耗时。": "No data yet. Send a message and tokens, steps and elapsed time will show up here.",
   "还没有记忆条目": "No memory entries yet",
   "还没有轨迹。发一句话就会有了。": "No trace yet. Send a message.",
+  "还没有预案。行动收口后在卡片上点「存为预案」即可沉淀。": "No playbooks yet. Once a mission finishes, click \"Save as playbook\" on its card.",
   "还没读到配置，请先点「重新读取」": "Config not loaded yet — click Reload first",
   "还缺：{0}": "Still missing: {0}",
   "这一档当前不可用，先看卡片里的原因": "This tier is unavailable — see the reason on its card",
@@ -1229,6 +1246,9 @@ const I18N_EN = {
   "项目目录": "Project folders",
   "项目目录与数据库": "Project directories & database",
   "顺延上界": "Scan upper bound",
+  "预案库": "Playbooks",
+  "预案步骤（未执行，需你批准）": "Playbook steps (not run yet — needs your approval)",
+  "预案：{0}": "Playbook: {0}",
   "预演": "Dry run",
   "预演：{0}": "Dry run: {0}",
   "预算 {0} 轮": "Budget {0} turns",
@@ -4259,6 +4279,10 @@ let aiCurMission = null;   // 当前绑定的行动 ID（Phase 1）：随 /api/a
                            // 由 aiSendText 第二参设置，普通对话会清掉它
 let aiMissionRows = null;  // 行动列表缓存（SSE 推送直接更新它）
 let aiMissionES = null;    // 行动 SSE 句柄（只订阅一次，EventSource 自动重连）
+let aiPbkRows = null;      // 预案库缓存（Phase 2）：行动卡片的预案标题也读它。
+                           // 必须声明在文件顶部这一批里 —— 放到使用处（aiPbkLoad 附近）
+                           // 会踩 TDZ：渲染函数在声明语句执行前被调用就会 ReferenceError，
+                           // 而 node --check 查不出来（本项目已经吃过一次）。
 const AI_KIND = {plan:'计划', step:'执行', result:'结果', ver:'复验', human:'等确认', grant:'授权', body:'传输', done:'结论'};
 /* 允许"本任务内不再逐次询问"的工具（与服务端 aiGrantFamily 一一对应）。
    放在前端是为了**只在能批量的卡上显示那个勾选**——数据类/系统类动作不给这个选项，
@@ -5011,6 +5035,9 @@ const AI_MS_CLS = {
   done:'ok', failed:'bad', canceled:'dim', expired:'dim'
 };
 const AI_MS_TRIGGER = {manual:'手动', patrol:'巡检', schedule:'晨报', webhook:'入站', guard:'守护'};
+// 终态集合与渲染时的 open 判断同源，抽出来避免两处各写一遍（漏一个就会
+// 让"已取消"的行动也冒出「存为预案」）。
+const AI_MS_FINAL = ['done','failed','canceled','expired'];
 
 function aiMissionsShell(){
   const box = $ai('ai-pane-missions'); if(!box) return null;
@@ -5022,9 +5049,13 @@ function aiMissionsShell(){
         '<button id="ai-ms-new">' + esc(t('新建行动')) + '</button>' +
         '<button id="ai-ms-re">' + esc(t('刷新')) + '</button>' +
       '</div>' +
-      '<div id="ai-ms-list"></div>';
+      '<div id="ai-ms-list"></div>' +
+      '<div class="ai-ms-sec"><span>' + esc(t('预案库')) + '</span>' +
+        '<button id="ai-pbk-re">' + esc(t('刷新')) + '</button></div>' +
+      '<div id="ai-pbk"></div>';
     $ai('ai-ms-new').onclick = aiMissionsCreate;
     $ai('ai-ms-re').onclick = ()=>aiMissionsLoad(true);
+    $ai('ai-pbk-re').onclick = ()=>aiPbkLoad(true);
     $ai('ai-ms-goal').addEventListener('keydown', e=>{ if(e.key === 'Enter') aiMissionsCreate(); });
   }
   return box;
@@ -5033,6 +5064,7 @@ function aiMissionsShell(){
 function aiMissionsLoad(force){
   const box = aiMissionsShell(); if(!box) return;
   aiMissionsSubscribe();
+  aiPbkLoad(force);
   const list = $ai('ai-ms-list');
   if(list && aiMissionRows == null) list.textContent = t('读取行动…');
   if(aiMissionRows && !force){ aiMissionsRender(); return; }
@@ -5092,6 +5124,31 @@ function aiMissionsRender(){
     goal.textContent = m.goal || '';
     main.appendChild(goal);
 
+    // 预案（Phase 2）：命中的预案标题 + 起草步骤。全部来自服务端字段，
+    // 前端不推断"这步会不会改状态"——写标记取自预案视图的 step_views。
+    if(m.playbook){
+      const pbv = (aiPbkRows || []).find(x=>x.id === m.playbook);
+      const pb = document.createElement('div'); pb.className = 'ai-ms-pb';
+      pb.textContent = t('预案：{0}', aiPbkTitle(m.playbook));
+      if(pbv && pbv.state !== 'active') pb.classList.add('warn');
+      main.appendChild(pb);
+    }
+    if((m.draft || []).length){
+      const pbv = (aiPbkRows || []).find(x=>x.id === m.playbook);
+      const dl = document.createElement('div'); dl.className = 'ai-ms-draft';
+      const cap = document.createElement('div'); cap.className = 'muted';
+      cap.textContent = t('预案步骤（未执行，需你批准）');
+      dl.appendChild(cap);
+      (m.draft || []).forEach((st,i)=>{
+        const w = pbv && pbv.step_views && pbv.step_views[i] && pbv.step_views[i].write;
+        const li = document.createElement('div');
+        li.textContent = (i+1) + '. ' + st.tool + (st.target ? '（' + st.target + '）' : '') +
+          (st.why ? ' · ' + st.why : '') + (w ? ' ' + t('【写操作】') : '');
+        dl.appendChild(li);
+      });
+      main.appendChild(dl);
+    }
+
     // 说明行：暂停原因 / 终态结论 / 断点——全部是服务端原文，esc 由 textContent 保证
     let note = '';
     if(m.state === 'paused' || m.state === 'awaiting_confirm') note = m.pause_why || '';
@@ -5106,7 +5163,14 @@ function aiMissionsRender(){
     const acts = document.createElement('div'); acts.className = 'ai-ms-acts';
     const canRun = ['pending','paused','awaiting_confirm'].indexOf(m.state) >= 0;
     const isRun = m.state === 'running';
-    const open = !['done','failed','canceled','expired'].includes(m.state);
+    const open = AI_MS_FINAL.indexOf(m.state) < 0;
+    // 报告（Phase 2 晨报）：只看/下载，不影响行动状态
+    if(m.report){
+      const b = document.createElement('button');
+      b.textContent = t('查看报告');
+      b.onclick = ()=>aiMsReport(m);
+      acts.appendChild(b);
+    }
     if(canRun){
       const b = document.createElement('button');
       b.textContent = t('继续'); b.title = t('继续执行该行动');
@@ -5125,9 +5189,153 @@ function aiMissionsRender(){
       c.onclick = ()=>aiMissionsOp('cancel', m.id);
       acts.appendChild(c);
     }
+    // 沉淀（Phase 2）：只有真跑过（有已完成步骤）的终态行动才值得存成预案。
+    // 未收口的也可存 —— 但那样的"步骤"可能是错的，不如等它收口。
+    if(AI_MS_FINAL.indexOf(m.state) >= 0 && (m.plan || []).length){
+      const b = document.createElement('button');
+      b.textContent = t('存为预案');
+      b.title = t('把这次的步骤序列存成可复用预案');
+      b.onclick = ()=>aiMsSavePbk(m);
+      acts.appendChild(b);
+    }
     row.appendChild(acts);
     list.appendChild(row);
   });
+}
+
+/* ---------- 报告（晨报）查看与下载 ----------
+   报告正文是 Markdown，但这里用等宽纯文本展示而不是渲染：
+   它是"给机器留档的事实清单"，渲染成花哨排版反而看不出原文结构；
+   而下载下来的 .md 谁想渲染谁渲染。 */
+async function aiMsReport(m){
+  let txt = '';
+  try{
+    const r = await fetch('/api/missions/report?id=' + encodeURIComponent(m.id));
+    if(!r.ok){
+      const j = await r.json().catch(()=>({}));
+      toast((j && j.error) || t('读取失败'), 'err');
+      return;
+    }
+    txt = await r.text();
+  }catch(_){ toast(t('读取失败'), 'err'); return; }
+  const want = await askConfirm(t('报告：{0}', m.goal || ''), txt,
+    t('下载 .md'), false, t('关闭'), {wide:true, mono:true});
+  if(want) aiMsDownload(m);
+}
+
+async function aiMsDownload(m){
+  try{
+    const r = await fetch('/api/missions/report?id=' + encodeURIComponent(m.id) + '&download=1');
+    if(!r.ok){ toast(t('下载失败'), 'err'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'envkit-' + (m.report || 'report.md');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); }catch(_){} }, 4000);
+  }catch(_){ toast(t('下载失败'), 'err'); }
+}
+
+async function aiMsSavePbk(m){
+  try{
+    const r = await fetch('/api/playbooks', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({op:'save_mission', mission_id: m.id})});
+    const d = await r.json();
+    if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    toast(t('已存为预案：{0}', (d.playbook && d.playbook.title) || ''));
+    aiPbkLoad(true);
+  }catch(_){ toast(t('操作失败'), 'err'); }
+}
+
+/* ---------- 预案库（Phase 2） ----------
+   入口只有一个：行动 tab 下方。不单开 tab —— 预案是行动的副产品，
+   离开"这次干了什么"单独去看预案，用户很难判断它靠不靠得住。
+   （缓存 aiPbkRows 的声明在文件顶部，见那里的 TDZ 说明。） */
+
+function aiPbkLoad(force){
+  if(aiPbkRows && !force){ aiPbkRender(); return; }
+  fetch('/api/playbooks').then(r=>r.json()).then(d=>{
+    aiPbkRows = (d && d.playbooks) || [];
+    aiPbkRender();
+    // 预案标题要显示在行动卡片上：拿到数据后补一次渲染
+    if(aiSideTab === 'missions') aiMissionsRender();
+  }).catch(()=>{ aiPbkRows = []; aiPbkRender(); });
+}
+
+function aiPbkTitle(id){
+  const p = (aiPbkRows || []).find(x=>x.id === id);
+  return p ? p.title : id;
+}
+
+const AI_PBK_STATE = {active:'可用', review:'待复审', retired:'已停用'};
+
+function aiPbkRender(){
+  const box = $ai('ai-pbk'); if(!box) return;
+  box.textContent = '';
+  const rows = aiPbkRows || [];
+  if(!rows.length){
+    const p = document.createElement('div'); p.className = 'muted';
+    p.textContent = t('还没有预案。行动收口后在卡片上点「存为预案」即可沉淀。');
+    box.appendChild(p);
+    return;
+  }
+  rows.forEach(p=>{
+    const row = document.createElement('div');
+    row.className = 'ai-pbk-row' + (p.state === 'review' ? ' warn' : (p.state === 'retired' ? ' dim' : ''));
+    const main = document.createElement('div'); main.className = 'ai-pbk-main';
+    const ttl = document.createElement('div'); ttl.className = 'ai-pbk-title';
+    ttl.textContent = p.title || p.id;
+    main.appendChild(ttl);
+    // 统计只说事实：用了几次、几次复验通过。没跑过就明说"未使用"，
+    // 不写成 0% —— 0% 看起来像"它总失败"。
+    const meta = document.createElement('div'); meta.className = 'muted ai-pbk-meta';
+    const used = (p.stats && p.stats.used) || 0;
+    meta.textContent = t(AI_PBK_STATE[p.state] || p.state) +
+      ' · ' + t('步骤 {0}', (p.steps || []).length) +
+      ' · ' + (used ? t('用过 {0} 次，复验通过 {1} 次（{2}%）', used, p.stats.succ || 0, p.rate)
+                   : t('未使用'));
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    const acts = document.createElement('div'); acts.className = 'ai-ms-acts';
+    if(p.state === 'retired'){
+      const b = document.createElement('button');
+      b.textContent = t('启用'); b.onclick = ()=>aiPbkOp(p.id, 'set_state', 'active');
+      acts.appendChild(b);
+    } else {
+      const b = document.createElement('button');
+      b.textContent = t('停用'); b.onclick = ()=>aiPbkOp(p.id, 'set_state', 'retired');
+      acts.appendChild(b);
+    }
+    const d = document.createElement('button');
+    d.textContent = t('删除'); d.className = 'danger';
+    d.onclick = ()=>aiPbkDel(p);
+    acts.appendChild(d);
+    row.appendChild(acts);
+    box.appendChild(row);
+  });
+}
+
+async function aiPbkOp(id, op, state){
+  try{
+    const r = await fetch('/api/playbooks', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({op: op, id: id, state: state})});
+    const d = await r.json();
+    if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    aiPbkLoad(true);
+  }catch(_){ toast(t('操作失败'), 'err'); }
+}
+
+async function aiPbkDel(p){
+  const yes = await askConfirm(t('删除预案'), t('确定删除「{0}」？历史统计会一起丢掉。', p.title), t('删除'), true);
+  if(!yes) return;
+  try{
+    const r = await fetch('/api/playbooks', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({op:'delete', id: p.id})});
+    const d = await r.json();
+    if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    aiPbkLoad(true);
+  }catch(_){ toast(t('操作失败'), 'err'); }
 }
 
 function aiMissionsOp(op, id){

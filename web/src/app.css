@@ -696,6 +696,22 @@
   .ai-ms-acts button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:11px;padding:2px 9px;cursor:pointer;white-space:nowrap}
   .ai-ms-acts button:hover{color:var(--brand)}
   .ai-ms-acts button.danger:hover{color:var(--err);border-color:var(--err)}
+  /* Phase 2：预案徽标 / 起草步骤 / 预案库列表。
+     起草步骤用等宽 + 缩进，和"已完成步骤"在视觉上分开 —— 用户最容易误会
+     的就是"这些是不是已经做了"。 */
+  .ai-ms-pb{font-size:11px;color:var(--brand);word-break:break-word;margin-top:2px}
+  .ai-ms-pb.warn{color:var(--warn)}
+  .ai-ms-draft{font-size:11px;color:var(--muted);margin-top:3px;padding-left:8px;border-left:2px solid var(--line);line-height:1.6;word-break:break-word}
+  .ai-ms-draft .muted{font-size:10px;opacity:.85}
+  .ai-ms-sec{display:flex;align-items:center;gap:6px;margin:10px 0 6px;padding-top:8px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+  .ai-ms-sec span{flex:1}
+  .ai-ms-sec button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:10px;padding:1px 8px;cursor:pointer}
+  .ai-pbk-row{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;border:1px solid var(--line);margin-bottom:6px}
+  .ai-pbk-row.warn{border-left:3px solid var(--warn)}
+  .ai-pbk-row.dim{opacity:.6}
+  .ai-pbk-main{flex:1;min-width:0}
+  .ai-pbk-title{color:var(--text);word-break:break-word}
+  .ai-pbk-meta{font-size:10px;margin-top:2px}
   /* 选中待引用的文件 */
   .ai-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 6px}
   .ai-chips[hidden]{display:none}

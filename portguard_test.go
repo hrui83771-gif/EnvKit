@@ -54,17 +54,24 @@ func stillAlive(t *testing.T, port int) bool {
 // ---------- 端口真释放等待 ----------
 
 func TestWaitPortsFreeWhenFree(t *testing.T) {
-	// 没人听的端口：立即放行，不吃满超时
+	// 没人听的端口：立即放行，不吃满超时。
+	//
+	// 断言用"耗时远小于预算"而不是"2 秒内"：classifyOccupants 每轮要拉一次
+	// 端口占用快照（Windows 上要起子进程，本机实测单轮 1.5~1.8s），卡 2s 的
+	// 阈值余量只有 0.2s——全量跑测试时机器一忙就假失败（实测 2.05s 挂过）。
+	// 预算放宽到 6s、阈值 3s：一轮就返回的实现稳过，真按 200ms 轮询睡满预算
+	// 的仍然会被抓住。
+	const budget = 6 * time.Second
 	start := time.Now()
-	ok, foreign := waitPortsFree([]int{19999}, 3*time.Second, nil, nil)
+	ok, foreign := waitPortsFree([]int{19999}, budget, nil, nil)
 	if !ok {
 		t.Error("空闲端口应判已释放")
 	}
 	if len(foreign) != 0 {
 		t.Errorf("空闲端口不该有占用者：%v", foreign)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("空闲端口应立即返回，实际耗时 %v", elapsed)
+	if elapsed := time.Since(start); elapsed > budget/2 {
+		t.Errorf("空闲端口应立即返回，实际耗时 %v（预算 %v）", elapsed, budget)
 	}
 }
 

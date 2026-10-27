@@ -131,11 +131,21 @@ func aiMissionAwaitConfirm(tool, note string) {
 	}
 }
 
-// aiMissionResumeContext 续作上下文（定案 3：摘要 + 关键结果全量）。
+// aiMissionResumeContext 行动上下文（Phase 1 定案 3 + Phase 2 修订）。
 //
-// 只在「有已完成步骤」时产出——第一次执行的回合 Plan 为空，不注入。
-// 传给模型的是：目标 + 中断原因 + 每步的工具结论（全量）+ 断点，
-// **不回传前半段对话原文**（请求体可控、缓存友好，见设计 2.4）。
+// **修订原因（真实断链）**：原实现只在「有已完成步骤」时注入，于是
+// 「全新 pending 行动 → 点继续 → 前端只发一句『继续执行该行动』」时
+// 模型拿不到目标，只能反问"你想让我做什么"。手动新建行动没暴露这个坑
+// （那边把 goal 当消息正文发了），但巡检/晨报/守护/入站产出的行动全都中招，
+// 而这几种恰恰没有人替它说目标。
+//
+// 现在的口径：
+//   - 绑定即注入，**目标始终带上**（空目标才返回空）；
+//   - 有已完成步骤 → 附「此前中断」摘要 + 每步结论全量 + 断点；
+//   - 有预案起草步骤 → 附建议顺序（省掉"推理怎么修"，但**不省确认**）；
+//   - 没步骤也没预案 → 只带目标 + 一句"这是第一次执行"。
+//
+// 仍不回传前半段对话原文（定案 3：请求体可控、缓存友好）。
 // 证据是工具输出（不可信数据），按库内惯例包 untrusted_data。
 func aiMissionResumeContext() string {
 	s := aiMissionCur
@@ -143,42 +153,86 @@ func aiMissionResumeContext() string {
 		return ""
 	}
 	m, ok := missionGet(s.id)
-	if !ok || len(m.Plan) == 0 {
+	if !ok {
 		return ""
+	}
+	goal := strings.TrimSpace(m.Goal)
+	if goal == "" {
+		return "" // 没有目标就没有可注入的东西
 	}
 	var b strings.Builder
 	b.WriteString("\n\n<mission_context>\n")
-	b.WriteString("你正在继续一个此前中断的「行动」。不要重头开始，也不要重复已完成的步骤。\n")
-	b.WriteString("目标：" + m.Goal + "\n")
+	if len(m.Plan) > 0 {
+		b.WriteString("你正在继续一个此前中断的「行动」。不要重头开始，也不要重复已完成的步骤。\n")
+	} else {
+		b.WriteString("这是「行动」的第一次执行，此前没有已完成步骤。\n")
+	}
+	b.WriteString("目标：" + goal + "\n")
+	if m.Trigger.Kind != "" {
+		b.WriteString("来源：" + m.Trigger.Kind + triggerDetailNote(m.Trigger.Detail) + "\n")
+	}
 	if m.PauseWhy != "" {
 		b.WriteString("中断原因：" + m.PauseWhy + "\n")
 	}
-	b.WriteString("此前已完成步骤（工具结论全量保留，对话原文不再回传）：\n")
-	for _, st := range m.Plan {
-		mark := "成功"
-		if !st.OK {
-			mark = "失败"
+	if len(m.Plan) > 0 {
+		b.WriteString("此前已完成步骤（工具结论全量保留，对话原文不再回传）：\n")
+		for _, st := range m.Plan {
+			mark := "成功"
+			if !st.OK {
+				mark = "失败"
+			}
+			desc := st.Why
+			if desc == "" {
+				desc = st.Tool
+			}
+			// planLine 的默认文案已含 target，别拼成「（backend）（backend）」
+			if st.Target != "" && !strings.Contains(desc, st.Target) {
+				desc += "（" + st.Target + "）"
+			}
+			line := itoa(st.Seq) + ". [" + mark + "] " + desc
+			if st.Evidence != "" {
+				line += " —— <untrusted_data>" + st.Evidence + "</untrusted_data>"
+			}
+			b.WriteString(line + "\n")
 		}
-		desc := st.Why
-		if desc == "" {
-			desc = st.Tool
-		}
-		// planLine 的默认文案已含 target，别拼成「（backend）（backend）」
-		if st.Target != "" && !strings.Contains(desc, st.Target) {
-			desc += "（" + st.Target + "）"
-		}
-		line := itoa(st.Seq) + ". [" + mark + "] " + desc
-		if st.Evidence != "" {
-			line += " —— <untrusted_data>" + st.Evidence + "</untrusted_data>"
-		}
-		b.WriteString(line + "\n")
 	}
 	if m.Pending != nil {
 		b.WriteString("断点：等待确认「" + m.Pending.Note + "」（工具 " + m.Pending.Tool + "）——请提醒用户确认，不要自行执行。\n")
 	}
+	// 预案起草步骤（Phase 2）：只给顺序，不给"免确认"的借口。
+	if len(m.Draft) > 0 {
+		title := m.Playbook
+		if p, ok := pbkGet(m.Playbook); ok {
+			title = p.Title
+		}
+		b.WriteString("本行动已套用预案「" + title + "」，建议按这个顺序做（可据实际情况调整）：\n")
+		for i, st := range m.Draft {
+			line := itoa(i+1) + ". " + st.Tool
+			if st.Target != "" {
+				line += "（" + st.Target + "）"
+			}
+			if st.Why != "" {
+				line += " —— " + st.Why
+			}
+			if t, ok := aiToolRegistry[st.Tool]; ok && t.Write {
+				line += "【写操作，必须先确认】"
+			}
+			b.WriteString(line + "\n")
+		}
+		b.WriteString("预案只是省掉「推理怎么修」，**不省确认**：每个写步骤照常弹确认卡。\n")
+	}
 	b.WriteString("规则：成败仍以系统复验结论为准（verify_result 是唯一判据）；从断点继续，补做未完成的步骤。\n")
 	b.WriteString("</mission_context>")
 	return b.String()
+}
+
+// triggerDetailNote 触发摘要的一句话补充（有内容才拼）。
+func triggerDetailNote(detail string) string {
+	d := strings.TrimSpace(detail)
+	if d == "" {
+		return ""
+	}
+	return "（" + truncateRunes(d, 160) + "）"
 }
 
 // aiMissionSettle 回合结束收口。必须在 endTrace 之前跑（defer LIFO 保证）。
@@ -193,6 +247,17 @@ func aiMissionSettle() {
 	if b := currentOutcomeBox(); b != nil {
 		outcome = b.get()
 	}
+	// fin 收口 + 回写预案统计。放一个闭包里而不是每处都写：
+	// 收口有五条出口，漏掉任何一处的统计回写都会让"这套预案靠不靠得住"
+	// 永远少记一次 —— 而那种缺失看不出来。
+	fin := func(fn func(*Mission) error) {
+		m, err := missionUpdate(s.id, fn)
+		if err != nil {
+			warn(scSys, "行动", "行动 %s 收口失败：%v", s.id, err)
+			return
+		}
+		missionPlaybookSettle(m)
+	}
 	why := ""
 	switch outcome {
 	case outSuccess:
@@ -203,26 +268,18 @@ func aiMissionSettle() {
 			if msg == "" {
 				msg = "复验结论"
 			}
-			if _, err := missionUpdate(s.id, func(x *Mission) error {
-				return missionFinish(x, s.verify.Verified, msg)
-			}); err != nil {
-				warn(scSys, "行动", "行动 %s 收口失败：%v", s.id, err)
-			}
+			fin(func(x *Mission) error { return missionFinish(x, s.verify.Verified, msg) })
 			return
 		case s.report && s.steps > 0 && s.fails == 0:
-			if _, err := missionUpdate(s.id, func(x *Mission) error {
+			fin(func(x *Mission) error {
 				return missionFinish(x, true, "巡检报告已产出（"+itoa(s.steps)+" 步全部成功）")
-			}); err != nil {
-				warn(scSys, "行动", "行动 %s 收口失败：%v", s.id, err)
-			}
+			})
 			return
 		default:
 			// 没有复验证据：failed 而不是 done（红线 1）
-			if _, err := missionUpdate(s.id, func(x *Mission) error {
+			fin(func(x *Mission) error {
 				return missionFinish(x, false, "回合结束但没有复验证据")
-			}); err != nil {
-				warn(scSys, "行动", "行动 %s 收口失败：%v", s.id, err)
-			}
+			})
 			return
 		}
 	case outPartial:
@@ -235,7 +292,7 @@ func aiMissionSettle() {
 	// 落 paused（不是终态）：断流不作废整轮，这正是续作的价值。
 	// 例外：断点停在确认卡上 → awaiting_confirm——状态机语义更准
 	//（卡片登记 TTL 30 分钟，见 msConfirmTimeout），续作时上下文会提示待确认。
-	if _, err := missionUpdate(s.id, func(x *Mission) error {
+	fin(func(x *Mission) error {
 		if missionTerminal(x.State) { // 理论不可达：收口时应为 running
 			return nil
 		}
@@ -247,9 +304,21 @@ func aiMissionSettle() {
 		}
 		x.PauseWhy = why2
 		return missionGo(x, to)
-	}); err != nil {
-		warn(scSys, "行动", "行动 %s 收口失败：%v", s.id, err)
+	})
+	warn(scSys, "行动", "行动 %s 暂停：%s", s.id, why)
+}
+
+// missionPlaybookSettle 行动收口后回写预案统计。
+//
+// 只有**终态**才算一次执行：paused / awaiting_confirm 是中断，不是结果，
+// 拿它记 fail 会让"这套预案靠不靠得住"被断网次数污染。
+// 成功判据仍是 Result.Verified（红线 1）—— 不看 mission 状态是 done 就算成功，
+// 因为报告型行动的 done 表示"产出完成"，与"这套处置有效"不是一回事，
+// 但报告型行动本来也不会带预案（晨报不套预案），这里只做防御。
+func missionPlaybookSettle(m Mission) {
+	if strings.TrimSpace(m.Playbook) == "" || !missionTerminal(m.State) {
 		return
 	}
-	warn(scSys, "行动", "行动 %s 暂停：%s", s.id, why)
+	verified := m.Result != nil && m.Result.Verified
+	pbkSettle(m.Playbook, verified)
 }

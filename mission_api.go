@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -127,6 +129,10 @@ func handleMissionTrigger(w http.ResponseWriter, r *http.Request) {
 		Kind   string `json:"kind"`
 		Title  string `json:"title"`
 		Detail string `json:"detail"`
+		// Svc 服务 ID（可选）。Phase 2：有值才可能命中"按服务限定"的预案，
+		// 没有就只按关键词/来源匹配 —— 让调用方明确说清"这是哪个服务的事"，
+		// 比后端从标题里猜服务可靠得多。
+		Svc string `json:"svc"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": "参数错误"})
@@ -152,8 +158,16 @@ func handleMissionTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 	auditNow(actSys, "mission_trigger", m.ID, body.Kind, resOK, firstLines(body.Title, 80))
 	info(scSys, "行动", "入站触发（%s）→ 待批行动 %s", body.Kind, m.ID)
+	// Phase 2：命中预案就在行动上起草步骤（只起草，不执行 —— 红线 2）
+	var hit bool
+	if body.Svc != "" {
+		_, hit = pbkApplyToMission(m.ID, strings.TrimSpace(body.Svc), "")
+	}
 	notifyMissions()
-	writeJSON(w, map[string]any{"ok": true, "mission": m})
+	if cur, ok := missionGet(m.ID); ok {
+		m = cur // 回包带上最新状态，前端不必再拉一次
+	}
+	writeJSON(w, map[string]any{"ok": true, "mission": m, "playbook_matched": hit})
 }
 
 // handleMissionEvents SSE：行动列表实时状态。
@@ -205,6 +219,52 @@ func handleMissionEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// handleMissionReport 读取报告型行动的产出（Phase 2 晨报）。
+//
+// GET /api/missions/report?id=<行动ID>[&download=1]
+//
+// 为什么不让前端直接访问文件：报告在 exe 同级目录，交给静态文件服务
+// 等于把整个目录的可读面开出去；而且鉴权才是这里真正需要的东西
+// （authMW 统一做）。只按"行动 ID → 文件名"这条路取，路径穿越无处下手。
+func handleMissionReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		writeJSON(w, map[string]any{"ok": false, "error": "缺少 id"})
+		return
+	}
+	m, ok := missionGet(id)
+	if !ok {
+		writeJSON(w, map[string]any{"ok": false, "error": "行动不存在：" + id})
+		return
+	}
+	name := strings.TrimSpace(m.Report)
+	if name == "" {
+		writeJSON(w, map[string]any{"ok": false, "error": "这条行动没有产出报告"})
+		return
+	}
+	// 文件名来自 missions.json，而那个文件允许手工编辑 —— 必须当不可信输入处理
+	if name != filepath.Base(name) || strings.ContainsAny(name, `/\`) {
+		writeJSON(w, map[string]any{"ok": false, "error": "报告文件名非法：" + name})
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(briefingDirFn(), name))
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "报告文件读不到（可能已被清理）：" + name})
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/markdown; charset=utf-8")
+	// 下载时给个有意义的文件名：直接存 2026-10-27-0830.md 会混在一堆同名文件里
+	if r.URL.Query().Get("download") != "" {
+		h.Set("Content-Disposition", `attachment; filename="envkit-`+name+`"`)
+	}
+	_, _ = w.Write(b)
 }
 
 // ---------- 配置段端点（设置页「基础配置 → 行动」） ----------

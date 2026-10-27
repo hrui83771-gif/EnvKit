@@ -15,7 +15,19 @@ func withMissionEnv(t *testing.T) func() {
 	dir := t.TempDir()
 	old := missionFile
 	missionFile = func() string { return filepath.Join(dir, "missions.json") }
-	return func() { missionFile = old }
+	// Phase 2：guard/inbound 产出后会自动去匹配预案，必须把预案文件也隔离，
+	// 否则测试会读到开发机上真实的 playbooks.json（结果随本机数据漂移）。
+	oldPbk := playbookFile
+	playbookFile = func() string { return filepath.Join(dir, "playbooks.json") }
+	// 气泡出口换成空实现：这些测试会走到"检测到异常，建议执行预案"，
+	// 不换的话跑一次单测就弹几十个真实通知。
+	oldNotify := notifyFn
+	notifyFn = func(string, string) {}
+	return func() {
+		missionFile = old
+		playbookFile = oldPbk
+		notifyFn = oldNotify
+	}
 }
 
 // allMissionStates 状态机的全集。加状态必须同步这里 + missionTransitions。
@@ -118,6 +130,35 @@ func TestMissionFinishOnlyVerify(t *testing.T) {
 	_ = missionFinish(m, false, "端口没起来")
 	if m.Result == nil || m.Result.Msg == "" || m.Result.Verified {
 		t.Fatalf("failed 行动必须带非空、未验证的 Result，实为 %+v", m.Result)
+	}
+}
+
+// TestMissionFinishReportTypeFromPending 报告型行动（晨报）可以在 pending 直接
+// 收口 done，但前提是**真的挂上了报告文件**。
+//
+// 这条例外最容易退化成后门：如果把判据写成"调用方说它是报告型"，那么任何
+// 可执行行动都能借这个 flag 逃过转移表。所以这里用两条反向断言钉住边界。
+func TestMissionFinishReportTypeFromPending(t *testing.T) {
+	m := &Mission{ID: "brf", State: msPending, Report: "briefing-2026-10-27.md"}
+	if err := missionFinish(m, true, "晨报已生成"); err != nil {
+		t.Fatalf("报告型行动应从 pending 直接收口：%v", err)
+	}
+	if m.State != msDone || m.Result == nil || !m.Result.Verified {
+		t.Fatalf("报告型行动收口不符：state=%s result=%+v", m.State, m.Result)
+	}
+
+	// 反向 1：没挂报告 → 不许借道
+	x := &Mission{ID: "no-rep", State: msPending}
+	if err := missionFinish(x, true, "声称完成"); err == nil {
+		t.Fatal("没有报告的 pending 行动不许直接 done（红线 1）")
+	}
+	// 反向 2：挂了报告但复验没过 → 依旧 failed，不能靠报告洗白
+	y := &Mission{ID: "rep-fail", State: msPending, Report: "r.md"}
+	if err := missionFinish(y, false, "复验未过"); err != nil {
+		t.Fatalf("报告型行动落 failed 不该报错：%v", err)
+	}
+	if y.State != msFailed {
+		t.Fatalf("复验没过应为 failed，实为 %s", y.State)
 	}
 }
 

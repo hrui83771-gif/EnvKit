@@ -17,7 +17,8 @@ func TestMissionFromGuard(t *testing.T) {
 	defer withAIMissionEnv(t)()
 
 	// 第一次：新建候选（pending，等人批）
-	m1, created := missionFromGuard("backend", "后端恢复待确认", "已拉起但复验未通过：端口没监听")
+	m1, created := missionFromGuard("backend", "后端", errKindVerifyFail,
+		"后端恢复待确认", "已拉起但复验未通过：端口没监听")
 	if !created {
 		t.Fatalf("首次应新建")
 	}
@@ -29,7 +30,7 @@ func TestMissionFromGuard(t *testing.T) {
 	}
 
 	// 未收口前重复事件：去重（守护 60s 一轮，不去重会刷屏）
-	m2, created2 := missionFromGuard("backend", "后端恢复失败", "又一次失败")
+	m2, created2 := missionFromGuard("backend", "后端", errKindVerifyFail, "后端恢复失败", "又一次失败")
 	if created2 {
 		t.Fatalf("同一服务未收口时不该重复产出")
 	}
@@ -37,7 +38,7 @@ func TestMissionFromGuard(t *testing.T) {
 		t.Fatalf("去重应返回同一行动：%s vs %s", m2.ID, m1.ID)
 	}
 	// 不同服务互不影响
-	if _, created := missionFromGuard("web", "前端恢复失败", "x"); !created {
+	if _, created := missionFromGuard("web", "前端", "", "前端恢复失败", "x"); !created {
 		t.Fatalf("不同服务应各自产出")
 	}
 
@@ -45,7 +46,7 @@ func TestMissionFromGuard(t *testing.T) {
 	if _, err := missionUpdate(m1.ID, func(x *Mission) error { return missionGo(x, msCanceled) }); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if _, created := missionFromGuard("backend", "后端恢复失败", "再次故障"); !created {
+	if _, created := missionFromGuard("backend", "后端", errKindVerifyFail, "后端恢复失败", "再次故障"); !created {
 		t.Fatalf("终态后应重新产出候选")
 	}
 }

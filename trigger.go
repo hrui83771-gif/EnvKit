@@ -25,7 +25,10 @@ import (
 // 返回 (行动, 是否新建)。去重规则：同一服务已有**未收口**的 guard 行动时
 // 不再新建——守护循环每 60s 一轮，不加去重会刷出一屏同样的候选。
 // 用户取消（终态）后再次故障会重新产出：明确.dismiss 不等于"永远别再报"。
-func missionFromGuard(svcID, title, detail string) (Mission, bool) {
+//
+// Phase 2：产出后立刻尝试匹配预案（pbkApplyToMission）。匹配失败不是错误 ——
+// 没有预案就走完整 AI 诊断，这正是设计 3.2 的"无预案 → 走现在的对话能力"。
+func missionFromGuard(svcID, svcLabel, errKind, title, detail string) (Mission, bool) {
 	for _, m := range missionList() {
 		if missionTerminal(m.State) {
 			continue
@@ -44,6 +47,12 @@ func missionFromGuard(svcID, title, detail string) (Mission, bool) {
 	}
 	auditNow(actGuard, "mission_guard_candidate", m.ID, svcID, resUnverified, firstLines(title, 80))
 	info(scSys, "行动", "守护事件升级为待批行动 %s：%s", m.ID, title)
+	// 先套预案再通知：SSE 推出去的列表应当已经带上「建议执行预案 X」，
+	// 否则用户会先看到一条光秃秃的行动，2 秒后才变成有建议的样子。
+	if p, ok := pbkApplyToMission(m.ID, svcID, errKind); ok {
+		// 桌宠/气泡只说一句：这是"建议"而不是"已经做了"，用词不能滑
+		notifyUser("检测到"+svcLabel+"异常", "建议执行预案「"+p.Title+"」（"+itoa(len(p.Steps))+" 步，需你确认）")
+	}
 	notifyMissions()
 	return m, true
 }
@@ -119,6 +128,11 @@ func msProduce(kind string, now time.Time) {
 	auditNow(actSys, "mission_"+kind, m.ID, "", resOK, title)
 	info(scSys, "行动", "已产出 %s 行动 %s（待你继续）", kind, m.ID)
 	notifyMissions()
+	// 晨报不走 AI 回合：报告由系统按事实聚合，生成完直接收口（设计 3.2、
+	// Phase 2 验收 4「内容全部来自系统记录」）。巡检仍留给 AI 现场诊断。
+	if kind == "schedule" {
+		briefingAttach(m.ID, now)
+	}
 }
 
 // startMissionScheduler 后台调度循环（main.go 启动链调用）。

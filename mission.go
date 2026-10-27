@@ -47,6 +47,10 @@ const (
 
 // missionTransitions 允许的状态转移（表驱动测试的唯一依据）。
 // 终态（done/failed/canceled/expired）不在表里 = 不可再转移。
+//
+// pending → done **故意不在此表**：没跑过的行动不许宣称完成（红线 1，
+// 否则一个伪造的 verified=true 就能把空行动标成 done）。报告型行动（晨报）
+// 的"产出即完成"走 missionFinish 里那条**有事实前提**的例外，见该函数注释。
 var missionTransitions = map[string][]string{
 	msPending:         {msRunning, msAwaitingConfirm, msPaused, msFailed, msCanceled, msExpired},
 	msAwaitingConfirm: {msRunning, msPaused, msFailed, msCanceled, msExpired},
@@ -80,6 +84,12 @@ func missionGo(m *Mission, to string) error {
 //
 // verified=false（没有复验证据、或复验未通过）一律落 failed —— 宁可错杀，
 // 不发假徽章。只有 verify_result 判过的成功才配 done。
+//
+// 报告型行动（晨报）例外：它没有执行阶段——报告由系统按事实聚合，产出那一刻
+// 任务就完成了。给它先转 running 再 done 是给状态机演戏，而"假 running"会污染
+// 后来所有按状态统计的东西。所以这里允许 pending → done，但判据落在**事实**上：
+// 必须已经挂上了报告文件名（m.Report != ""），不是调用方传进来的 flag。
+// 可执行行动（不会设 Report）依旧被转移表挡在门外。
 func missionFinish(m *Mission, verified bool, msg string) error {
 	to := msFailed
 	if verified {
@@ -92,6 +102,11 @@ func missionFinish(m *Mission, verified bool, msg string) error {
 	m.Result.Ok = verified
 	m.Result.Msg = truncateRunes(msg, 500)
 	m.Pending = nil // 终态不留断点
+	if to == msDone && m.State == msPending && m.Report != "" {
+		m.State = msDone
+		m.UpdatedAt = time.Now()
+		return nil
+	}
 	return missionGo(m, to)
 }
 
@@ -132,19 +147,27 @@ type PendingStep struct {
 
 // Mission 一个跨回合、可持久化、可恢复的行动。
 type Mission struct {
-	ID        string           `json:"id"`    // m-<时间>-<短随机>
-	Goal      string           `json:"goal"`  // 自然语言目标（巡检类放触发摘要）
-	State     string           `json:"state"` // 见 ms* 常量
-	Trigger   Trigger          `json:"trigger"`
-	TraceID   string           `json:"trace_id,omitempty"`  // 关联审计轨迹（trace.go）
-	Plan      []PlanStepRecord `json:"plan,omitempty"`      // 已完成步骤
-	Pending   *PendingStep     `json:"pending,omitempty"`   // 断点
-	Playbook  string           `json:"playbook,omitempty"`  // 套用的预案 ID（Phase 2 起）
-	Result    *OpResult        `json:"result,omitempty"`    // 终态结论
-	PauseWhy  string           `json:"pause_why,omitempty"` // 落 paused 的原因（断流/重启/用户）
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
-	ExpiresAt time.Time        `json:"expires_at"` // 截止时间：超期未收口 → expired
+	ID       string           `json:"id"`    // m-<时间>-<短随机>
+	Goal     string           `json:"goal"`  // 自然语言目标（巡检类放触发摘要）
+	State    string           `json:"state"` // 见 ms* 常量
+	Trigger  Trigger          `json:"trigger"`
+	TraceID  string           `json:"trace_id,omitempty"` // 关联审计轨迹（trace.go）
+	Plan     []PlanStepRecord `json:"plan,omitempty"`     // 已完成步骤
+	Pending  *PendingStep     `json:"pending,omitempty"`  // 断点
+	Playbook string           `json:"playbook,omitempty"` // 套用的预案 ID（Phase 2 起）
+	// Draft 预案起草的**未执行**步骤（Phase 2）。与 Plan（已发生）严格分开：
+	// 混在一起会让「步骤数」与「断点续作回放点」两个语义同时失真。
+	// 生命周期：套预案时写入 → 执行过程中逐步由 Plan 取代 → 终态时清空。
+	Draft []PlaybookStep `json:"draft,omitempty"`
+	// Report 报告型行动产出的事实报告**文件名**（不含目录，Phase 2 晨报）。
+	// 存文件名而不是全文：missions.json 会被反复整体读写，塞进几千字正文
+	// 会让每次状态变更都变慢；正文按需从 briefings/ 读。
+	Report    string    `json:"report,omitempty"`
+	Result    *OpResult `json:"result,omitempty"`    // 终态结论
+	PauseWhy  string    `json:"pause_why,omitempty"` // 落 paused 的原因（断流/重启/用户）
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ExpiresAt time.Time `json:"expires_at"` // 截止时间：超期未收口 → expired
 }
 
 // 行动的时间参数（超期收口 / 终态保留）从 v3.4 起由 dev 段配置
