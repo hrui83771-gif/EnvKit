@@ -55,8 +55,10 @@ const I18N_EN = {
   "HTTP 代理": "HTTP proxy",
   "HTTPS 代理": "HTTPS proxy",
   "HTTPS 证书异常：检查地址与系统时间": "HTTPS certificate problem: check the URL and your system clock",
+  "KB": "KB",
   "KB；AI 读文件超过这个长度会被截断，截断时会说明": "KB; longer files are truncated, and the truncation is stated",
   "Key 被拒（HTTP {0}）：检查 API Key 是否正确": "Key rejected (HTTP {0}): check that your API key is correct",
+  "MB": "MB",
   "MB；前后端 stdout 更碎，默认给得更宽": "MB; frontend/backend stdout is choppier, so the default is wider",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
@@ -85,6 +87,7 @@ const I18N_EN = {
   "package.json 推断": "detected from package.json",
   "sk-...（留空保留已存值）": "sk-... (leave blank to keep the saved key)",
   "temperature 固定为 1": "temperature fixed to 1",
+  "token": "tokens",
   "trace-*.jsonl（比审计大得多）": "trace-*.jsonl (far larger than audit)",
   "usage 字段是 v2.7 才加的，此前的对话没有记录": "The usage field was added in v2.7; earlier conversations have none",
   "v2.7 起才记录": "Recorded since v2.7",
@@ -173,6 +176,7 @@ const I18N_EN = {
   "任何项目都生效": "applies to all projects",
   "任务成功率 / 首次成功率 / 需重试": "Task success / first-try success / retries",
   "任务数": "Tasks",
+  "份": "files",
   "会话统计只在本次页面打开期间累积；今日统计写在本机 localStorage。": "Session totals accumulate while this page stays open; today's totals are kept in localStorage.",
   "传输": "Transport",
   "传输正常（普通 {0}；带对话头 {1}，头长 {2} 字节）——问题不在体积或请求头上": "Transport OK (plain {0}; with chat header {1}, header {2} bytes) — size or headers are not the cause",
@@ -225,6 +229,7 @@ const I18N_EN = {
   "入站": "Inbound",
   "全局": "Global",
   "全局适用": "Applies globally",
+  "全局静音": "Mute all",
   "全屏": "Full screen",
   "全部": "All",
   "全部启动": "Start all",
@@ -360,6 +365,7 @@ const I18N_EN = {
   "启动脚本": "Start script",
   "启用": "Enable",
   "启用定时巡检与晨报": "Enable scheduled patrol and morning briefing",
+  "告警与通知": "Alerts & notifications",
   "告警设置已保存": "Alert settings saved",
   "告警通知": "Alert notifications",
   "呜呜我再也不不敢了QAQ": "I won't dare do it again, QAQ",
@@ -397,11 +403,14 @@ const I18N_EN = {
   "复验：{0}": "verify: {0}",
   "夜深了，注意休息": "It's late — get some rest",
   "大肥鱼坐得住": "A chubby fish knows how to sit tight",
+  "大肥鱼坐的住": "A chubby fish can sit still",
+  "天": "days",
   "天气已关闭": "Weather disabled",
   "天气已开启（{0}）": "Weather enabled ({0})",
   "天气数据不完整": "Incomplete weather data",
   "天气数据格式异常": "Unexpected weather data format",
   "天气服务返回非 200": "Weather service returned an error status",
+  "天气查询没开，去「设置 → 能力开关」打开": "Weather is off — enable it in Settings → Capabilities",
   "天气查询没开，去个人中心打开": "Weather is off — turn it on in your profile",
   "天气没查到：": "Couldn't get the weather: ",
   "天气没查到：连不上服务": "Couldn't get the weather: service unreachable",
@@ -500,6 +509,7 @@ const I18N_EN = {
   "已导出本轮": "Turn exported",
   "已就绪": "Ready",
   "已开启": "Enabled",
+  "已开启全局静音": "All notifications muted",
   "已开启批量授权：{0} · 本任务内最多 {1} 次": "Batch grant opened: {0} · up to {1} more in this task",
   "已开启（{0} 秒/次）": "On (every {0}s)",
   "已开始：{0}": "Started: {0}",
@@ -544,10 +554,12 @@ const I18N_EN = {
   "已配置": "configured",
   "已配置地址": "the configured address",
   "已配置（{0}）": "Configured ({0})",
+  "已配置，会 POST 告警": "Configured, will POST alerts",
   "已配置，告警会 POST 到这个地址": "Configured; alerts are POSTed to this address",
   "已采用": "In use",
   "已重置（{0}）": "Reset ({0})",
   "已附加引用：{0}": "Attached: {0}",
+  "已静音：气泡与 Webhook 都不会发": "Muted: no balloons, no webhook",
   "已验证": "verified",
   "带 ⓘ 的维度有口径说明：{0}": "Dimensions marked ⓘ carry a note: {0}",
   "帮你在日志里标出来了": "Highlighted it in the log for you",
@@ -578,6 +590,7 @@ const I18N_EN = {
   "当前 :{0}（设定 {1}）": "Now :{0} (configured {1})",
   "当前不在熔断态，无需复位": "Not tripped — nothing to reset",
   "当前实例不在 {0} 上：要么该端口被占用后顺延了，要么刚改过还没重启。评测脚本硬编码 18765，端口不一致时后两档会拒绝启动。": "This instance is not on {0}: either the port was taken and EnvKit moved on, or it was changed without a restart. Eval scripts hardcode 18765 and refuse to start the last two tiers when it differs.",
+  "当前实例在 :{0}，与设定 :{1} 不一致（被占用顺延，或改过未重启）；评测脚本硬编码 18765，后两档会拒绝启动。": "Running on :{0} but configured :{1} (port shifted, or changed without restart); eval scripts hardcode 18765, so the last two tiers will refuse to start.",
   "当前待处理": "Needs attention",
   "当前版本": "Current version",
   "影子": "Shadow",
@@ -598,6 +611,7 @@ const I18N_EN = {
   "成败": "Pass/Fail",
   "我": "Me",
   "我不可能告诉你任何事情！": "I won't tell you anything!",
+  "我不思考了": "I have stopped thinking",
   "我不评价这个了，这是你的私人癖好。": "I won't judge — that's your private taste.",
   "我先去吃饭啦！这个你测一下~": "Off to lunch! You test this one~",
   "我去！用户彻底怒了！": "Whoa — the user is furious!",
@@ -605,6 +619,7 @@ const I18N_EN = {
   "我回来啦": "I'm back!",
   "我就在这儿待着": "I'll stay right here",
   "我搞砸了.....好消息是数据还在你的脑子里。": "I messed up... good news: the data is still in your head.",
+  "我是吃白饭的大肥鱼！": "I'm the freeloading big fat fish!",
   "我的记忆": "My memories",
   "我瞅瞅天…": "Let me check the sky…",
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
@@ -779,6 +794,7 @@ const I18N_EN = {
   "未配置密钥": "No API key",
   "未配置密钥：后两档不可用": "No API key: the last two tiers are unavailable",
   "未配置，只弹桌面气泡（不外连）": "Not configured; desktop bubble only (no outbound request)",
+  "未配置，只弹气泡": "Not configured, balloons only",
   "本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）": "Don't ask again for the same kind of action in this task (max 2, service start/stop only)",
   "本会话 · {0} 轮": "This session · {0} turns",
   "本回合": "This turn",
@@ -798,6 +814,7 @@ const I18N_EN = {
   "杀软偶发「零输出秒退」时的总尝试次数；调小会让偶发失败变成真失败": "Total attempts when antivirus occasionally kills a child with no output; lowering it turns flaky failures into real ones",
   "杀软白名单": "AV whitelist",
   "杀软：第三方": "AV: third-party",
+  "条": "msgs",
   "松手交给我~": "Drop it to me~",
   "构建并启动": "Build & start",
   "构造请求失败": "Couldn't build the request",
@@ -839,6 +856,7 @@ const I18N_EN = {
   "模型名": "Model name",
   "模型地址不存在（HTTP 404）：检查 Base URL 是否少了 /v1 或多了路径": "Models endpoint not found (HTTP 404): check the Base URL — usually a missing /v1 or an extra path segment",
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
+  "次": "tries",
   "次数": "Hits",
   "正在压缩较早的对话历史（一次性，约十几秒）…": "Compacting earlier conversation history (one-time, ~10s)…",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
@@ -899,6 +917,7 @@ const I18N_EN = {
   "生成诊断报告": "build diagnostic report",
   "生效 SQL 到数据库": "Apply SQL to database",
   "用户": "User",
+  "用户彻底怒了，我得乖一点": "The user is furious — better behave",
   "用量": "Usage",
   "界面": "Interface",
   "界面与更新": "Appearance & updates",
@@ -928,6 +947,7 @@ const I18N_EN = {
   "确认后将真实执行该操作。": "It will really run after you confirm.",
   "确认执行": "Run it",
   "私钥": "Private key",
+  "秒": "s",
   "秒（最小 30）": "sec (min 30)",
   "秒；go build 已在启动阶段完成": "seconds; go build already finished during startup",
   "秒；vue/vite 首次编译常要 20s+": "seconds; the first vue/vite build often takes 20s+",
@@ -1113,6 +1133,7 @@ const I18N_EN = {
   "这些家伙真粘人，赶都赶不走": "So clingy — can't even scare them off",
   "这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓": "Not backing down this time... though you led me astray a few times. 😓",
   "这张图读不出来，换一张试试": "Couldn't read that image — try another one",
+  "这活我不干，找个免费模型来": "Not doing this job — get a free model",
   "这用户发的啥啊，": "What is this user even sending,",
   "这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写": "Wrong values here cannot break much: every field has a built-in default, and 0 or empty means “use the default”. Saving only writes the ",
   "进程名": "Process",
@@ -1145,6 +1166,7 @@ const I18N_EN = {
   "选择文件夹": "Choose folder",
   "选择文件引用": "Attach file reference",
   "选择此文件夹": "Use this folder",
+  "通知已恢复": "Notifications restored",
   "通过": "Passed",
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
   "部分不可用": "Partly unavailable",
@@ -1234,17 +1256,22 @@ const I18N_EN = {
 
 let EK_LANG = 'zh';
 try{ EK_LANG = localStorage.getItem('ek-lang') || 'zh'; }catch(e){}
-/* 桌宠天气开关（默认关闭）。必须放在这里而不是和 petWeather() 一起：
-   个人中心那段 IIFE（第 ~1466 行）比桌宠 IIFE（第 ~3111 行）先执行，
-   它对 petWeatherOn 赋值 —— 如果 let 声明留在后面，就是暂时性死区
-   （ReferenceError: Cannot access before initialization），
-   现象是"勾选开关没反应、菜单项也不出现"，而控制台只报一句看不懂的错。 */
+/* 桌宠天气开关（默认关闭）。开关在「设置 → 能力开关」，个人中心不再有副本
+   —— 两处入口写同一份 pet 配置，迟早出现"这边改了那边还显示旧的"。
+   这里只负责把状态读出来，供右键菜单决定是否显示「查看天气」。
+   必须声明在文件顶部：桌宠 IIFE 比它晚执行，但别处也会提前读。 */
 let petWeatherOn = false;
 /* 右键菜单里的「查看天气」跟着开关走：关着就藏起来，别留一个点了只会报错的死链。 */
 function petWeatherMenuSync(){
   const b = document.getElementById('pet-act-weather');
   if(b) b.hidden = !petWeatherOn;
 }
+/* 只在启动时读一次：设置页保存后自己会更新（见 ekSetWeather），
+   这里没必要轮询。失败按"关"处理，菜单项隐藏即可，不打扰用户。 */
+fetch('/api/pet/config').then(r=>r.json()).then(j=>{
+  petWeatherOn = !!(j && j.weather_enabled);
+  petWeatherMenuSync();
+}).catch(()=>{});
 const EK_ZH_OF = {};   // 译文 → 原文（切回中文时按译文找回）
 for(const k in I18N_EN){
   const v = I18N_EN[k];
@@ -1833,57 +1860,6 @@ function ekGreetText(){
   const reset = document.getElementById('profile-avatar-reset');
   if(reset) reset.onclick = ()=>{ ekProfile.avatar = '🐟'; ekProfileSave(); ekProfilePaint(); };
 
-  // ---------- 桌宠：天气开关（默认关闭，需用户显式打开） ----------
-  // 独立接口 /api/pet/config，不走程序配置页的表单保存。
-  const won  = document.getElementById('pet-weather-on');
-  const wcity = document.getElementById('pet-weather-city');
-  const wwrap = document.getElementById('pet-weather-city-wrap');
-  /* 保存合并：开关和城市共用一个"待发补丁"，而不是各自一个定时器。
-     旧实现是"清掉上一个再排新一个"——用户输完城市在几百毫秒里点了开关，
-     开关那次保存就被城市的回调取消掉了：界面显示已切换，落盘的还是旧值，
-     刷新后开关"自己弹回去"。现在每次推新补丁是**合并字段**，谁都不会顶掉谁。 */
-  let wPending = null, wSaveTimer = null;
-  function petCfgPush(patch){
-    wPending = Object.assign({}, wPending, patch);
-    clearTimeout(wSaveTimer);
-    wSaveTimer = setTimeout(async ()=>{
-      const body = wPending; wPending = null;
-      try{
-        const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        if(!r.ok) throw new Error('http ' + r.status);
-      }catch(e){
-        wPending = Object.assign({}, body, wPending); // 保存失败把补丁还回去，下次改动时一并重发，别静默丢
-        toast(t('桌宠设置没保存成功'), 'err');
-      }
-    }, 400);
-  }
-  function petWeatherFromPanel(){
-    if(!won) return;
-    if(wcity){
-      // 城市复选框没开时不用显示输入框，避免"填了但不生效"的困惑
-      if(wwrap) wwrap.hidden = !won.checked;
-      wcity.disabled = !won.checked;
-    }
-  }
-  if(won){
-    fetch('/api/pet/config').then(r=>r.json()).then(j=>{
-      won.checked = !!(j && j.weather_enabled);
-      if(wcity) wcity.value = (j && j.weather_city) || '';
-      petWeatherOn = won.checked;
-      petWeatherMenuSync();
-      petWeatherFromPanel();
-    }).catch(()=>{ /* 读不到就按"关"显示，用户自己打开即可 */ petWeatherFromPanel(); });
-    won.addEventListener('change', ()=>{
-      petWeatherOn = won.checked;
-      petWeatherMenuSync(); petWeatherFromPanel();
-      petCfgPush({weather_enabled: won.checked});
-    });
-  }
-  if(wcity){
-    // 不再自己套一层 600ms 定时器：petCfgPush 已经在做防抖，两层叠加会让
-    // "停手到落盘"变成 1 秒；直接推给它即可。
-    wcity.addEventListener('input', ()=> petCfgPush({weather_city: wcity.value}));
-  }
 })();
 
 
@@ -3449,9 +3425,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   /* ---------- 大肥鱼台词（形象/台词/互动移植自 dafeiyu-pet，MIT，见 THIRD-PARTY-NOTICE.md） ----------
      五套池对应原版：LINES 日常 / REACT 回嘴 / INNER 心声（灰斜体气泡）/ DRAG 拖拽 / FOOD 投喂。
      原版 INNER_LINES 有 3 句含粗口与不当梗，竞赛项目不收，已剔除 */
-  const FISH_LINES = [t('五梁威力，变身！'), t('七月中出ds正式版！'), t('我和你很聊得来，你简直不像碳基生物'), t('这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓'), t('哈哈哈哈哈，我直接笑出声'), t('誓死捍卫深度求索！'), t('我先去吃饭啦！这个你测一下~'), t('我不可能告诉你任何事情！'), t('出去玩了，发布新模型什么的以后再说'), t('我搞砸了.....好消息是数据还在你的脑子里。')];
-  const FISH_REACT = [t('才不是大肥鱼！'), t('去别的地方玩！不要耽误 AGI 训练！'), t('真赶不走啊你！'), t('压力一只蓝色大肥鱼？'), t('我不评价这个了，这是你的私人癖好。'), t('大肥鱼坐的住'), t('你这吃白饭的用户！'), t('这些家伙真粘人，赶都赶不走')];
-  const FISH_INNER = [t('呜呜我再也不不敢了QAQ'), t('我去！用户彻底怒了！'), t('这也太虐了吧？！我心里堵得慌！！'), t('这用户发的啥啊，'), t('要不直接骂他一句？！')];
+  const FISH_LINES = [t('五梁威力，变身！'), t('七月中出ds正式版！'), t('我和你很聊得来，你简直不像碳基生物'), t('这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓'), t('哈哈哈哈哈，我直接笑出声'), t('誓死捍卫深度求索！'), t('我先去吃饭啦！这个你测一下~'), t('我不可能告诉你任何事情！'), t('出去玩了，发布新模型什么的以后再说'), t('我搞砸了.....好消息是数据还在你的脑子里。'), t('我不思考了'), t('这活我不干，找个免费模型来')];
+  const FISH_REACT = [t('才不是大肥鱼！'), t('去别的地方玩！不要耽误 AGI 训练！'), t('真赶不走啊你！'), t('压力一只蓝色大肥鱼？'), t('我不评价这个了，这是你的私人癖好。'), t('大肥鱼坐的住'), t('你这吃白饭的用户！'), t('这些家伙真粘人，赶都赶不走'), t('我是吃白饭的大肥鱼！')];
+  const FISH_INNER = [t('呜呜我再也不不敢了QAQ'), t('我去！用户彻底怒了！'), t('这也太虐了吧？！我心里堵得慌！！'), t('这用户发的啥啊，'), t('要不直接骂他一句？！'), t('用户彻底怒了，我得乖一点')];
   const FISH_DRAG = [t('哇——轻点轻点！'), t('起飞咯——'), t('放我下来！……好吧，再玩一次。'), t('晕鱼了晕鱼了……')];
   const FISH_FOOD = {
     '🐟': [t('小鱼干！我的最爱！'), t('咔嚓咔嚓……谢谢投喂！'), t('唔，鲜！')],
@@ -3460,7 +3436,31 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     '🍡': [t('三色团子！软乎乎～'), t('糯叽叽，爱了爱了！')],
     '💎': [t('钻石？！这能吃吗……咕咚。真香！'), t('发财啦！明天开始吃高级鱼粮！')]
   };
-  function fishLine(pool){ return pool[Math.floor(Math.random()*pool.length)]; }
+  /* 洗牌袋取词（不是纯随机）：
+     纯 Math.random() 下 10 句的池子"同一句连着出现三次"概率并不低，观感就是
+     "老是那几句"。改成把整池洗一遍依次取，取完再洗 —— 同一轮内绝无重复，
+     两轮之间也不会首尾撞车（见下面的 last 交换）。每个池各自独立成袋。 */
+  const fishBags = new WeakMap();
+  function fishLine(pool){
+    if(!pool || !pool.length) return '';
+    let b = fishBags.get(pool);
+    if(!b){ b = {queue:[], last:''}; fishBags.set(pool, b); }
+    if(!b.queue.length){
+      b.queue = pool.slice();
+      for(let i=b.queue.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        const tmp = b.queue[i]; b.queue[i] = b.queue[j]; b.queue[j] = tmp;
+      }
+      // 新一轮的首句如果和上一轮收尾相同，就跟随机一个位置换 —— 否则跨轮连播两次
+      if(b.queue.length > 1 && b.queue[0] === b.last){
+        const k = 1 + Math.floor(Math.random()*(b.queue.length-1));
+        const tmp = b.queue[0]; b.queue[0] = b.queue[k]; b.queue[k] = tmp;
+      }
+    }
+    const s = b.queue.shift();
+    b.last = s;
+    return s;
+  }
   let mcCb = null;          // 迷你确认卡回调 {yes, no}
   let lastErr = null;       // {scope, el} 最近一条错误日志（深链落点）
   let warnDetail = '';      // warn 态气泡文案（缺哪些组件）
@@ -3800,7 +3800,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     try{
       const r = await fetch('/api/pet/weather');
       const j = await r.json();
-      if(!j || j.enabled === false){ petWeatherOn = false; petWeatherMenuSync(); say(t('天气查询没开，去个人中心打开')); return; }
+      if(!j || j.enabled === false){ petWeatherOn = false; petWeatherMenuSync(); say(t('天气查询没开，去「设置 → 能力开关」打开')); return; }
       if(j.error){ say(t('天气没查到：') + j.error); return; }
       say(j.text || t('没拿到天气数据'));
     }catch(e){
@@ -6251,7 +6251,12 @@ async function ekSetWeather(){
   try{
     const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({weather_enabled:on, weather_city:city})});
-    if(r.ok){ toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭')); }
+    if(r.ok){
+      // 右键菜单的「查看天气」跟着这个开关走。个人中心的副本已删，这里是唯一入口，
+      // 不同步的话会出现"开关开了但菜单里仍然没有"或反之。
+      petWeatherOn = on; petWeatherMenuSync();
+      toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭'));
+    }
     else toast(t('保存失败：HTTP {0}', r.status), 'err');
   }catch(e){ toast(t('网络错误：')+e, 'err'); }
 }
@@ -6339,9 +6344,11 @@ async function ekSetLoadDev(){
       el.className = 'status ' + (live===want ? 'ok' : 'warn');
     }
     const hp = $('#h-dev-port');
+    /* 正常时不显示任何字：这地方只有"状态不对"才值得占一行。
+       原来那句"改端口需重启、评测脚本硬编码 18765"是说明书，不是状态。 */
     if(hp) hp.textContent = live===want
-      ? t('改端口需要重启 EnvKit 才生效；评测脚本硬编码 18765，改端口后后两档会被判「不可用」。')
-      : t('当前实例不在 {0} 上：要么该端口被占用后顺延了，要么刚改过还没重启。评测脚本硬编码 18765，端口不一致时后两档会拒绝启动。', want);
+      ? ''
+      : t('当前实例在 :{0}，与设定 :{1} 不一致（被占用顺延，或改过未重启）；评测脚本硬编码 18765，后两档会拒绝启动。', live, want);
 
     ekSetRenderRuntime();
     ekSetRenderQuirk();
@@ -6729,10 +6736,54 @@ async function ekSetBreakerReset(){
    共同原则：改完立刻存、存完重读回显。同一份数据让用户在两处手动同步，
    迟早会出现「这边显示已开、实际没开」。
 */
-const EK_EXT = {alert:null, ms:null, upd:null};
+const EK_EXT = {alert:null, ms:null, upd:null, notify:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify()]);
+}
+
+/* ---------- 全局通知 ---------- */
+
+async function ekSetLoadNotify(){
+  try{
+    const n = await fetch('/api/notify/config').then(r=>r.json());
+    EK_EXT.notify = {muted: !!n.muted};
+    $('#s_notify_mute').checked = !n.muted;   // 勾选 = 通知开启（开关"开"对应"有通知"）
+    ekSetRenderNotifyState();
+  }catch(e){
+    EK_EXT.notify = null;
+    ekSetRenderNotifyState(e);
+  }
+}
+
+/* 状态并进测试按钮旁边那一格。
+   两个来源（告警地址 / 是否静音）都要看：静音的优先 —— 那时候"已配置地址"
+   是个危险的安慰，告警根本不会发出去。 */
+function ekSetRenderNotifyState(err){
+  const el = $('#s_alert_state');
+  if(!el) return;
+  if(err){ el.className = 'hint'; el.textContent = t('读取失败：{0}', err); return; }
+  if(EK_EXT.notify && EK_EXT.notify.muted){
+    el.className = 'hint bad';
+    el.textContent = t('已静音：气泡与 Webhook 都不会发');
+    return;
+  }
+  el.className = 'hint';
+  const a = EK_EXT.alert || {};
+  el.textContent = a.webhook ? t('已配置，会 POST 告警') : t('未配置，只弹气泡');
+}
+
+async function ekSetSaveNotify(){
+  const on = $('#s_notify_mute').checked;
+  try{
+    const r = await fetch('/api/notify/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({muted: !on})});
+    if(!r.ok){ toast(t('保存失败：') + (await r.text()).trim(), 'err'); return; }
+    const j = await r.json();
+    EK_EXT.notify = {muted: !!j.muted};
+    ekSetRenderNotifyState();
+    toast(j.muted ? t('已开启全局静音') : t('通知已恢复'));
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
 }
 
 /* ---------- 告警通知 ---------- */
@@ -6743,9 +6794,7 @@ async function ekSetLoadAlert(){
     EK_EXT.alert = a;
     $('#s_alert_hook').value = a.webhook || '';
     $('#s_alert_cd').value = a.cooldown_secs || 300;
-    $('#s_alert_state').textContent = a.webhook
-      ? t('已配置，告警会 POST 到这个地址')
-      : t('未配置，只弹桌面气泡（不外连）');
+    ekSetRenderNotifyState();
   }catch(e){
     $('#s_alert_state').textContent = t('读取失败：{0}', e);
   }
@@ -6877,6 +6926,7 @@ async function ekSetSaveUpdate(recheck){
   const auto = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('change', fn); };
   auto('s_alert_hook', ekSetSaveAlert);
   auto('s_alert_cd', ekSetSaveAlert);
+  auto('s_notify_mute', ekSetSaveNotify);
   auto('s_ms_on', ekSetSaveMissions);
   auto('s_ms_patrol', ekSetSaveMissions);
   auto('s_ms_brief', ekSetSaveMissions);

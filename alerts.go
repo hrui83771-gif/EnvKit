@@ -33,7 +33,21 @@ var alertMu sync.Mutex
 var alertLast = map[string]time.Time{} // 告警标题 → 上次发送时间
 
 // alertDispatch 发出一条运维告警：桌面气泡（总是）+ Webhook（受抑制窗口约束）。
-func alertDispatch(title, msg string) {
+func alertDispatch(title, msg string) { alertDispatchMode(title, msg, false) }
+
+// alertDispatchForce 无视全局静音发一条。只给"测试告警"用 ——
+// 那是用户刚点了按钮在等结果，静音掉就变成"点了没反应"，
+// 而"点了没反应"会被读成链路坏了，测试恰恰不该在这上面撒谎。
+func alertDispatchForce(title, msg string) { alertDispatchMode(title, msg, true) }
+
+func alertDispatchMode(title, msg string, force bool) {
+	// 全局静音（设置页「通知」开关）：气泡和 Webhook 一起停。
+	// 只停气泡不停 Webhook 会留下"手机上还在响"的半静音状态，
+	// 而用户点这个开关的动机通常是"别在开会时弹出来"。
+	if !force && notifyMuted() {
+		metAlert("all", "muted")
+		return
+	}
 	platform.Notify(title, msg) // 本地感知不走抑制 —— 气泡 6 秒自动消失，刷屏成本低
 
 	cfgMu.Lock()
@@ -189,15 +203,16 @@ func handleAlertTest(w http.ResponseWriter, r *http.Request) {
 	hook := cfg.Alert.Webhook
 	cfgMu.Unlock()
 
+	muted := notifyMuted()
 	if strings.TrimSpace(hook) == "" {
 		// 没配 webhook 也弹一次气泡：证明"本机感知"这段是通的，
 		// 否则用户会把"什么都没发生"理解成整个告警链路坏了。
 		platform.Notify("EnvKit 测试告警", "当前未配置 Webhook，所以只弹了这条气泡。")
-		writeJSON(w, map[string]any{"ok": true, "webhook": false, "host": ""})
+		writeJSON(w, map[string]any{"ok": true, "webhook": false, "host": "", "muted": muted})
 		return
 	}
 	// 标题带时间戳：alertDispatch 按标题做冷却抑制，固定标题第二次点就没反应，
 	// 而"点了没反应"会被读成链路坏了 —— 测试恰恰不该在这上面撒谎。
-	alertDispatch("EnvKit 测试告警 "+time.Now().Format("15:04:05"), "收到这条说明告警链路可用。")
-	writeJSON(w, map[string]any{"ok": true, "webhook": true, "host": maskHook(hook)})
+	alertDispatchForce("EnvKit 测试告警 "+time.Now().Format("15:04:05"), "收到这条说明告警链路可用。")
+	writeJSON(w, map[string]any{"ok": true, "webhook": true, "host": maskHook(hook), "muted": muted})
 }

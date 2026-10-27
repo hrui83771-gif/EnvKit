@@ -195,6 +195,7 @@ func main() {
 	// 的保留逻辑兜底，两处配置面因此可以并存而不互相覆盖。
 	http.HandleFunc("/api/alerts/config", handleAlertConfig)
 	http.HandleFunc("/api/alerts/test", handleAlertTest)
+	http.HandleFunc("/api/notify/config", handleNotifyConfig)
 	http.HandleFunc("/api/missions/config", handleMissionConfig)
 	http.HandleFunc("/api/update/config", handleUpdateConfig)
 	http.HandleFunc("/api/dev/config", handleDevConfig)

@@ -65,19 +65,6 @@
             <button class="ghost" id="btn-theme">暗色</button>
           </div>
           <div class="pp-sep"></div>
-          <div class="pp-pet">
-            <div class="pp-sub">桌宠</div>
-            <label class="pp-check">
-              <input type="checkbox" id="pet-weather-on" />
-              <span>允许查询天气</span>
-            </label>
-            <div class="pp-weather-city" id="pet-weather-city-wrap" hidden>
-              <input id="pet-weather-city" maxlength="32" placeholder="城市，如 上海 / Shanghai" />
-              <span class="hint">留空则用默认城市（上海）</span>
-            </div>
-            <div class="hint pp-pet-note">开启后桌宠会向 wttr.in 发一次请求，其余功能均不出网。</div>
-          </div>
-          <div class="pp-sep"></div>
           <div class="pp-row">
             <button class="ghost" id="btn-av">杀软白名单</button>
             <button class="ghost" id="btn-avclean" style="display:none" title="检测到流氓软件残留时才显示">深度清除</button>
@@ -710,23 +697,20 @@
 
       <!-- ==================== 基础 ==================== -->
       <div class="cfg-pane show" data-set-pane="base">
-        <div class="set-note">与「程序配置」「链端校验」共用同一份 <code>config.json</code>；每次切到本页都会重新读取最新值，两边不会各存一份。</div>
         <div class="set-grid">
 
           <div class="set-card">
             <div class="set-card-head"><span class="t">安装与分发</span><span class="tag">本机</span></div>
             <label for="s_install_dir">安装目录</label>
             <div class="dirrow"><input id="s_install_dir" placeholder="D:\EnvKit" /><button class="ghost" data-spick="s_install_dir">选择</button></div>
-            <div class="hint">组件、日志与配置都落在这里。改之前先确认新目录已存在。</div>
           </div>
 
           <div class="set-card">
             <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
             <label for="s_proxy_http">HTTP 代理</label>
-            <input id="s_proxy_http" placeholder="http://127.0.0.1:7890（留空 = 直连）" />
+            <input id="s_proxy_http" placeholder="http://127.0.0.1:7890" />
             <label for="s_proxy_https">HTTPS 代理</label>
-            <input id="s_proxy_https" placeholder="http://127.0.0.1:7890（留空 = 直连）" />
-            <div class="hint">只影响 EnvKit 自己发起的下载与依赖安装，不改进程级环境变量。</div>
+            <input id="s_proxy_https" placeholder="http://127.0.0.1:7890" />
           </div>
 
           <div class="set-card">
@@ -737,7 +721,6 @@
               <div><label for="s_go_cgo">CGO_ENABLED</label><input id="s_go_cgo" placeholder="0" /></div>
               <div><label for="s_npm_registry">npm 源</label><input id="s_npm_registry" placeholder="https://registry.npmmirror.com" /></div>
             </div>
-            <div class="hint">留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。</div>
           </div>
 
           <div class="set-card">
@@ -746,19 +729,70 @@
             <div class="dirrow"><input id="s_fe_dir" placeholder="D:\project\web" /><button class="ghost" data-spick="s_fe_dir">选择</button></div>
             <label for="s_be_dir">后端目录</label>
             <div class="dirrow"><input id="s_be_dir" placeholder="D:\project\server" /><button class="ghost" data-spick="s_be_dir">选择</button></div>
-            <div class="hint">保存后会同步到「程序启动」的目录显示。</div>
           </div>
 
           <div class="set-card">
             <div class="set-card-head"><span class="t">数据库</span><span class="tag">只读</span></div>
             <div class="ro-list" id="s_db_view"></div>
-            <div class="row"><button class="ghost" data-goto="config">去程序配置修改</button><span class="hint">含密码，所以不在这里再放一份输入框</span></div>
+            <div class="row"><button class="ghost" data-goto="config">去程序配置修改</button></div>
           </div>
 
           <div class="set-card">
             <div class="set-card-head"><span class="t">链端</span><span class="tag">只读</span></div>
             <div class="ro-list" id="s_chain_view"></div>
-            <div class="row"><button class="ghost" data-goto="chain">去链端校验修改</button><span class="hint">字段多且互相约束，集中在一处改更安全</span></div>
+            <div class="row"><button class="ghost" data-goto="chain">去链端校验修改</button></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_upd_on"><span class="sl"></span></label>
+              <div class="cktext"><b>检查新版本</b></div>
+            </div>
+            <label for="s_update_url">更新地址</label>
+            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+            <div class="grid">
+              <div><label for="s_upd_interval">复查间隔（小时）</label>
+                <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 仅启动时" /></div>
+              <div><label for="s_upd_ignore">忽略版本</label>
+                <input id="s_upd_ignore" placeholder="如 3.5.0" /></div>
+            </div>
+            <div class="ro-list" id="s_upd_state" style="margin-top:6px"></div>
+            <div class="row" style="margin-top:6px"><button class="ghost" id="btn-s-upd-check">立即检查</button></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">告警与通知</span><span class="tag">挂机</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_notify_mute"><span class="sl"></span></label>
+              <div class="cktext"><b>全局静音</b></div>
+            </div>
+            <label for="s_alert_hook">Webhook 地址</label>
+            <input id="s_alert_hook" placeholder="留空 = 只弹气泡，不外发" />
+            <div class="grid">
+              <div><label for="s_alert_cd">冷却（秒）</label>
+                <input id="s_alert_cd" type="number" min="0" max="86400" placeholder="300" /></div>
+              <div><label>&nbsp;</label><button class="ghost" id="btn-s-alert-test" style="width:100%">发一条测试告警</button></div>
+            </div>
+            <div class="row" style="margin-top:4px"><span class="hint" id="s_alert_state">—</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b></div>
+            </div>
+            <div class="grid">
+              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
+                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
+              <div><label for="s_ms_brief">晨报时刻</label>
+                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
+            </div>
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
+            </div>
           </div>
 
           <div class="set-card">
@@ -767,59 +801,20 @@
             <input id="s_app_name" placeholder="EnvKit" />
             <label for="s_app_title">副标题</label>
             <input id="s_app_title" placeholder="统一开发环境助手" />
-            <div class="hint">改完点下面的「保存基础设置」生效。</div>
           </div>
 
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_upd_on"><span class="sl"></span></label>
-              <div class="cktext"><b>检查新版本</b><span class="hint">关掉后启动时也不再请求更新地址</span></div>
-            </div>
-            <label for="s_update_url">更新地址</label>
-            <input id="s_update_url" placeholder="留空 = 不检查（返回 version/notes 的 JSON）" />
-            <label for="s_upd_interval">复查间隔（小时）</label>
-            <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 只在启动时查一次" />
-            <label for="s_upd_ignore">忽略这个版本</label>
-            <input id="s_upd_ignore" placeholder="如 3.5.0，留空 = 不忽略" />
-            <div class="ro-list" id="s_upd_state" style="margin-top:8px"></div>
-            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-upd-check">立即检查</button><span class="hint">改任意一项会立刻保存并重查</span></div>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">告警通知</span><span class="tag">挂机</span></div>
-            <label for="s_alert_hook">Webhook 地址</label>
-            <input id="s_alert_hook" placeholder="留空 = 只弹桌面气泡，不外发" />
-            <label for="s_alert_cd">同一标题的冷却（秒）</label>
-            <input id="s_alert_cd" type="number" min="0" max="86400" placeholder="300" />
-            <div class="hint">状态：<span id="s_alert_state">—</span>。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。</div>
-            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-alert-test">发一条测试告警</button><span class="hint">立刻弹气泡并 POST 一次</span></div>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
-              <div class="cktext"><b>启用定时巡检与晨报</b><span class="hint">关掉只是不再自动产生行动，手动触发不受影响</span></div>
-            </div>
-            <label for="s_ms_patrol">巡检间隔（分钟）</label>
-            <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" />
-            <label for="s_ms_brief">晨报时刻</label>
-            <input id="s_ms_brief" placeholder="08:30；填 off 关闭晨报" />
-            <div class="ckrow">
-              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
-              <div class="cktext"><b>允许外部 HTTP 触发</b><span class="hint">默认关闭。打开后 <code>POST /api/trigger</code> 能让 EnvKit 主动巡检——这是它唯一从外部被叫醒的入口</span></div>
-            </div>
-          </div>
-
-          <div class="set-card">
+          <div class="set-card" style="grid-column:1/-1">
             <div class="set-card-head"><span class="t">能力开关</span><span class="tag">AI / 桌宠</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
-              <div class="cktext"><b>桌宠天气</b><span class="hint">默认关闭。这是 EnvKit 唯一会外连的功能（wttr.in）</span></div>
+            <div class="grid">
+              <div>
+                <div class="ckrow" style="margin-top:0">
+                  <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
+                  <div class="cktext"><b>桌宠天气</b></div>
+                </div>
+                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">应用</button></div>
+              </div>
+              <div><div class="ro-list" id="s_ai_view" style="margin-top:0"></div></div>
             </div>
-            <div class="dirrow" style="margin-top:8px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">应用</button></div>
-            <div class="ro-list" id="s_ai_view" style="margin-top:8px"></div>
           </div>
 
         </div>
@@ -832,63 +827,62 @@
 
       <!-- ==================== 开发者 ==================== -->
       <div class="cfg-pane" data-set-pane="dev">
-        <div class="set-note">这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写 <code>dev</code> 段，不碰其它配置。</div>
 
         <div class="action">
-          <div class="head"><div class="title">AI 记忆与摘要</div><span class="muted">滚动摘要什么时候触发、保留多少</span></div>
+          <div class="head"><div class="title">AI 记忆与摘要</div></div>
           <div class="set-fields">
-            <div class="set-field"><div class="set-flabel"><b>摘要触发阈值</b><span class="hint">历史估算 token 超过该值才压缩</span></div>
+            <div class="set-field"><div class="set-flabel"><b>摘要触发阈值</b><span class="unit">token</span></div>
               <input type="range" class="set-slider" id="sd_summary_after" min="1000" max="32000" step="500" />
               <input type="number" class="set-num" id="sd_summary_after_n" min="0" max="200000" /></div>
-            <div class="set-field"><div class="set-flabel"><b>摘要后保留量</b><span class="hint">尾部原样保留的估算上限</span></div>
+            <div class="set-field"><div class="set-flabel"><b>摘要后保留量</b><span class="unit">token</span></div>
               <input type="range" class="set-slider" id="sd_summary_keep" min="500" max="20000" step="250" />
               <input type="number" class="set-num" id="sd_summary_keep_n" min="0" max="200000" /></div>
-            <div class="set-field"><div class="set-flabel"><b>至少保留条数</b><span class="hint">摘要后至少原样留几条消息</span></div>
+            <div class="set-field"><div class="set-flabel"><b>至少保留条数</b><span class="unit">条</span></div>
               <input type="range" class="set-slider" id="sd_keep_msgs" min="2" max="60" step="2" />
               <input type="number" class="set-num" id="sd_keep_msgs_n" min="0" max="500" /></div>
-            <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="hint">秒；调大容忍慢上游，调小更快发现假死</span></div>
+            <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_turn_timeout" min="30" max="1800" step="30" />
               <input type="number" class="set-num" id="sd_turn_timeout_n" min="0" max="7200" /></div>
-            <div class="set-field"><div class="set-flabel"><b>单文件读取上限</b><span class="hint">KB；AI 读文件超过这个长度会被截断，截断时会说明</span></div>
+            <div class="set-field"><div class="set-flabel"><b>单文件读取上限</b><span class="unit">KB</span></div>
               <input type="range" class="set-slider" id="sd_explore_kb" min="16" max="512" step="16" />
               <input type="number" class="set-num" id="sd_explore_kb_n" min="0" max="1024" /></div>
           </div>
         </div>
 
         <div class="action">
-          <div class="head"><div class="title">数据保留</div><span class="muted">单位：天；到期自动清理</span></div>
+          <div class="head"><div class="title">数据保留</div></div>
           <div class="set-fields">
-            <div class="set-field"><div class="set-flabel"><b>审计</b><span class="hint">audit-*.jsonl</span></div>
+            <div class="set-field"><div class="set-flabel"><b>审计</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_audit_days" min="1" max="365" step="1" />
               <input type="number" class="set-num" id="sd_audit_days_n" min="0" max="3650" /></div>
-            <div class="set-field"><div class="set-flabel"><b>轨迹</b><span class="hint">trace-*.jsonl（比审计大得多）</span></div>
+            <div class="set-field"><div class="set-flabel"><b>轨迹</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_trace_days" min="1" max="180" step="1" />
               <input type="number" class="set-num" id="sd_trace_days_n" min="0" max="3650" /></div>
-            <div class="set-field"><div class="set-flabel"><b>影子报告</b><span class="hint">shadow-*.json</span></div>
+            <div class="set-field"><div class="set-flabel"><b>影子报告</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_shadow_days" min="1" max="365" step="1" />
               <input type="number" class="set-num" id="sd_shadow_days_n" min="0" max="3650" /></div>
-            <div class="set-field"><div class="set-flabel"><b>行动超期</b><span class="hint">未收口自动记 expired</span></div>
+            <div class="set-field"><div class="set-flabel"><b>行动超期</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_mission_dl" min="1" max="180" step="1" />
               <input type="number" class="set-num" id="sd_mission_dl_n" min="0" max="3650" /></div>
-            <div class="set-field"><div class="set-flabel"><b>行动保留</b><span class="hint">终态保留天数</span></div>
+            <div class="set-field"><div class="set-flabel"><b>行动保留</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_mission_keep" min="1" max="180" step="1" />
               <input type="number" class="set-num" id="sd_mission_keep_n" min="0" max="3650" /></div>
           </div>
         </div>
 
         <div class="action">
-          <div class="head"><div class="title">日志配额</div><span class="muted">单文件写满即轮转，超出份数的最老一份删除</span></div>
+          <div class="head"><div class="title">日志配额</div></div>
           <div class="set-fields">
-            <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="hint">MB；envkit-*.log</span></div>
+            <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="unit">MB</span></div>
               <input type="range" class="set-slider" id="sd_log_mb" min="1" max="32" step="1" />
               <input type="number" class="set-num" id="sd_log_mb_n" min="0" max="64" /></div>
-            <div class="set-field"><div class="set-flabel"><b>业务单文件上限</b><span class="hint">MB；前后端 stdout 更碎，默认给得更宽</span></div>
+            <div class="set-field"><div class="set-flabel"><b>业务单文件上限</b><span class="unit">MB</span></div>
               <input type="range" class="set-slider" id="sd_svclog_mb" min="1" max="32" step="1" />
               <input type="number" class="set-num" id="sd_svclog_mb_n" min="0" max="64" /></div>
-            <div class="set-field"><div class="set-flabel"><b>自身归档份数</b><span class="hint">不含当前文件</span></div>
+            <div class="set-field"><div class="set-flabel"><b>自身归档份数</b><span class="unit">份</span></div>
               <input type="range" class="set-slider" id="sd_log_keep" min="1" max="30" step="1" />
               <input type="number" class="set-num" id="sd_log_keep_n" min="0" max="30" /></div>
-            <div class="set-field"><div class="set-flabel"><b>业务归档份数</b><span class="hint">业务日志的排查价值衰减更快，默认更少</span></div>
+            <div class="set-field"><div class="set-flabel"><b>业务归档份数</b><span class="unit">份</span></div>
               <input type="range" class="set-slider" id="sd_svclog_keep" min="1" max="30" step="1" />
               <input type="number" class="set-num" id="sd_svclog_keep_n" min="0" max="30" /></div>
           </div>
@@ -897,27 +891,27 @@
         <div class="action">
           <div class="head"><div class="title">控制台端口</div><span class="status idle" id="st-dev-port">—</span></div>
           <div class="set-fields">
-            <div class="set-field wide"><div class="set-flabel"><b>起始端口</b><span class="hint">被占用时自动顺延</span></div>
+            <div class="set-field wide"><div class="set-flabel"><b>起始端口</b></div>
               <input type="number" class="set-num" id="sd_server_port" min="1024" max="65535" /></div>
-            <div class="set-field wide"><div class="set-flabel"><b>顺延上界</b><span class="hint">必须大于起始端口</span></div>
+            <div class="set-field wide"><div class="set-flabel"><b>顺延上界</b></div>
               <input type="number" class="set-num" id="sd_port_limit" min="1025" max="65535" /></div>
           </div>
-          <div class="hint" id="h-dev-port" style="margin-top:8px">改端口需要重启 EnvKit 才生效。</div>
+          <div class="hint" id="h-dev-port" style="margin-top:2px"></div>
         </div>
 
         <div class="action">
-          <div class="head"><div class="title">启动校验与重试</div><span class="muted">慢机器把窗口调大，避免把「还在编译」判成「启动失败」</span></div>
+          <div class="head"><div class="title">启动校验与重试</div></div>
           <div class="set-fields">
-            <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="hint">秒；vue/vite 首次编译常要 20s+</span></div>
+            <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_vwait_web" min="10" max="180" step="5" />
               <input type="number" class="set-num" id="sd_vwait_web_n" min="0" max="300" /></div>
-            <div class="set-field"><div class="set-flabel"><b>后端校验窗口</b><span class="hint">秒；go build 已在启动阶段完成</span></div>
+            <div class="set-field"><div class="set-flabel"><b>后端校验窗口</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_vwait_be" min="10" max="180" step="5" />
               <input type="number" class="set-num" id="sd_vwait_be_n" min="0" max="300" /></div>
-            <div class="set-field"><div class="set-flabel"><b>子进程重试次数</b><span class="hint">杀软偶发「零输出秒退」时的总尝试次数；调小会让偶发失败变成真失败</span></div>
+            <div class="set-field"><div class="set-flabel"><b>子进程重试次数</b><span class="unit">次</span></div>
               <input type="range" class="set-slider" id="sd_retries" min="1" max="5" step="1" />
               <input type="number" class="set-num" id="sd_retries_n" min="0" max="5" /></div>
-            <div class="set-field"><div class="set-flabel"><b>重试退避</b><span class="hint">秒；每次重试前等多久</span></div>
+            <div class="set-field"><div class="set-flabel"><b>重试退避</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_backoff" min="1" max="30" step="1" />
               <input type="number" class="set-num" id="sd_backoff_n" min="0" max="30" /></div>
           </div>
@@ -931,13 +925,12 @@
         <div class="action">
           <div class="head"><div class="title">模型兼容性</div><span class="muted">自动探测，无需手改</span></div>
           <div class="ro-list" id="sd_quirk"></div>
-          <div class="hint">不同模型对请求参数的接受度不一样（有的只认 temperature=1、有的要 max_completion_tokens、有的不支持工具调用）。这里显示的是调用中自动探测出来的结果，不是配置项。</div>
         </div>
 
         <div class="action">
-          <div class="head"><div class="title">恢复预算与断路器</div><span class="hint">改这里要手改 config.json 的 recovery 段</span></div>
+          <div class="head"><div class="title">恢复预算与断路器</div><span class="muted">只读 · 需手改 config.json</span></div>
           <div class="ro-list" id="sd_recovery"></div>
-          <div class="row"><button class="ghost" id="btn-sd-breaker">重置断路器</button><span class="hint" id="h-sd-breaker">连续失败进了熔断后，用它立刻放行一次探针</span></div>
+          <div class="row"><button class="ghost" id="btn-sd-breaker">重置断路器</button><span class="hint" id="h-sd-breaker">—</span></div>
         </div>
 
         <div class="set-savebar">
@@ -949,7 +942,6 @@
 
       <!-- ==================== 评测 ==================== -->
       <div class="cfg-pane" data-set-pane="eval">
-        <div class="set-note">评测只在开发仓库（含 <code>tools/</code>）下可用；分发版 exe 旁边没有脚本，会如实报「不可用」而不是硬跑。</div>
 
         <div class="action">
           <div class="head"><div class="title">环境自检</div><span class="status idle" id="st-eval-env">未检测</span></div>
@@ -957,7 +949,7 @@
           <div class="row"><button class="ghost" id="btn-ev-refresh">重新检测</button><span class="hint" id="h-ev-env"></span></div>
         </div>
 
-        <div class="set-h3">四档评测 <span class="hint">越靠前越安全；后两档会改机器状态，必须确认</span></div>
+        <div class="set-h3">四档评测</div>
         <div class="eval-grid" id="ev-kinds"></div>
 
         <div class="logwrap collapsed" id="lw-eval" style="margin-top:12px">
@@ -974,13 +966,13 @@
           <div class="log" id="log-eval"></div>
         </div>
 
-        <div class="set-h3">基线 <span class="hint">冻结只能走命令行 --set-baseline，界面只读</span></div>
+        <div class="set-h3">基线 <span class="muted">界面只读</span></div>
         <div class="action"><div class="ro-list" id="ev-baseline"></div><div class="hint" id="h-ev-baseline"></div></div>
 
-        <div class="set-h3">指标看板 <span class="hint">只说明取数来源，不在这里编数字</span></div>
+        <div class="set-h3">指标看板</div>
         <div class="action"><div class="ro-list" id="ev-boards"></div></div>
 
-        <div class="set-h3">历史产物 <span class="hint">docs/eval 下最近 60 份</span></div>
+        <div class="set-h3">历史产物</div>
         <div class="action"><div id="ev-reports" class="ev-reports"></div></div>
       </div>
     </section>
