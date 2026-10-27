@@ -762,13 +762,54 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">界面与更新</span><span class="tag">显示</span></div>
+            <div class="set-card-head"><span class="t">界面</span><span class="tag">显示</span></div>
             <label for="s_app_name">产品名</label>
             <input id="s_app_name" placeholder="EnvKit" />
             <label for="s_app_title">副标题</label>
             <input id="s_app_title" placeholder="统一开发环境助手" />
-            <label for="s_update_url">更新检查地址</label>
-            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+            <div class="hint">改完点下面的「保存基础设置」生效。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_upd_on"><span class="sl"></span></label>
+              <div class="cktext"><b>检查新版本</b><span class="hint">关掉后启动时也不再请求更新地址</span></div>
+            </div>
+            <label for="s_update_url">更新地址</label>
+            <input id="s_update_url" placeholder="留空 = 不检查（返回 version/notes 的 JSON）" />
+            <label for="s_upd_interval">复查间隔（小时）</label>
+            <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 只在启动时查一次" />
+            <label for="s_upd_ignore">忽略这个版本</label>
+            <input id="s_upd_ignore" placeholder="如 3.5.0，留空 = 不忽略" />
+            <div class="ro-list" id="s_upd_state" style="margin-top:8px"></div>
+            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-upd-check">立即检查</button><span class="hint">改任意一项会立刻保存并重查</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">告警通知</span><span class="tag">挂机</span></div>
+            <label for="s_alert_hook">Webhook 地址</label>
+            <input id="s_alert_hook" placeholder="留空 = 只弹桌面气泡，不外发" />
+            <label for="s_alert_cd">同一标题的冷却（秒）</label>
+            <input id="s_alert_cd" type="number" min="0" max="86400" placeholder="300" />
+            <div class="hint">状态：<span id="s_alert_state">—</span>。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。</div>
+            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-alert-test">发一条测试告警</button><span class="hint">立刻弹气泡并 POST 一次</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b><span class="hint">关掉只是不再自动产生行动，手动触发不受影响</span></div>
+            </div>
+            <label for="s_ms_patrol">巡检间隔（分钟）</label>
+            <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" />
+            <label for="s_ms_brief">晨报时刻</label>
+            <input id="s_ms_brief" placeholder="08:30；填 off 关闭晨报" />
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b><span class="hint">默认关闭。打开后 <code>POST /api/trigger</code> 能让 EnvKit 主动巡检——这是它唯一从外部被叫醒的入口</span></div>
+            </div>
           </div>
 
           <div class="set-card">
@@ -808,6 +849,9 @@
             <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="hint">秒；调大容忍慢上游，调小更快发现假死</span></div>
               <input type="range" class="set-slider" id="sd_turn_timeout" min="30" max="1800" step="30" />
               <input type="number" class="set-num" id="sd_turn_timeout_n" min="0" max="7200" /></div>
+            <div class="set-field"><div class="set-flabel"><b>单文件读取上限</b><span class="hint">KB；AI 读文件超过这个长度会被截断，截断时会说明</span></div>
+              <input type="range" class="set-slider" id="sd_explore_kb" min="16" max="512" step="16" />
+              <input type="number" class="set-num" id="sd_explore_kb_n" min="0" max="1024" /></div>
           </div>
         </div>
 
@@ -833,6 +877,24 @@
         </div>
 
         <div class="action">
+          <div class="head"><div class="title">日志配额</div><span class="muted">单文件写满即轮转，超出份数的最老一份删除</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="hint">MB；envkit-*.log</span></div>
+              <input type="range" class="set-slider" id="sd_log_mb" min="1" max="32" step="1" />
+              <input type="number" class="set-num" id="sd_log_mb_n" min="0" max="64" /></div>
+            <div class="set-field"><div class="set-flabel"><b>业务单文件上限</b><span class="hint">MB；前后端 stdout 更碎，默认给得更宽</span></div>
+              <input type="range" class="set-slider" id="sd_svclog_mb" min="1" max="32" step="1" />
+              <input type="number" class="set-num" id="sd_svclog_mb_n" min="0" max="64" /></div>
+            <div class="set-field"><div class="set-flabel"><b>自身归档份数</b><span class="hint">不含当前文件</span></div>
+              <input type="range" class="set-slider" id="sd_log_keep" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_log_keep_n" min="0" max="30" /></div>
+            <div class="set-field"><div class="set-flabel"><b>业务归档份数</b><span class="hint">业务日志的排查价值衰减更快，默认更少</span></div>
+              <input type="range" class="set-slider" id="sd_svclog_keep" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_svclog_keep_n" min="0" max="30" /></div>
+          </div>
+        </div>
+
+        <div class="action">
           <div class="head"><div class="title">控制台端口</div><span class="status idle" id="st-dev-port">—</span></div>
           <div class="set-fields">
             <div class="set-field wide"><div class="set-flabel"><b>起始端口</b><span class="hint">被占用时自动顺延</span></div>
@@ -841,6 +903,24 @@
               <input type="number" class="set-num" id="sd_port_limit" min="1025" max="65535" /></div>
           </div>
           <div class="hint" id="h-dev-port" style="margin-top:8px">改端口需要重启 EnvKit 才生效。</div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">启动校验与重试</div><span class="muted">慢机器把窗口调大，避免把「还在编译」判成「启动失败」</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="hint">秒；vue/vite 首次编译常要 20s+</span></div>
+              <input type="range" class="set-slider" id="sd_vwait_web" min="10" max="180" step="5" />
+              <input type="number" class="set-num" id="sd_vwait_web_n" min="0" max="300" /></div>
+            <div class="set-field"><div class="set-flabel"><b>后端校验窗口</b><span class="hint">秒；go build 已在启动阶段完成</span></div>
+              <input type="range" class="set-slider" id="sd_vwait_be" min="10" max="180" step="5" />
+              <input type="number" class="set-num" id="sd_vwait_be_n" min="0" max="300" /></div>
+            <div class="set-field"><div class="set-flabel"><b>子进程重试次数</b><span class="hint">杀软偶发「零输出秒退」时的总尝试次数；调小会让偶发失败变成真失败</span></div>
+              <input type="range" class="set-slider" id="sd_retries" min="1" max="5" step="1" />
+              <input type="number" class="set-num" id="sd_retries_n" min="0" max="5" /></div>
+            <div class="set-field"><div class="set-flabel"><b>重试退避</b><span class="hint">秒；每次重试前等多久</span></div>
+              <input type="range" class="set-slider" id="sd_backoff" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_backoff_n" min="0" max="30" /></div>
+          </div>
         </div>
 
         <div class="action">

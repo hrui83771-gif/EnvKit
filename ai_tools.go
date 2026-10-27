@@ -226,12 +226,12 @@ var aiToolRegistry = map[string]aiTool{
 					return "", fmt.Errorf("%s", busyReason("backend+web"))
 				}
 				defer h.Done()
-				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend())
 				if !rb.Ok {
 					h.SetResult(rb)
 					return "", aiOpErr("后端启动", rb)
 				}
-				rw := aiStartVerify("web", webStartTaskLocked("", script, actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTaskLocked("", script, actAI), verifyWaitWeb())
 				h.SetResult(rw)
 				if !rw.Ok {
 					// 后端确实起来了：必须说清楚，否则 AI 会把整件事报成失败
@@ -240,13 +240,13 @@ var aiToolRegistry = map[string]aiTool{
 				}
 				return "后端：" + aiOpResultText("启动", rb) + "\n前端：" + aiOpResultText("启动", rw), nil
 			case "web":
-				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTask("", script, actAI), verifyWaitWeb())
 				if !rw.Ok {
 					return "", aiOpErr("前端启动", rw)
 				}
 				return aiOpResultText("前端启动", rw), nil
 			case "backend":
-				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTask("", actAI), verifyWaitBackend())
 				if !rb.Ok {
 					return "", aiOpErr("后端启动", rb)
 				}
@@ -342,7 +342,7 @@ var aiToolRegistry = map[string]aiTool{
 					fin(resFail, why)
 					return "", fmt.Errorf("前端未重启：%s", why)
 				}
-				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb())
 				fin(rrRes(rw), rw.Msg)
 				if !rw.Ok {
 					return "", aiOpErr("前端重启", rw)
@@ -354,7 +354,7 @@ var aiToolRegistry = map[string]aiTool{
 					fin(resFail, why)
 					return "", fmt.Errorf("后端未重启：%s", why)
 				}
-				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend())
 				fin(rrRes(rb), rb.Msg)
 				if !rb.Ok {
 					return "", aiOpErr("后端重启", rb)
@@ -370,7 +370,7 @@ var aiToolRegistry = map[string]aiTool{
 					fin(resFail, why)
 					return "", fmt.Errorf("后端未重启：%s", why)
 				}
-				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend)
+				rb := aiStartVerify("backend", backendStartTaskLocked("", actAI), verifyWaitBackend())
 				if !rb.Ok {
 					fin(resFail, rb.Msg)
 					return "", aiOpErr("后端重启", rb)
@@ -379,7 +379,7 @@ var aiToolRegistry = map[string]aiTool{
 					fin(resFail, "backend ok; "+why)
 					return "", fmt.Errorf("后端已重启，但前端未重启：%s", why)
 				}
-				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb)
+				rw := aiStartVerify("web", webStartTaskLocked("", "serve", actAI), verifyWaitWeb())
 				fin(rrRes(rw), "backend ok; "+rw.Msg)
 				if !rw.Ok {
 					return "", fmt.Errorf("后端已重启，但前端重启失败[%s]：%s\n证据：%s",

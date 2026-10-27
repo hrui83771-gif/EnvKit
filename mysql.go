@@ -35,9 +35,11 @@ func runMysqlOut(args ...string) (string, error) {
 		lastErr  error
 	)
 	// 本机 mysql 子进程偶发"零输出秒退"（杀软行为拦截），重试几次可自愈（见 retry.go）
+	// 次数与退避来自设置页（默认 3 次 / 2 秒）。
+	attempts, backoff := subprocRetry()
 	_, err := runRetry(retryPolicy{
-		Attempts: 3,
-		Backoff:  2 * time.Second,
+		Attempts: attempts,
+		Backoff:  backoff,
 		Scope:    scConfig,
 		Tag:      "查询",
 		Label:    "mysql",

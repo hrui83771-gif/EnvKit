@@ -26,13 +26,19 @@ import (
 const (
 	exploreMaxDepth      = 3          // 目录树最大深度
 	exploreMaxEntries    = 200        // 单次列目录最大条目
-	exploreMaxReadBytes  = 64 * 1024  // 单文件最大读取字节
 	exploreMaxLines      = 400        // 单文件最大返回行数
 	exploreMaxHits       = 50         // 搜索最大命中数
 	exploreMaxScan       = 5000       // 单次搜索最大扫描文件数
 	exploreMaxFileScan   = 512 * 1024 // 内容搜索时跳过大文件
 	exploreMaxBriefFiles = 2000       // 生成项目画像时最大扫描文件数
 )
+
+// exploreMaxBytes 单文件读取上限（默认 64KB，设置页「AI 记忆与摘要」可调）。
+// 这个值同时决定"截断提示"里的数字 —— 提示与实现必须用同一个变量，
+// 否则会出现"说载入了 64KB、其实按 128KB 读的"这种自相矛盾。
+func exploreMaxBytes() int64 {
+	return int64(devOr(devSnap().ExploreMaxKB, devDefaultExploreMaxKB)) << 10
+}
 
 // exploreSkipDirs 永远不进的目录：依赖产物、构建产物、版本库元数据。
 var exploreSkipDirs = map[string]bool{
@@ -512,15 +518,16 @@ func exploreRead(args map[string]any) string {
 		return "打开失败：" + err.Error()
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, exploreMaxReadBytes))
+	maxBytes := exploreMaxBytes()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes))
 	if err != nil {
 		return "读取失败：" + err.Error()
 	}
 	text := string(data)
 	lines := strings.Split(text, "\n")
 	note := fmt.Sprintf("文件：%s（共 %d 行", relOrAbs(abs), len(lines))
-	if fi.Size() > exploreMaxReadBytes {
-		note += fmt.Sprintf("，源文件 %.1f KB，本次仅载入前 %d KB", float64(fi.Size())/1024, exploreMaxReadBytes/1024)
+	if fi.Size() > maxBytes {
+		note += fmt.Sprintf("，源文件 %.1f KB，本次仅载入前 %d KB", float64(fi.Size())/1024, maxBytes/1024)
 	}
 	start := offset - 1
 	if start > len(lines) {

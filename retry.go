@@ -172,3 +172,17 @@ func exitCodeText(err error) string {
 	}
 	return err.Error()
 }
+
+// subprocRetry 从设置页「启动校验与重试」读到的策略（0 = 内置默认）。
+//
+// 只给"零输出秒退"这条路径用（execStreamed / runMysqlOut）。数据库备份
+// （dbops.go 的 mysqldump）不跟这里走：那条策略 AnyErr=true，真实报错也会重试，
+// 放大次数只会把"注定失败"拖得更久。
+//
+// 为什么能在这里取 cfgMu：两个调用点都在跑子进程，不持有任何全局锁；
+// 若将来有人把它挪进持锁区，就是死锁 —— 见 DevConfig.LogMaxMB 上的锁序说明。
+func subprocRetry() (attempts int, backoff time.Duration) {
+	d := devSnap()
+	return devOr(d.SubprocRetries, devDefaultSubprocRetries),
+		time.Duration(devOr(d.SubprocBackoffSecs, devDefaultSubprocBackoff)) * time.Second
+}

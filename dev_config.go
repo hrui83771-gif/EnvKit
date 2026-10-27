@@ -50,6 +50,16 @@ func handleDevConfig(w http.ResponseWriter, r *http.Request) {
 
 		ServerPort    *int `json:"server_port"`
 		PortScanLimit *int `json:"port_scan_limit"`
+
+		LogMaxMB           *int `json:"log_max_mb"`
+		SvcLogMaxMB        *int `json:"svc_log_max_mb"`
+		LogKeep            *int `json:"log_keep"`
+		SvcLogKeep         *int `json:"svc_log_keep"`
+		VerifyWaitWebSecs  *int `json:"verify_wait_web_secs"`
+		VerifyWaitBackend  *int `json:"verify_wait_backend_secs"`
+		SubprocRetries     *int `json:"subproc_retries"`
+		SubprocBackoffSecs *int `json:"subproc_backoff_secs"`
+		ExploreMaxKB       *int `json:"explore_max_kb"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", 400)
@@ -83,6 +93,15 @@ func handleDevConfig(w http.ResponseWriter, r *http.Request) {
 	set("行动保留天数", &next.MissionKeepDays, body.MissionKeepDays)
 	set("控制台端口", &next.ServerPort, body.ServerPort)
 	set("端口上界", &next.PortScanLimit, body.PortScanLimit)
+	set("日志单文件上限", &next.LogMaxMB, body.LogMaxMB)
+	set("业务日志单文件上限", &next.SvcLogMaxMB, body.SvcLogMaxMB)
+	set("日志归档份数", &next.LogKeep, body.LogKeep)
+	set("业务日志归档份数", &next.SvcLogKeep, body.SvcLogKeep)
+	set("前端校验窗口", &next.VerifyWaitWebSecs, body.VerifyWaitWebSecs)
+	set("后端校验窗口", &next.VerifyWaitBackendSecs, body.VerifyWaitBackend)
+	set("子进程重试次数", &next.SubprocRetries, body.SubprocRetries)
+	set("子进程重试退避", &next.SubprocBackoffSecs, body.SubprocBackoffSecs)
+	set("AI 单文件读取上限", &next.ExploreMaxKB, body.ExploreMaxKB)
 
 	normalizeDev(&next)
 	if hard := hardProblems(checkDevConfig(next)); len(hard) > 0 {
@@ -101,6 +120,10 @@ func handleDevConfig(w http.ResponseWriter, r *http.Request) {
 	cfg.Dev = &dv
 	saved := cfg
 	cfgMu.Unlock()
+
+	// 日志配额走原子快照（写日志热路径不取 cfgMu），改完必须推一次，
+	// 否则要重启才生效 —— 而配额恰恰是"磁盘快满了"时才会被改的东西。
+	refreshLogQuota(dv)
 
 	if len(changed) > 0 {
 		saveExternalConfig(saved)

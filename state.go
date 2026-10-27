@@ -110,6 +110,10 @@ type Config struct {
 	// UpdateURL 自版本检查地址（返回 {"version":"x.y.z","notes":"..."} 的 JSON）。
 	// 留空 = 关闭检查。无公开发布渠道时保持为空即可。
 	UpdateURL string `json:"update_url"`
+	// Update 自更新检查的行为开关（v3.4，设置页「界面与更新」卡）。
+	// 指针段：老配置没有 "update" 段时为 nil → 一律按"开启、只在启动查一次"处理，
+	// 与 v3.4 之前的行为完全一致。
+	Update *UpdateConfig `json:"update,omitempty"`
 	// TrayHidden 上次退出前的窗口状态：true = 启动后直接隐藏到托盘（后台运行）。
 	// 由托盘菜单「隐藏窗口到托盘 / 显示控制台窗口」写入，下次启动沿用，
 	// 这样"挂机跑"不用每次开机都手动收一次窗口。
@@ -128,6 +132,28 @@ type PetConfig struct {
 	// 建议显式填写："Shanghai" / "上海" 均可。未填时默认"上海"（见 defaultWeatherCity）。
 	WeatherCity string `json:"weather_city,omitempty"`
 }
+
+// UpdateConfig 自更新检查的行为开关（config.json 的 "update" 段，v3.4）。
+//
+// 为什么单独一段而不是塞进 dev：这是面向普通用户的基础设置（更新检查要不要开、
+// 多久查一次），不是"调错了也不至于坏"的开发者调参；两者混在一段，
+// 以后谁改默认值都得先判断这条属于哪边。
+//
+// 和 update_url 的分工：URL 是"查哪里"，这里管"查不查、多久查、哪个版本别烦我"。
+type UpdateConfig struct {
+	// Enabled nil = 开。用指针是为了保住老行为：v3.4 之前只要配了
+	// update_url 就会检查，不能因为升级后多了个默认 false 的布尔就悄悄关掉。
+	Enabled *bool `json:"enabled,omitempty"`
+	// IntervalHours 定时复查间隔（小时）。0 = 只在启动时查一次（老行为）；
+	// >0 = 每 N 小时再查。改这个不用重启，updateLoop 每分钟醒一次自己算。
+	IntervalHours int `json:"interval_hours,omitempty"`
+	// IgnoreVersion 不再提示"有新版本"的版本号（精确匹配 latest）。
+	// 只抑制提示，不抑制检查本身 —— 界面上仍然能看到最新版号。
+	IgnoreVersion string `json:"ignore_version,omitempty"`
+}
+
+// on 是否允许检查（nil 视为开）。
+func (u UpdateConfig) on() bool { return u.Enabled == nil || *u.Enabled }
 
 // defaultWeatherCity 天气城市的默认值。
 //
@@ -189,6 +215,33 @@ type DevConfig struct {
 	// PortScanLimit 端口顺延/单实例探测的上界（不含；0 = 默认 18815，
 	// 即默认给 50 个顺延名额）。必须大于 ServerPort。
 	PortScanLimit int `json:"port_scan_limit,omitempty"`
+
+	// —— 日志配额（0 = 内置默认，见 loghub.go）——
+	// 单机上日志是磁盘增长最快的来源。业务侧 stdout 更碎、重启更频繁，
+	// 所以默认单文件给得比 EnvKit 自身宽、归档份数给得更少。
+	// **运行时取值不走 devSnap()**：日志热路径持有 logMu，再取 cfgMu 会与
+	// "持 cfgMu 时写日志"的路径形成锁序反转。改用 refreshLogQuota 写原子快照。
+	LogMaxMB    int `json:"log_max_mb,omitempty"`     // 自身单文件上限（默认 5）
+	SvcLogMaxMB int `json:"svc_log_max_mb,omitempty"` // 业务单文件上限（默认 8）
+	LogKeep     int `json:"log_keep,omitempty"`       // 自身归档份数（默认 10）
+	SvcLogKeep  int `json:"svc_log_keep,omitempty"`   // 业务归档份数（默认 5）
+
+	// —— 启动校验等待窗口（秒；0 = 内置默认）——
+	// 慢机器上首次 vite 编译可能超过 45 秒，窗口太短会把"还在编译"判成
+	// "启动失败"，这是最伤的一类误判（把人引去修本来正常的东西）。
+	VerifyWaitWebSecs     int `json:"verify_wait_web_secs,omitempty"`     // 默认 45
+	VerifyWaitBackendSecs int `json:"verify_wait_backend_secs,omitempty"` // 默认 25
+
+	// —— 子进程重试（"零输出秒退"，见 retry.go）——
+	// 只影响命令执行与 mysql 查询；数据库备份（dbops.go）固定 2 次不跟这里走，
+	// 因为那条路径 AnyErr=true（真报错也重试），放大次数只会拖长失败时间。
+	SubprocRetries     int `json:"subproc_retries,omitempty"`      // 总尝试次数（默认 3）
+	SubprocBackoffSecs int `json:"subproc_backoff_secs,omitempty"` // 每次重试前等待（默认 2）
+
+	// —— AI 读取 ——
+	// ExploreMaxKB 单文件读取上限（KB，默认 64）。调大可让 AI 读全大文件，
+	// 但内容会整段进上下文，长文件更容易触发摘要。
+	ExploreMaxKB int `json:"explore_max_kb,omitempty"`
 }
 
 // 开发者段的内置默认值：与界面上「恢复默认」的目标值是同一份数字，
@@ -205,6 +258,23 @@ const (
 	devDefaultMissionKeepDay     = 30
 	devDefaultServerPort         = 18765
 	devDefaultPortScanSpan       = 50 // 从起始端口起的顺延名额数（上界 = 起始 + 50）
+
+	// 日志配额（loghub.go 的同名常量直接引用这里，避免两份默认值各说各话）
+	devDefaultLogMaxMB    = 5
+	devDefaultSvcLogMaxMB = 8
+	devDefaultLogKeep     = 10
+	devDefaultSvcLogKeep  = 5
+
+	// 启动校验等待窗口（verify.go 的 verifyWaitWeb()/verifyWaitBackend() 用它）
+	devDefaultVerifyWaitWeb     = 45
+	devDefaultVerifyWaitBackend = 25
+
+	// 子进程"零输出秒退"重试（retry.go 的 subprocRetry() 用它）
+	devDefaultSubprocRetries = 3
+	devDefaultSubprocBackoff = 2 // 秒
+
+	// AI 单文件读取上限（explore.go 用它）
+	devDefaultExploreMaxKB = 64
 )
 
 // devOr 取正数，否则回落默认 —— 0 与负数都视为"没设"。
@@ -229,6 +299,15 @@ func (d DevConfig) resolved() DevConfig {
 	d.MissionKeepDays = devOr(d.MissionKeepDays, devDefaultMissionKeepDay)
 	d.ServerPort = devOr(d.ServerPort, devDefaultServerPort)
 	d.PortScanLimit = devOr(d.PortScanLimit, d.ServerPort+devDefaultPortScanSpan)
+	d.LogMaxMB = devOr(d.LogMaxMB, devDefaultLogMaxMB)
+	d.SvcLogMaxMB = devOr(d.SvcLogMaxMB, devDefaultSvcLogMaxMB)
+	d.LogKeep = devOr(d.LogKeep, devDefaultLogKeep)
+	d.SvcLogKeep = devOr(d.SvcLogKeep, devDefaultSvcLogKeep)
+	d.VerifyWaitWebSecs = devOr(d.VerifyWaitWebSecs, devDefaultVerifyWaitWeb)
+	d.VerifyWaitBackendSecs = devOr(d.VerifyWaitBackendSecs, devDefaultVerifyWaitBackend)
+	d.SubprocRetries = devOr(d.SubprocRetries, devDefaultSubprocRetries)
+	d.SubprocBackoffSecs = devOr(d.SubprocBackoffSecs, devDefaultSubprocBackoff)
+	d.ExploreMaxKB = devOr(d.ExploreMaxKB, devDefaultExploreMaxKB)
 	return d
 }
 
@@ -274,6 +353,18 @@ func (d DevConfig) portScanLimit() int {
 		return d.PortScanLimit
 	}
 	return start + devDefaultPortScanSpan
+}
+
+// logQuotaOf 日志配额（字节数）。**只允许 refreshLogQuota 调用**：
+// 写日志的热路径不许碰 cfgMu —— 别处存在"持着 cfgMu 写日志"的路径，
+// 谁要是在 logMu 下再取 cfgMu，就是锁序反转，偶发死锁且极难复现。
+func (d DevConfig) logQuotaOf() logQuota {
+	return logQuota{
+		keep:    devOr(d.LogKeep, devDefaultLogKeep),
+		svcKeep: devOr(d.SvcLogKeep, devDefaultSvcLogKeep),
+		max:     int64(devOr(d.LogMaxMB, devDefaultLogMaxMB)) << 20,
+		svcMax:  int64(devOr(d.SvcLogMaxMB, devDefaultSvcLogMaxMB)) << 20,
+	}
 }
 
 // devSnap 开发者段快照：所有"常量 → 配置"的运行时读取点都走这里。

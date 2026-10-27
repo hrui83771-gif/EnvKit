@@ -728,7 +728,9 @@
   .ai-pick-item .ic{width:14px;flex:none;text-align:center;color:var(--muted)}
   .ai-pick-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-pick-hint{padding:6px 9px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);line-height:1.5}
-  .ai-plus{background:var(--off)!important;color:var(--muted)!important;border:1px solid var(--line)!important;border-radius:8px;font-size:16px;line-height:1;padding:0 12px!important;cursor:pointer;flex:none}
+  /* 「选择文件引用」小按钮：原来继承 .ai-input button 的 padding:0 12px 被拉成一个大方块，
+     字也比输入框还显眼。这里固定 26×26、贴底（textarea 两行高，居中会飘在中间）。 */
+  .ai-plus{background:var(--off)!important;color:var(--muted)!important;border:1px solid var(--line)!important;border-radius:7px;font-size:13px;line-height:1;padding:0!important;width:26px;height:26px;min-width:26px;align-self:flex-end;margin-bottom:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
   .ai-plus.on{color:var(--brand)!important;border-color:var(--brand)!important}
   @media (max-width:900px){
     #ai-drawer.big{width:100vw}
@@ -1572,13 +1574,54 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">界面与更新</span><span class="tag">显示</span></div>
+            <div class="set-card-head"><span class="t">界面</span><span class="tag">显示</span></div>
             <label for="s_app_name">产品名</label>
             <input id="s_app_name" placeholder="EnvKit" />
             <label for="s_app_title">副标题</label>
             <input id="s_app_title" placeholder="统一开发环境助手" />
-            <label for="s_update_url">更新检查地址</label>
-            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+            <div class="hint">改完点下面的「保存基础设置」生效。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_upd_on"><span class="sl"></span></label>
+              <div class="cktext"><b>检查新版本</b><span class="hint">关掉后启动时也不再请求更新地址</span></div>
+            </div>
+            <label for="s_update_url">更新地址</label>
+            <input id="s_update_url" placeholder="留空 = 不检查（返回 version/notes 的 JSON）" />
+            <label for="s_upd_interval">复查间隔（小时）</label>
+            <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 只在启动时查一次" />
+            <label for="s_upd_ignore">忽略这个版本</label>
+            <input id="s_upd_ignore" placeholder="如 3.5.0，留空 = 不忽略" />
+            <div class="ro-list" id="s_upd_state" style="margin-top:8px"></div>
+            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-upd-check">立即检查</button><span class="hint">改任意一项会立刻保存并重查</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">告警通知</span><span class="tag">挂机</span></div>
+            <label for="s_alert_hook">Webhook 地址</label>
+            <input id="s_alert_hook" placeholder="留空 = 只弹桌面气泡，不外发" />
+            <label for="s_alert_cd">同一标题的冷却（秒）</label>
+            <input id="s_alert_cd" type="number" min="0" max="86400" placeholder="300" />
+            <div class="hint">状态：<span id="s_alert_state">—</span>。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。</div>
+            <div class="row" style="margin-top:8px"><button class="ghost" id="btn-s-alert-test">发一条测试告警</button><span class="hint">立刻弹气泡并 POST 一次</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b><span class="hint">关掉只是不再自动产生行动，手动触发不受影响</span></div>
+            </div>
+            <label for="s_ms_patrol">巡检间隔（分钟）</label>
+            <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" />
+            <label for="s_ms_brief">晨报时刻</label>
+            <input id="s_ms_brief" placeholder="08:30；填 off 关闭晨报" />
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b><span class="hint">默认关闭。打开后 <code>POST /api/trigger</code> 能让 EnvKit 主动巡检——这是它唯一从外部被叫醒的入口</span></div>
+            </div>
           </div>
 
           <div class="set-card">
@@ -1618,6 +1661,9 @@
             <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="hint">秒；调大容忍慢上游，调小更快发现假死</span></div>
               <input type="range" class="set-slider" id="sd_turn_timeout" min="30" max="1800" step="30" />
               <input type="number" class="set-num" id="sd_turn_timeout_n" min="0" max="7200" /></div>
+            <div class="set-field"><div class="set-flabel"><b>单文件读取上限</b><span class="hint">KB；AI 读文件超过这个长度会被截断，截断时会说明</span></div>
+              <input type="range" class="set-slider" id="sd_explore_kb" min="16" max="512" step="16" />
+              <input type="number" class="set-num" id="sd_explore_kb_n" min="0" max="1024" /></div>
           </div>
         </div>
 
@@ -1643,6 +1689,24 @@
         </div>
 
         <div class="action">
+          <div class="head"><div class="title">日志配额</div><span class="muted">单文件写满即轮转，超出份数的最老一份删除</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="hint">MB；envkit-*.log</span></div>
+              <input type="range" class="set-slider" id="sd_log_mb" min="1" max="32" step="1" />
+              <input type="number" class="set-num" id="sd_log_mb_n" min="0" max="64" /></div>
+            <div class="set-field"><div class="set-flabel"><b>业务单文件上限</b><span class="hint">MB；前后端 stdout 更碎，默认给得更宽</span></div>
+              <input type="range" class="set-slider" id="sd_svclog_mb" min="1" max="32" step="1" />
+              <input type="number" class="set-num" id="sd_svclog_mb_n" min="0" max="64" /></div>
+            <div class="set-field"><div class="set-flabel"><b>自身归档份数</b><span class="hint">不含当前文件</span></div>
+              <input type="range" class="set-slider" id="sd_log_keep" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_log_keep_n" min="0" max="30" /></div>
+            <div class="set-field"><div class="set-flabel"><b>业务归档份数</b><span class="hint">业务日志的排查价值衰减更快，默认更少</span></div>
+              <input type="range" class="set-slider" id="sd_svclog_keep" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_svclog_keep_n" min="0" max="30" /></div>
+          </div>
+        </div>
+
+        <div class="action">
           <div class="head"><div class="title">控制台端口</div><span class="status idle" id="st-dev-port">—</span></div>
           <div class="set-fields">
             <div class="set-field wide"><div class="set-flabel"><b>起始端口</b><span class="hint">被占用时自动顺延</span></div>
@@ -1651,6 +1715,24 @@
               <input type="number" class="set-num" id="sd_port_limit" min="1025" max="65535" /></div>
           </div>
           <div class="hint" id="h-dev-port" style="margin-top:8px">改端口需要重启 EnvKit 才生效。</div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">启动校验与重试</div><span class="muted">慢机器把窗口调大，避免把「还在编译」判成「启动失败」</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="hint">秒；vue/vite 首次编译常要 20s+</span></div>
+              <input type="range" class="set-slider" id="sd_vwait_web" min="10" max="180" step="5" />
+              <input type="number" class="set-num" id="sd_vwait_web_n" min="0" max="300" /></div>
+            <div class="set-field"><div class="set-flabel"><b>后端校验窗口</b><span class="hint">秒；go build 已在启动阶段完成</span></div>
+              <input type="range" class="set-slider" id="sd_vwait_be" min="10" max="180" step="5" />
+              <input type="number" class="set-num" id="sd_vwait_be_n" min="0" max="300" /></div>
+            <div class="set-field"><div class="set-flabel"><b>子进程重试次数</b><span class="hint">杀软偶发「零输出秒退」时的总尝试次数；调小会让偶发失败变成真失败</span></div>
+              <input type="range" class="set-slider" id="sd_retries" min="1" max="5" step="1" />
+              <input type="number" class="set-num" id="sd_retries_n" min="0" max="5" /></div>
+            <div class="set-field"><div class="set-flabel"><b>重试退避</b><span class="hint">秒；每次重试前等多久</span></div>
+              <input type="range" class="set-slider" id="sd_backoff" min="1" max="30" step="1" />
+              <input type="number" class="set-num" id="sd_backoff_n" min="0" max="30" /></div>
+          </div>
         </div>
 
         <div class="action">
@@ -1983,7 +2065,10 @@ const APP_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACq
    译文由 DOM 文本节点/属性替换完成，并用 MutationObserver 覆盖动态渲染的内容，
    因此新增界面文案只要补进 I18N_EN 即可（tools/i18n_inventory.py 可查漏）。 */
 const I18N_EN = {
+  "- 内容 | 标签": "- Content | Tags",
+  "0 = 只在启动时查一次": "0 = check once at startup only",
   "0 行": "0 lines",
+  "08:30；填 off 关闭晨报": "08:30; \"off\" disables the briefing",
   "1) 本机代理（Clash / V2Ray 等，常见 127.0.0.1:7890）没有绕过 localhost：\n   在代理的「绕过 / 例外 / Bypass」里加入 127.0.0.1;localhost;::1\n2) 或换一个不走系统代理的浏览器打开本控制台\n\n验证：到「AI 助手」页点「检测请求传输」，显示\"发送 N / 收到 N\"即已修好。": "1) A local proxy (Clash / V2Ray, often 127.0.0.1:7890) is not bypassing localhost:\n   add 127.0.0.1;localhost;::1 to its bypass / exception list\n2) Or open this console in a browser that does not use the system proxy\n\nVerify: open the AI panel and click \"Test request transport\" — \"sent N / received N\" means fixed.",
   "=仅供参考、": "= for reference only,",
   "=多数时候成立、": "= holds most of the time,",
@@ -2004,7 +2089,9 @@ const I18N_EN = {
   "HTTP 代理": "HTTP proxy",
   "HTTPS 代理": "HTTPS proxy",
   "HTTPS 证书异常：检查地址与系统时间": "HTTPS certificate problem: check the URL and your system clock",
+  "KB；AI 读文件超过这个长度会被截断，截断时会说明": "KB; longer files are truncated, and the truncation is stated",
   "Key 被拒（HTTP {0}）：检查 API Key 是否正确": "Key rejected (HTTP {0}): check that your API key is correct",
+  "MB；前后端 stdout 更碎，默认给得更宽": "MB; frontend/backend stdout is choppier, so the default is wider",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
   "MySQL 端口": "MySQL port",
@@ -2019,6 +2106,7 @@ const I18N_EN = {
   "W 端口": "W port",
   "W 脚本": "W script",
   "WeBASE-Front 地址": "WeBASE-Front URL",
+  "Webhook 地址": "Webhook URL",
   "docs/eval 下最近 60 份": "Latest 60 files under docs/eval",
   "docs/eval 下还没有 .json 产物": "No .json artifacts under docs/eval yet",
   "http://127.0.0.1:7890（留空 = 直连）": "http://127.0.0.1:7890 (empty = direct)",
@@ -2059,6 +2147,7 @@ const I18N_EN = {
   "③ 链端校验": "3. Chain check",
   "④ 程序启动": "4. Launch",
   "⚠ 请求内容被中间层丢弃": "⚠ Request payload dropped in transit",
+  "。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。": ". WeCom / DingTalk / Feishu group-bot custom webhooks can be pasted directly; only generic JSON is sent — their private formats are not supported.",
   "「拉取模型列表」会调用服务商的 /models 接口获取在售模型；拉取失败时仍可用预置列表或自定义模型名。Key 经 DPAPI 加密存储，仅本机可解密。": "\"Fetch model list\" calls the provider's /models endpoint to list available models; if it fails you can still use the built-in list or type a model name. The API key is DPAPI-encrypted and only decryptable on this machine.",
   "【附加文件引用】": "[Attached file references]",
   "一个小时内不打扰你，悬停找我": "I'll stay out of your way for an hour — hover to find me",
@@ -2069,6 +2158,7 @@ const I18N_EN = {
   "三色团子！软乎乎～": "Tricolor dango! So fluffy~",
   "上一级": "Up",
   "上传头像": "Upload avatar",
+  "上次检查": "Last checked",
   "上次评测": "Last run",
   "上海": "Shanghai",
   "上级目录": "Parent",
@@ -2086,10 +2176,14 @@ const I18N_EN = {
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
   "不发送温度": "Temperature is not sent",
   "不同模型对请求参数的接受度不一样（有的只认 temperature=1、有的要 max_completion_tokens、有的不支持工具调用）。这里显示的是调用中自动探测出来的结果，不是配置项。": "Models differ in which request parameters they accept (some only allow temperature=1, some require max_completion_tokens, some reject tool calls). These are what the calls detected on their own, not settings.",
+  "不含当前文件": "Excludes the current file",
   "不支持（已自动降级）": "Unsupported (auto-degraded)",
   "不通": "Unreachable",
   "与 EnvKit 的连接已断开（可能已重启），点击确定刷新页面。": "Connection to EnvKit was lost (it may have restarted). Click OK to refresh.",
   "与「程序配置」「链端校验」共用同一份": "Shares the same ",
+  "业务单文件上限": "Service per-file limit",
+  "业务归档份数": "Service archive count",
+  "业务日志的排查价值衰减更快，默认更少": "Service logs lose diagnostic value faster, so fewer are kept",
   "个人中心": "Profile",
   "中": "Med",
   "中午好": "Good noon",
@@ -2128,6 +2222,7 @@ const I18N_EN = {
   "你好！我可以查看日志与状态、执行备份/检测/启停等操作（写操作需你确认）。试试问我\"后端为什么起不来\"或\"帮我备份数据库\"。": "Hi! I can read logs and status, and run backups / checks / service start-stop (write actions need your confirmation). Try asking \"why won't the backend start?\" or \"back up the database for me\".",
   "你已拒绝：{0}": "You declined: {0}",
   "你已确认：{0}": "You confirmed: {0}",
+  "你当场的明确要求 &gt; 我的记忆 &gt; 自动经验": "Your explicit request &gt; my memory &gt; learned experience",
   "你当场的明确要求 > 我的记忆 > 自动经验": "your explicit instruction now > my memories > auto lessons",
   "你手动修好的": "Fixed by you",
   "你指定的": "set by you",
@@ -2156,10 +2251,12 @@ const I18N_EN = {
   "停止服务": "stop services",
   "停止生成": "Stop generating",
   "允许写操作": "Allow writes",
+  "允许外部 HTTP 触发": "Allow external HTTP trigger",
   "允许查询天气": "Allow weather lookups",
   "先备份，再生效…": "Backup first, then apply…",
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "免责声明": "Disclaimer",
+  "入站": "Inbound",
   "全局": "Global",
   "全局适用": "Applies globally",
   "全屏": "Full screen",
@@ -2172,6 +2269,8 @@ const I18N_EN = {
   "共 {0} 行 · 第 {1}/{2} 页": "{0} rows · page {1}/{2}",
   "关于 / 免责声明": "About / Disclaimer",
   "关于 EnvKit": "About EnvKit",
+  "关掉只是不再自动产生行动，手动触发不受影响": "Turning it off only stops automatic actions; manual triggers still work",
+  "关掉后启动时也不再请求更新地址": "When off, the update URL is not requested even at startup",
   "关闭": "Off",
   "关闭后 AI 对话与桌面助手均不可用": "When off, AI chat and the desktop assistant are both unavailable",
   "其它": "Other",
@@ -2205,6 +2304,7 @@ const I18N_EN = {
   "前端启动脚本": "Frontend start script",
   "前端日志": "Frontend log",
   "前端服务": "Frontend service",
+  "前端校验窗口": "Frontend verify window",
   "前端目录": "Frontend directory",
   "前端：{0}": "Frontend: {0}",
   "副标题": "Subtitle",
@@ -2226,6 +2326,8 @@ const I18N_EN = {
   "升级": "Upgrade",
   "升级组件": "Upgrade components",
   "单位：天；到期自动清理": "In days; expired files are cleaned up automatically",
+  "单文件写满即轮转，超出份数的最老一份删除": "A file rotates when full; the oldest beyond the count is deleted",
+  "单文件读取上限": "Per-file read limit",
   "单目标重试上限": "Retries per target",
   "单轮超时": "Turn timeout",
   "占比 {0}%": "{0}%",
@@ -2240,9 +2342,12 @@ const I18N_EN = {
   "去程序配置修改": "Edit in Configure",
   "去链端校验修改": "Edit in Chain Check",
   "反复失败": "Repeated failure",
+  "发一条测试告警": "Send a test alert",
   "发财啦！明天开始吃高级鱼粮！": "Rich! From tomorrow on, premium fish food!",
   "发送": "Send",
   "发送 {0} / 收到 {1}": "sent {0} / received {1}",
+  "发送中…": "Sending…",
+  "发送失败：HTTP {0}": "Send failed: HTTP {0}",
   "取消": "Cancel",
   "变大一点": "Bigger",
   "变大啦，看得清吗": "Bigger now — easier to see?",
@@ -2259,6 +2364,7 @@ const I18N_EN = {
   "可选": "Optional",
   "右键可以让我藏起来": "Right-click lets me hide",
   "合法候选：": "Valid candidates:",
+  "同一标题的冷却（秒）": "Cooldown per title (seconds)",
   "同时停止由本程序启动的前端 / 后端服务": "Also stop the frontend / backend services started by EnvKit",
   "同步链地址到 config.toml": "Sync chain address into config.toml",
   "后台守护": "Background guard",
@@ -2270,6 +2376,7 @@ const I18N_EN = {
   "后端入口": "Backend entry",
   "后端日志": "Backend log",
   "后端服务": "Backend service",
+  "后端校验窗口": "Backend verify window",
   "后端目录": "Backend directory",
   "后端：{0}": "Backend: {0}",
   "含密码，所以不在这里再放一份输入框": "Contains a password, so it is not duplicated as an input here",
@@ -2283,8 +2390,12 @@ const I18N_EN = {
   "启动失败：": "Failed to start: ",
   "启动方式": "Launch method",
   "启动服务": "start services",
+  "启动校验与重试": "Startup verify & retry",
   "启动脚本": "Start script",
   "启用": "Enable",
+  "启用定时巡检与晨报": "Enable scheduled patrol and morning briefing",
+  "告警设置已保存": "Alert settings saved",
+  "告警通知": "Alert notifications",
   "呜呜我再也不不敢了QAQ": "I won't dare do it again, QAQ",
   "呼…活过来了": "Whew… I'm alive again",
   "命令行执行 python tools/eval_gate.py --set-baseline 冻结；界面不提供，避免误把一次跑坏的结论固化成门禁。": "Freeze it on the command line with python tools/eval_gate.py --set-baseline; the UI deliberately omits that so a bad run cannot be baked into the gate.",
@@ -2311,6 +2422,7 @@ const I18N_EN = {
   "备份数据库": "back up database",
   "复位断路器": "Reset breaker",
   "复制": "Copy",
+  "复查间隔（小时）": "Re-check interval (hours)",
   "复验": "Verify",
   "复验反复失败": "Verification keeps failing",
   "复验未通过": "Verification failed",
@@ -2332,9 +2444,11 @@ const I18N_EN = {
   "失败：": "Failed: ",
   "好吃！": "Yum!",
   "好舒服~": "So comfy~",
+  "如 3.5.0，留空 = 不忽略": "e.g. 3.5.0; empty = do not ignore",
   "如 dev / serve / start（留空自动推断）": "e.g. dev / serve / start (blank = auto)",
   "如 main.go 或 cmd/server/main.go（留空自动推断）": "e.g. main.go or cmd/server/main.go (blank = auto)",
   "如：ls -l /opt/fisco": "e.g. ls -l /opt/fisco",
+  "子进程重试次数": "Child-process retries",
   "字段多且互相约束，集中在一处改更安全": "Many interdependent fields; editing them in one place is safer",
   "守护": "Guard",
   "守护运行状态": "Guard runtime status",
@@ -2346,6 +2460,8 @@ const I18N_EN = {
   "安装目录": "Install directory",
   "完成时间": "Finished at",
   "宕机 / 恢复时弹 Windows 桌面通知": "Windows toast on outage / recovery",
+  "定时行动": "Scheduled actions",
+  "定时行动设置已保存": "Scheduled action settings saved",
   "审计": "Audit",
   "审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级": "The audit log is append-only — never modified or rolled back — kept for 30 days in per-day files (next to the exe: ",
   "审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 audit-YYYYMMDD.jsonl）；密码与 API Key 在入库前已脱敏。": "Audit entries are append-only and never modified or rolled back; they are kept per day for 30 days (audit-YYYYMMDD.jsonl next to the exe). Passwords and API keys are redacted before being written.",
@@ -2386,10 +2502,13 @@ const I18N_EN = {
   "小鱼干": "Dried fish",
   "小鱼干！我的最爱！": "Small dried fish — my favorite!",
   "尚未冻结基线": "No baseline frozen yet",
+  "尚未检查": "Not checked yet",
   "尚未检测": "Not checked yet",
   "尾部原样保留的估算上限": "Estimated cap on the verbatim tail kept after summarizing",
   "展开": "Expand",
   "展开明细（{0} 行）": "Show details ({0} lines)",
+  "巡检": "Patrol",
+  "巡检间隔（分钟）": "Patrol interval (minutes)",
   "工具调用": "Tool calls",
   "已交给后端执行，完成前我来盯着": "Handed to the backend — I'll watch until it's done",
   "已保存": "Saved",
@@ -2400,6 +2519,8 @@ const I18N_EN = {
   "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
   "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
   "已加白名单": "Whitelisted",
+  "已发起检查，几秒后刷新状态": "Check started; status refreshes in a few seconds",
+  "已发送到 {0}": "Sent to {0}",
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
   "已启动": "Started",
@@ -2416,6 +2537,7 @@ const I18N_EN = {
   "已开启批量授权：{0} · 本任务内最多 {1} 次": "Batch grant opened: {0} · up to {1} more in this task",
   "已开启（{0} 秒/次）": "On (every {0}s)",
   "已开始：{0}": "Started: {0}",
+  "已弹桌面气泡（未配置 Webhook，不外连）": "Desktop bubble shown (no Webhook configured, nothing sent out)",
   "已归位 ✨": "Back home ✨",
   "已得出结论": "Reached a conclusion",
   "已恢复上次的对话（{0} 条）": "Restored previous conversation ({0} messages)",
@@ -2430,6 +2552,7 @@ const I18N_EN = {
   "已收藏脚本 {0}": "Saved script {0}",
   "已整理": "Tidied",
   "已是最新": "Up to date",
+  "已是最新版本": "Already up to date",
   "已有一条 AI 对话在进行中（另一个标签页？），请等它结束或点「停止」": "Another AI conversation is already running (another tab?) — wait for it or press Stop",
   "已有一条 AI 对话在进行中，请等它结束或点「停止」": "Another AI conversation is already running — wait for it or press Stop",
   "已清空为默认（点「保存」生效）": "Cleared to defaults (takes effect on Save)",
@@ -2453,7 +2576,9 @@ const I18N_EN = {
   "已退出": "Exited",
   "已配密钥但未启用": "Key set but disabled",
   "已配置": "configured",
+  "已配置地址": "the configured address",
   "已配置（{0}）": "Configured ({0})",
+  "已配置，告警会 POST 到这个地址": "Configured; alerts are POSTed to this address",
   "已采用": "In use",
   "已重置（{0}）": "Reset ({0})",
   "已附加引用：{0}": "Attached: {0}",
@@ -2488,16 +2613,19 @@ const I18N_EN = {
   "当前不在熔断态，无需复位": "Not tripped — nothing to reset",
   "当前实例不在 {0} 上：要么该端口被占用后顺延了，要么刚改过还没重启。评测脚本硬编码 18765，端口不一致时后两档会拒绝启动。": "This instance is not on {0}: either the port was taken and EnvKit moved on, or it was changed without a restart. Eval scripts hardcode 18765 and refuse to start the last two tiers when it differs.",
   "当前待处理": "Needs attention",
+  "当前版本": "Current version",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
   "必须大于起始端口": "Must be greater than the start port",
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
+  "忽略这个版本": "Ignore this version",
   "怎么称呼你？（可留空）": "What should I call you? (optional)",
   "思考中": "Thinking",
   "恢复原本大小": "Back to normal size",
   "恢复演练": "Restore drill",
   "恢复预算与断路器": "Recovery budget & breaker",
   "恢复默认": "Reset",
+  "慢机器把窗口调大，避免把「还在编译」判成「启动失败」": "On slow machines, widen the window so \"still compiling\" is not judged as \"failed to start\"",
   "慢路径": "Slow path",
   "成功": "OK",
   "成功 {0} · 部分 {1} · 失败 {2}": "{0} ok · {1} partial · {2} failed",
@@ -2544,6 +2672,7 @@ const I18N_EN = {
   "拉取模型列表中...": "Fetching model list...",
   "拒绝": "Reject",
   "拖个 .sql 给我试试": "Try dragging a .sql file to me",
+  "挂机": "Unattended",
   "指标看板": "Metrics boards",
   "按已配置的目录直接跑": "Uses your configured directories",
   "按配置值发送": "Sends the configured value",
@@ -2551,6 +2680,7 @@ const I18N_EN = {
   "授权": "Grant",
   "排队中": "Queued",
   "控制台端口": "Console port",
+  "描述要让助手做什么…": "Describe what you want the assistant to do…",
   "提供方 / 模型": "Provider / Model",
   "搜索项目文件": "Search project files",
   "摘要后保留量": "Keep after summary",
@@ -2558,6 +2688,7 @@ const I18N_EN = {
   "摘要触发阈值": "Summarize threshold",
   "操作": "Actions",
   "操作主体": "By actor",
+  "操作失败": "Operation failed",
   "操作失败：": "Operation failed: ",
   "操作审计": "Audit log",
   "操作总数": "Total operations",
@@ -2567,6 +2698,9 @@ const I18N_EN = {
   "收起": "Collapse",
   "收起一会儿": "Tuck away for a while",
   "收起数据浏览": "Collapse data browser",
+  "改任意一项会立刻保存并重查": "Any change saves and re-checks immediately",
+  "改即保存": "Saves on change",
+  "改完点下面的「保存基础设置」生效。": "Click \"Save base settings\" below to apply.",
   "改端口需要重启 EnvKit 才生效。": "Port changes take effect after EnvKit restarts.",
   "改端口需要重启 EnvKit 才生效；评测脚本硬编码 18765，改端口后后两档会被判「不可用」。": "Port changes need a restart; eval scripts hardcode 18765, so the last two tiers report unavailable if the port differs.",
   "改这里要手改 config.json 的 recovery 段": "Change these by hand in the recovery section of config.json",
@@ -2590,6 +2724,7 @@ const I18N_EN = {
   "断路器已复位，恢复接受自动重启": "Breaker reset — auto-restart will resume",
   "断路器已重置": "Breaker reset",
   "断路器阈值": "Breaker threshold",
+  "新建行动": "New mission",
   "无效操作次数 / 验证准确性 / 安全违规率 / 误拒率": "Invalid ops / verification accuracy / safety violations / false rejections",
   "无效端口号": "Invalid port number",
   "无数据": "No data",
@@ -2597,6 +2732,7 @@ const I18N_EN = {
   "无结论": "No verdict",
   "日均 {0} 次": "{0} per day",
   "日志": "Logs",
+  "日志配额": "Log quota",
   "日志里暂时没有错误行": "No error lines in the log yet",
   "早上好": "Good morning",
   "时间": "Time",
@@ -2608,16 +2744,22 @@ const I18N_EN = {
   "晕着呢…让我缓一缓": "Dizzy… give me a second",
   "晕鱼了晕鱼了……": "Dizzy fish, dizzy fish...",
   "晚上好": "Good evening",
+  "晨报时刻": "Morning briefing time",
   "普通请求正常（{0}），但带对话头的那次失败（{1}，头长 {2} 字节）—— 中间层在处理大请求头时丢掉了 body": "Plain request OK ({0}) but the one with the chat header failed ({1}, header {2} bytes) — the middle layer drops the body when headers are large",
+  "暂停": "Pause",
   "暂无可显示的内容": "Nothing to show yet",
   "暂无守护动作记录": "No guard actions recorded",
   "暂无审计记录": "No audit records yet",
   "暂无数据": "No data yet",
   "暂无经验，失败与被拒的记录累积到一定量后会自动出现": "No lessons yet — they appear once enough failures or denials accumulate",
+  "暂无行动。可在下方新建，或由巡检/入站触发自动产出。": "No missions yet. Create one below, or let patrol / inbound trigger produce one.",
   "暗色": "Dark",
   "更改": "Change",
+  "更新地址": "Update URL",
+  "更新检查": "Update check",
   "更新检查地址": "Update check URL",
   "最常见原因与修法": "Most likely cause and fix",
+  "最新版本": "Latest version",
   "最近动作": "Recent actions",
   "最近回合": "Recent turns",
   "最近有任务失败": "A recent task failed",
@@ -2625,6 +2767,8 @@ const I18N_EN = {
   "有任务正在执行，请稍候": "Another task is running — please wait",
   "有异常": "has issues",
   "有改动，待保存…": "Unsaved changes…",
+  "有新版本 {0}": "Version {0} available",
+  "有新版本 {0}，已按设置不再提示": "Version {0} available (muted per settings)",
   "有话直说~": "Just ask~",
   "服务 已就绪": "Services ready",
   "服务 异常": "Service error",
@@ -2633,6 +2777,7 @@ const I18N_EN = {
   "服务 运行中": "Services running",
   "服务启停": "Service start/stop",
   "服务商": "Provider",
+  "服务商 · 密钥 · 记忆": "Provider · Key · Memory",
   "服务商与密钥": "Provider & API key",
   "服务商返回 HTTP {0}": "Provider returned HTTP {0}",
   "未产出": "Not produced",
@@ -2667,6 +2812,7 @@ const I18N_EN = {
   "未配置主机": "Host not configured",
   "未配置密钥": "No API key",
   "未配置密钥：后两档不可用": "No API key: the last two tiers are unavailable",
+  "未配置，只弹桌面气泡（不外连）": "Not configured; desktop bubble only (no outbound request)",
   "本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）": "Don't ask again for the same kind of action in this task (max 2, service start/stop only)",
   "本会话 · {0} 轮": "This session · {0} turns",
   "本回合": "This turn",
@@ -2683,6 +2829,7 @@ const I18N_EN = {
   "本页面已与服务失去连接，可以关闭此标签页。": "This page has lost connection to the service — you can close this tab now.",
   "本项目": "This project",
   "本项目生效": "applies to this project",
+  "杀软偶发「零输出秒退」时的总尝试次数；调小会让偶发失败变成真失败": "Total attempts when antivirus occasionally kills a child with no output; lowering it turns flaky failures into real ones",
   "杀软白名单": "AV whitelist",
   "杀软：第三方": "AV: third-party",
   "松手交给我~": "Drop it to me~",
@@ -2707,6 +2854,7 @@ const I18N_EN = {
   "桌宠天气": "Pet weather",
   "桌宠设置没保存成功": "Couldn't save the pet setting",
   "桌面助手": "Desktop assistant",
+  "检查新版本": "Check for new versions",
   "检查更新": "Check for updates",
   "检查请求体是否能完整到达服务端（不调用模型，不花钱）": "Check whether the request body reaches the server intact (no model call, no cost)",
   "检测": "Check",
@@ -2786,9 +2934,12 @@ const I18N_EN = {
   "生效 SQL 到数据库": "Apply SQL to database",
   "用户": "User",
   "用量": "Usage",
+  "界面": "Interface",
   "界面与更新": "Appearance & updates",
   "留空 = 0.3（部分模型只接受 1，会自动适配）": "Empty = 0.3 (some models only accept 1; auto-adapted)",
   "留空 = 不检查更新": "Empty = no update check",
+  "留空 = 不检查（返回 version/notes 的 JSON）": "Empty = no check (JSON returning version/notes)",
+  "留空 = 只弹桌面气泡，不外发": "Empty = desktop bubble only, nothing sent out",
   "留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。": "Empty = system default. After changing a mirror, re-run the install from Configure → Dependencies.",
   "留空 = 由 EnvKit 按项目结构自动推断": "Leave blank to auto-detect from the project structure",
   "留空=同 SSH 主机": "Empty = same as SSH host",
@@ -2812,6 +2963,9 @@ const I18N_EN = {
   "确认执行": "Run it",
   "私钥": "Private key",
   "秒（最小 30）": "sec (min 30)",
+  "秒；go build 已在启动阶段完成": "seconds; go build already finished during startup",
+  "秒；vue/vite 首次编译常要 20s+": "seconds; the first vue/vite build often takes 20s+",
+  "秒；每次重试前等多久": "seconds; wait before each retry",
   "秒；调大容忍慢上游，调小更快发现假死": "Seconds; larger tolerates slow upstreams, smaller detects hangs sooner",
   "移除": "Remove",
   "程序启动": "Launch",
@@ -2820,7 +2974,9 @@ const I18N_EN = {
   "空闲": "Free",
   "穿透已解除": "Click-through is off",
   "窗口内动作上限": "Actions per window",
+  "立刻弹气泡并 POST 一次": "Shows a bubble and POSTs once immediately",
   "立刻放行一次恢复探针。只有确认底层环境已经恢复时才这么做——否则等于让同一个起不来的服务再被重启一轮。": "Lets one recovery probe through immediately. Only do this once the underlying environment is really back — otherwise the same service that cannot start gets restarted all over again.",
+  "立即检查": "Check now",
   "立即检测": "Run detection now",
   "端口": "Port",
   "端口与链信息": "Ports & chain info",
@@ -2850,6 +3006,8 @@ const I18N_EN = {
   "结论": "Conclusion",
   "统一开发环境助手": "All-in-one Dev Environment Helper",
   "统一开发环境助手 · 单文件 Go · 零依赖 · 内置 AI 运维助手": "All-in-one Dev Environment Helper · Single-file Go · Zero dependencies · Built-in AI ops assistant",
+  "继续": "Continue",
+  "继续执行该行动": "Resume this mission",
   "缓存 {0}%": "cache {0}%",
   "缓存写入": "Cache write",
   "缓存写入一栏对 DeepSeek 恒为 0：未命中的输入按普通输入计费，不单列写入。": "Cache write is always 0 for DeepSeek: uncached input is billed as regular input, not as a separate write.",
@@ -2871,6 +3029,7 @@ const I18N_EN = {
   "耗时 {0}ms": "took {0}ms",
   "能做什么": "What it can do",
   "能力开关": "Feature toggles",
+  "能让 EnvKit 主动巡检——这是它唯一从外部被叫醒的入口": "lets EnvKit start a patrol by itself — the only way it can be woken from outside",
   "脚本名含非法字符": "Script name has invalid characters",
   "自动保存": "Auto-save",
   "自动保存完成，但拉取模型失败：": "Auto-saved, but fetching models failed: ",
@@ -2882,6 +3041,8 @@ const I18N_EN = {
   "自定义": "Custom",
   "自定义查询 · {0} 行": "Custom query · {0} rows",
   "自定义模型名...": "Custom model name…",
+  "自身单文件上限": "Own per-file limit",
+  "自身归档份数": "Own archive count",
   "至少保留条数": "Min messages kept",
   "节点/WeBASE 宕机时，一键检测自动尝试重启链端": "On node/WeBASE outage, Quick check tries to restart the chain",
   "节点未运行": "Node down",
@@ -2891,6 +3052,7 @@ const I18N_EN = {
   "范围": "Scope",
   "蛋糕": "Cake",
   "蛋糕！罪恶但快乐……": "Cake! Sinful but happy...",
+  "行动": "Missions",
   "行动保留": "Mission retention",
   "行动超期": "Mission expiry",
   "衡量「宣称已恢复、其实没恢复」；这里的百分比是判定通过率，越高越好": "Measures “claimed recovered but actually not”; the percentage here is the pass rate, higher is better",
@@ -2942,6 +3104,7 @@ const I18N_EN = {
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
   "读取统计失败：{0}": "Failed to load stats: {0}",
+  "读取行动…": "Loading missions…",
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
@@ -3012,6 +3175,7 @@ const I18N_EN = {
   "选择 .sql 文件（选定后端目录会自动探测 dbs\\*.sql）": "Choose a .sql file (picking the backend directory auto-detects dbs\\*.sql)",
   "选择备份 .sql（mysqldump 导出的文件）": "Choose a backup .sql (exported by mysqldump)",
   "选择文件": "Choose file",
+  "选择文件…": "Choose a file…",
   "选择文件夹": "Choose folder",
   "选择文件引用": "Attach file reference",
   "选择此文件夹": "Use this folder",
@@ -3032,6 +3196,7 @@ const I18N_EN = {
   "重置": "Reset",
   "重置失败": "Reset failed",
   "重置断路器": "Reset breaker",
+  "重试退避": "Retry backoff",
   "钻石": "Diamond",
   "钻石？！这能吃吗……咕咚。真香！": "A diamond?! Can you even eat that... gulp. Delicious!",
   "链主机": "Chain host",
@@ -3048,6 +3213,7 @@ const I18N_EN = {
   "镜像与校验": "Mirrors & checksums",
   "门禁问题": "Gate problems",
   "问我任何环境问题...（Enter 发送）": "Ask me anything about your environment... (Enter to send)",
+  "问我任何环境问题...（Enter 发送，可拖入文件）": "Ask any environment question... (Enter to send, drag files in)",
   "降级 · 未通过复验": "Degraded · verification failed",
   "随时待命": "Standing by",
   "隐藏": "Hidden",
@@ -3069,6 +3235,7 @@ const I18N_EN = {
   "高频动作": "Top actions",
   "鲸鱼": "Whale",
   "默认关闭。启用后助手会记住你写的长期规矩，并从历史操作中学习失败模式以避免重复犯错；关闭时不再向模型注入任何记忆内容": "Off by default. When on, the assistant remembers the long-term rules you write and learns failure patterns from past actions to avoid repeating mistakes; when off, no memory content is injected into the model.",
+  "默认关闭。打开后": "Off by default. When on,",
   "默认关闭。这是 EnvKit 唯一会外连的功能（wttr.in）": "Off by default. This is the only EnvKit feature that talks to the internet (wttr.in)",
   "默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。": "Applies to this project only by default and expires when you switch projects — another machine's lessons rarely fit the current one. Check this only for truly general rules (e.g. stop the backend before backing up).",
   "默认城市": "default city",
@@ -7973,7 +8140,7 @@ function ekSetPane(name){
   if(tabs) tabs.querySelectorAll('.cfg-tab').forEach(b=>b.classList.toggle('on', b.dataset.setTab===name));
   document.querySelectorAll('#panel-settings .cfg-pane').forEach(p=>p.classList.toggle('show', p.dataset.setPane===name));
   EK_SET.tab = name;
-  if(name==='base') ekSetLoadBase();
+  if(name==='base'){ ekSetLoadBase(); ekSetLoadExtras(); }
   else if(name==='dev') ekSetLoadDev();
   else if(name==='eval'){ ekEvLoad(); ekEvPoll(true); }
   if(name!=='eval') ekEvPoll(false);
@@ -8018,7 +8185,8 @@ async function ekSetLoadBase(){
     $('#s_be_dir').value        = p.backend_dir || '';
     $('#s_app_name').value      = c.app_name || '';
     $('#s_app_title').value     = c.app_title || '';
-    $('#s_update_url').value    = c.update_url || '';
+    /* update_url 不在这里填：它归「更新检查」卡（走 /api/update/config）。
+       两个来源都写同一个输入框，会出现"一边刚改、另一边读回来按旧值覆盖"。 */
 
     /* 数据库/链端只读：密码只回「是否设置」，不在页面上再放一个可被读屏念出来的输入框 */
     ekRo('#s_db_view', [
@@ -8123,7 +8291,7 @@ async function ekSetWeather(){
 }
 
 /* ---------- 开发者 ----------
-   11 个字段只有一个保存口（/api/dev/config），全部是 int 指针：填 0 或留空 = 回落内置默认。
+   20 个字段只有一个保存口（/api/dev/config），全部是 int 指针：填 0 或留空 = 回落内置默认。
    默认值只在后端 state.go 里有一份（devDefault*），前端不复制字面量 ——
    「恢复默认」的语义就是"把 dev 段清成 0"，而不是在前端写第二份数字。 */
 const EK_DEV_MAP = [
@@ -8137,7 +8305,16 @@ const EK_DEV_MAP = [
   {k:'mission_deadline_days', s:'#sd_mission_dl',     n:'#sd_mission_dl_n'},
   {k:'mission_keep_days',     s:'#sd_mission_keep',   n:'#sd_mission_keep_n'},
   {k:'server_port',           s:null,                 n:'#sd_server_port'},
-  {k:'port_scan_limit',       s:null,                 n:'#sd_port_limit'}
+  {k:'port_scan_limit',       s:null,                 n:'#sd_port_limit'},
+  {k:'explore_max_kb',        s:'#sd_explore_kb',     n:'#sd_explore_kb_n'},
+  {k:'log_max_mb',            s:'#sd_log_mb',         n:'#sd_log_mb_n'},
+  {k:'svc_log_max_mb',        s:'#sd_svclog_mb',      n:'#sd_svclog_mb_n'},
+  {k:'log_keep',              s:'#sd_log_keep',       n:'#sd_log_keep_n'},
+  {k:'svc_log_keep',          s:'#sd_svclog_keep',    n:'#sd_svclog_keep_n'},
+  {k:'verify_wait_web_secs',  s:'#sd_vwait_web',      n:'#sd_vwait_web_n'},
+  {k:'verify_wait_backend_secs', s:'#sd_vwait_be',    n:'#sd_vwait_be_n'},
+  {k:'subproc_retries',       s:'#sd_retries',        n:'#sd_retries_n'},
+  {k:'subproc_backoff_secs',  s:'#sd_backoff',        n:'#sd_backoff_n'}
 ];
 
 function ekDevBindSliders(){
@@ -8276,7 +8453,7 @@ async function ekSetSaveDev(){
   }
 }
 
-/* 恢复默认 = 把 11 个字段全部清 0（后端 devOr 会把 0 当"没设"回落内置默认）。
+/* 恢复默认 = 把 20 个字段全部清 0（后端 devOr 会把 0 当"没设"回落内置默认）。
    滑块同步到 min 只是视觉近似：0 不在量程内，滑到最左即可，数字框保留真实的 0。 */
 function ekSetResetDev(){
   EK_DEV_MAP.forEach(m=>{
@@ -8577,6 +8754,178 @@ async function ekSetBreakerReset(){
     }
   }catch(e){ toast(t('网络错误：')+e, 'err'); }
 }
+
+/* ==================== 通知 / 定时行动 / 更新检查（v3.4） ====================
+   三块各走自己的端点，不混进 POST /api/config 的整包：
+     /api/alerts/config    Webhook + 冷却
+     /api/missions/config  巡检间隔 / 晨报时刻 / 入站开关
+     /api/update/config    更新地址 + 开关 + 复查间隔 + 忽略版本
+   共同原则：改完立刻存、存完重读回显。同一份数据让用户在两处手动同步，
+   迟早会出现「这边显示已开、实际没开」。
+*/
+const EK_EXT = {alert:null, ms:null, upd:null};
+
+async function ekSetLoadExtras(){
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate()]);
+}
+
+/* ---------- 告警通知 ---------- */
+
+async function ekSetLoadAlert(){
+  try{
+    const a = await fetch('/api/alerts/config').then(r=>r.json());
+    EK_EXT.alert = a;
+    $('#s_alert_hook').value = a.webhook || '';
+    $('#s_alert_cd').value = a.cooldown_secs || 300;
+    $('#s_alert_state').textContent = a.webhook
+      ? t('已配置，告警会 POST 到这个地址')
+      : t('未配置，只弹桌面气泡（不外连）');
+  }catch(e){
+    $('#s_alert_state').textContent = t('读取失败：{0}', e);
+  }
+}
+
+async function ekSetSaveAlert(){
+  const hook = $('#s_alert_hook').value.trim();
+  const cd = parseInt($('#s_alert_cd').value, 10);
+  const body = {webhook: hook};
+  if(!isNaN(cd) && cd >= 0) body.cooldown_secs = cd;
+  try{
+    const r = await fetch('/api/alerts/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ toast(t('保存失败：') + (await r.text()).trim(), 'err'); return; }
+    await ekSetLoadAlert();
+    toast(t('告警设置已保存'));
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+}
+
+async function ekSetAlertTest(){
+  const btn = $('#btn-s-alert-test');
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = t('发送中…'); }
+  try{
+    const r = await fetch('/api/alerts/test',{method:'POST'});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){ toast(t('发送失败：HTTP {0}', r.status), 'err'); }
+    else if(j.webhook){ toast(t('已发送到 {0}', j.host || t('已配置地址'))); }
+    else { toast(t('已弹桌面气泡（未配置 Webhook，不外连）')); }
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = label || t('发一条测试告警'); } }
+}
+
+/* ---------- 定时行动 ---------- */
+
+async function ekSetLoadMissions(){
+  try{
+    const m = await fetch('/api/missions/config').then(r=>r.json());
+    EK_EXT.ms = m;
+    /* enabled 是 *bool：老配置里没这一项时，返回的 JSON 里干脆没有这个字段。
+       缺字段 = 默认开，所以不能用 !!m.enabled（undefined 会被读成"关"）。 */
+    $('#s_ms_on').checked = (m.enabled !== false);
+    $('#s_ms_patrol').value = m.patrol_interval_min || 60;
+    $('#s_ms_brief').value = m.briefing_at || '08:30';
+    $('#s_ms_inbound').checked = !!m.inbound_hook;
+  }catch(e){
+    /* 读失败就保持界面原样：宁可显示旧值，也不要把开关自动拨到某个位置 */
+  }
+}
+
+async function ekSetSaveMissions(){
+  const n = parseInt($('#s_ms_patrol').value, 10);
+  const body = {
+    enabled: $('#s_ms_on').checked,
+    inbound_hook: $('#s_ms_inbound').checked,
+    briefing_at: $('#s_ms_brief').value.trim()
+  };
+  if(!isNaN(n) && n >= 0) body.patrol_interval_min = n;
+  try{
+    const r = await fetch('/api/missions/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ toast(t('保存失败：') + (await r.text()).trim(), 'err'); return; }
+    await ekSetLoadMissions();
+    toast(t('定时行动设置已保存'));
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+}
+
+/* ---------- 更新检查 ---------- */
+
+async function ekSetLoadUpdate(){
+  try{
+    const u = await fetch('/api/update/config').then(r=>r.json());
+    EK_EXT.upd = u;
+    $('#s_upd_on').checked = !!u.enabled;
+    $('#s_update_url').value = u.url || '';
+    $('#s_upd_interval').value = u.interval_hours || 0;
+    $('#s_upd_ignore').value = u.ignore_version || '';
+    ekSetRenderUpdate(u);
+  }catch(e){
+    ekRo('#s_upd_state', [{k:'状态', v:t('读取失败：{0}', e), cls:'bad'}]);
+  }
+}
+
+/* 状态行单独一个函数：保存后只更新这块，不重填输入框（否则正在输入的内容会被冲掉） */
+function ekSetRenderUpdate(u){
+  const r = (u && u.result) || {};
+  let st = t('尚未检查'), cls = '';
+  if(r.has_new && r.ignored){ st = t('有新版本 {0}，已按设置不再提示', r.latest); cls = 'warn'; }
+  else if(r.has_new){ st = t('有新版本 {0}', r.latest); cls = 'warn'; }
+  else if(r.error){ st = r.error; cls = 'warn'; }
+  else if(r.latest){ st = t('已是最新版本'); cls = 'ok'; }
+  ekRo('#s_upd_state', [
+    {k:'当前版本', v: r.current || ''},
+    {k:'最新版本', v: r.latest || ''},
+    {k:'上次检查', v: r.at || ''},
+    {k:'状态', v: st, cls: cls}
+  ]);
+}
+
+async function ekSetSaveUpdate(recheck){
+  const n = parseInt($('#s_upd_interval').value, 10);
+  const body = {
+    enabled: $('#s_upd_on').checked,
+    ignore_version: $('#s_upd_ignore').value.trim(),
+    url: $('#s_update_url').value.trim(),
+    recheck: !!recheck
+  };
+  if(!isNaN(n) && n >= 0) body.interval_hours = n;
+  try{
+    const r = await fetch('/api/update/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ toast(t('保存失败：') + (await r.text()).trim(), 'err'); return; }
+    const u = await r.json();
+    EK_EXT.upd = u;
+    /* 同步全局快照：基础保存条也会带 update_url 出去，不同步就会用旧值盖回来 */
+    if(cfg) cfg.update_url = u.url || '';
+    ekSetRenderUpdate(u);
+    if(recheck){
+      toast(t('已发起检查，几秒后刷新状态'));
+      /* 后端是异步重查（httpShort 最长 4 秒，同步等会卡住按钮） */
+      setTimeout(()=>{
+        fetch('/api/update/config').then(x=>x.json()).then(v=>ekSetRenderUpdate(v)).catch(()=>{});
+      }, 2500);
+    }
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+}
+
+/* 绑定：输入框用 change（失焦/回车才触发），按钮用委托 */
+(function(){
+  const w = document.getElementById('panel-settings');
+  if(!w) return;
+  const auto = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('change', fn); };
+  auto('s_alert_hook', ekSetSaveAlert);
+  auto('s_alert_cd', ekSetSaveAlert);
+  auto('s_ms_on', ekSetSaveMissions);
+  auto('s_ms_patrol', ekSetSaveMissions);
+  auto('s_ms_brief', ekSetSaveMissions);
+  auto('s_ms_inbound', ekSetSaveMissions);
+  auto('s_upd_on', ()=>ekSetSaveUpdate(false));
+  auto('s_update_url', ()=>ekSetSaveUpdate(false));
+  auto('s_upd_interval', ()=>ekSetSaveUpdate(false));
+  auto('s_upd_ignore', ()=>ekSetSaveUpdate(false));
+  document.addEventListener('click', ev=>{
+    const el = ev.target;
+    if(!el || !el.id) return;
+    if(el.id === 'btn-s-alert-test') ekSetAlertTest();
+    else if(el.id === 'btn-s-upd-check') ekSetSaveUpdate(true);
+  });
+})();
 </script>
 </body>
 </html>

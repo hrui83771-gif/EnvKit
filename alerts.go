@@ -175,3 +175,29 @@ func maskHook(u string) string {
 	}
 	return "(非法 URL)"
 }
+
+// handleAlertTest 发一条测试告警，用于配完 webhook 后当场确认链路通。
+//
+// 为什么值得单开一个端点：告警链路最怕"配好了但从来没响过"，真出事那天
+// 才发现地址写错。设置页上点一下就能验证，比事后翻日志便宜得多。
+func handleAlertTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	cfgMu.Lock()
+	hook := cfg.Alert.Webhook
+	cfgMu.Unlock()
+
+	if strings.TrimSpace(hook) == "" {
+		// 没配 webhook 也弹一次气泡：证明"本机感知"这段是通的，
+		// 否则用户会把"什么都没发生"理解成整个告警链路坏了。
+		platform.Notify("EnvKit 测试告警", "当前未配置 Webhook，所以只弹了这条气泡。")
+		writeJSON(w, map[string]any{"ok": true, "webhook": false, "host": ""})
+		return
+	}
+	// 标题带时间戳：alertDispatch 按标题做冷却抑制，固定标题第二次点就没反应，
+	// 而"点了没反应"会被读成链路坏了 —— 测试恰恰不该在这上面撒谎。
+	alertDispatch("EnvKit 测试告警 "+time.Now().Format("15:04:05"), "收到这条说明告警链路可用。")
+	writeJSON(w, map[string]any{"ok": true, "webhook": true, "host": maskHook(hook)})
+}

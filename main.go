@@ -26,7 +26,7 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.2.0"
+	appVersion = "3.4.0"
 	buildDate  = "2026-10-19"
 )
 
@@ -87,6 +87,9 @@ func main() {
 	apiToken = newToken()
 	tokenIssued = time.Now()
 	loadConfig()
+	// 把日志配额推进原子快照：loghub 的写日志热路径不许取 cfgMu（锁序反转），
+	// 只在启动与设置页保存后各推一次。
+	refreshLogQuota(devSnap())
 	os.MkdirAll(cfg.InstallDir, 0755)
 	isAdminFlag = isAdmin()
 	if !isAdminFlag {
@@ -97,7 +100,7 @@ func main() {
 		}
 	}
 
-	go runSelfUpdateCheck() // 自版本检查（未配置 update_url 时静默跳过）
+	go updateLoop() // 自版本检查（未配置 update_url 或已关闭时静默跳过；间隔可配）
 
 	// 控制台关闭钩子：点窗口 X 先弹确认，退出前停掉启动的子进程（internal/platform）
 	// Ctrl+C / 关窗口事件 → 停子进程 → 退出，绝不留无窗口的后台孤儿。
@@ -191,7 +194,9 @@ func main() {
 	// 老页面的整包保存（POST /api/config）永不携带这三段 —— mergeFormConfig
 	// 的保留逻辑兜底，两处配置面因此可以并存而不互相覆盖。
 	http.HandleFunc("/api/alerts/config", handleAlertConfig)
+	http.HandleFunc("/api/alerts/test", handleAlertTest)
 	http.HandleFunc("/api/missions/config", handleMissionConfig)
+	http.HandleFunc("/api/update/config", handleUpdateConfig)
 	http.HandleFunc("/api/dev/config", handleDevConfig)
 	http.HandleFunc("/api/eval/status", handleEvalStatus) // v3.4 评测看板（只读）
 	http.HandleFunc("/api/eval/run", handleEvalRun)       // v3.4 四档评测（破坏性档走 428）

@@ -153,6 +153,9 @@ type updateInfo struct {
 	Checked bool   `json:"checked"`
 	Error   string `json:"error,omitempty"`
 	At      string `json:"at"`
+	// Ignored 有新版本但命中了 ignore_version：只压提示，不压检查结果。
+	// 单独一个字段而不是把 HasNew 改 false —— 否则界面会撒谎说"已是最新"。
+	Ignored bool `json:"ignored,omitempty"`
 }
 
 var (
@@ -187,16 +190,35 @@ func seg(parts []string, i int) string {
 	return "0"
 }
 
-// runSelfUpdateCheck 启动时执行一次；结果缓存到全局 upd，/api/self-update 直接读。
-// 未配置 update_url 时视为功能关闭，不报错。
+// updateSnap 取更新检查设置（nil 段 → 零值 → on() 视为开）。
+func updateSnap() UpdateConfig {
+	cfgMu.Lock()
+	var u UpdateConfig
+	if cfg.Update != nil {
+		u = *cfg.Update
+	}
+	cfgMu.Unlock()
+	return u
+}
+
+// runSelfUpdateCheck 执行一次检查；结果缓存到全局 upd，/api/self-update 直接读。
+// 未配置 update_url、或设置里关掉了检查时，都视为"功能未启用"，不报错。
 func runSelfUpdateCheck() {
 	cfgMu.Lock()
 	url := strings.TrimSpace(cfg.UpdateURL)
+	var uc UpdateConfig
+	if cfg.Update != nil {
+		uc = *cfg.Update
+	}
 	cfgMu.Unlock()
+
 	res := updateInfo{Current: appVersion, At: time.Now().Format("15:04:05")}
-	if url == "" {
+	switch {
+	case !uc.on():
+		res.Error = "已关闭自更新检查（设置 → 界面与更新）"
+	case url == "":
 		res.Error = "未配置 update_url，跳过检查"
-	} else {
+	default:
 		resp, err := httpShort.Get(url)
 		if err == nil {
 			defer resp.Body.Close()
@@ -211,6 +233,12 @@ func runSelfUpdateCheck() {
 					res.Latest = strings.TrimSpace(body.Version)
 					res.Notes = body.Notes
 					res.HasNew = compareSemver(appVersion, res.Latest) < 0
+					res.Checked = true
+					// 忽略只压提示，不改 HasNew：界面上仍然要能看到"最新是哪个版本"，
+					// 否则用户会以为检查坏了。
+					if res.HasNew && strings.TrimSpace(uc.IgnoreVersion) == res.Latest {
+						res.Ignored = true
+					}
 				}
 			} else {
 				res.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
@@ -223,12 +251,36 @@ func runSelfUpdateCheck() {
 	upd = res
 	updMu.Unlock()
 	switch {
+	case res.HasNew && res.Ignored:
+		info(scSys, "版本", "发现新版本 %s（当前 %s），已按设置不再提示", res.Latest, appVersion)
 	case res.HasNew:
 		info(scSys, "版本", "发现新版本 %s（当前 %s）%s", res.Latest, appVersion, res.Notes)
-	case res.Error != "" && !strings.Contains(res.Error, "跳过"):
+	case res.Error != "" && !strings.Contains(res.Error, "跳过") && !strings.Contains(res.Error, "已关闭"):
 		warn(scSys, "版本", "自更新检查失败：%s", res.Error)
 	default:
 		info(scSys, "版本", "已是最新版本 %s", appVersion)
+	}
+}
+
+// updateLoop 启动时查一次，之后按设置的间隔定时复查。
+//
+// 为什么不直接 time.Sleep(N 小时)：用户改完间隔若能立刻生效，
+// 就不用为了"让新间隔生效"重启一次（而重启恰恰是刚改完设置最不想做的事）。
+// 所以固定每分钟醒一次，自己算到点没有 —— 改间隔最迟 1 分钟生效。
+func updateLoop() {
+	runSelfUpdateCheck()
+	last := time.Now()
+	for {
+		time.Sleep(time.Minute)
+		uc := updateSnap()
+		if uc.IntervalHours <= 0 {
+			continue // 0 = 只在启动时查一次
+		}
+		if time.Since(last) < time.Duration(uc.IntervalHours)*time.Hour {
+			continue
+		}
+		runSelfUpdateCheck()
+		last = time.Now()
 	}
 }
 

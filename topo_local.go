@@ -159,9 +159,9 @@ func (LocalProcAdapter) Execute(p Plan) OpResult {
 // Verify 复验。直接走 verifyService——它是 v3.0 判据改造（T1.7）的
 // 系统记录来源，适配器必须复用而不是另写一套，否则复验结论会有两个口径。
 func (LocalProcAdapter) Verify(svc Service, spec VerifySpec) OpResult {
-	wait := verifyWaitBackend
+	wait := verifyWaitBackend()
 	if svc.ID == "web" {
-		wait = verifyWaitWeb
+		wait = verifyWaitWeb()
 	}
 	if spec.WaitSecs > 0 {
 		wait = time.Duration(spec.WaitSecs) * time.Second

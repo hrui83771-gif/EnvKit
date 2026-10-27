@@ -722,7 +722,9 @@
   .ai-pick-item .ic{width:14px;flex:none;text-align:center;color:var(--muted)}
   .ai-pick-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-pick-hint{padding:6px 9px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);line-height:1.5}
-  .ai-plus{background:var(--off)!important;color:var(--muted)!important;border:1px solid var(--line)!important;border-radius:8px;font-size:16px;line-height:1;padding:0 12px!important;cursor:pointer;flex:none}
+  /* 「选择文件引用」小按钮：原来继承 .ai-input button 的 padding:0 12px 被拉成一个大方块，
+     字也比输入框还显眼。这里固定 26×26、贴底（textarea 两行高，居中会飘在中间）。 */
+  .ai-plus{background:var(--off)!important;color:var(--muted)!important;border:1px solid var(--line)!important;border-radius:7px;font-size:13px;line-height:1;padding:0!important;width:26px;height:26px;min-width:26px;align-self:flex-end;margin-bottom:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
   .ai-plus.on{color:var(--brand)!important;border-color:var(--brand)!important}
   @media (max-width:900px){
     #ai-drawer.big{width:100vw}

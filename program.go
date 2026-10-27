@@ -601,7 +601,7 @@ func handleWebStart(w http.ResponseWriter, r *http.Request) {
 	// v2.5：与后端端点同一个修复——点「启动」后当场复验。
 	// 理由见 handleBackendStart 的注释：只反映部分调用路径的复验记录
 	// 会让 ever_verified变成假判据，比不复验更糟。
-	verified := verifyService("web", verifyWaitWeb)
+	verified := verifyService("web", verifyWaitWeb())
 	if !verified.Ok {
 		writeJSON(w, map[string]any{
 			"started": true, "verified": false,
@@ -853,7 +853,7 @@ func handleBackendStart(w http.ResponseWriter, r *http.Request) {
 	//
 	// 同步等待而不是异步：这是用户点按钮，本来就该等结果。
 	// 45s 是上限，正常服务 1~2s 内就绪。
-	verified := verifyService("backend", verifyWaitBackend)
+	verified := verifyService("backend", verifyWaitBackend())
 	if !verified.Ok {
 		// 复验失败不回滚启动——进程可能还在启动中，
 		// 但必须如实说"派生成功但复验没通过"，不能报"已启动"。

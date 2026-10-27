@@ -47,6 +47,9 @@ lesson-outcomes.json
 
 # ---------- 构建产物（发布走 GitHub Releases，不进 git）----------
 *.exe
+# Windows 上 go build 覆盖正在运行的 exe 时会留下改名备份 EnvKit.exe~，
+# 它不匹配上面的 *.exe（结尾是 ~），每次构建都冒出来当未跟踪文件。
+*.exe~
 
 # ---------- 测试临时产物（tools/ 下的正式脚本保留）----------
 tools/_*

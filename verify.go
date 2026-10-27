@@ -33,9 +33,10 @@ import (
 )
 
 // ---------- 复验超时窗口 ----------
+// 前两个是函数不是常量：设置页「启动校验」那组可调（dev.verify_wait_*_secs）。
+// 慢机器上首次 vite 编译经常超过 45 秒，窗口太短会把"还在编译"判成"启动失败"——
+// 这是最伤的一类误判，所以必须能调。其余三个是机制参数，不需要人改。
 const (
-	verifyWaitWeb     = 45 * time.Second // 前端：vue/vite 首次编译常常要 20s+，窗口太短必然假阴性
-	verifyWaitBackend = 25 * time.Second // 后端：go build 已在启动阶段完成，run 起来很快
 	verifyPollEvery   = 2 * time.Second
 	verifyDialTimeout = 700 * time.Millisecond
 	// verifyChainGrowth 共识活性采样窗口。
@@ -46,6 +47,17 @@ const (
 	// 取 1 而非更大值：窗口内只要 view 动过，就说明共识循环没卡死。
 	verifyChainMinViewDelta = 1
 )
+
+// verifyWaitWeb 前端校验窗口。慢机器 / 首次编译调大，只是多等一会儿，不会造成误判。
+func verifyWaitWeb() time.Duration {
+	return time.Duration(devOr(devSnap().VerifyWaitWebSecs, devDefaultVerifyWaitWeb)) * time.Second
+}
+
+// verifyWaitBackend 后端校验窗口。go build 已在启动阶段完成，run 起来很快，
+// 所以默认比前端短。
+func verifyWaitBackend() time.Duration {
+	return time.Duration(devOr(devSnap().VerifyWaitBackendSecs, devDefaultVerifyWaitBackend)) * time.Second
+}
 
 // webaseFetch 链端只读查询的唯一出入口。抽成变量是为了让单测能在不碰真实链的前提下
 // 复现"共识停滞 / 配置错误 / 接口不可达"这些现实分支——链端故障没法在 CI 里制造。
@@ -81,9 +93,9 @@ func verifyServiceInner(target string, wait time.Duration) OpResult {
 		return opFail(action, target, errKindBadConfig, "target 只能是 web 或 backend")
 	}
 	if wait <= 0 {
-		wait = verifyWaitBackend
+		wait = verifyWaitBackend()
 		if target == "web" {
-			wait = verifyWaitWeb
+			wait = verifyWaitWeb()
 		}
 	}
 	ports := svcPortsFn(target)

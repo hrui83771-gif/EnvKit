@@ -403,6 +403,19 @@ func normalizeDev(d *DevConfig) {
 	d.MissionKeepDays = span(d.MissionKeepDays, 1, 3650)
 	d.ServerPort = pos(d.ServerPort)
 	d.PortScanLimit = pos(d.PortScanLimit)
+	// 日志配额：MB 与份数都压界。上限不设太大 —— 单文件 64MB × 30 份已经是
+	// 近 2GB，够任何排查用了；再大就是"日志把磁盘吃满"本身变成故障。
+	d.LogMaxMB = span(d.LogMaxMB, 1, 64)
+	d.SvcLogMaxMB = span(d.SvcLogMaxMB, 1, 64)
+	d.LogKeep = span(d.LogKeep, 1, 30)
+	d.SvcLogKeep = span(d.SvcLogKeep, 1, 30)
+	// 校验窗口下限 10 秒：再短连 TCP 建连都没完成，等于恒定误判。
+	d.VerifyWaitWebSecs = span(d.VerifyWaitWebSecs, 10, 300)
+	d.VerifyWaitBackendSecs = span(d.VerifyWaitBackendSecs, 10, 300)
+	// 重试上限 5 次：再多只是在杀软面前反复撞墙，用户等不起。
+	d.SubprocRetries = span(d.SubprocRetries, 1, 5)
+	d.SubprocBackoffSecs = span(d.SubprocBackoffSecs, 1, 30)
+	d.ExploreMaxKB = span(d.ExploreMaxKB, 16, 1024)
 	// 保留量必须小于触发阈值：尾部预算 ≥ 触发阈值意味着"摘要完还是超标"，
 	// 下一回合又立刻触发，等于把摘要调用变成每回合一次。
 	if d.SummaryAfterTokens > 0 && d.SummaryKeepTokens >= d.SummaryAfterTokens {
@@ -429,6 +442,28 @@ func checkDevConfig(d DevConfig) []configProblem {
 	}
 	if d.ServerPort != 0 && d.PortScanLimit != 0 && d.PortScanLimit <= d.ServerPort {
 		hard("dev.port_scan_limit", "必须大于 server_port（%d），否则顺延与单实例探测都没有名额", d.ServerPort)
+	}
+	// 带上下界的调参项：范围与 normalizeDev 保持一致（normalize 会先压回去，
+	// 这里兜的是"绕过端点直接改 config.json"的情况）。
+	for _, f := range []struct {
+		name   string
+		v      int
+		lo, hi int
+		unit   string
+	}{
+		{"dev.log_max_mb", d.LogMaxMB, 1, 64, "MB"},
+		{"dev.svc_log_max_mb", d.SvcLogMaxMB, 1, 64, "MB"},
+		{"dev.log_keep", d.LogKeep, 1, 30, "份"},
+		{"dev.svc_log_keep", d.SvcLogKeep, 1, 30, "份"},
+		{"dev.verify_wait_web_secs", d.VerifyWaitWebSecs, 10, 300, "秒"},
+		{"dev.verify_wait_backend_secs", d.VerifyWaitBackendSecs, 10, 300, "秒"},
+		{"dev.subproc_retries", d.SubprocRetries, 1, 5, "次"},
+		{"dev.subproc_backoff_secs", d.SubprocBackoffSecs, 1, 30, "秒"},
+		{"dev.explore_max_kb", d.ExploreMaxKB, 16, 1024, "KB"},
+	} {
+		if f.v != 0 && (f.v < f.lo || f.v > f.hi) {
+			hard(f.name, "需在 %d-%d %s，当前 %d", f.lo, f.hi, f.unit, f.v)
+		}
 	}
 	if d.TurnTimeoutSecs != 0 && (d.TurnTimeoutSecs < 30 || d.TurnTimeoutSecs > 3600) {
 		hard("dev.turn_timeout_secs", "需在 30-3600 秒，当前 %d", d.TurnTimeoutSecs)

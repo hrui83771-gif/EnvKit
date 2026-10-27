@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -88,12 +89,16 @@ var (
 // 日志配额：EnvKit 自身与业务服务分别限额。
 // 业务侧单文件略宽（8MB）：前后端 stdout 单行更碎、重启更频繁；
 // 归档份数更少（5 份）：业务日志的排查价值随时间的衰减比 EnvKit 自身快。
+//
+// 这几个常量是**兜底默认**，真正的默认值在 state.go 的 devDefault*（设置页
+// 「日志配额」那组滑块改的就是它们）。两份数字必须同源，所以这里直接引用，
+// 不许再写字面量 —— 否则改了滑块没生效、或者反过来，两种都很难查。
 const (
-	logKeep    = 10      // EnvKit 自身日志归档份数（不含当前文件）
-	logMaxSize = 5 << 20 // EnvKit 自身日志单文件上限
+	logKeep    = devDefaultLogKeep        // EnvKit 自身日志归档份数（不含当前文件）
+	logMaxSize = devDefaultLogMaxMB << 20 // EnvKit 自身日志单文件上限
 
-	svcLogKeep    = 5       // 业务服务日志归档份数
-	svcLogMaxSize = 8 << 20 // 业务服务日志单文件上限
+	svcLogKeep    = devDefaultSvcLogKeep        // 业务服务日志归档份数
+	svcLogMaxSize = devDefaultSvcLogMaxMB << 20 // 业务服务日志单文件上限
 
 	// logLineCap 轮转复验的容量上界里给"单行超长"留的余量。后端偶尔打一整行
 	// JSON 能到几十 KB；1MB 以上的单行会触发复验 warn（只打印、不阻断）——
@@ -101,18 +106,39 @@ const (
 	logLineCap = 1 << 20
 )
 
+// logQuota 生效中的日志配额快照。
+type logQuota struct {
+	keep, svcKeep int
+	max, svcMax   int64
+}
+
+// logQuotaCur 原子快照：写日志的热路径只读它，不取 cfgMu。
+// 锁序说明：写日志时持有 logMu，而别处存在"持 cfgMu 时写日志"的路径；
+// 若这里反过来去取 cfgMu 就是锁序反转（偶发死锁，复现极难）。
+// 所以配额只在启动与保存后由 refreshLogQuota 推一次。
+var logQuotaCur atomic.Value
+
+func refreshLogQuota(d DevConfig) { logQuotaCur.Store(d.logQuotaOf()) }
+
+func logQuotaNow() logQuota {
+	if v, ok := logQuotaCur.Load().(logQuota); ok && v.keep > 0 && v.max > 0 && v.svcMax > 0 && v.svcKeep > 0 {
+		return v
+	}
+	return logQuota{keep: logKeep, svcKeep: svcLogKeep, max: logMaxSize, svcMax: svcLogMaxSize}
+}
+
 func logKeepFor(src string) int {
 	if src == "" {
-		return logKeep
+		return logQuotaNow().keep
 	}
-	return svcLogKeep
+	return logQuotaNow().svcKeep
 }
 
 func logMaxFor(src string) int64 {
 	if src == "" {
-		return logMaxSize
+		return logQuotaNow().max
 	}
-	return svcLogMaxSize
+	return logQuotaNow().svcMax
 }
 
 // logDir 日志目录：默认可执行文件所在目录；测试可覆盖。

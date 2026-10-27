@@ -431,11 +431,13 @@ func execStreamedDetail(scope, src, step, dir string, extra map[string]string, n
 	// 能真正终止它——旧实现只放任务锁不杀子进程，go build 挂死后
 	// 锁放了、编译还在跑，之后任何人都拿不到 backend 组锁。
 	fgKey := scope + "/" + src
-	// 策略：零输出秒退 → 2s 后重试一次 → 仍零输出则改用 cmd /c 包装（见 retry.go）
+	// 策略：零输出秒退 → 退避后重试 → 仍零输出则改用 cmd /c 包装（见 retry.go）
+	// 次数与退避来自设置页（默认 3 次 / 2 秒），这里不写字面量。
 	var last streamResult
+	attempts, backoff := subprocRetry()
 	_, err := runRetry(retryPolicy{
-		Attempts: 3,
-		Backoff:  2 * time.Second,
+		Attempts: attempts,
+		Backoff:  backoff,
 		WrapLast: true,
 		Scope:    scope,
 		Tag:      step,
