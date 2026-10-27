@@ -291,6 +291,17 @@ type lineWriter struct {
 	last   string
 	n      int      // 已产出行数（用于判断子进程是否"零输出秒退"）
 	tail   []string // 最近若干行（给失败摘要用：真实报错必须能原样引用）
+	// afterCR 上一个字节是 '\r'，还没看到后一个字节。
+	//
+	// 为什么需要它：Windows 子进程的输出几乎全是 CRLF，而 '\r' 在这里
+	// **原本被当作"终端回车重绘"直接丢弃当前半行** —— 于是 `Error: xxx\r\n`
+	// 里的 "Error: xxx" 连同换行一起被吞，日志里就只剩"子进程无任何输出"。
+	// v3.4 之前所有"零输出秒退"的误判都从这里来（npm 报 Cannot find module
+	// 却记成"疑似杀毒软件拦截"），而它又极难发现：换个 LF-only 的工具就正常。
+	//
+	// 现在改成延迟判定：'\r' 先记一笔，看下一个字节——是 '\n' 就是行结束（提交），
+	// 不是就当重绘（丢弃半行，让后写的覆盖先写的）。
+	afterCR bool
 }
 
 // 保留多少行用于失败摘要。npm/node 的报错通常是一段栈，前几行是
@@ -344,11 +355,23 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for _, b := range p {
+		if w.afterCR {
+			w.afterCR = false
+			if b == '\n' {
+				// CRLF：'\r' 就是行尾，把已缓冲的内容交出去。
+				// （随后不再处理这个 '\n'，避免重复 emit）
+				w.emitLine()
+				continue
+			}
+			// 单独 '\r' = 终端重绘：丢掉正在写的半行，让后面的内容覆盖它。
+			// 进度条（"50%\r75%\r100%\n"）只有这样才能折叠成一行。
+			w.buf = w.buf[:0]
+		}
 		switch b {
 		case '\n':
 			w.emitLine()
 		case '\r':
-			w.buf = w.buf[:0] // 终端语义：回车回到行首，丢弃当前未完成行
+			w.afterCR = true
 		default:
 			w.buf = append(w.buf, b)
 		}
@@ -359,6 +382,8 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 func (w *lineWriter) flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	// 结尾停在 '\r'（没有跟 '\n'）时，那半行同样是有效内容
+	w.afterCR = false
 	w.emitLine()
 }
 
