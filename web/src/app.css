@@ -732,3 +732,79 @@
   .ai-input textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;font-family:inherit;background:var(--soft);color:var(--text)}
   .ai-input button{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:0 16px;font-weight:600;cursor:pointer}
   .ai-input button:disabled{opacity:.5}
+
+  /* ==================== 设置页（v3.4） ====================
+     三区共用 .cfg-tabs/.cfg-tab/.cfg-pane 的既有观感，只在内容层新增卡片与字段行。
+     注意全局 label{display:block;margin:8px 0 4px} 与 input,select{width:100%;padding:8px 10px}
+     对这里同样生效：滑块的 padding/border/background 必须逐项复位，否则会变成一条粗框。 */
+  .set-note{font-size:12px;color:var(--muted);line-height:1.7;margin:0 0 12px;padding:8px 10px;border-left:3px solid var(--brand2);background:var(--soft);border-radius:0 8px 8px 0}
+  .set-note code{font-family:Consolas,monospace;font-size:11.5px;background:var(--off);padding:1px 4px;border-radius:4px}
+  .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:900px){ .set-grid{grid-template-columns:1fr} }
+  .set-card{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
+  .set-card-head{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+  .set-card-head .t{font-size:13px;font-weight:700;color:var(--text)}
+  .set-card-head .tag{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);background:var(--off);border-radius:999px;padding:2px 8px}
+  .set-card .hint{display:block;line-height:1.55;margin-top:4px}
+  .set-card input[readonly]{background:var(--off);color:var(--muted)}
+  .set-h3{font-size:13px;font-weight:700;color:var(--text);margin:16px 0 8px;display:flex;align-items:baseline;gap:8px}
+  .set-h3 .hint{font-weight:400}
+  /* 只读键值行：值可能是路径/长串，必须能断行；坏值用色标而不是加个 "!" 前缀 */
+  .ro-list{display:flex;flex-direction:column;margin-top:6px}
+  .ro-row{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px;line-height:1.6}
+  .ro-row:last-child{border-bottom:0}
+  .ro-row .k{color:var(--muted);width:118px;flex:none}
+  .ro-row .v{flex:1;min-width:0;word-break:break-all;font-variant-numeric:tabular-nums}
+  .ro-row .v.ok{color:var(--ok);font-weight:600}
+  .ro-row .v.bad{color:var(--err);font-weight:600}
+  .ro-row .v.warn{color:var(--warn);font-weight:600}
+  .ro-empty{font-size:12px;color:var(--muted);padding:6px 0}
+  /* 保存条：跟随内容自然流，**不做 sticky**。
+     sticky bottom 在长页面里会一直浮在视口底部，把「数据库/链端」「顺延上界」这类
+     最后一行输入框压住（截图里肉眼可见），而设置页本来就是一个滚到底才保存的表单。 */
+  .set-savebar{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 12px;background:var(--soft2);border:1px solid var(--line);border-radius:10px}
+  /* 开发者区字段行：说明 | 滑块 | 数字。数字框固定宽度（全局 width:100% 在这里由 grid 列宽约束） */
+  .set-fields{display:grid;gap:9px;margin-top:10px}
+  .set-field{display:grid;grid-template-columns:minmax(160px,1fr) minmax(120px,240px) 92px;gap:12px;align-items:center}
+  .set-field.wide{grid-template-columns:minmax(160px,1fr) 140px}
+  @media (max-width:760px){ .set-field,.set-field.wide{grid-template-columns:1fr;gap:4px} }
+  .set-flabel{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .set-flabel b{font-size:12.5px;font-weight:600;color:var(--text)}
+  .set-flabel .hint{font-size:11.5px}
+  /* 滑块：逐项复位全局 input 规则（padding 8px 10px + 边框 + 底色会让它变成一根粗框） */
+  .set-slider{-webkit-appearance:none;appearance:none;width:100%;height:auto;margin:0;padding:0;border:0;background:transparent;border-radius:0;cursor:pointer}
+  .set-slider::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:var(--off)}
+  .set-slider::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-5px;border-radius:50%;background:var(--brand);border:2px solid var(--card);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+  .set-slider:focus{outline:none;border:0;background:transparent}
+  .set-slider:focus::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--brand-weak)}
+  .set-num{width:100%;text-align:right;font-variant-numeric:tabular-nums;padding:5px 8px;font-size:12.5px}
+  /* 四档评测卡 */
+  .eval-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:900px){ .eval-grid{grid-template-columns:1fr} }
+  .ev-card{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:8px}
+  .ev-card.danger{border-color:var(--warnbg);background:var(--card)}
+  .ev-card.na{opacity:.72}
+  .ev-head{display:flex;align-items:center;gap:8px}
+  .ev-name{font-size:13px;font-weight:700}
+  .ev-badge{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:var(--off);color:var(--muted)}
+  .ev-badge.ro{background:var(--okbg);color:var(--ok)}
+  .ev-badge.rw{background:var(--warnbg);color:var(--warn)}
+  .ev-script{font-family:Consolas,monospace;font-size:11.5px;color:var(--muted);word-break:break-all}
+  .ev-cost{font-size:12px;line-height:1.65;color:var(--text)}
+  .ev-block{font-size:11.5px;color:var(--err);line-height:1.6}
+  .ev-block div::before{content:'· '}
+  .ev-ops{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+  .ev-ops .set-num{width:64px;text-align:center}
+  .ev-ops input[type="text"]{width:120px;padding:5px 8px;font-size:12px}
+  .ev-chk{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text);font-weight:500;margin:0;cursor:pointer;width:auto}
+  .ev-chk input{width:auto;height:auto;margin:0;padding:0;border:0;background:none;accent-color:var(--brand)}
+  .ev-run{margin-top:6px;padding:7px 10px;font-size:12px}
+  /* 产物列表会随批次累积到几十份，限高滚动，别把页面拉成一条长龙 */
+  .ev-reports{display:flex;flex-direction:column;margin-top:4px;max-height:300px;overflow:auto}
+  .ev-rep{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px}
+  .ev-rep:last-child{border-bottom:0}
+  .ev-rep .n{flex:1;min-width:0;word-break:break-all;font-family:Consolas,monospace;font-size:11.5px}
+  .ev-rep .m{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ev-rep .k{font-size:11px;border-radius:999px;padding:1px 7px;background:var(--off);color:var(--muted);white-space:nowrap}
+  .ev-rep .k.report{background:var(--okbg);color:var(--ok)}
+  .ev-rep .k.shadow{background:var(--infobg);color:var(--info)}

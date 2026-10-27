@@ -699,6 +699,212 @@
       <div class="hint" style="margin-top:8px">审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 <code>audit-YYYYMMDD.jsonl</code>）；密码与 API Key 在入库前已脱敏。</div>
     </section>
 
+    <!-- 设置（v3.4：基础 / 开发者 / 评测 三区） -->
+    <section class="panel" id="panel-settings">
+      <div class="phead"><h2>设置 <span class="stepno">基础 · 开发者 · 评测</span></h2></div>
+      <div class="cfg-tabs" id="set-tabs">
+        <button class="cfg-tab on" data-set-tab="base">基础</button>
+        <button class="cfg-tab" data-set-tab="dev">开发者</button>
+        <button class="cfg-tab" data-set-tab="eval">评测</button>
+      </div>
+
+      <!-- ==================== 基础 ==================== -->
+      <div class="cfg-pane show" data-set-pane="base">
+        <div class="set-note">与「程序配置」「链端校验」共用同一份 <code>config.json</code>；每次切到本页都会重新读取最新值，两边不会各存一份。</div>
+        <div class="set-grid">
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">安装与分发</span><span class="tag">本机</span></div>
+            <label for="s_install_dir">安装目录</label>
+            <div class="dirrow"><input id="s_install_dir" placeholder="D:\EnvKit" /><button class="ghost" data-spick="s_install_dir">选择</button></div>
+            <div class="hint">组件、日志与配置都落在这里。改之前先确认新目录已存在。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
+            <label for="s_proxy_http">HTTP 代理</label>
+            <input id="s_proxy_http" placeholder="http://127.0.0.1:7890（留空 = 直连）" />
+            <label for="s_proxy_https">HTTPS 代理</label>
+            <input id="s_proxy_https" placeholder="http://127.0.0.1:7890（留空 = 直连）" />
+            <div class="hint">只影响 EnvKit 自己发起的下载与依赖安装，不改进程级环境变量。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">镜像与校验</span><span class="tag">Go / npm</span></div>
+            <div class="grid">
+              <div><label for="s_goproxy">GOPROXY</label><input id="s_goproxy" placeholder="https://goproxy.cn,direct" /></div>
+              <div><label for="s_gosumdb">GOSUMDB</label><input id="s_gosumdb" placeholder="off" /></div>
+              <div><label for="s_go_cgo">CGO_ENABLED</label><input id="s_go_cgo" placeholder="0" /></div>
+              <div><label for="s_npm_registry">npm 源</label><input id="s_npm_registry" placeholder="https://registry.npmmirror.com" /></div>
+            </div>
+            <div class="hint">留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">项目目录</span><span class="tag">前端 / 后端</span></div>
+            <label for="s_fe_dir">前端目录</label>
+            <div class="dirrow"><input id="s_fe_dir" placeholder="D:\project\web" /><button class="ghost" data-spick="s_fe_dir">选择</button></div>
+            <label for="s_be_dir">后端目录</label>
+            <div class="dirrow"><input id="s_be_dir" placeholder="D:\project\server" /><button class="ghost" data-spick="s_be_dir">选择</button></div>
+            <div class="hint">保存后会同步到「程序启动」的目录显示。</div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">数据库</span><span class="tag">只读</span></div>
+            <div class="ro-list" id="s_db_view"></div>
+            <div class="row"><button class="ghost" data-goto="config">去程序配置修改</button><span class="hint">含密码，所以不在这里再放一份输入框</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">链端</span><span class="tag">只读</span></div>
+            <div class="ro-list" id="s_chain_view"></div>
+            <div class="row"><button class="ghost" data-goto="chain">去链端校验修改</button><span class="hint">字段多且互相约束，集中在一处改更安全</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">界面与更新</span><span class="tag">显示</span></div>
+            <label for="s_app_name">产品名</label>
+            <input id="s_app_name" placeholder="EnvKit" />
+            <label for="s_app_title">副标题</label>
+            <input id="s_app_title" placeholder="统一开发环境助手" />
+            <label for="s_update_url">更新检查地址</label>
+            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">能力开关</span><span class="tag">AI / 桌宠</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
+              <div class="cktext"><b>桌宠天气</b><span class="hint">默认关闭。这是 EnvKit 唯一会外连的功能（wttr.in）</span></div>
+            </div>
+            <div class="dirrow" style="margin-top:8px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">应用</button></div>
+            <div class="ro-list" id="s_ai_view" style="margin-top:8px"></div>
+          </div>
+
+        </div>
+        <div class="set-savebar">
+          <button id="btn-set-save">保存基础设置</button>
+          <button class="ghost" id="btn-set-reload">重新读取</button>
+          <span class="hint" id="h-set-save">—</span>
+        </div>
+      </div>
+
+      <!-- ==================== 开发者 ==================== -->
+      <div class="cfg-pane" data-set-pane="dev">
+        <div class="set-note">这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写 <code>dev</code> 段，不碰其它配置。</div>
+
+        <div class="action">
+          <div class="head"><div class="title">AI 记忆与摘要</div><span class="muted">滚动摘要什么时候触发、保留多少</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>摘要触发阈值</b><span class="hint">历史估算 token 超过该值才压缩</span></div>
+              <input type="range" class="set-slider" id="sd_summary_after" min="1000" max="32000" step="500" />
+              <input type="number" class="set-num" id="sd_summary_after_n" min="0" max="200000" /></div>
+            <div class="set-field"><div class="set-flabel"><b>摘要后保留量</b><span class="hint">尾部原样保留的估算上限</span></div>
+              <input type="range" class="set-slider" id="sd_summary_keep" min="500" max="20000" step="250" />
+              <input type="number" class="set-num" id="sd_summary_keep_n" min="0" max="200000" /></div>
+            <div class="set-field"><div class="set-flabel"><b>至少保留条数</b><span class="hint">摘要后至少原样留几条消息</span></div>
+              <input type="range" class="set-slider" id="sd_keep_msgs" min="2" max="60" step="2" />
+              <input type="number" class="set-num" id="sd_keep_msgs_n" min="0" max="500" /></div>
+            <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="hint">秒；调大容忍慢上游，调小更快发现假死</span></div>
+              <input type="range" class="set-slider" id="sd_turn_timeout" min="30" max="1800" step="30" />
+              <input type="number" class="set-num" id="sd_turn_timeout_n" min="0" max="7200" /></div>
+          </div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">数据保留</div><span class="muted">单位：天；到期自动清理</span></div>
+          <div class="set-fields">
+            <div class="set-field"><div class="set-flabel"><b>审计</b><span class="hint">audit-*.jsonl</span></div>
+              <input type="range" class="set-slider" id="sd_audit_days" min="1" max="365" step="1" />
+              <input type="number" class="set-num" id="sd_audit_days_n" min="0" max="3650" /></div>
+            <div class="set-field"><div class="set-flabel"><b>轨迹</b><span class="hint">trace-*.jsonl（比审计大得多）</span></div>
+              <input type="range" class="set-slider" id="sd_trace_days" min="1" max="180" step="1" />
+              <input type="number" class="set-num" id="sd_trace_days_n" min="0" max="3650" /></div>
+            <div class="set-field"><div class="set-flabel"><b>影子报告</b><span class="hint">shadow-*.json</span></div>
+              <input type="range" class="set-slider" id="sd_shadow_days" min="1" max="365" step="1" />
+              <input type="number" class="set-num" id="sd_shadow_days_n" min="0" max="3650" /></div>
+            <div class="set-field"><div class="set-flabel"><b>行动超期</b><span class="hint">未收口自动记 expired</span></div>
+              <input type="range" class="set-slider" id="sd_mission_dl" min="1" max="180" step="1" />
+              <input type="number" class="set-num" id="sd_mission_dl_n" min="0" max="3650" /></div>
+            <div class="set-field"><div class="set-flabel"><b>行动保留</b><span class="hint">终态保留天数</span></div>
+              <input type="range" class="set-slider" id="sd_mission_keep" min="1" max="180" step="1" />
+              <input type="number" class="set-num" id="sd_mission_keep_n" min="0" max="3650" /></div>
+          </div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">控制台端口</div><span class="status idle" id="st-dev-port">—</span></div>
+          <div class="set-fields">
+            <div class="set-field wide"><div class="set-flabel"><b>起始端口</b><span class="hint">被占用时自动顺延</span></div>
+              <input type="number" class="set-num" id="sd_server_port" min="1024" max="65535" /></div>
+            <div class="set-field wide"><div class="set-flabel"><b>顺延上界</b><span class="hint">必须大于起始端口</span></div>
+              <input type="number" class="set-num" id="sd_port_limit" min="1025" max="65535" /></div>
+          </div>
+          <div class="hint" id="h-dev-port" style="margin-top:8px">改端口需要重启 EnvKit 才生效。</div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">运行时</div><span class="muted">只读</span></div>
+          <div class="ro-list" id="sd_runtime"></div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">模型怪癖</div><span class="muted">自动学习，勿手改</span></div>
+          <div class="ro-list" id="sd_quirk"></div>
+          <div class="hint">上游对参数的接受度不一致（只认 temperature=1、要 max_completion_tokens、不支持工具调用）；这些是踩坑后自动记下来的，不是配置项。</div>
+        </div>
+
+        <div class="action">
+          <div class="head"><div class="title">恢复预算与断路器</div><span class="hint">改这里要手改 config.json 的 recovery 段</span></div>
+          <div class="ro-list" id="sd_recovery"></div>
+          <div class="row"><button class="ghost" id="btn-sd-breaker">重置断路器</button><span class="hint" id="h-sd-breaker">连续失败进了熔断后，用它立刻放行一次探针</span></div>
+        </div>
+
+        <div class="set-savebar">
+          <button id="btn-sd-save">保存开发者配置</button>
+          <button class="ghost" id="btn-sd-reset">恢复默认</button>
+          <span class="hint" id="h-sd-save">—</span>
+        </div>
+      </div>
+
+      <!-- ==================== 评测 ==================== -->
+      <div class="cfg-pane" data-set-pane="eval">
+        <div class="set-note">评测只在开发仓库（含 <code>tools/</code>）下可用；分发版 exe 旁边没有脚本，会如实报「不可用」而不是硬跑。</div>
+
+        <div class="action">
+          <div class="head"><div class="title">环境自检</div><span class="status idle" id="st-eval-env">未检测</span></div>
+          <div class="ro-list" id="ev-env"></div>
+          <div class="row"><button class="ghost" id="btn-ev-refresh">重新检测</button><span class="hint" id="h-ev-env"></span></div>
+        </div>
+
+        <div class="set-h3">四档评测 <span class="hint">越靠前越安全；后两档会改机器状态，必须确认</span></div>
+        <div class="eval-grid" id="ev-kinds"></div>
+
+        <div class="logwrap collapsed" id="lw-eval" style="margin-top:12px">
+          <div class="logbar">
+            <span class="dot" id="ld-eval"></span><span class="t">评测日志</span>
+            <span class="meta" id="lm-eval">0 行</span><span class="sp"></span>
+            <button class="mini" data-log="eval" data-act="copy">复制</button>
+            <button class="mini" data-log="eval" data-act="download">下载</button>
+            <button class="mini" data-log="eval" data-act="light">浅色</button>
+            <button class="mini on" data-log="eval" data-act="auto">自动滚动</button>
+            <button class="mini" data-log="eval" data-act="clear">清空</button>
+            <button class="mini" data-log="eval" data-act="toggle">展开</button>
+          </div>
+          <div class="log" id="log-eval"></div>
+        </div>
+
+        <div class="set-h3">基线 <span class="hint">冻结只能走命令行 --set-baseline，界面只读</span></div>
+        <div class="action"><div class="ro-list" id="ev-baseline"></div><div class="hint" id="h-ev-baseline"></div></div>
+
+        <div class="set-h3">指标看板 <span class="hint">只说明取数来源，不在这里编数字</span></div>
+        <div class="action"><div class="ro-list" id="ev-boards"></div></div>
+
+        <div class="set-h3">历史产物 <span class="hint">docs/eval 下最近 60 份</span></div>
+        <div class="action"><div id="ev-reports" class="ev-reports"></div></div>
+      </div>
+    </section>
+
   </main>
 
   <aside class="sidebar">
@@ -710,6 +916,8 @@
       <div class="nav-sep"></div>
       <div class="nav" data-panel="ai">AI 助手</div>
       <div class="nav" data-panel="audit">操作审计</div>
+      <div class="nav-sep"></div>
+      <div class="nav" data-panel="settings">设置</div>
     </div>
     <div class="svc">
       <div class="svc-head">
@@ -774,7 +982,7 @@
       <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px">
         <img id="about-logo" alt="" style="width:48px;height:48px;border-radius:12px;box-shadow:0 2px 6px rgba(16,24,40,.18)" />
         <div>
-          <p style="margin:0"><b>EnvKit</b> v__APP_VERSION__</p>
+          <p style="margin:0"><b>EnvKit</b> <span id="about-ver">v__APP_VERSION__</span></p>
           <p style="margin:3px 0 0;color:var(--muted)">统一开发环境助手 · 单文件 Go · 零依赖 · 内置 AI 运维助手</p>
         </div>
       </div>

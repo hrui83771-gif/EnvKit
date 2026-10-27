@@ -717,6 +717,13 @@ func evalModelName() string {
 // 由脚本自己写，Go 侧不插手（插手就要复制一份字段口径）。
 func evalBuildArgs(k evalKind, b evalRunReq, outPath string) []string {
 	var a []string
+	// --dry-run 只有两个破坏性档的脚本支持（只列计划、不调模型、不建沙箱）；
+	// gate/smoke 的脚本没有这个参数，argparse 会直接以 exit 2 拒掉。
+	// 这里不传的后果比"预演没生效"更糟：recovery 的预演会真的开始建沙箱，
+	// 3 分钟同步超时把它砍断，留下半截沙箱和占着的端口。
+	if b.DryRun && (k.Key == "recovery" || k.Key == "tasks") {
+		a = append(a, "--dry-run")
+	}
 	if b.Repeat > 0 {
 		a = append(a, "--repeat", strconv.Itoa(b.Repeat))
 	}
