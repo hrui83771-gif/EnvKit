@@ -104,6 +104,47 @@ func TestSelfUpdateAcceptsGitHubRelease(t *testing.T) {
 	}
 }
 
+// 回归（2026-10-27 真发 v3.4.0 时想到的）：GitHub 上 tag 习惯带 `v`，
+// 程序里 appVersion 不带。若比较时不去前缀，发完版第一次检查就会
+// 对用户喊"发现新版本 v3.4.0" —— 而那就是他自己装着的这一版。
+// 属于"把对判成错"那一类：让人去升一个根本升不了的东西。
+func TestSelfUpdateTagPrefixIsNotNewer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"tag_name":"v`+appVersion+`","body":"当前版本"}`)
+	}))
+	defer srv.Close()
+
+	cfgMu.Lock()
+	oldURL := cfg.UpdateURL
+	cfg.UpdateURL = srv.URL
+	cfgMu.Unlock()
+	updMu.Lock()
+	oldUpd := upd
+	updMu.Unlock()
+	defer func() {
+		cfgMu.Lock()
+		cfg.UpdateURL = oldURL
+		cfgMu.Unlock()
+		updMu.Lock()
+		upd = oldUpd
+		updMu.Unlock()
+	}()
+
+	runSelfUpdateCheck()
+
+	updMu.Lock()
+	got := upd
+	updMu.Unlock()
+
+	if got.Error != "" {
+		t.Fatalf("解析失败：%q", got.Error)
+	}
+	if got.HasNew {
+		t.Fatalf("tag=v%s 与 appVersion=%s 是同一版，不该判为新版本：%+v",
+			appVersion, appVersion, got)
+	}
+}
+
 // 回归：Config 浅拷贝共享 AI 指针 —— 脱敏/加密绝不能动到全局内存里的密钥。
 // （真实事故：导出诊断包后 AI 助手 API Key 被清空，直到重启才恢复。）
 func TestConfigCopyKeepsAIKey(t *testing.T) {
