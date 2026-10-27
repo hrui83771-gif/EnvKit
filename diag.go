@@ -183,6 +183,18 @@ func compareSemver(a, b string) int {
 	return 0
 }
 
+// oneLine 把多行说明压成一行并截断：GitHub release 的 body 常是多段 markdown，
+// 原样塞进日志会把一条记录拆成十几行，塞进界面会把卡片撑破。
+func oneLine(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ") // Fields 顺带吃掉换行与连续空白
+	if max > 0 {
+		if r := []rune(s); len(r) > max {
+			return string(r[:max]) + "…"
+		}
+	}
+	return s
+}
+
 func seg(parts []string, i int) string {
 	if i < len(parts) {
 		return strings.TrimSpace(parts[i])
@@ -219,25 +231,60 @@ func runSelfUpdateCheck() {
 	case url == "":
 		res.Error = "未配置 update_url，跳过检查"
 	default:
-		resp, err := httpShort.Get(url)
+		// 两种地址都认：
+		//   ① 自己的静态 version.json —— {"version":"3.4.0","notes":"…"}
+		//   ② GitHub Releases API —— /repos/{o}/{r}/releases/latest，版本号在 tag_name、说明在 body
+		// 认第二种是为了"不用手工维护一个 json"：发 release 就等于发布了版本信息。
+		req, rerr := http.NewRequest(http.MethodGet, url, nil)
+		if rerr != nil {
+			res.Error = rerr.Error()
+			break
+		}
+		// GitHub API 要求带 UA；Go 默认的 Go-http-client 虽然也能过，但限流时
+		// 排查问题看不出是谁在请求，带个项目标识更省事。
+		req.Header.Set("User-Agent", "EnvKit/"+appVersion)
+		req.Header.Set("Accept", "application/vnd.github+json, application/json")
+		resp, err := httpCDN.Do(req) // 8 秒：外网版本检查要求快速失败，别让启动等 20 秒
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
 				var body struct {
 					Version string `json:"version"`
 					Notes   string `json:"notes"`
+					TagName string `json:"tag_name"` // GitHub Releases
+					Body    string `json:"body"`     // GitHub Releases 的说明正文
+					Name    string `json:"name"`     // 自建接口常用 name 兜底
 				}
-				if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&body); err != nil {
+				// 256KB：release 说明带 changelog 时 64KB 会截断成"解析失败"
+				if err := json.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&body); err != nil {
 					res.Error = "响应解析失败：" + err.Error()
 				} else {
-					res.Latest = strings.TrimSpace(body.Version)
-					res.Notes = body.Notes
-					res.HasNew = compareSemver(appVersion, res.Latest) < 0
-					res.Checked = true
-					// 忽略只压提示，不改 HasNew：界面上仍然要能看到"最新是哪个版本"，
-					// 否则用户会以为检查坏了。
-					if res.HasNew && strings.TrimSpace(uc.IgnoreVersion) == res.Latest {
-						res.Ignored = true
+					latest := strings.TrimSpace(body.Version)
+					if latest == "" {
+						latest = strings.TrimSpace(body.TagName)
+					}
+					if latest == "" {
+						latest = strings.TrimSpace(body.Name)
+					}
+					notes := strings.TrimSpace(body.Notes)
+					if notes == "" {
+						notes = strings.TrimSpace(body.Body)
+					}
+					notes = oneLine(notes, 160)
+					if latest == "" {
+						// 地址填成网页（HTML）时 JSON 解析会先失败；能走到这里说明
+						// 是个合法 JSON 但没有版本字段 —— 说清楚缺什么，比"未发现新版本"诚实。
+						res.Error = "响应里没有版本号（需要 version 或 tag_name 字段）"
+					} else {
+						res.Latest = latest
+						res.Notes = notes
+						res.HasNew = compareSemver(appVersion, res.Latest) < 0
+						res.Checked = true
+						// 忽略只压提示，不改 HasNew：界面上仍然要能看到"最新是哪个版本"，
+						// 否则用户会以为检查坏了。
+						if res.HasNew && strings.TrimSpace(uc.IgnoreVersion) == res.Latest {
+							res.Ignored = true
+						}
 					}
 				}
 			} else {
@@ -273,10 +320,11 @@ func updateLoop() {
 	for {
 		time.Sleep(time.Minute)
 		uc := updateSnap()
-		if uc.IntervalHours <= 0 {
+		hours := uc.interval()
+		if hours <= 0 {
 			continue // 0 = 只在启动时查一次
 		}
-		if time.Since(last) < time.Duration(uc.IntervalHours)*time.Hour {
+		if time.Since(last) < time.Duration(hours)*time.Hour {
 			continue
 		}
 		runSelfUpdateCheck()

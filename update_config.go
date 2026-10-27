@@ -2,9 +2,11 @@
 //
 // 与 handleDevConfig / handlePetConfig 同一范式：GET 回显生效值，POST 按指针增量提交。
 //
-// 为什么 update_url 不在这里改：它一直属于 /api/config 的整包表单（老页面早就在用），
-// 挪进来会变成"两个端点写同一个字段"，谁后保存谁覆盖。这里只管
-// 「查不查、多久查、哪个版本别再提示」三个行为开关，URL 仍走基础设置的保存条。
+// 为什么 update_url 也在这里写：URL 虽然住在 Config 顶层（老字段），但界面上
+// 它和"查不查、多久查、哪个版本别再提示"是同一张卡、同一个保存动作。
+// 分成两个端点写只会多出"一半生效"的中间态，所以这里一并接住（见 body.URL）。
+// 老页面 configBody() 仍会把 update_url 带进 /api/config 整包 —— 同一个输入框、
+// 同一个值，不构成两个来源；要彻底拆掉得连老页面的保存条一起改。
 package main
 
 import (
@@ -40,7 +42,7 @@ func updateViewOf() updateView {
 
 	return updateView{
 		Enabled:       u.on(),
-		IntervalHours: u.IntervalHours,
+		IntervalHours: u.interval(), // nil（没配过）也回显成默认值，否则界面显示 0 = 只在启动查
 		IgnoreVersion: u.IgnoreVersion,
 		URL:           url,
 		Result:        res,
@@ -136,10 +138,12 @@ func handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if v > 168 {
 			v = 168
 		}
-		if next.IntervalHours != v {
+		// 和「生效值」比而不是和「存的值」比：原本 nil（=默认 72）时，
+		// 用户把它改成 72 不该算一次改动，也不该因此触发重查。
+		if next.interval() != v {
 			changed = append(changed, "复查间隔")
 		}
-		next.IntervalHours = v
+		next.IntervalHours = &v
 	}
 	if body.IgnoreVersion != nil {
 		v := strings.TrimSpace(*body.IgnoreVersion)
@@ -174,7 +178,7 @@ func handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		auditNow(actUser, "update_config", "config.json", "update", resOK,
 			fmt.Sprintf("已修改：%s", strings.Join(changed, "、")))
 	}
-	// 改了开关或点「立即检查」都重查一次。异步：httpShort 最长 4 秒，
+	// 改了开关或点「立即检查」都重查一次。异步：外网请求最长 8 秒（httpCDN），
 	// 同步等会让前端按钮卡住，而这地方的结果本来就是"稍后刷新看到"。
 	if len(changed) > 0 || body.Recheck {
 		go runSelfUpdateCheck()

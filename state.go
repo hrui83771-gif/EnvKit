@@ -107,12 +107,15 @@ type Config struct {
 	// "dev" 段时为 nil，所有读取点走 devSnap() + getter 兜底，不判空就崩的写法一律不允许。
 	// 老页面的 configBody() 不回传 dev，靠 mergeFormConfig 的 nil 保护不被自动保存抹掉。
 	Dev *DevConfig `json:"dev,omitempty"`
-	// UpdateURL 自版本检查地址（返回 {"version":"x.y.z","notes":"..."} 的 JSON）。
-	// 留空 = 关闭检查。无公开发布渠道时保持为空即可。
+	// UpdateURL 自版本检查地址。两种都认：
+	//   ① 静态 JSON：{"version":"x.y.z","notes":"…"}
+	//   ② GitHub Releases API：/repos/{owner}/{repo}/releases/latest
+	//      （版本取 tag_name、说明取 body —— 发 release 就等于发布了版本信息，不用手工维护 json）
+	// 留空 = 关闭检查。
 	UpdateURL string `json:"update_url"`
 	// Update 自更新检查的行为开关（v3.4，设置页「界面与更新」卡）。
-	// 指针段：老配置没有 "update" 段时为 nil → 一律按"开启、只在启动查一次"处理，
-	// 与 v3.4 之前的行为完全一致。
+	// 指针段：老配置没有 "update" 段时为 nil → 按"开启 + 每 3 天复查一次"处理
+	// （v3.4 里是"只在启动查一次"，节奏太稀，跟着"自动检查更新"一起改成了定时）。
 	Update *UpdateConfig `json:"update,omitempty"`
 	// Notify 全局通知开关（v3.4）。指针段：老配置没有 "notify" 段时为 nil
 	// → 按"不静音"处理，与之前行为完全一致。
@@ -151,12 +154,38 @@ type UpdateConfig struct {
 	// Enabled nil = 开。用指针是为了保住老行为：v3.4 之前只要配了
 	// update_url 就会检查，不能因为升级后多了个默认 false 的布尔就悄悄关掉。
 	Enabled *bool `json:"enabled,omitempty"`
-	// IntervalHours 定时复查间隔（小时）。0 = 只在启动时查一次（老行为）；
+	// IntervalHours 定时复查间隔（小时）。nil = 内置默认（每 3 天一次）；
+	// 显式 0 = 只在启动时查一次（v3.4 的老行为，保留给"不想定时外连"的人）；
 	// >0 = 每 N 小时再查。改这个不用重启，updateLoop 每分钟醒一次自己算。
-	IntervalHours int `json:"interval_hours,omitempty"`
+	//
+	// 为什么从 int 改成 *int：int 下"没配过"和"配成 0"都是 0，就没法让
+	// "默认自动复查"和"显式关掉定时复查"共存 —— 老配置里没有这个字段，
+	// 升级后应当变成自动复查，而不是沿用"只在启动查一次"。
+	IntervalHours *int `json:"interval_hours,omitempty"`
 	// IgnoreVersion 不再提示"有新版本"的版本号（精确匹配 latest）。
 	// 只抑制提示，不抑制检查本身 —— 界面上仍然能看到最新版号。
 	IgnoreVersion string `json:"ignore_version,omitempty"`
+}
+
+// updateDefaultIntervalHours 未配置时的复查间隔：3 天。
+//
+// 为什么是 3 天而不是 1 天：这个检查要外连 GitHub，天天查既没必要也吵；
+// 而一周一次又容易"版本发出去好几天了没人知道"。上限仍由 handleUpdateConfig 卡在 168。
+const updateDefaultIntervalHours = 72
+
+// interval 生效的复查间隔（小时）：nil → 默认 72，负数按 0，上限 168。
+func (u UpdateConfig) interval() int {
+	if u.IntervalHours == nil {
+		return updateDefaultIntervalHours
+	}
+	v := *u.IntervalHours
+	if v < 0 {
+		return 0
+	}
+	if v > 168 {
+		return 168
+	}
+	return v
 }
 
 // on 是否允许检查（nil 视为开）。

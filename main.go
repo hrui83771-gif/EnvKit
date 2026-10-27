@@ -27,7 +27,7 @@ var embeddedConfig []byte
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
 	appVersion = "3.4.0"
-	buildDate  = "2026-10-19"
+	buildDate  = "2026-10-27"
 )
 
 //go:embed web/index.html

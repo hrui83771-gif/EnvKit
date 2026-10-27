@@ -87,6 +87,8 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 
 **操作审计**：主体、动作、目标、结果、耗时、复验结论、trace_id，按天分文件保留 30 天。
 
+**设置**：一页三区（基础 11 卡 / 开发者 8 组 / 评测四档）。日志配额、校验窗口、重试次数、AI 读取上限这些原本写死的常量都能改，改完即生效；更新检查默认每 3 天查一次 GitHub Releases；全局静音一键停掉所有主动通知。
+
 **托盘**：右键打开控制台 / 程序配置 / 日志目录；隐藏窗口到托盘，退出前停掉前后端。
 
 ## 桌宠
@@ -112,7 +114,7 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 
 ### 下载
 
-从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载 `EnvKit-v3.2.0-win64.zip`，解压后运行 `安装.bat`（复制到 `%LOCALAPPDATA%\EnvKit` 并建桌面快捷方式），或直接双击 `EnvKit.exe`——单文件、免安装。控制台默认 `http://127.0.0.1:18765`，端口冲突时自动避让。
+从 [Releases](https://github.com/hrui83771-gif/EnvKit/releases) 下载 `EnvKit-v3.4.0-win64.zip`，解压后运行 `安装.bat`（复制到 `%LOCALAPPDATA%\EnvKit` 并建桌面快捷方式），或直接双击 `EnvKit.exe`——单文件、免安装。控制台默认 `http://127.0.0.1:18765`，端口冲突时自动避让。
 
 ### 从源码构建
 
@@ -162,7 +164,7 @@ Go 代码在模块根（`package main`），Windows 平台相关代码在 `inter
 
 ## 版本
 
-当前 **3.2.0**。这一版的改动见 [`docs/RELEASE-v3.2.0.md`](docs/RELEASE-v3.2.0.md)，历史路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+当前 **3.4.0**。这一版的改动见 [`docs/RELEASE-v3.4.0.md`](docs/RELEASE-v3.4.0.md)，历史路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
 ## 许可证
 

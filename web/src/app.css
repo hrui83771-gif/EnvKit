@@ -225,6 +225,18 @@
   #confirm .mbox.danger .mhead{background:#c0392b;color:#fff}
   #confirm .mbox.danger #cf-msg{border-left:3px solid #c0392b;padding-left:12px;margin-left:14px}
   #confirm .mbox.danger #cf-ok{background:#c0392b}
+  /* 确认弹窗的正文必须自己能滚。
+     评测「预演」会把脚本 stdout（最多 6000 字）塞进 #cf-msg：原来它没有 overflow，
+     内容把 .mbox 撑到超过 max-height 后被 overflow:hidden 裁掉 —— 表现就是
+     「没滚动条、后半截看不见、底部的关闭按钮也被顶到看不见的地方」，等于关不掉。
+     flex:1 让正文吃剩余空间，min-height:0 是必须的（flex 子项默认 min-height:auto，
+     不写这行它就不肯收缩，照样撑爆父容器）。 */
+  #confirm .mbox{width:min(460px,92vw)}
+  #confirm .mbox.wide{width:min(840px,94vw)}
+  #confirm .mfoot{flex:none}
+  #cf-msg{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+  /* 预演/评测输出是控制台文本，等宽字更接近它本来的样子 */
+  #confirm .mbox.mono #cf-msg{font-family:Consolas,Menlo,monospace;font-size:12px}
   .log.light .err{color:#c0392b}.log.light .warn{color:#9a6b00}.log.light .ok{color:#1f7a44}.log.light .INFO{color:#2b5f9e}
   .muted{color:var(--muted);font-size:12px}
   .mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--info);word-break:break-all}

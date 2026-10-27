@@ -231,6 +231,18 @@
   #confirm .mbox.danger .mhead{background:#c0392b;color:#fff}
   #confirm .mbox.danger #cf-msg{border-left:3px solid #c0392b;padding-left:12px;margin-left:14px}
   #confirm .mbox.danger #cf-ok{background:#c0392b}
+  /* 确认弹窗的正文必须自己能滚。
+     评测「预演」会把脚本 stdout（最多 6000 字）塞进 #cf-msg：原来它没有 overflow，
+     内容把 .mbox 撑到超过 max-height 后被 overflow:hidden 裁掉 —— 表现就是
+     「没滚动条、后半截看不见、底部的关闭按钮也被顶到看不见的地方」，等于关不掉。
+     flex:1 让正文吃剩余空间，min-height:0 是必须的（flex 子项默认 min-height:auto，
+     不写这行它就不肯收缩，照样撑爆父容器）。 */
+  #confirm .mbox{width:min(460px,92vw)}
+  #confirm .mbox.wide{width:min(840px,94vw)}
+  #confirm .mfoot{flex:none}
+  #cf-msg{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+  /* 预演/评测输出是控制台文本，等宽字更接近它本来的样子 */
+  #confirm .mbox.mono #cf-msg{font-family:Consolas,Menlo,monospace;font-size:12px}
   .log.light .err{color:#c0392b}.log.light .warn{color:#9a6b00}.log.light .ok{color:#1f7a44}.log.light .INFO{color:#2b5f9e}
   .muted{color:var(--muted);font-size:12px}
   .mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--info);word-break:break-all}
@@ -1555,10 +1567,10 @@
               <div class="cktext"><b>检查新版本</b></div>
             </div>
             <label for="s_update_url">更新地址</label>
-            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+            <input id="s_update_url" placeholder="留空 = 不检查（可填 Releases API 或 version.json）" />
             <div class="grid">
               <div><label for="s_upd_interval">复查间隔（小时）</label>
-                <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 仅启动时" /></div>
+                <input id="s_upd_interval" type="number" min="0" max="168" placeholder="72（0 = 仅启动时）" /></div>
               <div><label for="s_upd_ignore">忽略版本</label>
                 <input id="s_upd_ignore" placeholder="如 3.5.0" /></div>
             </div>
@@ -1842,7 +1854,7 @@
 </div>
 
 <div class="modal" id="confirm">
-  <div class="mbox" style="width:min(460px,92vw)">
+  <div class="mbox">
     <div class="mhead" id="cf-title">确认</div>
     <div id="cf-msg" style="padding:14px 16px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all"></div>
     <div class="mfoot">
@@ -2050,11 +2062,13 @@ const APP_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACq
    译文由 DOM 文本节点/属性替换完成，并用 MutationObserver 覆盖动态渲染的内容，
    因此新增界面文案只要补进 I18N_EN 即可（tools/i18n_inventory.py 可查漏）。 */
 const I18N_EN = {
+  "\n\n……输出较长，只显示前 6000 字": "\n\n…output is long; showing the first 6000 characters",
   "- 内容 | 标签": "- Content | Tags",
   "0 = 只在启动时查一次": "0 = check once at startup only",
   "0 行": "0 lines",
   "08:30；填 off 关闭晨报": "08:30; \"off\" disables the briefing",
   "1) 本机代理（Clash / V2Ray 等，常见 127.0.0.1:7890）没有绕过 localhost：\n   在代理的「绕过 / 例外 / Bypass」里加入 127.0.0.1;localhost;::1\n2) 或换一个不走系统代理的浏览器打开本控制台\n\n验证：到「AI 助手」页点「检测请求传输」，显示\"发送 N / 收到 N\"即已修好。": "1) A local proxy (Clash / V2Ray, often 127.0.0.1:7890) is not bypassing localhost:\n   add 127.0.0.1;localhost;::1 to its bypass / exception list\n2) Or open this console in a browser that does not use the system proxy\n\nVerify: open the AI panel and click \"Test request transport\" — \"sent N / received N\" means fixed.",
+  "72（0 = 仅启动时）": "72 (0 = startup only)",
   "=仅供参考、": "= for reference only,",
   "=多数时候成立、": "= holds most of the time,",
   "AI": "AI",
@@ -2126,6 +2140,15 @@ const I18N_EN = {
   "{0} 行": "{0} rows",
   "{0} 轮 / {1} 份报告": "{0} runs / {1} reports",
   "{0} 项通过": "{0} checks passed",
+  "{0}°，{1}，正合适。": "{0}°, {1} — just right.",
+  "{0}°，{1}，还算舒服。": "{0}°, {1} — comfortable enough.",
+  "{0}°，冷，多穿一件。": "{0}°, cold. Wear one more layer.",
+  "{0}°，夏天这么冷，你确定没看错？": "{0}°? This cold in summer — are you sure?",
+  "{0}°，有点凉，加件外套。": "{0}°, a bit chilly. Grab a jacket.",
+  "{0}°，热，水别断。": "{0}°, hot. Keep the water coming.",
+  "{0}°，这温度能把鱼烤干，别在外面待着。": "{0}° — hot enough to dry a fish out. Stay inside.",
+  "{0}°，零下，裹好再出门。": "{0}°, below zero. Wrap up before heading out.",
+  "{0}°？冬天这么暖，有点不对劲。": "{0}°? This warm in winter is a bit off.",
   "{0}（与脚本一致）": "{0} (matches the scripts)",
   "{0}，{1}！环境很健康": "{0}, {1}! Environment looks healthy",
   "{0}，环境很健康": "{0}, environment looks healthy",
@@ -2160,6 +2183,7 @@ const I18N_EN = {
   "下载": "Download",
   "下载代理 HTTPS（可选）": "Download proxy HTTPS (optional)",
   "下载代理 HTTP（可选）": "Download proxy HTTP (optional)",
+  "下雪了，路上滑，慢点走。": "It's snowing. Roads are slippery — take it slow.",
   "不主动提示。\n          标「已失效」的项目/环境变了，该条不会注入——": "not surfaced proactively.\n          Items marked \"expired\" changed project or environment and are no longer injected —",
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
   "不发送温度": "Temperature is not sent",
@@ -2186,6 +2210,7 @@ const I18N_EN = {
   "仅执行 SQL": "Apply SQL only",
   "仅相关时": "When relevant",
   "仅覆盖最近 {0} 天（轨迹保留期）": "Covers last {0} days (trace retention)",
+  "今天{0}，出门看一眼天。": "{0} today. Take a look outside before you head out.",
   "今日统计": "Today's usage",
   "今日（本机累计）": "Today (local)",
   "仍有 {0} 个组件未就绪": "{0} component(s) still not ready",
@@ -2404,6 +2429,7 @@ const I18N_EN = {
   "团子": "Dango",
   "固定发 1（该模型只接受 1）": "Always sends 1 (this model accepts only 1)",
   "在呢~": "Here~",
+  "在打雷，能不出门就别出去。": "Thunder out there — stay in if you can.",
   "城市，如 上海 / Shanghai": "City, e.g. Shanghai",
   "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
   "基础": "Basics",
@@ -2420,10 +2446,13 @@ const I18N_EN = {
   "复验环境状态": "Verify environment state",
   "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
+  "外面在下雨，伞带上。": "It's raining. Take an umbrella.",
+  "外面有{0}，窗户关一下。": "There's {0} outside — shut the window.",
   "夜深了，注意休息": "It's late — get some rest",
   "大肥鱼坐得住": "A chubby fish knows how to sit tight",
   "大肥鱼坐的住": "A chubby fish can sit still",
   "天": "days",
+  "天气不错": "nice weather",
   "天气已关闭": "Weather disabled",
   "天气已开启（{0}）": "Weather enabled ({0})",
   "天气数据不完整": "Incomplete weather data",
@@ -2941,7 +2970,7 @@ const I18N_EN = {
   "界面": "Interface",
   "界面与更新": "Appearance & updates",
   "留空 = 0.3（部分模型只接受 1，会自动适配）": "Empty = 0.3 (some models only accept 1; auto-adapted)",
-  "留空 = 不检查更新": "Empty = no update check",
+  "留空 = 不检查（可填 Releases API 或 version.json）": "Empty = no check (Releases API or version.json)",
   "留空 = 不检查（返回 version/notes 的 JSON）": "Empty = no check (JSON returning version/notes)",
   "留空 = 只弹桌面气泡，不外发": "Empty = desktop bubble only, nothing sent out",
   "留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。": "Empty = system default. After changing a mirror, re-run the install from Configure → Dependencies.",
@@ -3724,18 +3753,28 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeBrowser(); 
 
 /* ---------- 二次确认 ---------- */
 let cfResolveFn = null;
-function askConfirm(title, msg, okText, danger, cancelText){
+// opts：{wide: 更宽的弹窗, mono: 正文用等宽字}。评测「预演」塞的是脚本 stdout，
+// 窄框 + 比例字体会让几千字变成一大坨，所以单独给一个宽版。
+function askConfirm(title, msg, okText, danger, cancelText, opts){
   $('#cf-title').textContent = title;
   $('#cf-msg').textContent = msg;
   $('#cf-ok').textContent = okText || '确定';
   $('#cf-cancel').textContent = cancelText || '取消';
-  document.querySelector('#confirm .mbox').classList.toggle('danger', !!danger);
+  const box = document.querySelector('#confirm .mbox');
+  box.classList.toggle('danger', !!danger);
+  // 每次都显式覆盖，避免上一次的宽/等宽样式留到下一个确认框
+  box.classList.toggle('wide', !!(opts && opts.wide));
+  box.classList.toggle('mono', !!(opts && opts.mono));
+  $('#cf-msg').scrollTop = 0;   // 长文本从第一行开始看，别停在上次滚到的位置
   $('#confirm').classList.add('show');
   return new Promise(res=>{ cfResolveFn = res; });
 }
 function closeConfirm(v){ $('#confirm').classList.remove('show'); document.querySelector('#confirm .mbox').classList.remove('danger'); if(cfResolveFn){ cfResolveFn(v); cfResolveFn = null; } }
 $('#cf-ok').onclick = ()=>closeConfirm(true);
 $('#cf-cancel').onclick = ()=>closeConfirm(false);
+// 点遮罩空白处也能关。长内容弹窗里「找不到关闭按钮」时，这是最后一条退路
+// （ESC 同样有效，见上面的 keydown 监听）。
+$('#confirm').addEventListener('click', e=>{ if(e.target.id==='confirm') closeConfirm(false); });
 
 /* ---------- 关于 / 免责声明 ---------- */
 $('#btn-about').onclick = ()=>$('#about').classList.add('show');
@@ -3827,6 +3866,34 @@ function ekGreetText(){
   const g = t(h<5?'夜深了，注意休息':h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好');
   const nm = (ekProfile.name || '').trim();
   return nm ? t('{0}，{1}！环境很健康', g, nm) : t('{0}，环境很健康', g);
+}
+
+/* 天气问候句：把「今天什么天 + 多少度 + 什么季节」揉成一句人话。
+   单独成函数是为了 CDP 能直接喂假数据断言（不必真去查 wttr.in）。
+   顺序是"先看天再看温度"——下不下雨决定今天要不要带伞，比"多少度"更有用。 */
+function ekWeatherLine(w){
+  if(!w) return '';
+  const desc = String(w.desc || '').trim();
+  const temp = parseInt(String(w.temp_c == null ? '' : w.temp_c).replace(/[^\d-]/g, ''), 10);
+  const ok = isFinite(temp);
+  const m = new Date().getMonth() + 1;
+  const summer = m >= 6 && m <= 8, winter = m === 12 || m <= 2;
+  if(/雷/.test(desc)) return t('在打雷，能不出门就别出去。');
+  if(/雪/.test(desc)) return t('下雪了，路上滑，慢点走。');
+  if(/雨/.test(desc)) return t('外面在下雨，伞带上。');
+  if(/雾|霾/.test(desc)) return t('外面有{0}，窗户关一下。', desc);
+  if(!ok) return desc ? t('今天{0}，出门看一眼天。', desc) : '';
+  /* 季节 + 温度的矛盾组合单独说一句：冬天 26°、夏天 5° 这种，
+     泛泛的"加件外套"就不如直接吐槽一句像人。 */
+  if(winter && temp >= 24) return t('{0}°？冬天这么暖，有点不对劲。', temp);
+  if(summer && temp <= 8) return t('{0}°，夏天这么冷，你确定没看错？', temp);
+  if(temp >= 35) return t('{0}°，这温度能把鱼烤干，别在外面待着。', temp);
+  if(temp >= 30) return t('{0}°，热，水别断。', temp);
+  if(temp >= 24) return t('{0}°，{1}，还算舒服。', temp, desc || t('天气不错'));
+  if(temp >= 16) return t('{0}°，{1}，正合适。', temp, desc || t('天气不错'));
+  if(temp >= 8)  return t('{0}°，有点凉，加件外套。', temp);
+  if(temp >= 0)  return t('{0}°，冷，多穿一件。', temp);
+  return t('{0}°，零下，裹好再出门。', temp);
 }
 
 (function(){
@@ -5481,6 +5548,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     return s;
   }
   let mcCb = null;          // 迷你确认卡回调 {yes, no}
+  let lastSaid = '';        // 最近一条气泡文案（天气补全前要靠它判断"还是不是原来那句"）
   let lastErr = null;       // {scope, el} 最近一条错误日志（深链落点）
   let warnDetail = '';      // warn 态气泡文案（缺哪些组件）
 
@@ -5490,6 +5558,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   /* ---------- 泡泡与粒子 ---------- */
   function say(html, sticky, inner){
     clearTimeout(bubbleTimer);
+    lastSaid = html;
     bubble.innerHTML = html;
     bubble.classList.toggle('inner', !!inner);
     pet.classList.add('show-bubble');
@@ -5826,6 +5895,26 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
       say(t('天气没查到：连不上服务'));
     }
   }
+  /* 开场问候里补一句天气（仅在天气能力开启时）。
+     为什么不阻塞问候：首次查 wttr.in 可能 1~3 秒，让"早上好"等天气才开口，
+     开机那下就会明显卡顿。改成先说问候、拿到天气再把同一句补全 ——
+     用户看到的是一条消息长出来，而不是两条消息互相覆盖。
+     超过 4 秒就放弃：那时气泡早自动收了，突然冒出来更像故障。 */
+  async function petGreetWeather(greet){
+    if(!petWeatherOn) return;
+    const t0 = Date.now();
+    try{
+      const r = await fetch('/api/pet/weather');
+      const j = await r.json();
+      if(Date.now() - t0 > 4000) return;
+      if(!j || j.enabled === false || j.error) return;
+      const line = ekWeatherLine(j);
+      if(!line) return;
+      // 期间用户说了别的（或状态不再是待机）就不补，别把人家刚说的话盖掉
+      if(lastSaid !== greet || st !== 'idle') return;
+      say(greet + '。' + line);
+    }catch(_){}
+  }
   /* 待机小动作（原版 _maybe_idle_action：蹦跳/摇摆/伸懒腰/日常台词/心声） */
   function petHop(){ pet.classList.add('hop'); setTimeout(()=>pet.classList.remove('hop'), 660); }
   function petStretch(){ pet.classList.add('stretch'); setTimeout(()=>pet.classList.remove('stretch'), 920); }
@@ -6154,7 +6243,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(st!=='idle') return;
     if(document.body.classList.contains('pet-gone')) return;   // 已被彻底隐藏就不开口
     // 有人设了昵称就带上：问候是唯一适合直呼其名的场景
-    say(ekGreetText());
+    const greet = ekGreetText();
+    say(greet);
+    petGreetWeather(greet);   // 天气开着就补一句（不阻塞上面这句）
   }, 1200);
 })();
 
@@ -8659,7 +8750,13 @@ async function ekEvRun(kind, dry){
     return;
   }
   if(j.dry_run){
-    await askConfirm(t('预演：{0}', k.name), (j.output || t('（无输出）')).slice(0,6000), t('知道了'), false, t('关闭'));
+    // 预演输出是脚本 stdout，几千字很正常：给宽版 + 等宽字体，正文区自己滚
+    // （CSS #cf-msg 的 overflow:auto）。截断要明说，别让人以为脚本就输出这些。
+    const raw = j.output || t('（无输出）');
+    const cut = raw.length > 6000;
+    await askConfirm(t('预演：{0}', k.name),
+      raw.slice(0, 6000) + (cut ? t('\n\n……输出较长，只显示前 6000 字') : ''),
+      t('知道了'), false, t('关闭'), {wide:true, mono:true});
     await ekEvLoad();
     return;
   }
@@ -8767,7 +8864,10 @@ async function ekSetLoadNotify(){
   try{
     const n = await fetch('/api/notify/config').then(r=>r.json());
     EK_EXT.notify = {muted: !!n.muted};
-    $('#s_notify_mute').checked = !n.muted;   // 勾选 = 通知开启（开关"开"对应"有通知"）
+    // 开关名字就叫「全局静音」，所以开关"开"必须等于 muted=true。
+    // 曾经这里写成 !n.muted（勾上=通知开），标签和状态正好相反 ——
+    // 用户看到的"亮着"其实是通知开着，点一下反而把自己静音了。
+    $('#s_notify_mute').checked = !!n.muted;
     ekSetRenderNotifyState();
   }catch(e){
     EK_EXT.notify = null;
@@ -8793,10 +8893,10 @@ function ekSetRenderNotifyState(err){
 }
 
 async function ekSetSaveNotify(){
-  const on = $('#s_notify_mute').checked;
+  const muted = $('#s_notify_mute').checked;   // 开关开 = 静音开
   try{
     const r = await fetch('/api/notify/config',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({muted: !on})});
+      body:JSON.stringify({muted: muted})});
     if(!r.ok){ toast(t('保存失败：') + (await r.text()).trim(), 'err'); return; }
     const j = await r.json();
     EK_EXT.notify = {muted: !!j.muted};

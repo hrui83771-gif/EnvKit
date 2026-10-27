@@ -116,5 +116,11 @@
     "weather_enabled": false,
     "weather_city": ""
   },
-  "update_url": ""
+  "update_url": "https://api.github.com/repos/hrui83771-gif/EnvKit/releases/latest",
+  "update": {
+    "interval_hours": 72
+  },
+  "notify": {
+    "muted": false
+  }
 }

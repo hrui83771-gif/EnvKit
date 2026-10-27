@@ -750,10 +750,10 @@
               <div class="cktext"><b>检查新版本</b></div>
             </div>
             <label for="s_update_url">更新地址</label>
-            <input id="s_update_url" placeholder="留空 = 不检查更新" />
+            <input id="s_update_url" placeholder="留空 = 不检查（可填 Releases API 或 version.json）" />
             <div class="grid">
               <div><label for="s_upd_interval">复查间隔（小时）</label>
-                <input id="s_upd_interval" type="number" min="0" max="168" placeholder="0 = 仅启动时" /></div>
+                <input id="s_upd_interval" type="number" min="0" max="168" placeholder="72（0 = 仅启动时）" /></div>
               <div><label for="s_upd_ignore">忽略版本</label>
                 <input id="s_upd_ignore" placeholder="如 3.5.0" /></div>
             </div>
@@ -1037,7 +1037,7 @@
 </div>
 
 <div class="modal" id="confirm">
-  <div class="mbox" style="width:min(460px,92vw)">
+  <div class="mbox">
     <div class="mhead" id="cf-title">确认</div>
     <div id="cf-msg" style="padding:14px 16px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all"></div>
     <div class="mfoot">

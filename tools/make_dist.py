@@ -70,7 +70,11 @@ def read_version():
 
 def build_exe():
     print("== go build -trimpath ==")
-    r = subprocess.run(["go", "build", "-trimpath", "-ldflags", "-s -w", "-o", EXE, "."],
+    # buildDate 必须跟着打包这天走：main.go 里的默认值是占位，不注入的话
+    # 界面「关于」和诊断报告会一直显示上一个发版日，看起来像发错版本。
+    import datetime
+    flags = "-s -w -X main.buildDate=%s" % datetime.date.today().isoformat()
+    r = subprocess.run(["go", "build", "-trimpath", "-ldflags", flags, "-o", EXE, "."],
                        cwd=ROOT, capture_output=True, text=True, shell=True)
     if r.returncode != 0:
         sys.exit("构建失败：\n" + (r.stderr or r.stdout))
