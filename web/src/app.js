@@ -517,6 +517,7 @@ const I18N_EN = {
   "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
   "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
   "已停用": "Retired",
+  "已删除预案「{0}」": "Playbook \"{0}\" deleted",
   "已加白名单": "Whitelisted",
   "已发起检查，几秒后刷新状态": "Check started; status refreshes in a few seconds",
   "已发送到 {0}": "Sent to {0}",
@@ -5345,13 +5346,22 @@ async function aiPbkOp(id, op, state){
 }
 
 async function aiPbkDel(p){
-  const yes = await askConfirm(t('删除预案'), t('确定删除「{0}」？历史统计会一起丢掉。', p.title), t('删除'), true);
+  // 确认框本身出异常时不能静默：原来这里没有 try 包住 askConfirm，
+  // 一旦弹窗层坏掉（例如被 AI 侧栏压住点不到，见 app.css .modal 的注释），
+  // 表现就是"点了删除什么都没发生"，连日志都没有。宁可弹原生 confirm 兜底。
+  let yes = false;
+  try{
+    yes = await askConfirm(t('删除预案'), t('确定删除「{0}」？历史统计会一起丢掉。', p.title), t('删除'), true);
+  }catch(_){
+    yes = window.confirm(t('确定删除「{0}」？历史统计会一起丢掉。', p.title));
+  }
   if(!yes) return;
   try{
     const r = await fetch('/api/playbooks', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({op:'delete', id: p.id})});
     const d = await r.json();
     if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    toast(t('已删除预案「{0}」', p.title));
     aiPbkLoad(true);
   }catch(_){ toast(t('操作失败'), 'err'); }
 }

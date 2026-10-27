@@ -205,6 +205,34 @@ func TestPbkFromMission(t *testing.T) {
 	}
 }
 
+// TestPbkFromMissionRejectsDuplicate 同一个行动点两次「存为预案」只能得到一条。
+//
+// 这不是洁癖：两条同源预案在界面上标题/步骤/统计完全一样，删掉一条另一条还在，
+// 看起来就是"删除不生效"。去重要在锁内读文件，否则连点两下仍可能双写。
+func TestPbkFromMissionRejectsDuplicate(t *testing.T) {
+	defer withMissionEnv(t)()
+
+	m, _ := missionNew("检查数据库", Trigger{Kind: "manual"})
+	if _, err := missionUpdate(m.ID, func(x *Mission) error {
+		x.Plan = []PlanStepRecord{{Seq: 1, Tool: "get_logs", Why: "看日志", OK: true}}
+		return nil
+	}); err != nil {
+		t.Fatalf("注入步骤: %v", err)
+	}
+
+	first, err := pbkFromMission(m.ID, "")
+	if err != nil {
+		t.Fatalf("第一次沉淀应当成功：%v", err)
+	}
+	_, err = pbkFromMission(m.ID, "")
+	if err == nil || !strings.Contains(err.Error(), first.Title) {
+		t.Fatalf("第二次必须被拒并说清是哪一条，实为 %v", err)
+	}
+	if n := len(pbkList()); n != 1 {
+		t.Fatalf("重复沉淀后应仍只有 1 条，实际 %d 条", n)
+	}
+}
+
 // TestPbkFromMissionRejects 沉淀的两条拒绝路径：没步骤 / 工具名不存在。
 func TestPbkFromMissionRejects(t *testing.T) {
 	defer withMissionEnv(t)()

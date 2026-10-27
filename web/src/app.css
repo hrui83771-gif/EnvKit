@@ -308,7 +308,15 @@
   .tbar .tbtn:hover{color:#e4eaf2}
   #term-wrap{height:300px;min-height:180px;max-height:85vh;resize:vertical;overflow:hidden;background:#10161f;padding:4px}
   #term{height:100%}
-  .modal{display:none;position:fixed;inset:0;background:rgba(8,12,18,.55);z-index:50;align-items:center;justify-content:center}
+  /* 层级顺序是有意排的，别单独调其中一个：
+       header 5 < 菜单 40/60 < .modal 80 < #toasts 95 < 桌宠右键 999。
+     这里原来是 50，比 #ai-drawer 的 65 低 —— 从行动 tab 里点「删除预案」
+     弹出的确认框整个被侧栏压住：看得见一小半，右下角的「删除」正好在侧栏底下，
+     真实鼠标点上去命中的是侧栏，于是"点了没反应"，后端连请求都收不到
+     （审计日志里一条 playbook_delete 都没有）。CDP 的 element.click() 会绕过
+     命中测试，所以这类 bug 只有 elementFromPoint 查得出来，见
+     tools/cdp_p2_mission_test.js 的遮挡断言。 */
+  .modal{display:none;position:fixed;inset:0;background:rgba(8,12,18,.55);z-index:80;align-items:center;justify-content:center}
   .modal.show{display:flex}
   .mbox{background:var(--card);border-radius:12px;width:min(620px,92vw);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
   .mhead{padding:13px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:15px}

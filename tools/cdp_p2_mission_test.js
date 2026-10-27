@@ -267,6 +267,74 @@ function seed() {
     ok('待复审标黄', /\bwarn\b/.test(s.pbkCls[1]), s.pbkCls[1]);
     ok('已停用置灰且给「启用」', /\bdim\b/.test(s.pbkCls[2]) && (s.pbkBtns[2] || []).indexOf('启用') >= 0, s.pbkBtns[2]);
 
+    // ---- 删除预案（此前完全没有断言，结果按钮坏了回归照样全绿）----
+    // 断言两层：① 点下去必须真的弹确认框（否则是"点了没反应"）；
+    //           ② 确认后列表和磁盘都必须真的少一条（否则是"删了还在"）。
+    const delClick = await evalJS(`(function(){
+      const rows = [].slice.call(document.querySelectorAll('#ai-pbk .ai-pbk-row'));
+      const row = rows.find(r => /\\bdim\\b/.test(r.className));
+      if (!row) return JSON.stringify({ err: 'no-row' });
+      const b = [].slice.call(row.querySelectorAll('button')).find(x => x.textContent === '删除');
+      if (!b) return JSON.stringify({ err: 'no-btn' });
+      b.click();
+      const c = document.getElementById('confirm');
+      return JSON.stringify({
+        shown: c ? c.classList.contains('show') : false,
+        title: (document.getElementById('cf-title') || {}).textContent || '',
+        okText: (document.getElementById('cf-ok') || {}).textContent || '',
+        danger: c ? c.querySelector('.mbox').classList.contains('danger') : false,
+        msg: (document.getElementById('cf-msg') || {}).textContent || '',
+      });
+    })()`);
+    const dc = JSON.parse(delClick);
+    console.log('DELCLICK ' + delClick);
+    ok('点「删除」会弹确认框', !dc.err && dc.shown === true, dc);
+    ok('确认框标题是「删除预案」', /删除预案/.test(dc.title || ''), dc.title);
+    ok('确认框去掉按钮写「删除」且为危险样式', dc.okText === '删除' && dc.danger === true,
+      [dc.okText, dc.danger]);
+    ok('确认框点明会连带丢掉历史统计', /历史统计/.test(dc.msg || ''), dc.msg);
+
+    // 遮挡检测（本 bug 的真正原因，也是 CDP 的固有盲区）：
+    // `element.click()` 绕过命中测试，弹窗就算被侧栏整块盖住也照样"点得到"。
+    // 真实鼠标不会——它命中的是 z-index 更高的那一层。所以必须用
+    // elementFromPoint 查一次"这个坐标上最上层是谁"，否则 CSS 层级写反
+    // 这种 bug 会一路全绿到用户手里。
+    const hit = await evalJS(`(function(){
+      const b = document.getElementById('cf-ok');
+      const r = b.getBoundingClientRect();
+      const el = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
+      return JSON.stringify({
+        inside: !!(el && (el === b || b.contains(el))),
+        hitId: el ? (el.id || el.tagName) : null,
+        zModal: getComputedStyle(document.getElementById('confirm')).zIndex,
+        zDrawer: getComputedStyle(document.getElementById('ai-drawer')).zIndex,
+      });
+    })()`);
+    const hd = JSON.parse(hit);
+    console.log('HITTEST ' + hit);
+    ok('确认按钮没被 AI 侧栏盖住（真实鼠标点得到）', hd.inside === true, hd);
+
+    await evalJS(`(function(){ document.getElementById('cf-ok').click(); return 1; })()`);
+    await sleep(1200);
+
+    const afterDel = await evalJS(`(function(){
+      return JSON.stringify({
+        n: document.querySelectorAll('#ai-pbk .ai-pbk-row').length,
+        rows: [].slice.call(document.querySelectorAll('#ai-pbk .ai-pbk-title')).map(x => x.textContent),
+      });
+    })()`);
+    const ad = JSON.parse(afterDel);
+    console.log('AFTERDEL ' + afterDel);
+    ok('确认后列表少一条', ad.n === 2, ad);
+    ok('删掉的正是那一条（旧预案：链端重连）',
+      !ad.rows.some(x => /链端重连/.test(x)) && ad.rows.length === 2, ad.rows);
+
+    // 磁盘/接口层也要一致：只改界面不改文件 = 刷新就复活
+    const pbkAfter = await getJSON(URL_ + 'api/playbooks?t=' + tm[1]);
+    ok('接口层也确实删掉了（不是只删了 DOM）',
+      !!(pbkAfter && pbkAfter.ok) && (pbkAfter.playbooks || []).every(x => x.id !== 'p-3'),
+      (pbkAfter.playbooks || []).map(x => x.id));
+
     ok('行动 3 条', s.msCount === 3, s.msCount);
     // 列表按 updated_at 倒序，不按种子顺序 —— 断言一律按内容定位。
     // 用下标写死会在「排序规则一改」时给出假失败，而假失败比没有断言更费时间。

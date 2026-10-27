@@ -1257,6 +1257,7 @@
   "已存为预案：{0}": "Saved as playbook: {0}",
   "删除预案": "Delete playbook",
   "确定删除「{0}」？历史统计会一起丢掉。": "Delete \"{0}\"? Its history stats will be lost too.",
+  "已删除预案「{0}」": "Playbook \"{0}\" deleted",
   "成长": "Growth",
   "首次解决率": "First-try rate",
   "预案命中率": "Playbook hit rate",

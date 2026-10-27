@@ -479,6 +479,14 @@ func pbkFromMission(id, title string) (Playbook, error) {
 	pbkMu.Lock()
 	defer pbkMu.Unlock()
 	all := loadPlaybooks()
+	// 同一个行动只沉淀一次。不去重的话，连点两下「存为预案」就会得到两条
+	// 标题/步骤/统计完全一样的预案 —— 界面上两行长得一模一样，删掉一条另一条
+	// 还在，看起来就像"删不掉"。**去重必须在锁内读文件**，否则和别的写路径赛跑。
+	for _, e := range all {
+		if e.SourceMission == m.ID {
+			return Playbook{}, fmt.Errorf("这次行动已经存过预案「%s」，不用再存一次", e.Title)
+		}
+	}
 	all = append(all, p)
 	if err := pbkTrim(&all); err != nil {
 		return Playbook{}, err
