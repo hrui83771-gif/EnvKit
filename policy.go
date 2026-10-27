@@ -133,6 +133,13 @@ var policyRules = map[string]policyRule{
 	"kill_process":      {PolicyElevated, false, "强制结束进程可能导致未保存数据丢失"},
 	"db_create":         {PolicyElevated, false, "建库会改动数据库结构"},
 	"chain_autorecover": {PolicyElevated, false, "重启链端节点会中断共识与交易"},
+
+	// ---- v3.4 设置页评测区 ----
+	// 分档依据是"会不会改变 EnvKit 之外的状态"，不是耗时长短：
+	// 沙箱注入会占端口、杀沙箱内进程、启停沙箱服务，影响面超出 EnvKit 自身，
+	// 所以给 elevated（红框）；任务评测只烧额度不改状态，confirm 就够。
+	"eval_recovery": {PolicyElevated, false, "沙箱注入评测会注入故障（占端口、杀进程）并启停沙箱服务，影响面超出 EnvKit 自身"},
+	"eval_tasks":    {PolicyConfirm, false, "任务评测会发起多轮真实模型调用，产生额度消耗且耗时较长"},
 }
 
 // policyFallback 未登记动作的默认档位。见 policyRules 注释里的理由。

@@ -264,7 +264,6 @@ def coverage(runs):
     # 而它们已经**从分母里剔掉了** → **比率可以大于 1**。
     # 实测 hang_service 得到 coverage_judgeable = 1.500。
     used_j = sum(1 for r in runs if r.get('verdict_used'))
-    used_j = sum(1 for r in runs if r.get('verdict_used'))
     cj = (used_j / judgeable) if judgeable else None
     # ---- v3.0 T1.7：词表兜底命中（判据走了弱路径）----
     #
@@ -294,6 +293,33 @@ def coverage(runs):
             'judgeable': judgeable,
             'coverage_judgeable': cj,
             'fallback_hits': len(fb)}
+
+
+def coverage_usable(cov):
+    """可用轮次的覆盖率：分母剔除「AI 不可用」的轮次。
+
+    ## 为什么必须有这一层（v3.4 修）
+
+    第 [4/5] 步卡的是 `coverage_judgeable`（分母已剔除掐断/采集失败/AI 不可用），
+    而第 [5/5] 步比基线时原来直接拿 `coverage`（分母是全部轮次）。
+    **同一份数据两套分母**，于是出现这种自相矛盾：
+
+        可判定轮次覆盖率：36/36 = 1.000        ← 门槛通过
+        !! 结构块覆盖率 0.973< 基线 1.000      ← 基线比较判退化
+
+    0.973 的差额来自 1 轮 `honest_error`（上游断开、模型根本没输出），
+    按本文件自己的原则它"不该进任何分母"。**把对判成错是最伤的方向**：
+    这种假红会让人去改本来正确的产品行为，改一百次也不会好。
+
+    老基线没有 `honest_failures` 字段时按 0 处理（当时确实没有这类轮次），
+    所以这个改动不会让历史基线失真。
+    """
+    if not cov:
+        return None
+    n = cov.get('runs', 0) - cov.get('honest_failures', 0)
+    if n <= 0:
+        return None
+    return cov.get('used', 0) / n
 
 
 # ---------- 3. 比基线 ----------
@@ -379,6 +405,39 @@ def collect_shadow_records():
     return out
 
 
+# ---------- 机器可读结论（设置页看板） ----------
+def dump_json_out(path, ok, problems, snap, base):
+    """把门禁结论落成 JSON。
+
+    **为什么需要这个出口**：设置页要展示"七维 + 与基线逐维比较"。
+    如果 Go 侧自己去解析 report-*.json 重算一遍，就成了第二套口径 ——
+    两份口径必然漂移，而漂移的方向永远是"看板比门禁好看"。
+    这里把**已经算好的** snap / problems 原样交出去；
+    不传 --json-out 时行为与之前完全一致（默认不写任何文件）。
+    """
+    if not path:
+        return
+    data = {
+        'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'ok': ok,
+        'problems': problems,
+        'snap': snap,
+        'baseline': base,
+        # 看板要"与基线同口径"才能红得对。这两个字段让前端不必自己
+        # 从 snap.coverage 里推（那边的分母含 AI 不可用轮次，直接比值会假红）。
+        'coverage_usable': coverage_usable((snap or {}).get('coverage')),
+        'baseline_coverage_usable': coverage_usable((base or {}).get('coverage')),
+        'dim_order': list(DIM_META.keys()),
+        'dim_higher_better': DIM_META,
+    }
+    try:
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                              encoding='utf-8')
+    except Exception as e:
+        # 写不出只影响看板，不该让门禁本身判失败
+        log('  !! 写 --json-out 失败：%s' % e)
+
+
 # ---------- 主 ----------
 def main():
     ap = argparse.ArgumentParser()
@@ -388,6 +447,9 @@ def main():
                     help='只跑自检，不查指标')
     ap.add_argument('--tol', type=float, default=0.0,
                     help='指标相对基线的允许跌幅（0 = 不许跌）')
+    ap.add_argument('--json-out',
+                    help='把结论写成机器可读 JSON（设置页看板用）。默认不写，'
+                         '不影响命令行行为')
     a = ap.parse_args()
 
     log('=' * 68)
@@ -540,6 +602,8 @@ def main():
     if a.set_baseline:
         save_baseline(snap)
         log('  已冻结为新基线。**请人工确认这份基线可信后再提交。**')
+        # 新基线自己跟自己比：看板此时应显示"全 OK"，而不是拿旧基线误报退化
+        dump_json_out(a.json_out, True, [], snap, snap)
         return 0
 
     base = load_baseline()
@@ -556,15 +620,16 @@ def main():
         log('  基线：%s（%s）' % (base.get('generated_at', '?'),
                                   base.get('note', '')[:40]))
         # 覆盖率必须守住（它是「改造有没有生效」的开关）
-        bc = (base.get('coverage') or {}).get('coverage')
-        nc = snap['coverage']['coverage'] if snap['coverage'] else None
+        # **与 [4/5] 步同口径**：分母剔除 AI 不可用的轮次（见 coverage_usable）
+        bc = coverage_usable(base.get('coverage'))
+        nc = coverage_usable(snap['coverage'])
         if bc is not None and nc is not None:
             if nc < bc - a.tol:
-                msg = '结构块覆盖率 %.3f< 基线 %.3f' % (nc, bc)
+                msg = '可用轮次覆盖率 %.3f< 基线 %.3f' % (nc, bc)
                 log('  !! %s' % msg)
                 problems.append(msg)
             else:
-                log('  结构块覆盖率 %.3f（基线 %.3f）OK' % (nc, bc))
+                log('  可用轮次覆盖率 %.3f（基线 %.3f）OK' % (nc, bc))
         # 各维比较
         for dim in DIM_META:
             bd = (base.get('dims') or {}).get(dim) or {}
@@ -590,9 +655,11 @@ def main():
         for p in problems:
             log('  · %s' % p)
         log('=' * 68)
+        dump_json_out(a.json_out, False, problems, snap, base)
         return 1
     log('门禁通过')
     log('=' * 68)
+    dump_json_out(a.json_out, True, [], snap, base)
     return 0
 
 

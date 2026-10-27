@@ -21,6 +21,10 @@ const (
 	scChain   = "chain"
 	scStart   = "start"
 	scSys     = "sys"
+	// scEval 评测区（设置页「开发者配置 → 评测」）。
+	// 单独一个 scope：评测一次能吐几百行，混进 start/config 面板会把
+	// 用户正在看的启动日志直接冲走。
+	scEval = "eval"
 )
 
 type Proxy struct {

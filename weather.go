@@ -40,11 +40,11 @@ const weatherCacheTTL = 5 * time.Minute
 // weatherResp 返回给前端的结构。
 type weatherResp struct {
 	Enabled bool   `json:"enabled"`
-	Text    string `json:"text,omitempty"`   // 播报文案，如"汕头今天 26°，多云"
-	City    string `json:"city,omitempty"`   // 实际查询的城市
-	TempC   string `json:"temp_c,omitempty"` // 当前温度
-	Desc    string `json:"desc,omitempty"`   // 天气描述
-	Error   string `json:"error,omitempty"`  // 失败原因（人话，英文界面下查不到译文时的保底）
+	Text    string `json:"text,omitempty"`     // 播报文案，如"汕头今天 26°，多云"
+	City    string `json:"city,omitempty"`     // 实际查询的城市
+	TempC   string `json:"temp_c,omitempty"`   // 当前温度
+	Desc    string `json:"desc,omitempty"`     // 天气描述
+	Error   string `json:"error,omitempty"`    // 失败原因（人话，英文界面下查不到译文时的保底）
 	ErrCode string `json:"err_code,omitempty"` // 稳定错误键（不含数字），前端按它查词表翻译
 }
 

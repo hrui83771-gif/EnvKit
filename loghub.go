@@ -247,6 +247,22 @@ func rotateSink(sk string, sink *logSink, dir, day, src string) {
 	}
 }
 
+// closeAllLogSinksLocked 关闭并丢弃全部日志句柄（调用方须已持有 logFileMu）。
+// 切天时用，测试收尾也用它 —— 否则被句柄占着的临时目录 RemoveAll 会失败。
+func closeAllLogSinksLocked() {
+	for k, s := range logSinks {
+		_ = s.f.Close()
+		delete(logSinks, k)
+	}
+}
+
+// closeAllLogSinks 同上的加锁版本（给测试与将来的"手动刷盘"用）。
+func closeAllLogSinks() {
+	logFileMu.Lock()
+	closeAllLogSinksLocked()
+	logFileMu.Unlock()
+}
+
 func writeLogFile(m LogMsg) {
 	dir := logDir()
 	day := time.Now().Format("20060102")
@@ -254,10 +270,7 @@ func writeLogFile(m LogMsg) {
 	defer logFileMu.Unlock()
 	if logLastDay != day {
 		// 切天：关上一天的全部句柄（按天建的文件留着不关，fd 会跨天泄漏）
-		for k, s := range logSinks {
-			_ = s.f.Close()
-			delete(logSinks, k)
-		}
+		closeAllLogSinksLocked()
 		logLastDay = day
 	}
 	sk := day + "/" + m.Src

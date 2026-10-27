@@ -193,12 +193,17 @@ func main() {
 	http.HandleFunc("/api/alerts/config", handleAlertConfig)
 	http.HandleFunc("/api/missions/config", handleMissionConfig)
 	http.HandleFunc("/api/dev/config", handleDevConfig)
+	http.HandleFunc("/api/eval/status", handleEvalStatus) // v3.4 评测看板（只读）
+	http.HandleFunc("/api/eval/run", handleEvalRun)       // v3.4 四档评测（破坏性档走 428）
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
 
 	// 控制台端口来自 dev 段（默认 18765，被占用则顺延到 port_scan_limit）
 	dv := devSnap()
 	port := findPort(dv.serverPort(), dv.portScanLimit())
+	// 记下实际端口：评测脚本硬编码 127.0.0.1:18765，端口顺延后必须能被
+	// /api/eval/status 发现并对齐（否则脚本会连到别的实例，卡在取 token）。
+	listenPortCur = port
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	openURL := "http://" + addr + "/"
 	go openBrowser(openURL)
