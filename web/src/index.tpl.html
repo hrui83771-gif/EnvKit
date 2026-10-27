@@ -849,9 +849,9 @@
         </div>
 
         <div class="action">
-          <div class="head"><div class="title">模型怪癖</div><span class="muted">自动学习，勿手改</span></div>
+          <div class="head"><div class="title">模型兼容性</div><span class="muted">自动探测，无需手改</span></div>
           <div class="ro-list" id="sd_quirk"></div>
-          <div class="hint">上游对参数的接受度不一致（只认 temperature=1、要 max_completion_tokens、不支持工具调用）；这些是踩坑后自动记下来的，不是配置项。</div>
+          <div class="hint">不同模型对请求参数的接受度不一样（有的只认 temperature=1、有的要 max_completion_tokens、有的不支持工具调用）。这里显示的是调用中自动探测出来的结果，不是配置项。</div>
         </div>
 
         <div class="action">
