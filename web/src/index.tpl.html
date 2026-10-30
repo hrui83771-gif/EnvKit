@@ -811,7 +811,10 @@
                   <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
                   <div class="cktext"><b>桌宠天气</b></div>
                 </div>
-                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">应用</button></div>
+                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">保存城市</button></div>
+                <!-- 生效状态必须写在卡片里：过去只有一个"应用"按钮，
+                     勾完开关页面毫无变化，用户没法判断到底生效了没有 -->
+                <div class="hint" id="h-weather" style="margin-top:4px">—</div>
               </div>
               <div><div class="ro-list" id="s_ai_view" style="margin-top:0"></div></div>
             </div>

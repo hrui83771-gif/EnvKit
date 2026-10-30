@@ -423,13 +423,29 @@
   /* 心声气泡：灰色斜体（原版 bubble_inner 样式） */
   .pet-bubble.inner{background:#e9e9f0;color:#7c7c8a;font-style:italic}
   .pet-bubble.inner::after{border-top-color:#e9e9f0}
+  /* 多行气泡（天气）：实况 / 细节 / 建议三行。
+     默认气泡是 top:-14px 往下长，三行会压住鱼头；rich 改成贴着顶端往上长，
+     箭头仍在底部（指向鱼）。鱼被拖到屏幕顶端时由 JS 加 .down 退回往下长，
+     否则气泡会长到视口外面去。 */
+  .pet-bubble.rich{top:auto;bottom:calc(100% + 6px);max-width:250px;text-align:left;line-height:1.5;padding:7px 11px;transform:translateX(calc(-50% + var(--bbx,0px))) scale(0)}
+  #pet.show-bubble .pet-bubble.rich{transform:translateX(calc(-50% + var(--bbx,0px))) scale(1)}
+  .pet-bubble.rich::after{left:calc(50% - var(--bbx,0px))}
+  .pet-bubble.rich.down{top:-14px;bottom:auto}
+  .pet-bubble.rich.down::after{bottom:auto;top:-5px;border-top:none;border-bottom:6px solid #fff}
+  .pet-bubble.rich .wx1{font-weight:600;color:#2f2f33}
+  .pet-bubble.rich .wx2{color:#6b6b75;font-size:11px;margin-top:2px}
+  .pet-bubble.rich .wx3{color:#8a6a2f;margin-top:3px}
   /* 右键菜单当前模式高亮（原版 checkable 菜单项） */
   .pet-ctx button.cur{background:var(--brand);color:#fff}
-  /* 投喂面板（原版 FoodPanel：五种食物） */
-  .pet-food{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:none;gap:6px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
-  .pet-food.show{display:flex}
-  .pet-food button{font-size:20px;line-height:1;background:none;border:none;cursor:pointer;padding:4px;border-radius:8px;transition:transform .15s,background .15s}
-  .pet-food button:hover{background:rgba(127,127,127,.15);transform:scale(1.25)}
+  /* 投喂面板（原版 FoodPanel：五种食物）
+     v3.6.2 起贴侧面、两列紧凑排布：
+     ① 横排悬在头顶时正好盖住它自己那句"谢谢投喂"；
+     ② 单列 5 个太高一整条，鱼贴着屏幕底时放不下（视口只剩百来像素），
+        两列约 72×92，贴左下方刚好挨着身子，也不顶到天气气泡。 */
+  .pet-food{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:5px;display:none;grid-template-columns:repeat(2,1fr);gap:2px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  .pet-food.show{display:grid}
+  .pet-food button{font-size:18px;line-height:1;background:none;border:none;cursor:pointer;padding:4px;border-radius:10px;transition:transform .15s,background .15s}
+  .pet-food button:hover{background:rgba(127,127,127,.15);transform:scale(1.18)}
   /* 鲸式喷水：水柱+泡泡（连击 15 次彩蛋，替代已退役的彩虹滤镜） */
   @keyframes petFxJet{0%{transform:translateY(8px) scaleY(.4);opacity:0}30%{opacity:.95}100%{transform:translateY(-30px) scaleY(1.2);opacity:0}}
   .pet-fx span.jet{width:8px;height:22px;background:linear-gradient(#cfeaff,#5aa8d8);border-radius:50% 50% 45% 45%/60% 60% 40% 40%;animation:petFxJet .8s ease-out forwards}

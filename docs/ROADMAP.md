@@ -531,6 +531,7 @@ P2 依赖 P1（否则又多一套状态计算），P3 依赖 P2（先验证状�
 | **v3.5** ✅ | — | **Agent 闭环 Phase 2/3**：预案库 + 告警闭环 + 晨报；Mission→Lesson 沉淀 + 成长指标 | 预案统计（只认复验）回写；经验 Fail 计数回流 | 行动卡片：预案徽标 / 起草步骤 / 报告查看；成长报表 | 预案/晨报/沉淀/指标单测 + CDP 26 条断言 |
 | **v3.6** ✅ | — | **修三个「结论报错」的缺陷**：记忆列表把存在报成不存在；只读行动被判 failed（判据把对判成错） | — | 修预案删除被 AI 侧栏遮挡（z-index 80）；「存为预案」去重 | 新增 5 格只读收口单测 + CDP 遮挡断言（`elementFromPoint`） |
 | **v3.6.1**（已合入，待发） | — | 修 `missionFromGuard` 返回值与落盘不一致（命中预案却返回空） | — | — | **端到端闭环测试**（`agent_loop_e2e_test.go`：告警→预案→起草→执行→复验→done→沉淀→复用→降级→经验召回）+ 评测题 T16（判据读 `/api/missions` 落盘结论）+ **T15/T16 实跑**（T16 PASS 3.3s；T15 PASS×3 各约 610s）+ 预检卡投递测试 `ai_confirm_intent_test.go` |
+| **v3.6.2**（桌宠天气与投喂，已合入，待发） | — | 天气翻译改为**按 weatherCode 查表**（实测 16 个城市，149 Smoky haze / 152 Smog 最常遇到，旧词表两个都没有） | 设置页勾开关即生效（不再只认「应用」），「保存基础设置」一并保存；跨窗口广播同步 | 天气气泡补体感/湿度/风/能见度 + 建议句；食物栏改贴侧面两列，不再压气泡 | `TestWeatherHazeDescIsChinese` / `TestWeatherCodeTableIsComplete` / `TestPetConfigPersistsToDisk`（真读文件） + CDP `cdp_pet_weather_food_test.js`（几何断言，先红后绿验证） |
 
 每个版本独立可发布、独立可回滚。**任一版本未达标不进下一版。**
 

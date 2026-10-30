@@ -429,13 +429,29 @@
   /* 心声气泡：灰色斜体（原版 bubble_inner 样式） */
   .pet-bubble.inner{background:#e9e9f0;color:#7c7c8a;font-style:italic}
   .pet-bubble.inner::after{border-top-color:#e9e9f0}
+  /* 多行气泡（天气）：实况 / 细节 / 建议三行。
+     默认气泡是 top:-14px 往下长，三行会压住鱼头；rich 改成贴着顶端往上长，
+     箭头仍在底部（指向鱼）。鱼被拖到屏幕顶端时由 JS 加 .down 退回往下长，
+     否则气泡会长到视口外面去。 */
+  .pet-bubble.rich{top:auto;bottom:calc(100% + 6px);max-width:250px;text-align:left;line-height:1.5;padding:7px 11px;transform:translateX(calc(-50% + var(--bbx,0px))) scale(0)}
+  #pet.show-bubble .pet-bubble.rich{transform:translateX(calc(-50% + var(--bbx,0px))) scale(1)}
+  .pet-bubble.rich::after{left:calc(50% - var(--bbx,0px))}
+  .pet-bubble.rich.down{top:-14px;bottom:auto}
+  .pet-bubble.rich.down::after{bottom:auto;top:-5px;border-top:none;border-bottom:6px solid #fff}
+  .pet-bubble.rich .wx1{font-weight:600;color:#2f2f33}
+  .pet-bubble.rich .wx2{color:#6b6b75;font-size:11px;margin-top:2px}
+  .pet-bubble.rich .wx3{color:#8a6a2f;margin-top:3px}
   /* 右键菜单当前模式高亮（原版 checkable 菜单项） */
   .pet-ctx button.cur{background:var(--brand);color:#fff}
-  /* 投喂面板（原版 FoodPanel：五种食物） */
-  .pet-food{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:none;gap:6px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
-  .pet-food.show{display:flex}
-  .pet-food button{font-size:20px;line-height:1;background:none;border:none;cursor:pointer;padding:4px;border-radius:8px;transition:transform .15s,background .15s}
-  .pet-food button:hover{background:rgba(127,127,127,.15);transform:scale(1.25)}
+  /* 投喂面板（原版 FoodPanel：五种食物）
+     v3.6.2 起贴侧面、两列紧凑排布：
+     ① 横排悬在头顶时正好盖住它自己那句"谢谢投喂"；
+     ② 单列 5 个太高一整条，鱼贴着屏幕底时放不下（视口只剩百来像素），
+        两列约 72×92，贴左下方刚好挨着身子，也不顶到天气气泡。 */
+  .pet-food{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:5px;display:none;grid-template-columns:repeat(2,1fr);gap:2px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  .pet-food.show{display:grid}
+  .pet-food button{font-size:18px;line-height:1;background:none;border:none;cursor:pointer;padding:4px;border-radius:10px;transition:transform .15s,background .15s}
+  .pet-food button:hover{background:rgba(127,127,127,.15);transform:scale(1.18)}
   /* 鲸式喷水：水柱+泡泡（连击 15 次彩蛋，替代已退役的彩虹滤镜） */
   @keyframes petFxJet{0%{transform:translateY(8px) scaleY(.4);opacity:0}30%{opacity:.95}100%{transform:translateY(-30px) scaleY(1.2);opacity:0}}
   .pet-fx span.jet{width:8px;height:22px;background:linear-gradient(#cfeaff,#5aa8d8);border-radius:50% 50% 45% 45%/60% 60% 40% 40%;animation:petFxJet .8s ease-out forwards}
@@ -1668,7 +1684,10 @@
                   <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
                   <div class="cktext"><b>桌宠天气</b></div>
                 </div>
-                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">应用</button></div>
+                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">保存城市</button></div>
+                <!-- 生效状态必须写在卡片里：过去只有一个"应用"按钮，
+                     勾完开关页面毫无变化，用户没法判断到底生效了没有 -->
+                <div class="hint" id="h-weather" style="margin-top:4px">—</div>
               </div>
               <div><div class="ro-list" id="s_ai_view" style="margin-top:0"></div></div>
             </div>
@@ -2164,6 +2183,7 @@ const I18N_EN = {
   "trace-*.jsonl（比审计大得多）": "trace-*.jsonl (far larger than audit)",
   "usage 字段是 v2.7 才加的，此前的对话没有记录": "The usage field was added in v2.7; earlier conversations have none",
   "v2.7 起才记录": "Recorded since v2.7",
+  "{0} {1} km/h": "{0} {1} km/h",
   "{0} · {1} · {2} 秒 · {3} 行": "{0} · {1} · {2}s · {3} lines",
   "{0} · 已 {1} 秒{2}": "{0} · {1}s elapsed{2}",
   "{0} 个存活": "{0} alive",
@@ -2270,6 +2290,7 @@ const I18N_EN = {
   "传输被截断：发送 {0} 字节，服务端只收到 {1} 字节": "Transport truncated: sent {0} bytes, server received only {1}",
   "位置：": "Location: ",
   "低": "Low",
+  "体感 {0}°": "Feels {0}°",
   "余额 {0} {1}": "Balance {0} {1}",
   "余额 ¥{0}": "Balance ¥{0}",
   "余额查询失败": "Balance query failed",
@@ -2294,6 +2315,7 @@ const I18N_EN = {
   "依赖 未检测": "Deps not checked",
   "保存中…": "Saving…",
   "保存后会同步到「程序启动」的目录显示。": "Saved folders also show up on the Launch page.",
+  "保存城市": "Save city",
   "保存基础设置": "Save basics",
   "保存失败": "Save failed",
   "保存失败：": "Save failed: ",
@@ -2588,6 +2610,7 @@ const I18N_EN = {
   "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
   "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
   "已停用": "Retired",
+  "已关闭（不查询、不出网）": "Off (no lookups, no network)",
   "已删除预案「{0}」": "Playbook \"{0}\" deleted",
   "已加白名单": "Whitelisted",
   "已发起检查，几秒后刷新状态": "Check started; status refreshes in a few seconds",
@@ -2606,6 +2629,7 @@ const I18N_EN = {
   "已导出本轮": "Turn exported",
   "已就绪": "Ready",
   "已开启": "Enabled",
+  "已开启 · {0}": "On · {0}",
   "已开启全局静音": "All notifications muted",
   "已开启批量授权：{0} · 本任务内最多 {1} 次": "Batch grant opened: {0} · up to {1} more in this task",
   "已开启（{0} 秒/次）": "On (every {0}s)",
@@ -2997,6 +3021,7 @@ const I18N_EN = {
   "温度": "Temperature",
   "温度 固定为 1": "temperature fixed to 1",
   "温度参数": "Temperature",
+  "湿度 {0}%": "Humidity {0}%",
   "溜达": "Wander",
   "溜达溜达～": "Wander wander~",
   "滚动摘要什么时候触发、保留多少": "When rolling summarization kicks in, and how much it keeps",
@@ -3124,6 +3149,7 @@ const I18N_EN = {
   "耗时 {0}ms": "took {0}ms",
   "能做什么": "What it can do",
   "能力开关": "Feature toggles",
+  "能见度 {0} km": "Visibility {0} km",
   "能让 EnvKit 主动巡检——这是它唯一从外部被叫醒的入口": "lets EnvKit start a patrol by itself — the only way it can be woken from outside",
   "脚本名含非法字符": "Script name has invalid characters",
   "自动保存": "Auto-save",
@@ -3333,6 +3359,7 @@ const I18N_EN = {
   "预演：{0}": "Dry run: {0}",
   "预算 {0} 轮": "Budget {0} turns",
   "预算窗口": "Budget window",
+  "风 {0} km/h": "Wind {0} km/h",
   "首次": "First",
   "首次解决率": "First-try rate",
   "驱动器": "Drives",
@@ -3385,11 +3412,51 @@ function petWeatherMenuSync(){
   const b = document.getElementById('pet-act-weather');
   if(b) b.hidden = !petWeatherOn;
 }
+/* 跨窗口/跨标签同步（v3.6.2）。
+   症状：在设置页点「应用」后天气生效了，但同一个 exe 开的另一个窗口里
+   菜单还是旧的 —— 因为 petWeatherOn 是**每个页面各自的内存变量**，
+   服务端配置改了它不会知道。用户看到的就是"这配置好像只存在于一个进程里"。
+   走广播（BroadcastChannel 优先，localStorage 事件兜底）：
+   一处改了，所有窗口立刻跟上；刷新后仍以服务端为准。 */
+let petCfgBus = null;
+try{ if(typeof BroadcastChannel === 'function') petCfgBus = new BroadcastChannel('ek-pet-cfg'); }catch(_){}
+/* 城市输入框是否已经用服务端值填过。
+   为什么要这个标记：勾开关时会顺带把输入框里的城市一并提交，而输入框
+   **只有在设置页打开过之后才被填**。没填就提交空串，服务端会当成
+   "用户要清空城市"写回默认值 —— 实测把用户的「合肥」悄悄改成了「上海」。
+   没加载过就不提交城市字段（POST 用的是 *string，省略 = 不动）。 */
+let ekWeatherCityLoaded = false;
+function petWeatherLocal(on, city){
+  petWeatherOn = !!on;
+  petWeatherMenuSync();
+  const el = document.getElementById('s_weather_on');
+  if(el) el.checked = petWeatherOn;
+  if(typeof city === 'string' && city){
+    const c = document.getElementById('s_weather_city');
+    if(c) c.value = city;
+    ekWeatherCityLoaded = true;
+  }
+  if(typeof ekWeatherHint === 'function') ekWeatherHint(petWeatherOn, city || '');
+}
+function petWeatherBroadcast(on){
+  try{ if(petCfgBus) petCfgBus.postMessage({on: !!on}); }catch(_){}
+  try{ localStorage.setItem('ek-pet-weather', on ? '1' : '0'); }catch(_){}
+}
+if(petCfgBus) petCfgBus.onmessage = e=>{ if(e.data && typeof e.data.on === 'boolean') petWeatherLocal(e.data.on); };
+addEventListener('storage', e=>{
+  if(e.key === 'ek-pet-weather' && e.newValue !== null) petWeatherLocal(e.newValue === '1');
+});
 /* 只在启动时读一次：设置页保存后自己会更新（见 ekSetWeather），
-   这里没必要轮询。失败按"关"处理，菜单项隐藏即可，不打扰用户。 */
+   这里没必要轮询。失败按"关"处理，菜单项隐藏即可，不打扰用户。
+   顺手把设置页那两个控件也填上：不然用户先勾开关、后打开设置页，
+   看到的会是一个空城市框。 */
 fetch('/api/pet/config').then(r=>r.json()).then(j=>{
   petWeatherOn = !!(j && j.weather_enabled);
   petWeatherMenuSync();
+  if(j){
+    petWeatherLocal(petWeatherOn, j.weather_city || '');
+    try{ localStorage.setItem('ek-pet-weather', petWeatherOn ? '1' : '0'); }catch(_){}
+  }
 }).catch(()=>{});
 const EK_ZH_OF = {};   // 译文 → 原文（切回中文时按译文找回）
 for(const k in I18N_EN){
@@ -5633,11 +5700,38 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     clearTimeout(bubbleTimer);
     lastSaid = html;
     bubble.innerHTML = html;
+    /* rich/down 是给多行气泡（天气）用的，普通台词必须复位 ——
+       否则说完天气之后每一句日常台词都会保持宽气泡的样子。 */
+    bubble.classList.remove('rich','down');
     bubble.classList.toggle('inner', !!inner);
     pet.classList.add('show-bubble');
     if(!sticky) bubbleTimer = setTimeout(()=>{
       if(st!=='confirm' && st!=='thinking' && st!=='busy') pet.classList.remove('show-bubble');
     }, 2400);
+  }
+  /* 多行气泡（天气细节用）。
+     默认气泡是 top:-14px 往下长，一行刚好；三行会压住鱼脑门。
+     rich 状态改成贴着顶端往上长，并量一下鱼的位置：贴到屏幕顶端时
+     往上长会出界，那就退回往下长（down）。
+     宽度上也要夹一次：气泡（250px）比鱼（140px）宽，鱼贴在右边时
+     右侧会顶出视口（实测 overflow 3px），用 --bbx 整体推回来。 */
+  function sayRich(html, sticky){
+    say(html, sticky);
+    bubble.classList.add('rich');
+    const r = pet.getBoundingClientRect();
+    bubble.classList.toggle('down', r.top < 118);
+    /* 夹取必须按**布局宽度**算，不能量 getBoundingClientRect：
+       气泡正处在 scale(0)→scale(1) 的过渡里，量到的是缩小后的矩形，
+       算出来的溢出量偏小，实测右边还是会出界 8px。
+       offsetWidth 不受 transform 影响；气泡水平居中于鱼，所以
+       left = 鱼中心 - w/2，再按视口两侧夹一次。 */
+    const w = bubble.offsetWidth || 0;
+    if(!w) return;   // 桌宠被隐藏（display:none）时量不到宽度，别算出无意义的偏移
+    const left = r.left + r.width / 2 - w / 2;
+    let dx = 0;
+    if(left + w > innerWidth - 6) dx = (innerWidth - 6) - (left + w);
+    if(left + dx < 6) dx = 6 - left;
+    bubble.style.setProperty('--bbx', Math.round(dx) + 'px');
   }
   function hideBubble(){ clearTimeout(bubbleTimer); pet.classList.remove('show-bubble'); }
   function spawn(cls, style, life, txt){
@@ -5951,10 +6045,40 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   }
   function setPassthrough(on){ applyPassthrough(on); }
 
-  /* ---------- 天气（可选，默认关闭；开关在个人中心） ---------- */
+  /* ---------- 天气（可选，默认关闭；开关在设置 → 能力开关） ---------- */
   /* 前端不直连 wttr.in：统一走 /api/pet/weather，由 Go 侧控制超时与外连出口。
-     petWeatherOn 与 petWeatherMenuSync 都声明在文件顶部（个人中心那段 IIFE
+     petWeatherOn 与 petWeatherMenuSync 都声明在文件顶部（设置页那段 IIFE
      比这个 IIFE 先执行，留在里面会撞暂死区）。 */
+
+  /* 天气细节（v3.6.2）：体感 / 湿度 / 风 / 能见度。
+     这些字段 wttr.in 一直在给，后端以前只解析了 humidity 就丢掉，
+     于是气泡里永远只有"合肥今天 19°，霾"——用户说的"之前设计的细节都看不到"。
+     缺项就跳过，绝不补 0：补出来的 0 会被当成真实观测。 */
+  function wxNum(v){
+    const n = parseInt(String(v == null ? '' : v).replace(/[^\d-]/g, ''), 10);
+    return isFinite(n) ? n : null;
+  }
+  function wxDetail(j){
+    const out = [];
+    const fl = wxNum(j.feels_like), tc = wxNum(j.temp_c);
+    if(fl !== null && fl !== tc) out.push(t('体感 {0}°', fl));
+    if(j.humidity) out.push(t('湿度 {0}%', j.humidity));
+    if(j.wind_kmph) out.push(j.wind_dir ? t('{0} {1} km/h', j.wind_dir, j.wind_kmph) : t('风 {0} km/h', j.wind_kmph));
+    if(j.visibility) out.push(t('能见度 {0} km', j.visibility));
+    return out.join(' · ');
+  }
+  /* 把一句话天气拆成"实况 / 细节 / 建议"三行。
+     建议句复用开场问候那份 ekWeatherLine，保证右键查看和开机问候说的一致。 */
+  function sayWeather(j){
+    const head = j.text || t('没拿到天气数据');
+    const det = wxDetail(j);
+    const advice = ekWeatherLine(j);
+    if(!det && !advice){ say(head, true); return; }
+    let html = '<div class="wx1">' + esc(head) + '</div>';
+    if(det) html += '<div class="wx2">' + esc(det) + '</div>';
+    if(advice) html += '<div class="wx3">' + esc(advice) + '</div>';
+    sayRich(html, true);
+  }
   async function petWeather(){
     if(!petWeatherOn) return;
     say(t('我瞅瞅天…'), true);
@@ -5963,7 +6087,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
       const j = await r.json();
       if(!j || j.enabled === false){ petWeatherOn = false; petWeatherMenuSync(); say(t('天气查询没开，去「设置 → 能力开关」打开')); return; }
       if(j.error){ say(t('天气没查到：') + j.error); return; }
-      say(j.text || t('没拿到天气数据'));
+      sayWeather(j);
     }catch(e){
       say(t('天气没查到：连不上服务'));
     }
@@ -6057,11 +6181,33 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
 
   /* ---------- 投喂（还原原版双击喂食：5 种食物 + 专属台词 + 进食动画） ---------- */
   const foodPanel = el('pet-food');
+  /* 面板放鱼的**侧面**（v3.6.2）。
+     原来是居中悬在头顶（top: r.top-48），双击的同时它会喊"咔嚓咔嚓谢谢投喂"，
+     气泡正好被这块面板盖住——用户只能看到一排食物，看不到它说话。
+     规则：先试左下方（贴身子、不压头顶的气泡），放不下就翻到右下；
+     鱼贴边时再夹进视口；最后量一次，真压到气泡就挪到气泡下面。 */
+  function rectsOverlap(a, b){
+    return Math.min(a.right, b.right) > Math.max(a.left, b.left) &&
+           Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+  }
   function openFood(){
+    foodPanel.classList.add('show');        // 先显示再量：display:none 时 offsetWidth 恒为 0
     const r = pet.getBoundingClientRect();
-    foodPanel.style.left = Math.max(6, Math.min(innerWidth - 206, r.left + r.width / 2 - 103)) + 'px';
-    foodPanel.style.top = Math.max(6, r.top - 48) + 'px';
-    foodPanel.classList.add('show');
+    const pw = foodPanel.offsetWidth || 72, ph = foodPanel.offsetHeight || 92;
+    const gap = 10;
+    let left = r.left - pw - gap;
+    if(left < 6) left = Math.min(innerWidth - pw - 6, r.right + gap);
+    if(left < 6) left = 6;
+    // 底边对齐鱼的下沿：气泡在头顶，这一带最空
+    const top = Math.max(6, Math.min(innerHeight - ph - 6, r.bottom - ph - 8));
+    foodPanel.style.left = left + 'px';
+    foodPanel.style.top = top + 'px';
+    // 兜底：气泡朝下长（鱼贴屏幕顶）时可能与面板相交，挪到气泡下方
+    const br = bubble.getBoundingClientRect();
+    if(rectsOverlap(br, foodPanel.getBoundingClientRect())){
+      const below = br.bottom + 8;
+      if(below + ph <= innerHeight - 6) foodPanel.style.top = below + 'px';
+    }
   }
   function feedFish(f){
     wake();
@@ -8658,6 +8804,8 @@ async function ekSetLoadBase(){
     if(pet){
       $('#s_weather_on').checked = !!pet.weather_enabled;
       $('#s_weather_city').value = pet.weather_city || '';
+      ekWeatherCityLoaded = true;   // 已用服务端值填过 → 之后清空才是"用户要清空"
+      ekWeatherHint(!!pet.weather_enabled, pet.weather_city || '');
     }
     if(ai){
       ekRo('#s_ai_view', [
@@ -8714,6 +8862,11 @@ async function ekSetSaveBase(){
          那次自动保存就会把刚设的目录/代理按旧值写回去。必须重读一次。 */
       try{ await loadConfig(); }catch(e){}
       await ekSetLoadBase();
+      /* 天气那一格也在同一块面板里，用户按的是同一个「保存」——
+         过去这个按钮对它完全无效，必须再单独点一次「应用」（原始反馈：
+         "按理说我保存配置后就生效了"）。仍然走独立端点，只是顺序上一起做；
+         silent：上面的 toast 已经说了"已保存"，不需要连弹两条。 */
+      try{ await ekSetWeather(true); }catch(e){}
     }else{
       let msg = 'HTTP ' + r.status;
       try{
@@ -8730,20 +8883,61 @@ async function ekSetSaveBase(){
 }
 
 /* 天气是独立出入口：/api/pet/config 用 *bool，绝不能混进 /api/config 的整包保存 */
-async function ekSetWeather(){
-  const on = $('#s_weather_on').checked;
-  const city = $('#s_weather_city').value.trim();
+/* 生效状态提示：卡片里那行小字。
+   过去这里只有旁边一个「应用」按钮，勾完开关页面**什么都不变**，
+   用户无法判断"是不是已经生效"，只能再点一次应用试试——这正是本月报上来的
+   「必须点应用才生效」。现在勾选即保存，并把服务端回的生效值原样显示出来。 */
+function ekWeatherHint(on, city){
+  const h = document.getElementById('h-weather');
+  if(!h) return;
+  if(typeof on !== 'boolean'){
+    const el = document.getElementById('s_weather_on');
+    on = !!(el && el.checked);
+  }
+  if(!on){ h.textContent = t('已关闭（不查询、不出网）'); return; }
+  const c = city || (document.getElementById('s_weather_city') || {}).value || '';
+  h.textContent = c ? t('已开启 · {0}', c) : t('已开启');
+}
+
+async function ekSetWeather(quiet){
+  const onEl = $('#s_weather_on'), cityEl = $('#s_weather_city');
+  const on = !!(onEl && onEl.checked);
+  const city = cityEl ? cityEl.value.trim() : '';
+  const st = $('#h-weather');
+  // 城市字段只在"填过"或"确实被清空"时提交：见 ekWeatherCityLoaded 的说明，
+  // 否则"刚打开页面就勾开关"会把用户已存的城市用空串覆盖掉。
+  const body = {weather_enabled: on};
+  if(cityEl && (city !== '' || ekWeatherCityLoaded)) body.weather_city = city;
+  if(st) st.textContent = t('保存中…');
   try{
     const r = await fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({weather_enabled:on, weather_city:city})});
-    if(r.ok){
-      // 右键菜单的「查看天气」跟着这个开关走。个人中心的副本已删，这里是唯一入口，
-      // 不同步的话会出现"开关开了但菜单里仍然没有"或反之。
-      petWeatherOn = on; petWeatherMenuSync();
-      toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭'));
+      body:JSON.stringify(body)});
+    if(!r.ok){ if(st) st.textContent = t('保存失败：HTTP {0}', r.status); toast(t('保存失败：HTTP {0}', r.status), 'err'); return; }
+    // 以**服务端回的生效值**为准，而不是"我刚勾的值"：勾上只证明点了，
+    // 回读才证明存下去了（城市留空时服务端给的是默认城市）。
+    let eff = null;
+    try{ eff = await r.json(); }catch(_){}
+    if(!eff || typeof eff.weather_enabled !== 'boolean'){
+      try{ eff = await (await fetch('/api/pet/config')).json(); }catch(_){}
     }
-    else toast(t('保存失败：HTTP {0}', r.status), 'err');
-  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+    if(eff && typeof eff.weather_enabled === 'boolean'){
+      if(onEl) onEl.checked = !!eff.weather_enabled;
+      if(cityEl){ cityEl.value = eff.weather_city || ''; ekWeatherCityLoaded = true; }
+      petWeatherOn = !!eff.weather_enabled;
+      petWeatherMenuSync();
+      petWeatherBroadcast(petWeatherOn);
+      ekWeatherHint(petWeatherOn, eff.weather_city || '');
+      if(!quiet){
+        toast(eff.weather_enabled ? t('天气已开启（{0}）', eff.weather_city || t('默认城市')) : t('天气已关闭'));
+      }
+    }else{
+      ekWeatherHint(on, city);
+      if(!quiet) toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭'));
+    }
+  }catch(e){
+    if(st) st.textContent = t('网络错误：')+e;
+    toast(t('网络错误：')+e, 'err');
+  }
 }
 
 /* ---------- 开发者 ----------
@@ -9200,6 +9394,19 @@ function ekEvPoll(on){
     else if(id === 'btn-sd-reset') ekSetResetDev();
     else if(id === 'btn-ev-refresh') ekEvLoad();
     else if(id === 'btn-sd-breaker') ekSetBreakerReset();
+  });
+  /* 5) 天气开关/城市：改了就立刻存，不再等旁边的「应用」。
+     勾上一个开关却什么都不发生，是最难判断的一种"没生效"：
+     用户只能反复点，而每次都以为是自己点错了。 */
+  document.addEventListener('change', ev=>{
+    const id = ev.target && ev.target.id;
+    if(id === 's_weather_on' || id === 's_weather_city') ekSetWeather();
+  });
+  document.addEventListener('keydown', ev=>{
+    if(ev.target && ev.target.id === 's_weather_city' && ev.key === 'Enter'){
+      ev.preventDefault();
+      ekSetWeather();
+    }
   });
 })();
 

@@ -43,9 +43,19 @@ type weatherResp struct {
 	Text    string `json:"text,omitempty"`     // 播报文案，如"汕头今天 26°，多云"
 	City    string `json:"city,omitempty"`     // 实际查询的城市
 	TempC   string `json:"temp_c,omitempty"`   // 当前温度
-	Desc    string `json:"desc,omitempty"`     // 天气描述
+	Desc    string `json:"desc,omitempty"`     // 天气描述（中文）
 	Error   string `json:"error,omitempty"`    // 失败原因（人话，英文界面下查不到译文时的保底）
 	ErrCode string `json:"err_code,omitempty"` // 稳定错误键（不含数字），前端按它查词表翻译
+
+	// 细节字段（v3.6.2）。这些数据 wttr.in 一直在返回，但过去只解析了 humidity
+	// 就丢掉了 —— 界面上只剩"合肥今天 19°，霾"，用户看不到体感/湿度/风。
+	// 全部按字符串原样透传：上游缺字段时是空串，前端跳过而不是显示 0。
+	FeelsLike  string `json:"feels_like,omitempty"` // 体感温度（°C）
+	Humidity   string `json:"humidity,omitempty"`   // 相对湿度（%）
+	WindKmph   string `json:"wind_kmph,omitempty"`  // 风速（km/h）
+	WindDir    string `json:"wind_dir,omitempty"`   // 风向（英文缩写，如 SE）
+	Visibility string `json:"visibility,omitempty"` // 能见度（km）
+	Code       string `json:"code,omitempty"`       // 天气代码，便于核对翻译
 }
 
 // weatherCache 最近一次成功的播报（单城市、单条即可：右键菜单一次只查一个
@@ -90,10 +100,18 @@ func resetWeatherCache() {
 // "天气数据格式异常"，而错的其实是结构体。改结构体前先看真实报文。
 type wttrJ1 struct {
 	CurrentCondition []struct {
-		TempC       string      `json:"temp_C"`
-		LangZh      []wttrValue `json:"lang_zh"`
+		TempC  string      `json:"temp_C"`
+		Code   string      `json:"weatherCode"`
+		LangZh []wttrValue `json:"lang_zh"`
+		// WeatherDesc 是英文描述，但**写法会变**（同一份数据里 "Clear"/"Sunny"、
+		// "Smoky haze"/"Smog" 混着出现），所以中文优先按 weatherCode 查，
+		// 描述只作后备。见 weatherZhByCode。
 		WeatherDesc []wttrValue `json:"weatherDesc"`
 		Humidity    string      `json:"humidity"`
+		FeelsLikeC  string      `json:"FeelsLikeC"`
+		WindKmph    string      `json:"windspeedKmph"`
+		WindDir     string      `json:"winddir16Point"`
+		Visibility  string      `json:"visibility"`
 	} `json:"current_condition"`
 	NearestArea []struct {
 		AreaName []wttrValue `json:"areaName"`
@@ -125,20 +143,63 @@ var weatherZh = map[string]string{
 	"sunny": "晴", "clear": "晴",
 	"partly cloudy": "多云", "cloudy": "多云", "overcast": "阴",
 	"mist": "薄雾", "fog": "雾", "freezing fog": "冻雾",
+	// 沙尘/烟霾这一族是**国内城市最常见**的几种，英文写法还不统一：
+	// 实测 上海/合肥/广州/成都/西安/呼和浩特/青岛 同一天都返回 "Smoky haze"，
+	// 长沙返回 "Smog"，乌鲁木齐市区偶发 "Haze"/"Smoke"。旧词表一个都没有，
+	// 于是气泡里直接飘英文（见 2026-10-30 的截图）。
+	"haze": "霾", "smoky haze": "霾", "smog": "雾霾", "smoke": "烟霾",
+	"widespread dust": "浮尘", "dust": "浮尘", "sandstorm": "沙尘暴",
+	"blowing snow": "风吹雪", "light freezing rain": "小冻雨",
 	"patchy rain nearby": "局部有雨", "patchy rain possible": "可能有雨",
 	"light drizzle": "毛毛雨", "light rain": "小雨", "moderate rain": "中雨",
-	"heavy rain": "大雨", "moderate or heavy rain shower": "阵雨",
-	"light rain shower": "小阵雨", "torrential rain shower": "暴雨",
+	"moderate rain at times": "间歇中雨", "heavy rain": "大雨",
+	"heavy rain at times":           "间歇大雨",
+	"moderate or heavy rain shower": "阵雨",
+	"light rain shower":             "小阵雨", "torrential rain shower": "暴雨",
 	"patchy light rain": "零星小雨", "patchy light drizzle": "零星毛毛雨",
 	"thundery outbreaks possible": "可能有雷阵雨", "thundery outbreaks in nearby": "附近有雷阵雨",
 	"moderate or heavy rain with thunder": "雷雨", "patchy light rain with thunder": "局部雷阵雨",
 	"patchy snow possible": "可能有雪", "light snow": "小雪", "moderate snow": "中雪",
 	"heavy snow": "大雪", "blizzard": "暴雪", "patchy light snow": "零星小雪",
+	"patchy moderate snow": "小到中雪", "patchy heavy snow": "中到大雪",
 	"light snow showers": "小阵雪", "moderate or heavy snow showers": "阵雪",
 	"light sleet": "小雨夹雪", "moderate or heavy sleet": "雨夹雪",
 	"patchy sleet possible": "可能有雨夹雪", "ice pellets": "冰粒",
 	"freezing drizzle": "冻毛毛雨", "freezing rain": "冻雨",
+	"heavy freezing drizzle":           "强冻毛毛雨",
+	"moderate or heavy freezing rain":  "中到大冻雨",
 	"patchy freezing drizzle possible": "可能有冻毛毛雨",
+	"light showers of ice pellets":     "小冰粒", "moderate or heavy showers of ice pellets": "中到大冰粒",
+	"patchy light snow with thunder": "局部雷阵雪", "moderate or heavy snow with thunder": "雷阵雪",
+}
+
+// weatherZhByCode 按 worldweatheronline 的天气代码翻成中文。
+//
+// 为什么要多这一层：描述文本**不稳定**——同一套代码在不同城市/不同时刻会给出
+// "Sunny"/"Clear" 两种写法，霾则分成 "Smoky haze"(149) 与 "Smog"(152)；
+// 只按文本查表，等于把"上游改了个措辞"变成"我们界面上出现英文"。
+// 代码是枚举值，少一个就能靠测试发现（TestWeatherCodeTableIsComplete）。
+// 覆盖 113~395 的全部常用值；查不到代码时退回文本表，再查不到才留英文。
+var weatherZhByCode = map[string]string{
+	"113": "晴", "116": "多云", "119": "阴", "122": "阴",
+	"143": "薄雾", "248": "雾", "260": "冻雾",
+	// 149/152 不在 wwo 的公开代码表里，是 wttr.in 自己给国内霾天用的值，
+	// 恰恰最常遇到：2026-10-30 实测 16 个城市里 7 个是 149。
+	"149": "霾", "152": "雾霾",
+	"176": "局部有雨", "179": "可能有雪", "182": "可能有雨夹雪", "185": "可能有冻毛毛雨",
+	"200": "可能有雷阵雨",
+	"227": "风吹雪", "230": "暴雪",
+	"263": "零星毛毛雨", "266": "毛毛雨", "281": "冻毛毛雨", "284": "强冻毛毛雨",
+	"293": "零星小雨", "296": "小雨", "299": "间歇中雨", "302": "中雨",
+	"305": "间歇大雨", "308": "大雨", "311": "小冻雨", "314": "中到大冻雨",
+	"317": "小雨夹雪", "320": "中到大雨夹雪",
+	"323": "零星小雪", "326": "小雪", "329": "小到中雪", "332": "中雪",
+	"335": "中到大雪", "338": "大雪", "350": "冰粒",
+	"353": "小阵雨", "356": "中到大阵雨", "359": "暴雨",
+	"362": "小阵雨夹雪", "365": "中到大阵雨夹雪",
+	"368": "小阵雪", "371": "中到大阵雪",
+	"374": "小冰粒", "377": "中到大冰粒",
+	"386": "局部雷阵雨", "389": "雷雨", "392": "局部雷阵雪", "395": "雷阵雪",
 }
 
 // translateWeather 把英文描述换成中文；大小写与尾随空白都先归一。
@@ -148,6 +209,15 @@ func translateWeather(en string) string {
 		return zh
 	}
 	return strings.TrimSpace(en)
+}
+
+// weatherDescZh 先按代码查、再按描述查。
+// 代码为空（上游偶尔不给）时不能当成"没查到"直接返回英文——退回文本表。
+func weatherDescZh(code, desc string) string {
+	if zh, ok := weatherZhByCode[strings.TrimSpace(code)]; ok {
+		return zh
+	}
+	return translateWeather(desc)
 }
 
 // handlePetConfig 读写桌宠配置（目前只有天气）。
@@ -349,7 +419,9 @@ func fetchWeather(ctx context.Context, city string) (string, weatherResp, error)
 	if rawDesc == "" {
 		rawDesc = firstValue(cur.LangZh)
 	}
-	desc := translateWeather(rawDesc)
+	// 优先按代码翻：描述文本会随上游改措辞（Sunny/Clear、Smoky haze/Smog），
+	// 而代码是枚举值，缺一个测试就能发现。
+	desc := weatherDescZh(cur.Code, rawDesc)
 	// wttr.in 的 areaName 是**街道/区**级（汕头返回 "Xilu"），直接播报
 	// "Xilu今天…" 很怪。优先用用户自己填的城市名；没填才退回
 	// 「区 · 省」这种能认出来的写法，最后才用纯 areaName。
@@ -369,6 +441,13 @@ func fetchWeather(ctx context.Context, city string) (string, weatherResp, error)
 	out.City = place
 	out.TempC = cur.TempC
 	out.Desc = desc
+	out.Code = strings.TrimSpace(cur.Code)
+	// 细节字段原样透传；上游偶尔缺项，前端按空串跳过（不要补 0 冒充真实观测）
+	out.FeelsLike = strings.TrimSpace(cur.FeelsLikeC)
+	out.Humidity = strings.TrimSpace(cur.Humidity)
+	out.WindKmph = strings.TrimSpace(cur.WindKmph)
+	out.WindDir = strings.TrimSpace(cur.WindDir)
+	out.Visibility = strings.TrimSpace(cur.Visibility)
 
 	// 拼播报文案：地名 + 温度 + 天气；缺少的部分跳过而不是留空档
 	var b strings.Builder

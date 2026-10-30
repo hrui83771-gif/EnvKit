@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,6 +132,80 @@ func TestWeatherTranslateCoversCommonCodes(t *testing.T) {
 	}
 }
 
+// TestWeatherHazeDescIsChinese 国内最常见的霾天（149 Smoky haze / 152 Smog）。
+//
+// 2026-10-30 实测 16 个中国城市：上海·合肥·广州·成都·西安·呼和浩特·青岛
+// 当前都是 code=149 desc="Smoky haze"，长沙是 152 "Smog"，旧词表两个都没有，
+// 于是气泡直接把英文播给用户（"合肥今天 19°，Smoky haze"）。
+// 夹具照抄真实报文的形状，含细节字段。
+func TestWeatherHazeDescIsChinese(t *testing.T) {
+	cases := []struct{ name, code, desc, want string }{
+		{"上海", "149", "Smoky haze", "霾"},
+		{"长沙", "152", "Smog", "雾霾"},
+		{"北京", "113", "Clear", "晴"},
+	}
+	for _, c := range cases {
+		body := `{"current_condition":[{
+      "temp_C":"19","FeelsLikeC":"18","humidity":"58","weatherCode":"` + c.code + `",
+      "windspeedKmph":"8","winddir16Point":"NE","visibility":"6",
+      "lang_zh":[{"value":"` + c.desc + `"}],
+      "weatherDesc":[{"value":"` + c.desc + `"}]}],
+      "nearest_area":[{"areaName":[{"value":"X"}],"region":[{"value":"Y"}]}]}`
+		withStubWeather(t, body, http.StatusOK)
+		text, resp, err := fetchWeather(context.Background(), c.name)
+		if err != nil {
+			t.Fatalf("%s：%v", c.name, err)
+		}
+		if resp.Desc != c.want {
+			t.Errorf("%s：code=%s desc=%q 应译为 %q，实际 %q", c.name, c.code, c.desc, c.want, resp.Desc)
+		}
+		if strings.Contains(text, c.desc) {
+			t.Errorf("%s：播报里残留英文 %q：%q", c.name, c.desc, text)
+		}
+		// 细节字段必须原样带出来，前端才有东西可显示
+		if resp.FeelsLike != "18" || resp.Humidity != "58" || resp.WindKmph != "8" ||
+			resp.WindDir != "NE" || resp.Visibility != "6" {
+			t.Errorf("%s：细节字段没带全 %+v", c.name, resp)
+		}
+	}
+}
+
+// TestWeatherCodeTableIsComplete 代码表必须覆盖 113~395 的常用枚举，
+// 且每一项都得是中文 —— 混进一个英文值就等于"上线后偶尔冒英文"。
+func TestWeatherCodeTableIsComplete(t *testing.T) {
+	need := []string{
+		"113", "116", "119", "122", "143", "149", "152", "176", "179", "182", "185",
+		"200", "227", "230", "248", "260", "263", "266", "281", "284", "293", "296",
+		"299", "302", "305", "308", "311", "314", "317", "320", "323", "326", "329",
+		"332", "335", "338", "350", "353", "356", "359", "362", "365", "368", "371",
+		"374", "377", "386", "389", "392", "395",
+	}
+	for _, code := range need {
+		zh, ok := weatherZhByCode[code]
+		if !ok {
+			t.Errorf("天气代码 %s 没有译文", code)
+			continue
+		}
+		if strings.TrimSpace(zh) == "" {
+			t.Errorf("天气代码 %s 的译文是空的", code)
+		}
+		for _, r := range zh {
+			if r < 128 { // 任何 ASCII 字母/数字混进去都是漏翻
+				t.Errorf("天气代码 %s 的译文含 ASCII 字符：%q", code, zh)
+				break
+			}
+		}
+	}
+	// 代码优先于文本：同一个代码配不同描述，结果必须一致
+	if a, b := weatherDescZh("149", "Smoky haze"), weatherDescZh("149", "Smog"); a != b {
+		t.Errorf("同一代码应给出同一译文，实际 %q vs %q", a, b)
+	}
+	// 代码缺失时退回文本表（上游偶尔不给 weatherCode）
+	if got := weatherDescZh("", "Sunny"); got != "晴" {
+		t.Errorf("缺代码应退回文本表，实际 %q", got)
+	}
+}
+
 func TestWeatherUpstreamErrorIsReadable(t *testing.T) {
 	withStubWeather(t, `{"not":"weather"}`, http.StatusOK)
 	if _, _, err := fetchWeather(context.Background(), ""); err == nil {
@@ -182,7 +257,8 @@ func TestPetWeatherDisabledIsSilent(t *testing.T) {
 // "只改城市"的保存会把开关静默关掉（AI 段当年就是这么丢 Key 的）。
 
 // withPetCfg 切换桌宠配置并把落盘重定向到临时目录（测试不能写真实 config.json）。
-func withPetCfg(t *testing.T, pc PetConfig) {
+// 返回盘上的目录，供"真的读一遍文件"的用例使用。
+func withPetCfg(t *testing.T, pc PetConfig) string {
 	t.Helper()
 	dir := t.TempDir()
 	oldPath := configFilePath
@@ -194,6 +270,7 @@ func withPetCfg(t *testing.T, pc PetConfig) {
 		cfg.Pet = oldPet
 		resetWeatherCache()
 	})
+	return dir
 }
 
 func getPetCfg(t *testing.T) (*httptest.ResponseRecorder, PetConfig) {
@@ -238,6 +315,44 @@ func TestPetConfigPostKeepsUnspecifiedFields(t *testing.T) {
 	_, pc := getPetCfg(t)
 	if pc.WeatherEnabled || pc.WeatherCity != "北京" {
 		t.Fatalf("落盘回读不一致：enabled=%v city=%q", pc.WeatherEnabled, pc.WeatherCity)
+	}
+}
+
+// TestPetConfigPersistsToDisk 真的去读 config.json，而不是再问一次内存。
+//
+// 原来这里写着"落盘再回读：状态不能只活在内存里"，但 getPetCfg 走的是
+// handlePetConfig 的 GET 分支 —— 它读的是 `cfg.Pet`，**根本没碰文件**。
+// 于是"只改内存不写盘"这种缺陷会一路绿灯通过。用户报的"点应用后好像
+// 只存在于一个进程里"，恰恰只能用"读文件"来证实或排除。
+func TestPetConfigPersistsToDisk(t *testing.T) {
+	dir := withPetCfg(t, PetConfig{WeatherEnabled: false, WeatherCity: ""})
+	if rec := postPetCfg(t, `{"weather_enabled":true,"weather_city":"合肥"}`); rec.Code != 200 {
+		t.Fatalf("POST 失败：%d %s", rec.Code, rec.Body.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatalf("保存后应该真的写出 config.json：%v", err)
+	}
+	var onDisk Config
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatalf("落盘内容不是合法配置：%v", err)
+	}
+	if !onDisk.Pet.WeatherEnabled || onDisk.Pet.WeatherCity != "合肥" {
+		t.Fatalf("磁盘上的 pet 段不对：%+v（说明开关只活在内存里）", onDisk.Pet)
+	}
+	// 城市留空保存后，盘上应仍是空串（生效值「上海」只用于展示/查询，
+	// 不能被写回成用户没填过的值，否则用户以后想改默认城市就改不动了）
+	if rec := postPetCfg(t, `{"weather_city":""}`); rec.Code != 200 {
+		t.Fatalf("POST 失败：%d", rec.Code)
+	}
+	raw, _ = os.ReadFile(filepath.Join(dir, "config.json"))
+	onDisk = Config{} // 必须清零：Unmarshal 不会重置"这次 JSON 里没有的字段"
+	_ = json.Unmarshal(raw, &onDisk)
+	if onDisk.Pet.WeatherCity != "" {
+		t.Fatalf("清空城市后盘上应是空串，实际 %q", onDisk.Pet.WeatherCity)
+	}
+	if !onDisk.Pet.WeatherEnabled {
+		t.Fatal("只清城市不该把开关一起关掉")
 	}
 }
 

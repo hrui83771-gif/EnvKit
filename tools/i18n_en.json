@@ -1267,5 +1267,13 @@
   "首次": "First",
   "周": "Week",
   "数据截至 {0}": "As of {0}",
-  "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}"
+  "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}",
+  "保存城市": "Save city",
+  "已关闭（不查询、不出网）": "Off (no lookups, no network)",
+  "已开启 · {0}": "On · {0}",
+  "体感 {0}°": "Feels {0}°",
+  "湿度 {0}%": "Humidity {0}%",
+  "风 {0} km/h": "Wind {0} km/h",
+  "{0} {1} km/h": "{0} {1} km/h",
+  "能见度 {0} km": "Visibility {0} km"
 }
