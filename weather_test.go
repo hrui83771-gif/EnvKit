@@ -143,6 +143,16 @@ func TestWeatherHazeDescIsChinese(t *testing.T) {
 		{"上海", "149", "Smoky haze", "霾"},
 		{"长沙", "152", "Smog", "雾霾"},
 		{"北京", "113", "Clear", "晴"},
+		// 同一天同一批城市里实际出现的其余几种（乌鲁木齐/昆明/兰州/广州/西安/哈尔滨），
+		// 一并钉住：代码相同但描述措辞不同（Sunny vs Clear）也必须译成同一句。
+		{"乌鲁木齐", "113", "Sunny", "晴"},
+		{"昆明", "116", "Partly Cloudy", "多云"},
+		{"广州", "119", "Cloudy", "阴"},
+		{"兰州", "122", "Overcast", "阴"},
+		{"西安", "176", "Patchy rain nearby", "局部有雨"},
+		{"合肥", "266", "Light drizzle", "毛毛雨"},
+		{"成都", "296", "Light rain", "小雨"},
+		{"哈尔滨", "311", "Light freezing rain", "小冻雨"},
 	}
 	for _, c := range cases {
 		body := `{"current_condition":[{
