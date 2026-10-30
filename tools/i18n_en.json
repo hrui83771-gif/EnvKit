@@ -841,7 +841,7 @@
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
   "次": "tries",
   "次数": "Hits",
-  "正在压缩较早的对话历史（一次性，约十几秒）…": "Compacting earlier conversation history (one-time, ~10s)…",
+  "正在压缩较早的对话历史（约十几秒，只压这一轮）…": "Compacting earlier conversation history (~10s, this turn only)…",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
   "正在检测…": "Detecting…",
   "正在运行": "Running",

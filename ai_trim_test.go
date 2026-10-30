@@ -69,11 +69,14 @@ func TestAISummaryCut(t *testing.T) {
 		t.Errorf("500 token 的历史不该摘要，cut = %d", got)
 	}
 
-	// 大历史：必须按 6 条量化，且至少给尾部留 6 条
-	big := msgsWithApproxTokens(40, 200) // ≈ 8000 token
+	// 大历史：必须按 6 条量化，且至少给尾部留 6 条。
+	// 用例规模要**多于触发阈值**（2026-10-30 默认值 5000 → 10000，见 state.go 的注释）：
+	// 60 条 × 200 token ≈ 12000，稳稳越过阈值；写死 8000 的话阈值一调这里就误报。
+	big := msgsWithApproxTokens(60, 200) // ≈ 12000 token
 	cut := aiSummaryCut(big)
 	if cut <= 0 {
-		t.Fatalf("8000 token 的历史应触发摘要，cut = %d", cut)
+		t.Fatalf("约 12000 token 的历史应触发摘要（阈值 %d），cut = %d",
+			devSnap().summaryAfterTokens(), cut)
 	}
 	if cut%aiSumQuantum != 0 {
 		t.Fatalf("切分点必须按 %d 条量化，got %d", aiSumQuantum, cut)

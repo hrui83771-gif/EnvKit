@@ -59,7 +59,7 @@ func TestMergeFormConfigKeepsDev(t *testing.T) {
 // ---------- 2. 归一化的深拷贝与钳制 ----------
 
 func TestNormalizeConfigClonesDev(t *testing.T) {
-	src := &DevConfig{TurnTimeoutSecs: -5, TraceRetentionDays: -1, SummaryAfterTokens: 5000, SummaryKeepTokens: 9000}
+	src := &DevConfig{TurnTimeoutSecs: -5, TraceRetentionDays: -1, SummaryAfterTokens: 5000, SummaryKeepTokens: 12000}
 	c := Config{Dev: src}
 	normalizeConfig(&c)
 	if c.Dev == src {
@@ -72,7 +72,7 @@ func TestNormalizeConfigClonesDev(t *testing.T) {
 		t.Fatalf("保留量 ≥ 触发阈值时应自动压回：after=%d keep=%d",
 			c.Dev.SummaryAfterTokens, c.Dev.SummaryKeepTokens)
 	}
-	if src.TurnTimeoutSecs != -5 || src.TraceRetentionDays != -1 || src.SummaryKeepTokens != 9000 {
+	if src.TurnTimeoutSecs != -5 || src.TraceRetentionDays != -1 || src.SummaryKeepTokens != 12000 {
 		t.Fatalf("被归一化的源段不应被改动： %+v", *src)
 	}
 }
@@ -99,7 +99,7 @@ func TestCheckDevConfigRejectsOutOfRange(t *testing.T) {
 
 func TestDevDefaultsAndJSONContract(t *testing.T) {
 	d := DevConfig{}.resolved()
-	if d.SummaryAfterTokens != 5000 || d.SummaryKeepTokens != 3000 || d.SummarizeKeepMsgs != 12 ||
+	if d.SummaryAfterTokens != 10000 || d.SummaryKeepTokens != 3000 || d.SummarizeKeepMsgs != 12 ||
 		d.TurnTimeoutSecs != 360 || d.AuditRetentionDays != 30 || d.TraceRetentionDays != 14 ||
 		d.ShadowRetentionDays != 30 || d.MissionDeadlineDays != 30 || d.MissionKeepDays != 30 ||
 		d.ServerPort != 18765 || d.PortScanLimit != 18815 {

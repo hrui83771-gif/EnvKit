@@ -199,7 +199,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// 用户只看到"思考中"三点动画干等，第一反应就是"卡死了，刷新一下"。
 	msgs = aiMaybeSummarize(msgs, func() {
 		sseWrite(w, fl, map[string]any{"type": "info",
-			"text": "正在压缩较早的对话历史（一次性，约十几秒）…"})
+			"text": "正在压缩较早的对话历史（约十几秒，只压这一轮）…"})
 	})
 	if len(msgs) > 40 {
 		msgs = msgs[len(msgs)-40:]
@@ -349,8 +349,18 @@ var (
 	aiSumCache struct {
 		key  string
 		text string
+		// 失败负缓存：同一段 head 摘要失败后短期不再重试。
+		//
+		// 没有它的话，模型对摘要请求持续报错时（例如只接受流式的服务商、或临时额度耗尽），
+		// **每个回合**都会先白等一次最长 60s 的前置调用再继续 ——
+		// 用户体感同样是"老在压缩"，而且每次都卡十几秒（2026-10-27 日志里有一次"空响应"）。
+		failKey string
+		failAt  time.Time
 	}
 )
+
+// aiSumFailCooldown 摘要失败后的冷却时长（只针对同一段历史，key 不同照常尝试）。
+const aiSumFailCooldown = 5 * time.Minute
 
 // aiTurnTimeout 单轮上游最长等待：共享 client（httpStream）不设全局超时，
 // 由这里的计时器兜底，避免上游假死时永久挂住（此前是靠 client 的 120s 超时）。
@@ -432,6 +442,20 @@ func aiClampToolResult(tool, res string) string {
 		"文件搜索收窄关键词。**不要凭这半截结果下结论。**"
 }
 
+// aiUpstreamReadErr 给扫描 goroutine 的读取错误定性：返回非空串才表示"要报给用户的上游故障"。
+//
+// 两条判据都不能省：
+//  1. 已收到 `[DONE]` → 一律不算故障。上游结束后我们会主动 Close body 去叫醒扫描方，
+//     它这时拿到的必然是 http.ErrBodyReadAfterClose（"http: read on closed response body"）。
+//     这轮内容其实已经收全了，报红等于把"我关的"说成"服务坏了"（2026-10-30 真实反馈）。
+//  2. 未收到 [DONE] 时仍交给 aiIsAbortErr 过滤"我们自己收尾"那几种（客户端断开/超时/心跳失败）。
+func aiUpstreamReadErr(readErr error, sawDone bool) string {
+	if readErr == nil || sawDone {
+		return ""
+	}
+	return readErr.Error()
+}
+
 // aiIsAbortErr 判断一条上游读取错误是否只是"我们自己收尾"的产物。
 //
 // 背景：流式读取跑在独立 goroutine 里扫 resp.Body；主循环在客户端断开 / 单轮超时 /
@@ -443,6 +467,9 @@ func aiIsAbortErr(s string) bool {
 	l := strings.ToLower(s)
 	for _, k := range []string{
 		"use of closed network connection",
+		// http.ErrBodyReadAfterClose：body 的 closed 标志**只由本地 Close 设置**，
+		// 上游断连只会给 EOF / reset，永远造不出这条错误。所以它必然是"我们关的"。
+		"read on closed response body",
 		"context canceled",
 		"context deadline exceeded",
 		"operation was canceled",
@@ -657,13 +684,30 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// ① 写入只发生在一个 goroutine（无竞态）；② 心跳写失败即代表页面已关闭 → 实时中断；
 		// ③ 心跳同时可防止反向代理/中间层的空闲断连。
 		var readErr error
+		// sawDone：本条流已收到 `data: [DONE]`（上游明确宣告结束）。
+		//
+		// 有了它，收尾时就不该再采信 readErr：我们在 [DONE] 之后会立刻 Close 掉 body
+		// 去解除扫描 goroutine 的阻塞，而扫描方此时可能正卡在 Read 里，于是拿到
+		// `http: read on closed response body`（http.ErrBodyReadAfterClose）。
+		// 把它当"上游故障"弹红字，等于把**我们自己关的**说成服务坏了 ——
+		// 用户看到"AI 服务返回错误：http: read on closed response body"，
+		// 而实际上这轮回复是完整收到的（2026-10-30 真实反馈）。
+		// 上游怎么可能让本地的 body 变成 closed？不可能：closed 标志只由本地 Close 设置。
+		sawDone := false
 		lineCh := make(chan string, 128)
+		// scanDone：扫描 goroutine 真退出了。readErr 由它写、主循环读，
+		// 收尾时等这个信号再读，才不会构成数据竞争（[DONE] 后 break 时它可能还活着）。
+		scanDone := make(chan struct{})
 		// done：主循环提前返回（客户端断开/超时/心跳失败）时通知扫描 goroutine 退出。
 		// 少了它，若此刻 channel 已积满 128 行，`lineCh <- sc.Text()` 会永远阻塞 ——
 		// 每次异常断流泄漏一个 goroutine + 一个 scanner（连同 resp.Body 的引用）。
 		// 正常 Close() 只让 sc.Scan() 失败；卡在**发送**上的 goroutine 是 Close 救不了的。
 		done := make(chan struct{})
 		go func() {
+			// defer 是后进先出：close(lineCh) 先跑、close(scanDone) 后跑。
+			// readErr = sc.Err() 在 defer 之前就已赋值，所以等到 scanDone 时它一定写完
+			// （readErr 不经 channel 传递，光等 lineCh 关闭不够 —— 那是另一条路径的 happens-before）。
+			defer close(scanDone)
 			defer close(lineCh) // 先写后 close：读侧在 channel 关闭后读取，channel 提供 happens-before
 			sc := bufio.NewScanner(resp.Body)
 			sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -732,6 +776,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
+				// 上游已宣告结束。标记下来：收尾阶段不再把 readErr 当上游故障
+				// （接下来我们会主动 Close body 叫醒扫描 goroutine）。
+				sawDone = true
 				break
 			}
 			var ev struct {
@@ -832,6 +879,11 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		}
 		stopTimers()
 		resp.Body.Close()
+		// 等扫描 goroutine 真退出再读 readErr：
+		// ① [DONE] 之后 break 时它可能还卡在 Read 里，不等就是数据竞争；
+		// ② 等到了，readErr 的赋值才一定对本次收尾可见（见上面的 defer 说明）。
+		// Close 已把阻塞的 Read 叫醒，这里不会长等。
+		<-scanDone
 		// 每次上游请求的缓存账目落一行日志。
 		// 只有回合合计是看不出"哪一轮掉点"的：冷启动、摘要重建、确认重建，
 		// 三者在合计里长一个样，在逐轮明细里却完全不同（这正是要靠数据判断的地方）。
@@ -857,9 +909,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			warn(scSys, "AI", "客户端已断开，已中断本轮上游流式响应")
 			return
 		}
-		if readErr != nil {
-			upErr = readErr.Error()
-		}
+		// 已收到 [DONE] 时，readErr 只可能是"我们刚才 Close 掉了 body"的产物
+		// （http.ErrBodyReadAfterClose）。这轮内容是完整收到的，照常往下收尾。
+		upErr = aiUpstreamReadErr(readErr, sawDone)
 		// 「连接是被我们自己关掉的」不算上游故障。
 		//
 		// 读取 goroutine 在扫描 resp.Body，而主循环在客户端断开 / 超时 / 心跳失败时

@@ -283,7 +283,14 @@ type DevConfig struct {
 // 开发者段的内置默认值：与界面上「恢复默认」的目标值是同一份数字，
 // 改这里就等于改默认 —— 不要在别处再写第二份字面量。
 const (
-	devDefaultSummaryAfterTokens = 5000
+	// 摘要触发阈值：历史估算过这么多 token 才压一次。
+	//
+	// 5000 → 10000（2026-10-30 用户反馈"压缩频率有点高"）。原因是压缩后水位并不低：
+	// keepTokens 3000 + 摘要本身 400 字 + 之后每轮工具结果动辄几百上千 token，
+	// 旧阈值下压完只剩约 2000 token 余量，一两轮就又触发 —— 每压一次都要先等一次
+	// 前置 LLM 调用（十几秒），体感就是"老在压缩"。
+	// 现在压完水位约 3400/10000 ≈ 34%，余量够走 4~6 轮工具；模型上下文（64k+）远没到边。
+	devDefaultSummaryAfterTokens = 10000
 	devDefaultSummaryKeepTokens  = 3000
 	devDefaultSummarizeKeepMsgs  = 12
 	devDefaultTurnTimeoutSecs    = 360

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
+	"time"
 )
 
 // aiTrimDanglingToolCalls 去掉历史中所有"没有紧跟 tool 结果"的 assistant(tool_calls) 消息。
@@ -156,30 +157,68 @@ func aiMaybeSummarize(msgs []aiMsg, onStart func()) []aiMsg {
 	aiSumMu.Lock()
 	cached := aiSumCache.key == key
 	text := aiSumCache.text
+	// 冷却中的失败：同一段历史刚失败过，别再让用户干等一次前置调用。
+	cooling := !cached && aiSumCache.failKey == key && time.Since(aiSumCache.failAt) < aiSumFailCooldown
 	aiSumMu.Unlock()
 	if !cached {
+		if cooling {
+			warn(scSys, "AI", "同一段历史的摘要刚失败过，%s 内不再重试（本回合按原始历史继续，上下文会长一些）",
+				aiSumFailCooldown)
+			return msgs
+		}
 		if onStart != nil {
 			onStart()
 		}
 		var err error
-		text, err = aiSummarizeHistory(head)
+		text, err = aiSummarizeHistoryFunc(head)
 		if err != nil {
+			aiSumMu.Lock()
+			aiSumCache.failKey, aiSumCache.failAt = key, time.Now()
+			aiSumMu.Unlock()
 			warn(scSys, "AI", "对话摘要生成失败，本回合按原始历史继续：%v", err)
 			return msgs
 		}
 		aiSumMu.Lock()
 		aiSumCache.key, aiSumCache.text = key, text
+		aiSumCache.failKey = "" // 成功了就清掉冷却，别让它挡下一次
 		aiSumMu.Unlock()
 		info(scSys, "AI", "已生成对话摘要（压缩 %d 条 → %d 字），长对话上下文已续上", cut, len([]rune(text)))
 	}
 	out := make([]aiMsg, 0, len(msgs)-cut+1)
-	out = append(out, aiMsg{Role: "user", Content: "（系统注入的此前对话要点备忘，不是用户发言，无需回应）\n<untrusted_data>" + text + "</untrusted_data>"})
+	out = append(out, aiMsg{Role: "user", Content: aiSummaryPrefix + text + "</untrusted_data>"})
 	out = append(out, msgs[cut:]...)
 	return out
 }
 
+// aiSummaryPrefix 摘要消息的开头（含包裹标签的左半）。构造与识别都用它，
+// 不要在别处再抄一遍字面量：识别靠前缀匹配，抄错一个标点就识别不出来。
+const aiSummaryMark = "（系统注入的此前对话要点备忘"
+
+const aiSummaryPrefix = aiSummaryMark + "，不是用户发言，无需回应）\n<untrusted_data>"
+
+// aiIsSummaryMsg 这条消息是不是上一次压缩留下的要点备忘。
+func aiIsSummaryMsg(m aiMsg) bool {
+	return m.Role == "user" && strings.HasPrefix(m.Content, aiSummaryMark)
+}
+
 // aiSummarizeHistory 用当前配置的模型把历史头部压缩成要点备忘（非流式，一次调用）。
 func aiSummarizeHistory(head []aiMsg) (string, error) {
+	out, err := aiCallLLM([]aiMsg{{Role: "user", Content: aiSummaryPrompt(head)}}, nil)
+	if err != nil {
+		return "", err
+	}
+	return firstLines(strings.TrimSpace(out), 1200), nil
+}
+
+// aiSummarizeHistoryFunc 间接层：只为测试能在不联网的前提下验证
+// "同一段历史摘要失败后不会每回合重试"（那是负缓存存在的唯一理由）。
+var aiSummarizeHistoryFunc = aiSummarizeHistory
+
+// aiSummaryPrompt 构造那次压缩调用的请求正文。
+//
+// 抽成纯函数只为一件事：**它错了不会报错，只会让摘要内容悄悄变差**，
+// 这种地方必须能用断言钉住（见 ai_summary_prompt_test.go），不能只靠读代码。
+func aiSummaryPrompt(head []aiMsg) string {
 	var b strings.Builder
 	b.WriteString("以下是 EnvKit 助手与用户的对话历史。请压缩成不超过 400 字的要点备忘，必须保留：\n" +
 		"1) 用户的目标与明确要求；\n" +
@@ -190,6 +229,22 @@ func aiSummarizeHistory(head []aiMsg) (string, error) {
 	for _, m := range head {
 		c := strings.TrimSpace(m.Content)
 		if c == "" || (m.Role != "user" && m.Role != "assistant") {
+			continue
+		}
+		// 上一次压缩留下的要点备忘（它在历史里也是 role=user，但**不是用户说的话**）。
+		// 当普通用户消息喂进去的后果：摘要里出现"用户：（系统注入的此前对话要点备忘…
+		// <untrusted_data>…"，标签层层嵌套，模型既可能把它当用户刚说的要求，
+		// 也可能被自指措辞带偏。这里剥掉包裹层，单独作为「已有要点」交给它合并。
+		if aiIsSummaryMsg(m) {
+			inner := strings.TrimPrefix(c, aiSummaryPrefix)
+			inner = strings.TrimSuffix(strings.TrimSpace(inner), "</untrusted_data>")
+			b.WriteString("此前要点备忘（在此基础上合并更新，不要逐字复述）：\n")
+			b.WriteString(firstLines(strings.TrimSpace(inner), 1200))
+			b.WriteString("\n")
+			n++
+			if n >= 40 {
+				break
+			}
 			continue
 		}
 		if m.Role == "user" {
@@ -205,11 +260,7 @@ func aiSummarizeHistory(head []aiMsg) (string, error) {
 		}
 	}
 	b.WriteString("\n</untrusted_data>")
-	out, err := aiCallLLM([]aiMsg{{Role: "user", Content: b.String()}}, nil)
-	if err != nil {
-		return "", err
-	}
-	return firstLines(strings.TrimSpace(out), 1200), nil
+	return b.String()
 }
 
 // aiToolResultAsUser 把工具结果包装成一条用户消息（供模型基于结果作答）。
