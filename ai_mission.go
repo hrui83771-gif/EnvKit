@@ -9,11 +9,17 @@ package main
 //
 // 收口判据（设计 2.2 + 红线 1）：
 //   · 结局 success + 本回合有复验结论 → 复验过了 done，没过 failed；
-//   · 结局 success + 无复验 → 非报告型 failed（宁可错杀，不发假徽章）；
-//     报告型（巡检/晨报，trigger=patrol|schedule）以「步骤全部成功且 >0」为完成 ——
-//     只读报告没有环境状态可复验，拿动作判据卡它会永远 failed（实现时补入的细化，见设计文档）；
+//   · 结局 success + 无复验，三条路只有两条能判 done：
+//     ① 报告型（巡检/晨报，trigger=patrol|schedule）以「步骤全部成功且 >0」为完成；
+//     ② **纯只读行动**（v3.6）以「全部步骤成功且没有任何写工具」为完成 ——
+//     只读检查没有环境状态可复验，拿动作判据卡它会让「检查数据库」这种
+//     一步成功、什么都没改的行动永远 failed（判据把对判成了错）；
+//   · 结局 success + 无复验 + 有写操作 → failed（宁可错杀，不发假徽章）；
 //   · 结局 partial/failed/aborted（含断流、用户点停止、预算耗尽）→ paused 带原因，
 //     用户回来点「继续」——**断流不作废整轮**，这正是 Mission 存在的意义。
+//
+// ① 与 ② 都只是"用客观事实替代复验"，红线 1 没有被放宽：
+// done 仍只能由 missionFinish 落，且依据是落盘的步骤记录，不是模型的自述。
 
 import (
 	"strings"
@@ -235,6 +241,35 @@ func triggerDetailNote(detail string) string {
 	return "（" + truncateRunes(d, 160) + "）"
 }
 
+// missionReadOnlyDone 判断一次行动是否「纯只读且全部成功」（v3.6）。
+//
+// 为什么需要这条：手动发起的只读检查（"检查数据库""看看日志"）没有任何写操作，
+// 也就没有环境状态可复验，模型既不会也不需要调 verify_environment。用
+// 「必须有复验证据」去卡它，会让一步成功、什么都没改的行动永远 failed ——
+// 进而把首次解决率、R6 连败、预案命中率一起算错，用户看到的是一排 0。
+//
+// 判据仍然是**客观事实**，不是"模型说它做完了"（红线 1 没有放宽）：
+//   - 每一步都成功（落盘记录的 ok 字段，来自工具执行结果）；
+//   - 每一步用的工具都在注册表里，且不是写工具。
+//
+// 注册表里查不到的工具名一律按「写」处理：证明不了它没动东西，就不给它免复验。
+func missionReadOnlyDone(id string) (int, bool) {
+	m, ok := missionGet(id)
+	if !ok || len(m.Plan) == 0 {
+		return 0, false
+	}
+	for _, st := range m.Plan {
+		if !st.OK {
+			return 0, false
+		}
+		t, exists := aiToolRegistry[st.Tool]
+		if !exists || t.Write {
+			return 0, false
+		}
+	}
+	return len(m.Plan), true
+}
+
 // aiMissionSettle 回合结束收口。必须在 endTrace 之前跑（defer LIFO 保证）。
 func aiMissionSettle() {
 	s := aiMissionCur
@@ -276,9 +311,17 @@ func aiMissionSettle() {
 			})
 			return
 		default:
+			// 纯只读行动（v3.6）：没有任何改动可复验，逐步成功即视为完成。
+			// 有写操作的行动仍一律 failed —— 那才是红线 1 要守的地方。
+			if n, ro := missionReadOnlyDone(s.id); ro {
+				fin(func(x *Mission) error {
+					return missionFinish(x, true, "只读检查完成（"+itoa(n)+" 步全部成功，未改动任何东西）")
+				})
+				return
+			}
 			// 没有复验证据：failed 而不是 done（红线 1）
 			fin(func(x *Mission) error {
-				return missionFinish(x, false, "回合结束但没有复验证据")
+				return missionFinish(x, false, "回合结束但没有复验证据（有写操作的行动须调用 verify_environment 复验）")
 			})
 			return
 		}

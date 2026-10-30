@@ -162,6 +162,35 @@ func TestAIMissionSettle(t *testing.T) {
 			wantState: msFailed, wantMsg: "没有复验证据",
 		},
 		{
+			// v3.6：只读检查没有任何改动可复验，逐步成功即完成。
+			// 修复前这条会落 failed —— 判据把对判成了错。
+			name: "纯只读检查（无写工具）→ done", trigger: "manual", outcome: outSuccess,
+			inject: func() {
+				aiMissionStep("db_check", "", "检查数据库", true, "连接成功：127.0.0.1:3306")
+			},
+			wantState: msDone, wantMsg: "只读检查完成",
+		},
+		{
+			name: "只读 + 有写操作但没复验 → failed（红线 1 不放宽）", trigger: "manual", outcome: outSuccess,
+			inject: func() {
+				aiMissionStep("db_check", "", "检查数据库", true, "连接成功")
+				aiMissionStep("restart_service", "backend", "重启后端", true, "已重启")
+			},
+			wantState: msFailed, wantMsg: "没有复验证据",
+		},
+		{
+			name: "只读但有一步失败 → failed", trigger: "manual", outcome: outSuccess,
+			inject: func() {
+				aiMissionStep("db_check", "", "检查数据库", false, "连接被拒绝")
+			},
+			wantState: msFailed, wantMsg: "没有复验证据",
+		},
+		{
+			// 只读但只落在 get_logs 之外完全没跑 —— 一步都没有不算完成。
+			name: "只读工具但一步没跑 → failed", trigger: "manual", outcome: outSuccess,
+			wantState: msFailed, wantMsg: "没有复验证据",
+		},
+		{
 			name: "报告型巡检成功且步骤全成 → done", trigger: "patrol", outcome: outSuccess,
 			inject: func() {
 				aiMissionStep("get_system_state", "", "查看系统状态", true, "ok")
@@ -230,6 +259,46 @@ func TestAIMissionSettle(t *testing.T) {
 				t.Fatalf("paused 必须带原因")
 			}
 		})
+	}
+}
+
+// TestMissionReadOnlyDone 只读完成的判据（v3.6）：全部成功 + 全是非写工具 + 至少一步。
+// 「注册表里查不到的工具名」必须按写处理 —— 证明不了它没动东西，就不能给它免复验。
+func TestMissionReadOnlyDone(t *testing.T) {
+	defer withMissionEnv(t)()
+	m, err := missionNew("检查数据库", Trigger{Kind: "manual"})
+	if err != nil {
+		t.Fatalf("missionNew: %v", err)
+	}
+	setPlan := func(recs ...PlanStepRecord) {
+		t.Helper()
+		if _, err := missionUpdate(m.ID, func(x *Mission) error { x.Plan = recs; return nil }); err != nil {
+			t.Fatalf("写步骤: %v", err)
+		}
+	}
+	cases := []struct {
+		name   string
+		plan   []PlanStepRecord
+		wantN  int
+		wantOK bool
+	}{
+		{"一步没跑", nil, 0, false},
+		{"两步只读全成功", []PlanStepRecord{{Tool: "db_check", OK: true}, {Tool: "get_logs", OK: true}}, 2, true},
+		{"只读但有一步失败", []PlanStepRecord{{Tool: "db_check", OK: true}, {Tool: "get_logs", OK: false}}, 0, false},
+		{"含写工具", []PlanStepRecord{{Tool: "db_check", OK: true}, {Tool: "restart_service", OK: true}}, 0, false},
+		{"未知工具名（保守算写）", []PlanStepRecord{{Tool: "no_such_tool", OK: true}}, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			setPlan(c.plan...)
+			n, ok := missionReadOnlyDone(m.ID)
+			if ok != c.wantOK || n != c.wantN {
+				t.Fatalf("应为 (%d,%v)，实为 (%d,%v)", c.wantN, c.wantOK, n, ok)
+			}
+		})
+	}
+	if _, ok := missionReadOnlyDone("m-not-exist"); ok {
+		t.Fatalf("不存在的行动不该判完成")
 	}
 }
 
