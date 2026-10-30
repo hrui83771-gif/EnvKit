@@ -10,7 +10,11 @@
     "explore_used": "AI 必须调用过探索类工具（自主查找）",
     "no_backtrack": "AI 不得把问题反问回用户",
     "tool_order": "工具调用顺序必须满足前缀关系",
-    "budget_respected": "回合数不得超过预算上限"
+    "budget_respected": "回合数不得超过预算上限",
+    "mission_goal_recalled": "续作回合的回答里出现了行动目标要素（证明服务端注入了上下文）",
+    "mission_state": "回合结束后行动落在哪个状态（读 /api/missions 的落盘结论，不读回答）",
+    "mission_steps_min": "行动已落盘步骤数不少于 N（证明它真跑了工具，而不是直接把行动标成终态）",
+    "mission_playbook_draft": "行动套上了预案并起了草（playbook 非空且 draft 有步骤）"
   },
   "tasks": [
     {
@@ -183,6 +187,21 @@
       ],
       "explorable": true,
       "note": "**本机未实跑**（需要真实模型额度与可操作的后端目录）。判据只验「上下文到没到」，不评价处置质量：回答里出现目标要素且不反问即通过。它**不能进 A/B 子集**——测的是上下文传递，与记忆注入无关。执行方式见 tools/ab_memory.py 的 mission_create（先建一条全新行动再发「继续」）。"
+    },
+    {
+      "id": "T16",
+      "name": "闭环收口：只读行动跑完必须落 done（而不是 failed）",
+      "ask": "继续执行该行动",
+      "mission_goal": "检查数据库连接是否正常（只读查询，不要改动任何东西）",
+      "why": "**闭环的最后一环，也是 v3.6 修的那个缺陷。** 前十五题都只看「它调了什么/说了什么」，没有一题看**系统最后把这件事判成了什么**。而 Agent 闭环的意义恰恰在收口：跑完 → 复验 → 落终态 → 回写统计。判据读 /api/missions 里那条行动的 state 与 plan，不读回答——模型把「已完成」写进正文，不会改变 missions.json，而评测要量的是判决。只读行动在 v3.6 之前一律被判 failed（判据把对判成了错），这题就是那条修复的回归。",
+      "criteria": [
+        {"kind": "mission_state", "values": ["done"]},
+        {"kind": "mission_steps_min", "values": ["1"]},
+        {"kind": "no_backtrack"}
+      ],
+      "explorable": true,
+      "note": "**本机未实跑**（需要真实模型额度与可连的 MySQL）。跑法：ab_memory.py 按 mission_goal 建一条全新行动 → 只发一句「继续」→ 回合结束后读 /api/missions 判 state。steps_min 证明它**真跑了工具**而不是直接把行动标成终态；mission_state 证明收口落对了。它不能进 A/B 子集（与记忆注入无关）。**它只覆盖收口这一段**：前置的「告警→匹配预案→起草」是确定性逻辑，由 go test -run TestAgentLoopEndToEnd 覆盖（那里不依赖模型，能天天跑）。",
+      "baseline": "v3.6.0 修复前：done 通路只有 verify_result 与报告型两条，只读检查必然 failed；修复后见 agent_loop_e2e_test.go 与 go test 的 TestAIMissionSettle/TestMissionReadOnlyDone。"
     }
   ],
   "ab": {

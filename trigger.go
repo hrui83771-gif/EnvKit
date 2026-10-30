@@ -53,6 +53,13 @@ func missionFromGuard(svcID, svcLabel, errKind, title, detail string) (Mission, 
 	if p, ok := pbkApplyToMission(m.ID, svcID, errKind); ok {
 		// 桌宠/气泡只说一句：这是"建议"而不是"已经做了"，用词不能滑
 		notifyUser("检测到"+svcLabel+"异常", "建议执行预案「"+p.Title+"」（"+itoa(len(p.Steps))+" 步，需你确认）")
+		// 返回值必须与落盘状态一致。上面那次更新写的是文件里那条，
+		// 手里的 m 还是套预案之前的副本 —— 直接返回它，调用方看到的就是
+		// 「日志说命中了、卡片上没有预案」。handleMissionTrigger 结尾特意
+		// 重读一遍，正是同一个坑的补丁；这里补在源头，调用方不用各自记得。
+		if cur, ok := missionGet(m.ID); ok {
+			m = cur
+		}
 	}
 	notifyMissions()
 	return m, true

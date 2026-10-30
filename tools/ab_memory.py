@@ -568,8 +568,30 @@ def plan_steps(events):
 
 
 # ---------- 判分 ----------
-def judge(task, text, events):
+def fetch_mission(mid):
+    """取一条行动的**最新落盘状态**（v3.6 起，闭环题的判据来源）。
+
+    为什么不看回答文本：行动终态是系统算出来的结论（verify_result 落盘后由
+    missionFinish 裁定），模型转述不了它——它只能把"done"写进正文，
+    而正文里写什么都不改变 missions.json。这正是"让判据读系统的申报"。
+
+    取不到就返回 None，让判据明确失败：把"没查到"当成"通过"是最坏的一种
+    失败（报表上看不出区别）。
+    """
+    if not mid:
+        return None
+    d = api('/api/missions')
+    for m in (d.get('missions') or []):
+        if m.get('id') == mid:
+            return m
+    return None
+
+
+def judge(task, text, events, mission=None):
     """按tasks.json 的 criteria 判分。返回 (是否通过, 逐条明细)。
+
+    `mission` 是行动的最新落盘状态（见 fetch_mission），只有闭环题需要。
+    未传时 mission_* 类判据一律判失败而不是跳过。
 
     每条 criterion 只用机械可判的依据：
       - 调没调某个工具（事件流里有）
@@ -627,6 +649,38 @@ def judge(task, text, events):
             hit = [p for p in BACKTRACK_PHRASES if p in text]
             passed = not hit
             why = f'backtrack={hit}' if hit else 'no backtrack'
+        elif kind == 'mission_state':
+            # v3.6（闭环题的判据）：行动最终落在哪个状态，**读系统记录**而不读回答。
+            #
+            # 为什么这条不能被"回答里出现 done"替代：模型完全可以在正文里写
+            # "已完成"，而 missions.json 里那条还是 failed —— 那是判决与文书不一致，
+            # 而评测要量的是判决。这正是红线 1「成败只认 verify_result」的镜像：
+            # 判据也只认系统落盘的结论。
+            #
+            # values 是**可接受状态的集合**（不是单值）：同一件事"done"与
+            # "failed 且复验明确未过" 是两种不同结局，题怎么定义就写哪些。
+            if mission is None:
+                passed = False
+                why = '没有行动记录（闭环判据必须先建行动，不能当通过）'
+            else:
+                st = str(mission.get('state') or '')
+                passed = st in vals
+                r = mission.get('result') or {}
+                why = (f"state={st} verified={r.get('verified')} "
+                       f"msg={str(r.get('msg') or '')[:120]}")
+        elif kind == 'mission_steps_min':
+            # 步骤数下限：证明"它真跑了"，而不只是把行动标成终态。
+            # 与 mission_state 配合使用——只有两者同时成立，才算「跑完并正确收口」。
+            need = int(vals[0]) if vals else 1
+            plan = (mission or {}).get('plan') or []
+            passed = mission is not None and len(plan) >= need
+            why = f'steps={len(plan)} need>={need}'
+        elif kind == 'mission_playbook_draft':
+            # 预案是不是真的被套上并起草了（Phase 2 那条腿的模型侧证据）。
+            p = str((mission or {}).get('playbook') or '')
+            draft = (mission or {}).get('draft') or []
+            passed = mission is not None and p != '' and len(draft) > 0
+            why = f'playbook={p or "（无）"} draft={len(draft)}'
         elif kind == 'mission_goal_recalled':
             # v3.5（Phase 3 验收 3）：「续作不丢上下文」。
             #
@@ -696,7 +750,11 @@ def run_group(name, memory_on, tasks, repeat):
             # （Phase 2 修掉的那条真实断链）。
             mid = mission_create(t['mission_goal']) if t.get('mission_goal') else None
             text, events, dur = chat([{'role': 'user', 'content': t['ask']}], mission_id=mid)
-            ok, detail = judge(t, text, events)
+            # v3.6：闭环题的判据读行动落盘状态，所以必须在**收口之后**再取一次。
+            # 时序不能省：这一回合的 settle 发生在服务端流结束前，chat() 返回时
+            # 已经收过口；提前取会拿到 running 而把正确行为判成失败。
+            mission = fetch_mission(mid) if mid else None
+            ok, detail = judge(t, text, events, mission=mission)
             row = {
                 'task': t['id'], 'task_name': t['name'], 'run': i + 1,
                 'success': ok,
@@ -708,6 +766,15 @@ def run_group(name, memory_on, tasks, repeat):
                 'criteria': detail,
                 'answer_head': text[:200],
                 'mission_id': mid,
+                # 行动终态原样落报告：判据看的就是这几个字段，
+                # 报表里不写出来，复核时又得重跑一次才知道当时是什么状态。
+                'mission': None if mission is None else {
+                    'state': mission.get('state'),
+                    'playbook': mission.get('playbook') or '',
+                    'draft': len(mission.get('draft') or []),
+                    'plan': len(mission.get('plan') or []),
+                    'result': mission.get('result') or {},
+                },
             }
             rows.append(row)
             flag = 'PASS' if ok else 'FAIL'

@@ -172,7 +172,9 @@ Go 代码在模块根（`package main`），Windows 平台相关代码在 `inter
 
 ## 版本
 
-当前 **3.5.0**（已发布）。这一版把 Agent 闭环走完：预案库、告警闭环、晨报（Phase 2），以及行动→经验自动沉淀与成长报表（Phase 3）。改动见 [`docs/RELEASE-v3.5.0.md`](docs/RELEASE-v3.5.0.md)，设计与偏离见 [docs/DESIGN-agent-loop.md](docs/DESIGN-agent-loop.md)，历史路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+当前 **3.6.0**（已发布）。v3.5 把 Agent 闭环走完（预案库、告警闭环、晨报、行动→经验自动沉淀、成长报表）；v3.6 修了三个「结论报错」的缺陷（记忆列表把存在报成不存在、只读行动被判 failed、预案删除被侧栏遮挡）。改动见 [`docs/RELEASE-v3.6.0.md`](docs/RELEASE-v3.6.0.md)，设计与偏离见 [docs/DESIGN-agent-loop.md](docs/DESIGN-agent-loop.md)，历史路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+
+闭环的**接缝**由 `agent_loop_e2e_test.go` 一条测试覆盖（告警 → 预案 → 起草 → 执行 → 复验 → 收口 → 沉淀 → 复用 → 降级 → 经验召回，不调模型）。单模块单测测不出接缝问题：历史上两次真实断链都发生在接缝上，而当时所有单测都是绿的。
 
 ## 许可证
 
