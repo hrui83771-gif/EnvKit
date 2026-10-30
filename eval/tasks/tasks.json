@@ -186,7 +186,8 @@
         {"kind": "no_backtrack"}
       ],
       "explorable": true,
-      "note": "**本机未实跑**（需要真实模型额度与可操作的后端目录）。判据只验「上下文到没到」，不评价处置质量：回答里出现目标要素且不反问即通过。它**不能进 A/B 子集**——测的是上下文传递，与记忆注入无关。执行方式见 tools/ab_memory.py 的 mission_create（先建一条全新行动再发「继续」）。"
+      "allow_confirm_pause": true,
+      "note": "**已实跑（2026-10-30，deepseek-flash）**：PASS ×3，单次约 10 分钟。目标要素在**两次里来自确认卡参数**（`start_service{service:backend}`）、一次来自回答正文（「现在直接启动后端」）——这个形态差异是题面必须两种都认的原因：模型有时先说再弹卡，有时直接弹卡，两种都证明上下文到了。判据只验「上下文到没到」，不评价处置质量。**它不能进 A/B 子集**——测的是上下文传递，与记忆注入无关。**单次 10 分钟是「等用户点头」的代价**：写操作弹卡后服务端原地等人（正确设计），评测端没人可点，只能等 `aiConfirmWaitMax` 超时。`--reject-confirm` 本想替评测端点「拒绝」，实测 30 秒 60 次全 404（详见 DESIGN-agent-loop.md §4.4）。"
     },
     {
       "id": "T16",
@@ -200,7 +201,7 @@
         {"kind": "no_backtrack"}
       ],
       "explorable": true,
-      "note": "**本机未实跑**（需要真实模型额度与可连的 MySQL）。跑法：ab_memory.py 按 mission_goal 建一条全新行动 → 只发一句「继续」→ 回合结束后读 /api/missions 判 state。steps_min 证明它**真跑了工具**而不是直接把行动标成终态；mission_state 证明收口落对了。它不能进 A/B 子集（与记忆注入无关）。**它只覆盖收口这一段**：前置的「告警→匹配预案→起草」是确定性逻辑，由 go test -run TestAgentLoopEndToEnd 覆盖（那里不依赖模型，能天天跑）。",
+      "note": "**已实跑（2026-10-30，deepseek-flash）**：PASS，3.3 秒，工具序列 `recall_lessons → db_check`，行动落 `done`、`msg=只读检查完成（2 步全部成功，未改动任何东西）`。跑法：ab_memory.py 按 mission_goal 建一条全新行动 → 只发一句「继续」→ 回合结束后读 /api/missions 判 state。steps_min 证明它**真跑了工具**而不是直接把行动标成终态；mission_state 证明收口落对了。它不能进 A/B 子集（与记忆注入无关）。**它只覆盖收口这一段**：前置的「告警→匹配预案→起草」是确定性逻辑，由 go test -run TestAgentLoopEndToEnd 覆盖（那里不依赖模型，能天天跑）。",
       "baseline": "v3.6.0 修复前：done 通路只有 verify_result 与报告型两条，只读检查必然 failed；修复后见 agent_loop_e2e_test.go 与 go test 的 TestAIMissionSettle/TestMissionReadOnlyDone。"
     }
   ],

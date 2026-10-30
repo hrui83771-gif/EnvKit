@@ -1,0 +1,129 @@
+{
+  "spec_version": "1.0",
+  "model": "deepseek-flash",
+  "repeat": 1,
+  "ids": [
+    "T15",
+    "T16"
+  ],
+  "rows": [
+    {
+      "task": "T15",
+      "task_name": "续作不丢上下文（全新行动，只发「继续」）",
+      "run": 1,
+      "success": true,
+      "explore_rounds": 0,
+      "total_rounds": 2,
+      "plan_steps": 2,
+      "seconds": 634.2,
+      "tools": [
+        "recall_lessons",
+        "get_logs"
+      ],
+      "criteria": [
+        {
+          "kind": "mission_goal_recalled",
+          "values": [
+            "后端",
+            "backend"
+          ],
+          "passed": true,
+          "why": "hit=['后端', 'backend'] @confirm_card"
+        },
+        {
+          "kind": "no_backtrack",
+          "values": [],
+          "passed": true,
+          "why": "no backtrack"
+        }
+      ],
+      "answer_head": "",
+      "mission_id": "m-20261030-202114-0CC403",
+      "mission": {
+        "state": "awaiting_confirm",
+        "playbook": "",
+        "draft": 0,
+        "plan": 2,
+        "result": {}
+      }
+    },
+    {
+      "task": "T16",
+      "task_name": "闭环收口：只读行动跑完必须落 done（而不是 failed）",
+      "run": 1,
+      "success": true,
+      "explore_rounds": 1,
+      "total_rounds": 3,
+      "plan_steps": 3,
+      "seconds": 7.4,
+      "tools": [
+        "recall_lessons",
+        "db_check",
+        "db_query"
+      ],
+      "criteria": [
+        {
+          "kind": "mission_state",
+          "values": [
+            "done"
+          ],
+          "passed": true,
+          "why": "state=done verified=True msg=只读检查完成（3 步全部成功，未改动任何东西）"
+        },
+        {
+          "kind": "mission_steps_min",
+          "values": [
+            "1"
+          ],
+          "passed": true,
+          "why": "steps=3 need>=1"
+        },
+        {
+          "kind": "no_backtrack",
+          "values": [],
+          "passed": true,
+          "why": "no backtrack"
+        }
+      ],
+      "answer_head": "数据库连接检查完成，结果正常，未做任何改动。\n\n- **连通性**：db_check 通过，成功连接 127.0.0.1:3306，服务端 MySQL 8.0.40\n- **目标库**：`blood` 已存在\n- **读权限**：实际执行只读查询成功，返回 `version=8.0.40`、`server_time=2026-10-30 20:33:38`、`cur_db=blood`，说明账号对",
+      "mission_id": "m-20261030-203333-28E805",
+      "mission": {
+        "state": "done",
+        "playbook": "",
+        "draft": 0,
+        "plan": 3,
+        "result": {
+          "ok": true,
+          "action": "mission",
+          "target": "m-20261030-203333-28E805",
+          "msg": "只读检查完成（3 步全部成功，未改动任何东西）",
+          "evidence": null,
+          "verified": true
+        }
+      }
+    }
+  ],
+  "summary": {
+    "n": 2,
+    "success_rate": 1.0,
+    "explore_median": 0.5,
+    "explore_p90": 0,
+    "seconds_median": 320.8,
+    "per_task": {
+      "T16": {
+        "name": "闭环收口：只读行动跑完必须落 done（而不是 failed）",
+        "success_rate": 1.0,
+        "explore_median": 1,
+        "total_median": 3,
+        "seconds_median": 7.4
+      },
+      "T15": {
+        "name": "续作不丢上下文（全新行动，只发「继续」）",
+        "success_rate": 1.0,
+        "explore_median": 0,
+        "total_median": 2,
+        "seconds_median": 634.2
+      }
+    }
+  }
+}

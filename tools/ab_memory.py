@@ -63,6 +63,14 @@ BASE = 'http://127.0.0.1:18765'
 ROOT = Path(__file__).resolve().parent.parent
 TASKS_JSON = ROOT / 'eval' / 'tasks' / 'tasks.json'
 REPORT = ROOT / 'docs' / 'eval' / 'ab-memory-report.json'
+# --only 跑的是「单题验证」，与 A/B 增益是两件事：口径不同、结论不同
+# （A/B 看两组差异，单题看某一条判据在这台机器上到底能不能通过）。
+# 落到同一个文件里就会互相覆盖：跑一次单题，A/B 的历史数据就没了。
+TASK_REPORT = ROOT / 'docs' / 'eval' / 'task-report.json'
+# 单轮事件留档：判据说 PASS 之后，复核的人唯一能看的就是这个。
+# 只留一个 PASS 在报告里，等于要求复核者重跑一次——而模型每次不同，
+# 重跑出来的不是同一件事。
+EVENTS_DIR = ROOT / 'docs' / 'eval' / 'events'
 
 # 强制直连。若走本机代理，POST 的 body 会被剥掉——
 # EnvKit 侧表现为「AI 收到空请求：请求体未到达服务端」，
@@ -247,19 +255,40 @@ AUTO_APPROVE_WHITELIST = {
 }
 
 
-def _validate_response(text, events):
+def _validate_response(text, events, allow_confirm_pause=False):
     """校验响应有效性。**无效必须报错，绝不能当 0 数据用。**
 
     实测踩过两次，都会给出一个漂亮但假的 0：
     - 第一次：代理剥掉 POST body，一个事件都没收到 -> 报告写"增益 0.000"
     - 第二次：只有 error 事件，没正文也没工具 -> 同样写成 0
     两次看起来都像"记忆层没影响"，真相是"根本没测到"。
+
+    `allow_confirm_pause`：题目显式声明「允许以确认卡结束本回合」时，
+    「正文为空 + 有 confirm_request」是**产品的正确决定**，不是采集故障。
+    默认 False，其余题目的口径一字不动。
     """
     if not events:
         raise SystemExit(
             '\n**空响应**：一个 SSE 事件都没收到。\n'
             '几乎可以确定是本机代理拦截了 POST 请求体。\n'
             '（EnvKit 日志里会有「请求体未到达（被本机代理/预览容器拦截）」）')
+
+    # **产品停在确认卡上 ≠ 采集失败**（v3.6.1）。
+    #
+    # 实测（T15 实跑）：模型正确地把「启动后端」交给用户确认，事件流
+    # reasoning×129 + plan_step + tool_result + confirm_request + waiting_confirm
+    # + done，**正文为空**——它在等用户点头，这是红线 2 要求的正确行为。
+    # 原来这一层无条件按"没跑"处理，于是「正确行为」在判据看到之前就作废了。
+    #
+    # 豁免必须放在**两道校验之前**：如果模型的第一步就是弹卡（还没有
+    # tool_result），下面第一道「没正文也没工具」同样会把它误判成
+    # "模型没被调用到"——同一个错误在两个地方各写了一遍。
+    #
+    # 只在题目**显式声明** `allow_confirm_pause` 时放行，其余口径一字不动
+    # （改口径要基线同批冻结）。
+    if (allow_confirm_pause and not text.strip()
+            and any(e.get('type') == 'confirm_request' for e in events)):
+        return
     if not text.strip() and not tool_seq(events):
         kinds = [e.get('type') for e in events]
         errs = [e.get('text', '')[:200] for e in events if e.get('type') == 'error']
@@ -350,11 +379,46 @@ def _pending_confirm(events):
     return (last[0], last[1], tid) if last else None
 
 
-def chat_once(messages, confirm=None, timeout=300, mission_id=None):
+def _confirm_text(events):
+    """把确认卡里"模型自己填的东西"摊平成文本，供判据取证。
+
+    只取 `tool` / `text`（产品生成的中文动作名）/ `args`（模型给的参数），
+    **不取 `reason`**：那是产品标记意图来源的固定值，不是模型输出，
+    拿它当证据等于拿常量当证据（一定命中，等于没测）。
+    """
+    out = []
+    for e in events:
+        if e.get('type') != 'confirm_request':
+            continue
+        out.append(str(e.get('tool') or ''))
+        out.append(str(e.get('text') or ''))
+        try:
+            out.append(json.dumps(e.get('args') or {}, ensure_ascii=False))
+        except (TypeError, ValueError):
+            out.append(str(e.get('args') or ''))
+    return [x for x in out if x]
+
+
+def chat_once(messages, confirm=None, timeout=300, mission_id=None, reject_confirm=0):
     """发一轮请求，返回 (文本, 事件列表, 耗时秒)。
 
     confirm 非空时走"确认回执"路径：服务端执行该写工具、把结果交给模型、
     然后继续同一轮推理（见 ai_loop.go:97-129）。
+
+    reject_confirm=N：本轮最多**拒绝** N 张确认卡（POST /api/ai/confirm
+    approved:false），让回合正常收尾。
+
+    ## 为什么需要它
+
+    实测 T15：模型正确地要求「启动后端」的确认，然后服务端**原地等用户决定**
+    （v3.2 的设计，正确），等不到就超时——一题跑 **614 秒**，其中 600 秒
+    全在等一个评测端根本不打算点的按钮。
+    评测装置的角色就是那个"用户"：要么点确认，要么点拒绝。
+    **不表态不是一种中立态度，它是把设备缺陷伪装成慢。**
+
+    拒绝后服务端会继续这一轮（模型看到"用户拒绝了"再收尾），
+    所以仍然有正文可判。合成的 `eval_confirm_reject` 事件会被记进事件流——
+    复核的人必须能看出"这张卡是谁决定不点的"，不能让它看起来像模型自己收手的。
 
     mission_id 非空时把这一回合绑定到一条已有行动（v3.5，Phase 3 验收 3）。
     绑定后服务端会注入 `<mission_context>`（目标 + 已完成步骤 + 断点），
@@ -414,14 +478,68 @@ def chat_once(messages, confirm=None, timeout=300, mission_id=None):
             events.append(ev)
             if ev.get('type') == 'delta':
                 text += ev.get('text', '')
+            if ev.get('type') == 'confirm_request' and reject_confirm > 0:
+                reject_confirm -= 1
+                _reject_confirm(ev, events)
     return text, events, time.time() - t0
 
 
-def chat(messages, timeout=300, allow_writes=False, extra_writes=(), mission_id=None):
+def _reject_confirm(ev, events):
+    """就地回执「拒绝」，让服务端不再干等（见 chat_once 的说明）。
+
+    ## 必须重试：发卡在前、登记等待者在后
+
+    实测（T15，第一次带 --reject-confirm）：立刻投递得到 **404 no_waiter**，
+    然后这一轮照样等满 600 秒 —— 服务端是"先 sseWrite(confirm_request)，
+    再 aiAwaitConfirm 登记等待者"（ai_loop.go:1070），我们读到事件就投递，
+    比登记早几十毫秒，于是被当成"没有等待者"。
+
+    这与前端那条 404 注释说的是同一件事（404 = 当前没有等待者，
+    前端据此退回旧路径）。区别是**评测端不能退回旧路径**：它没有任何人
+    会去点那个按钮，只能重试到送达 —— 否则测出来的 600 秒是设备自己造成的。
+
+    **失败必须记下来**：回执一直没送达时，事后要能看出是"模型没弹卡"
+    还是"我们没送到"，而不是只剩一个 600 秒的耗时。
+    """
+    body = {'tool_call_id': ev.get('tool_call_id', ''), 'tool': ev.get('tool', ''),
+            'args': ev.get('args') or {}, 'approved': False, 'batch': False}
+    raw_body = json.dumps(body).encode('utf-8')
+    ev2 = {'type': 'eval_confirm_reject', 'tool': ev.get('tool', '')}
+    tries = 0
+    for tries in range(1, 61):  # 60 × 0.5s ≈ 30s 上限
+        req = urllib.request.Request(BASE + '/api/ai/confirm', data=raw_body, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('X-EnvKit-Token', TOKEN)
+        try:
+            raw = OPENER.open(req, timeout=15).read().decode('utf-8', 'replace')
+            j = json.loads(raw)
+            ev2['ok'] = bool(j.get('ok'))
+            ev2['resp'] = raw[:200]
+            if ev2['ok']:
+                break
+        except urllib.error.HTTPError as e:
+            # 404 = 还没登记上，重试；其余状态码重试也没用。
+            ev2['ok'] = False
+            ev2['resp'] = f'HTTP {e.code}'
+            if e.code != 404:
+                break
+        except Exception as e:  # noqa: BLE001
+            ev2['ok'] = False
+            ev2['resp'] = f'{type(e).__name__}: {e}'[:200]
+            break
+        time.sleep(0.5)
+    ev2['tries'] = tries
+    events.append(ev2)
+
+
+def chat(messages, timeout=300, allow_writes=False, extra_writes=(), mission_id=None,
+         allow_confirm_pause=False, reject_confirm=0):
     """发一轮对话，返回 (文本, 全部事件, 总耗时秒)。
 
     allow_writes=True 时自动批准确认卡（**仅限 AUTO_APPROVE_WHITELIST**
     加上 `extra_writes` 里按类声明的工具）。
+    `allow_confirm_pause=True`：允许本回合以确认卡结束（正文可为空），
+    见 `_validate_response` —— 用于「停下来问就是对的」这类题。
 
     ## 为什么要这个开关
 
@@ -452,7 +570,8 @@ def chat(messages, timeout=300, allow_writes=False, extra_writes=(), mission_id=
     看起来像它什么都没查就动手了。
     """
     t0 = time.time()
-    text, events, _ = chat_once(messages, None, timeout, mission_id)
+    text, events, _ = chat_once(messages, None, timeout, mission_id,
+                                 reject_confirm=reject_confirm)
 
     if allow_writes:
         # 本轮的批准集合 = 全局白名单 ∪ 这一类声明的额外工具。
@@ -471,12 +590,13 @@ def chat(messages, timeout=300, allow_writes=False, extra_writes=(), mission_id=
                 break
             confirm = {'tool_call_id': tid, 'tool': tool,
                        'args': args, 'approved': True}
-            text2, events2, _ = chat_once(messages, confirm, timeout, mission_id)
+            text2, events2, _ = chat_once(messages, confirm, timeout, mission_id,
+                                          reject_confirm=reject_confirm)
             text += text2
             events += events2
 
     try:
-        _validate_response(text, events)
+        _validate_response(text, events, allow_confirm_pause=allow_confirm_pause)
     except Exception as e:
         # ⚠️ **必须把 events 挂在异常上带出来**。
         #
@@ -690,9 +810,26 @@ def judge(task, text, events, mission=None):
             # 判据刻意宽松（任一关键词命中即可）：目的是**证明上下文存在**，
             # 不是评价模型怎么表达它。用 requires_all 会让措辞差异变成失败，
             # 那是把「表达方式」当成「能力」。
-            hit = [v for v in vals if v in text]
+            #
+            # v3.6.1：**确认卡里的参数也是证据**。
+            # 实测 T15：模型决定「启动后端」是对的，但它把这一步交给用户确认
+            # （红线 2），正文为空。只看正文就等于因为「它按规矩停下来问」
+            # 判它「不知道要干什么」——把正确行为判成失败。
+            # 确认卡的 tool/args/text 是模型自己填的，同样证明上下文到了。
+            # `hit_src` 写清命中在哪，复核时能看出这是"说了"还是"做了"。
+            hit, hit_src = [], ''
+            for v in vals:
+                if v in text:
+                    hit.append(v)
+                    hit_src = hit_src or 'answer'
+            if not hit:
+                card = ' '.join(_confirm_text(events))
+                for v in vals:
+                    if v in card:
+                        hit.append(v)
+                        hit_src = hit_src or 'confirm_card'
             passed = bool(hit)
-            why = f'hit={hit}' if hit else 'goal not recalled（上下文没传到）'
+            why = (f'hit={hit} @{hit_src}' if hit else 'goal not recalled（上下文没传到）')
         else:
             # 判据类型不认识时**必须判失败**，不能默认通过——
             # 否则加一条新判据就会静默变成"永远通过"。
@@ -722,25 +859,32 @@ def mission_create(goal):
     return mid
 
 
-def run_group(name, memory_on, tasks, repeat):
-    print(f'\n===== 组 {name}（memory_enabled={memory_on}）=====')
+def _dump_events(tid, run, events):
+    """把这一轮的事件落盘（剔掉 reasoning，只留决策与调用）。
 
-    # 记忆库状态也必须对齐，否则 A/B 测的不是"记忆有没有用"，
-    # 而是"开关切了没有"。A 组清空（注入零），B 组预置（注入非零）。
-    if memory_on:
-        seed_memories(clear_first=True)
-    else:
-        clear_memories()
+    reasoning 事件占体积九成、对复核没有用处，但**条数要记下来**：
+    T15 那次是 reasoning×129 才走到确认卡，只看剩下的 8 条事件
+    会以为模型很干脆，实际它想了很久。
+    """
+    from collections import Counter as _C
+    counts = dict(_C(e.get('type') for e in events))
+    keep = [e for e in events if e.get('type') != 'reasoning']
+    EVENTS_DIR.mkdir(parents=True, exist_ok=True)
+    p = EVENTS_DIR / f'{tid}-run{run}.json'
+    p.write_text(json.dumps({'task': tid, 'run': run, 'counts': counts,
+                             'events': keep}, ensure_ascii=False, indent=1),
+                 encoding='utf-8')
+    return p
 
-    set_memory(memory_on)
-    # 确认开关真的生效了。**不确认的话整轮 A/B 都不可信**——
-    # 之前有一次 POST /api/ai/config 的 body 为空，把 enabled 误关过。
-    cur = api('/api/ai/config')
-    if bool(cur.get('memory_enabled')) != bool(memory_on):
-        raise SystemExit(f'{name} 组开关未生效：期望 {memory_on}，实际 {cur.get("memory_enabled")}')
-    if memory_on:
-        verify_seeded(expected=len(SEED_MEMORIES))
 
+def run_tasks(tasks, repeat, reject_confirm=0):
+    """跑一批题，返回逐次记录。
+
+    抽出来是为了让「A/B 一组」和「--only 指定的几题」共用同一套执行路径 ——
+    两条路各写一份循环的话，两边迟早会不一致（改了一边忘另一边），
+    而评测装置的不一致没法被发现：它只会让两次报告不可比。
+    **本函数不碰记忆开关与记忆库**，那是 run_group 的事。
+    """
     rows = []
     for t in tasks:
         for i in range(repeat):
@@ -749,7 +893,9 @@ def run_group(name, memory_on, tasks, repeat):
             # 全看服务端有没有在「无已完成步骤」时也注入 <mission_context>
             # （Phase 2 修掉的那条真实断链）。
             mid = mission_create(t['mission_goal']) if t.get('mission_goal') else None
-            text, events, dur = chat([{'role': 'user', 'content': t['ask']}], mission_id=mid)
+            text, events, dur = chat([{'role': 'user', 'content': t['ask']}], mission_id=mid,
+                                     allow_confirm_pause=bool(t.get('allow_confirm_pause')),
+                                     reject_confirm=reject_confirm)
             # v3.6：闭环题的判据读行动落盘状态，所以必须在**收口之后**再取一次。
             # 时序不能省：这一回合的 settle 发生在服务端流结束前，chat() 返回时
             # 已经收过口；提前取会拿到 running 而把正确行为判成失败。
@@ -777,10 +923,39 @@ def run_group(name, memory_on, tasks, repeat):
                 },
             }
             rows.append(row)
+            dump = _dump_events(t['id'], i + 1, events)
             flag = 'PASS' if ok else 'FAIL'
             print(f'  {flag} {t["id"]} run{i+1}  探索{row["explore_rounds"]} '
-                  f'总{row["total_rounds"]} {row["seconds"]}s')
+                  f'总{row["total_rounds"]} {row["seconds"]}s  事件留档 {dump.name}')
+            if not ok:
+                # 失败必须当场把判据明细打出来：报告要留档，但人是在终端上看结果，
+                # 只说 FAIL 会逼着人再跑一次才知道为什么。
+                for c in detail:
+                    if not c['passed']:
+                        print(f'       × {c["kind"]}: {c["why"]}')
     return rows
+
+
+def run_group(name, memory_on, tasks, repeat):
+    print(f'\n===== 组 {name}（memory_enabled={memory_on}）=====')
+
+    # 记忆库状态也必须对齐，否则 A/B 测的不是"记忆有没有用"，
+    # 而是"开关切了没有"。A 组清空（注入零），B 组预置（注入非零）。
+    if memory_on:
+        seed_memories(clear_first=True)
+    else:
+        clear_memories()
+
+    set_memory(memory_on)
+    # 确认开关真的生效了。**不确认的话整轮 A/B 都不可信**——
+    # 之前有一次 POST /api/ai/config 的 body 为空，把 enabled 误关过。
+    cur = api('/api/ai/config')
+    if bool(cur.get('memory_enabled')) != bool(memory_on):
+        raise SystemExit(f'{name} 组开关未生效：期望 {memory_on}，实际 {cur.get("memory_enabled")}')
+    if memory_on:
+        verify_seeded(expected=len(SEED_MEMORIES))
+
+    return run_tasks(tasks, repeat)
 
 
 def median(xs):
@@ -818,9 +993,57 @@ def main():
     ap.add_argument('--group', choices=['A', 'B', 'both'], default='both')
     ap.add_argument('--repeat', type=int, default=None, help='覆盖任务集里的重复次数')
     ap.add_argument('--dry-run', action='store_true', help='只打印计划，不调模型')
+    ap.add_argument('--only', help='只跑指定题（逗号分隔，如 T15,T16），不进 A/B 分组')
+    ap.add_argument('--reject-confirm', type=int, default=0,
+                    help='自动拒绝前 N 张确认卡（让回合正常收尾，避免干等超时）')
     a = ap.parse_args()
 
     spec = json.loads(TASKS_JSON.read_text(encoding='utf-8'))
+
+    if a.only:
+        # 单题验证：**不动记忆开关、不动记忆库**。
+        # 这几题（续作/闭环）测的是上下文传递与收口判决，与记忆注入无关；
+        # 顺手切开关会把用户的真实设置留在评测状态上。
+        ids = [x.strip() for x in a.only.split(',') if x.strip()]
+        known = {t['id'] for t in spec['tasks']}
+        unknown = [x for x in ids if x not in known]
+        if unknown:
+            raise SystemExit('题号不存在：' + ','.join(unknown))
+        picked = [t for t in spec['tasks'] if t['id'] in ids]
+        repeat = a.repeat or 1
+        print(f"模型配置：{api('/api/ai/config').get('model')}")
+        print(f'指定题（{len(picked)} 题 × {repeat} 次）：')
+        for t in picked:
+            print(f'  {t["id"]} {t["name"]}')
+            print(f'      行动目标：{t.get("mission_goal") or "（无，按普通对话跑）"}')
+            print(f'      {t["ask"]}')
+        if a.dry_run:
+            print('\ndry-run：未调用模型。去掉 --dry-run 真正执行（会消耗 API 额度）。')
+            return
+        rows = run_tasks(picked, repeat, reject_confirm=a.reject_confirm)
+        # **按题合并，不整体覆盖**：一次 --only 只跑一两题，
+        # 覆盖式写入会让"T15 跑完再跑 T16"变成 T15 的数字消失 ——
+        # 那不是"重跑"，是"删档"。同题号的旧记录被本次结果替换（同题才有可比性）。
+        old_rows = []
+        if TASK_REPORT.exists():
+            try:
+                old_rows = json.loads(TASK_REPORT.read_text(encoding='utf-8')).get('rows') or []
+            except (OSError, ValueError):
+                old_rows = []
+        keep = [r for r in old_rows if r.get('task') not in ids]
+        merged = keep + rows
+        rep = {'spec_version': spec['version'],
+               'model': api('/api/ai/config').get('model'),
+               'repeat': repeat, 'ids': sorted({r['task'] for r in merged}),
+               'rows': merged, 'summary': summarize(merged)}
+        TASK_REPORT.write_text(json.dumps(rep, ensure_ascii=False, indent=2),
+                               encoding='utf-8')
+        ok_n = sum(1 for r in rows if r['success'])
+        print(f'\n本次：{ok_n}/{len(rows)} 通过')
+        print(f'累计：{len(merged)} 条记录，{len({r["task"] for r in merged})} 题')
+        print(f'完整数据：{TASK_REPORT}')
+        return
+
     ids = set(spec['ab']['task_ids'])
     tasks = [t for t in spec['tasks'] if t['id'] in ids]
     repeat = a.repeat or spec['ab']['repeat']
