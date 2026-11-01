@@ -1,18 +1,38 @@
 name: eval-gate
 
-# 门禁的触发时机：**手动触发 + 打 tag 时**。
+# 评测门禁。分两层：
 #
-# ## 为什么不在每次 push 上跑全量评测
+#   快速层（每次 push / PR 都跑，几分钟，**不调模型**）
+#     - 判分器自检：元数据不一致会让新注入**静默失效**，而 Go 单测照样绿
+#     - go test / go vet
 #
-# 11 类 × 3 次 = 33 次**真实模型调用**，一次约 25~30 分钟，
-# 而 GitHub Actions 公开仓库每月只给 2000 分钟。
-# 每次 push 跑一遍，一天的额度就没了 —— 而额度耗尽后**门禁会静默失效**
-#（GitHub 会把 job 挂起，不报错）。
+#   全量层（tag 或手动触发，**33 次真实模型调用**，约 25~30 分钟）
+#     - 11 类 × 3 次评测 + 六维判分 + 基线比对
 #
-# > **静默失效的门禁比没有门禁更坏** ——
-# > 它给人"有保护"的错觉，实际早就没在跑。
+# 为什么全量层不挂在每次 push 上：GitHub 公开仓库每月 2000 分钟，
+# 每次 push 跑一遍一天就烧完；额度耗尽后 job 会被**静默挂起**，
+# 而静默失效的门禁比没有门禁更坏 —— 它给人"有保护"的错觉。
 #
-# 所以：**手动触发跑全量（需要时），每次 push 只跑不需要模型的快速项**。
+# ## 这个文件踩过的四个坑（2026-11-01 修）
+#
+# 1. **注释里的 `${{ }}` 也会被求值**。原来在 run 脚本的注释里写了一句
+#    "不能用 a && b || c"，GitHub 把花括号里的东西当成真表达式，
+#    报 `Unrecognized named-value: 'a'`，整个文件判为 Invalid workflow file，
+#    连 job 都不创建（API 返回 jobs.total_count = 0）。
+#    → 现在这类说明只写在 YAML 注释里（也就是本段），不进 run 脚本。
+#
+# 2. **run 脚本里出现与内容同缩进的 `- name:` 会把它吞成脚本文本**。
+#    原来两个 step 缩进成 10 空格，正好等于块标量缩进量，
+#    于是"冻结基线""门禁判定"从来没作为 step 存在过，
+#    全量评测跑完没人判定。→ 现在所有 step 都是 6 空格。
+#
+# 3. **windows runner 的默认 shell 是 pwsh，不是 bash**。
+#    原来用了 `if [ -z "$VAR" ]; then` 这种 bash 语法，
+#    在 pwsh 下 `[` 不是命令，直接报错。→ 需要 bash 语法的 step 显式 `shell: bash`。
+#
+# 4. **setup-go 的版本必须 >= go.mod 的 go 行**。go.mod 写 `go 1.26.0`，
+#    原来装 1.25，会在最简单的编译前就报 `requires go >= 1.26.0`。
+
 on:
   workflow_dispatch:
     inputs:
@@ -22,11 +42,13 @@ on:
         default: false
         type: boolean
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   pull_request:
     paths:
-      # 只在这些文件变化时跑快速门禁 —— 它们是「能不能测」的依赖
+      # 只在这些文件变化时跑 —— 它们是「能不能测」的依赖
       - 'ai_tools.go'
       - 'ai_loop.go'
       - 'ai_sse.go'
@@ -40,6 +62,9 @@ concurrency:
   group: eval-gate-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: windows-latest
@@ -50,57 +75,49 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # 快速门禁：**不需要模型调用**，每次 push 都跑（几秒）
-      # 它守的是「判据装置本身没坏」——
-      # 元数据不一致会让新注入**静默失效**，而 Go 单测是绿的。
-      - name: 快速门禁（判分器自检）
-        run: python tools/recovery_selftest.py
+      # ---- 快速层：不调模型，每次 push 都跑 ----
 
-      - name: Go 单元测试
-        run: go test ./...
+      - name: 判分器自检
+        run: python tools/recovery_selftest.py
 
       - name: go vet
         run: go vet ./...
 
-      # 全量门禁：需要真实模型调用。
+      - name: Go 单元测试
+        run: go test -count=1 ./...
+        timeout-minutes: 20
+
+      # ---- 全量层：只有 tag / 手动触发时跑 ----
       #
-      # ## 为什么必须用 secret 而不是直接带 config.json
-      #
-      # 产品的 `config.json` 里 key 是 **DPAPI 密文**
-      # （`CryptProtectData`，**当前 Windows 用户作用域**）。
-      # CI runner 是另一个用户/另一台机器 → `dpapiUnprotect` 必然失败
-      # （`secrets_windows.go:65` 原话：「可能来自其他机器/用户」）。
-      #
-      # 好在 `dpapiUnprotect` 对**没有 `dpapi:` 前缀的值直接返回原文**，
-      # 所以**明文 key 是支持的**——由 workflow 从 secret 写进配置。
-      #
-      # ## 注意不要提交 config.json
-      #
-      # 它在 `.gitignore` 里；`git clean -fd` 也清不掉它。
-      # 但**同一 runner 上如果残留了别处的密文**，
-      # 上面那次写入会失败——所以先判断「能不能连上模型」而不是「文件存不存在」。
+      # key 为什么走 secret 而不是提交 config.json：
+      # 产品里的 key 是 DPAPI 密文（CryptProtectData，**当前 Windows 用户作用域**），
+      # CI runner 是另一个用户/另一台机器 → dpapiUnprotect 必然失败。
+      # 好在它遇到**没有 dpapi: 前缀**的值会直接返回原文，
+      # 所以明文 key 是可用的 —— 由下面这段从 secret 写进配置。
       - name: 全量评测 + 门禁
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         env:
           MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
           MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
         run: |
-          if [ -z "$MODEL_API_KEY" ]; then
-            echo "::warning title=跳过全量评测::未配置 secret MODEL_API_KEY。"
-            echo "判分器装置的门禁已在上一步跑过。"
+          set -euo pipefail
+
+          if [ -z "${MODEL_API_KEY:-}" ]; then
+            echo "::warning title=跳过全量评测::未配置 secret MODEL_API_KEY，只跑了快速层。"
             exit 0
           fi
 
-          # 把 key 写进配置。**用 python 而非 jq**：避免额外依赖，
-          # 且能保留 config.json 里的其他字段与结构。
-          python -c "
+          # 把 key 写进配置。用 python 而非 jq：不引额外依赖，
+          # 且能保留 config.json 里其它字段与结构。
+          python - <<'PY'
           import json, os, pathlib
           p = pathlib.Path('config.json')
           cfg = json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
@@ -112,16 +129,15 @@ jobs:
           ai['model'] = os.environ.get('MODEL_MODEL') or 'deepseek-flash'
           p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding='utf-8')
           print('config.json 已写入（api_key 为明文，非 dpapi）')
-          "
+          PY
 
-          # **先验能连上模型，再跑 33 次调用** ——
-          # 否则连不上时也要等 25 分钟才知道，白烧额度。
-          python -c "
-          import json, os, sys, urllib.request
+          # 先验能不能连上模型，再跑 33 次调用 ——
+          # 否则连不上也要等 25 分钟才知道，白烧额度。
+          python - <<'PY'
+          import json, sys, urllib.request
           cfg = json.load(open('config.json', encoding='utf-8'))
           ai = cfg['ai']
-          req = urllib.request.Request(
-              ai['base_url'].rstrip('/') + '/models', method='GET')
+          req = urllib.request.Request(ai['base_url'].rstrip('/') + '/models', method='GET')
           req.add_header('Authorization', 'Bearer ' + ai['api_key'])
           try:
               urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=20).read()
@@ -129,33 +145,26 @@ jobs:
           except Exception as e:
               print('::error title=模型不可达::%s' % e)
               sys.exit(1)
-          "
+          PY
 
-          # 33 次调用 + 六维判分，一次约 25~30 分钟
+          # 33 次调用 + 六维判分，约 25~30 分钟
           python tools/recovery_sandbox.py --allow-writes --repeat 3 --min-samples 3
 
-          # 冻结基线要**显式传参**，不能用 `${{ a && b || c }}` ——
-          # GitHub Actions 没有三元表达式，那种写法在
-          # a 为假时会把 c 也取出来（|| 的语义），行为不可控。
-          - name: 冻结基线（仅手动勾选时）
-            if: github.event_name == 'workflow_dispatch' && inputs.set_baseline == 'true'
-            run: python tools/eval_gate.py --set-baseline
+      # 冻结基线要**显式传参**，不能写成短路表达式 ——
+      # GitHub Actions 没有三元运算符，`a && b || c` 在 a 为假时会把 c 也取出来。
+      # （这句说明**只能**留在 YAML 注释里：写进 run 脚本会被当成真表达式求值。）
+      - name: 冻结基线（仅手动勾选时）
+        if: github.event_name == 'workflow_dispatch' && inputs.set_baseline == 'true'
+        run: python tools/eval_gate.py --set-baseline
 
-          - name: 门禁判定
-            run: python tools/eval_gate.py
+      - name: 门禁判定
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        run: python tools/eval_gate.py
 
-      # 无论成败都清掉 key —— runner 是临时的，但不清理会让
-      # 后续步骤（比如 upload-artifact）有机会把它打包进去。
-      #
-      # ## 为什么用 `run: |` 而不是 `run: "python -c \"...\""`
-      #
-      # 内嵌 Python 里全是 `if p.exists():` 这种带冒号的行，
-      # YAML 会把 `: ` 当成映射语法 —— 解析直接失败
-      # （报 `mapping values are not allowed here`，**行号指向 Python 那行**，
-      #看起来跟 YAML 毫无关系）。
-      # **报错位置离真因很远**，用 block scalar 就绕开了。
+      # 无论成败都清掉 key。runner 是临时的，但不清理会让后续步骤
+      # （比如 upload-artifact）有机会把它打包进去。
       - name: 清除配置里的 key
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always()
         run: |
           python -c "
           import json, pathlib
@@ -167,7 +176,7 @@ jobs:
           print('config.json 里的 key 已清空')
           "
 
-      # 上传报告作为构件 —— 门禁失败了要能查「当时测出了什么」
+      # 上传报告，门禁失败了要能查「当时测出了什么」
       - name: 上传评测报告
         if: always()
         uses: actions/upload-artifact@v4
