@@ -494,13 +494,25 @@ var aiToolRegistry = map[string]aiTool{
 // 就得把结论直接摆出来。
 func svcAIView(target string, si SvcInfo) map[string]any {
 	rec := svcSnapshot(target)
+	// v3.6.2：phase 直接取 runtimeService —— 与桌面界面、手机页**同一个函数**。
+	//
+	// 老快照只给 running + ever_verified，模型得自己拿两个布尔推测"到底好没好"，
+	// 而界面用的是 runtimeService 的五态。两套口径一旦分叉就会出现
+	// **界面绿的、AI 说报错**：界面读 phase=running，AI 读 last_verify 里那条
+	// 更早的 warn/fail 文案。同一件事必须只有一个算法（这也是手机端
+	// lanStateGet 已经踩过并统一过的路）。
+	st := runtimeService(target)
 	view := map[string]any{
-		"running": si.Running,
-		"pid":     si.PID,
-		"since":   si.Since,
+		"running": st.Running,
+		"pid":     st.PID,
+		"since":   st.Since,
+		"phase":   st.Phase,
 	}
 	if si.URL != "" {
 		view["url"] = si.URL
+	}
+	if st.Port > 0 {
+		view["port"] = st.Port
 	}
 	// 曾成功过吗 —— 这是区分 (a) 与 (b) 的唯一依据
 	everVerified := false
@@ -519,17 +531,34 @@ func svcAIView(target string, si SvcInfo) map[string]any {
 	}
 
 	// 明确告诉模型该怎么处置 —— 不让它在"诊断"和"重启"之间自己选。
-	switch {
-	case si.Running:
-		view["what_to_do"] = "服务在运行。若用户说它不可用，先复验（verify_environment），别直接重启。"
-	case everVerified:
-		view["what_to_do"] = "服务**曾经成功运行过**（复验通过过），现在进程不在了。" +
-			"这说明它是被外部终止的，不是启动失败。" +
-			"正确处置：用 start_service 重新拉起，不要去排查端口占用或编译错误。"
+	//
+	// 判据按 phase 走而不是按 running：degraded（进程在、没验过）和
+	// failed（崩了/退了）对用户是完全不同的两件事，混成一句"没在正常运行"
+	// 会让模型把"还在编译"当成"启动失败"去排查编译错误。
+	switch st.Phase {
+	case phRunning:
+		view["what_to_do"] = "服务在运行且复验通过（phase=running）。**状态正常，不要报告故障**。" +
+			"若 recent_errors 里有 [FAIL]/[WARN]，那是更早的历史行，不代表当前状态。"
+	case phStarting:
+		view["what_to_do"] = "服务正在启动中（phase=starting），还没出结论。不要判失败，" +
+			"等它跑完或用 verify_environment 复验。"
+	case phDegraded:
+		view["what_to_do"] = "进程在跑但**没有复验证据**（phase=degraded）。这不等于失败，" +
+			"也不等于可用。正确处置：先 verify_environment，确认端口/HTTP 通了再下结论；" +
+			"确实不通才 stop/restart。"
+	case phFailed:
+		view["what_to_do"] = "服务处于失败态（phase=failed：进程已退出或反复崩溃）。" +
+			"先看 crashed_once 与日志确定原因，再决定 start 还是 restart。"
 	default:
-		view["what_to_do"] = "服务从未成功运行过。这是**启动失败**，" +
-			"应排查原因（端口占用 / 编译错误 / 依赖缺失），" +
-			"反复重启解决不了问题。"
+		if everVerified {
+			view["what_to_do"] = "服务**曾经成功运行过**（复验通过过），现在进程不在了。" +
+				"这说明它是被外部终止的，不是启动失败。" +
+				"正确处置：用 start_service 重新拉起，不要去排查端口占用或编译错误。"
+		} else {
+			view["what_to_do"] = "服务从未成功运行过。这是**启动失败**，" +
+				"应排查原因（端口占用 / 编译错误 / 依赖缺失），" +
+				"反复重启解决不了问题。"
+		}
 	}
 	return view
 }
@@ -599,7 +628,15 @@ func aiHealthSnapshotFor(task string) string {
 	// 第一轮就能对着具体错误作答，而不是再花一轮去调 get_logs。
 	// 快照整体拼在消息尾部（见 aiRunLoop），变化只会打断尾部前缀，不影响缓存命中。
 	if errs := aiRecentErrors(3); len(errs) > 0 {
-		snap["recent_errors"] = errs
+		// 必须带定性说明。这些行**没有时间戳过滤**，可能来自几个小时前的
+		// 一次失败尝试；直接丢给模型，它会把历史 WARN 当成"现在报错了"。
+		// 实测踩到：启动成功、phase=running，模型仍然复述日志里的旧 [FAIL]，
+		// 用户看到的就是"明明好了却说报错"。
+		snap["recent_errors"] = map[string]any{
+			"note": "日志里最近的 [FAIL]/[WARN] 行，可能来自更早的操作，**不代表服务当前状态**；" +
+				"当前状态只以 services.*.phase 与 verify_environment 的结论为准。",
+			"lines": errs,
+		}
 	}
 	// 项目画像：让模型不用调工具也知道"这是个什么项目、有哪些可用脚本"（带 2 分钟缓存）。
 	// 同样拼在末尾：变化只打断尾部前缀，不破坏 system + 历史的缓存命中。

@@ -42,28 +42,43 @@ func lanPairURL(port int, code string) string {
 	return base + "?" + url.Values{"code": {code}}.Encode()
 }
 
-// handleLanQR 返回配对二维码（PNG）。
+// handleLanQR 返回二维码（PNG）。
 //
-// GET /api/lan/qr
+// GET /api/lan/qr          配对二维码（网址 + 当前配对码）
+// GET /api/lan/qr?otp=1    二次验证密钥的 otpauth:// 二维码（给口令器扫）
 //
-// 不接受外部传入的内容 —— 二维码里编什么由服务端决定（自家地址 + 当前配对码）。
-// 接受调用方指定内容等于开一个"任意文本转二维码"的接口，虽不致命但是白开的攻击面。
+// **不接受外部传入的内容** —— 二维码里编什么由服务端决定。接受调用方指定内容
+// 等于开一个"任意文本转二维码"的接口，虽不致命但是白开的攻击面。
+// otp=1 这个分支同样只读服务端自己的密钥，不多给一比特控制权。
 func handleLanQR(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
 	c := lanSnap()
-	code := lanPairCodeCur()
-	// 用**实际**监听端口：改端口后没重启时，配置端口上没人监听，
-	// 把那个端口编进二维码等于让用户扫出一个打不开的地址。
-	target := lanPairURL(lanDisplayPort(c), code)
-	if target == "" {
-		lanWriteJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":  false,
-			"msg": "没找到手机能连上的局域网地址（电脑连 WiFi 或网线了吗？）",
-		})
-		return
+
+	var target string
+	if r.URL.Query().Get("otp") == "1" {
+		if c.OTPSecret == "" {
+			lanWriteJSON(w, http.StatusNotFound, map[string]any{"ok": false, "msg": "还没有生成二次验证密钥"})
+			return
+		}
+		target = lanOTPURL(c.OTPSecret)
+		if target == "" {
+			lanWriteJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "msg": "生成 otpauth 地址失败"})
+			return
+		}
+	} else {
+		// 用**实际**监听端口：改端口后没重启时，配置端口上没人监听，
+		// 把那个端口编进二维码等于让用户扫出一个打不开的地址。
+		target = lanPairURL(lanDisplayPort(c), lanPairCodeCur())
+		if target == "" {
+			lanWriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"ok":  false,
+				"msg": "没找到手机能连上的局域网地址（电脑连 WiFi 或网线了吗？）",
+			})
+			return
+		}
 	}
 	png, err := qrcode.Encode(target, qrcode.Medium, 320)
 	if err != nil {

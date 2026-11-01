@@ -176,6 +176,7 @@ const I18N_EN = {
   "中午好": "Good noon",
   "主体": "Actor",
   "主机": "Host",
+  "二次验证已开启：用口令器扫右边的二维码": "Two-factor is on — scan the QR code on the right with your authenticator",
   "五梁威力，变身！": "Five-Liang power, transform!",
   "交易数量": "Transactions",
   "产品名": "Product name",
@@ -300,6 +301,7 @@ const I18N_EN = {
   "前端校验窗口": "Frontend verify window",
   "前端目录": "Frontend directory",
   "前端：{0}": "Frontend: {0}",
+  "剪贴板": "Clipboard",
   "副标题": "Subtitle",
   "加入": "Add",
   "加入 Defender 白名单": "add Defender exclusion",
@@ -346,12 +348,14 @@ const I18N_EN = {
   "变大一点": "Bigger",
   "变大啦，看得清吗": "Bigger now — easier to see?",
   "变小一点": "Smaller",
+  "口令器（Authenticator）里的 6 位数字，挡得住配对码被人瞥见。": "The 6-digit code from your authenticator app — survives a pair code being seen.",
   "只存在本机": "Stored on this device only",
   "只影响 EnvKit 自己发起的下载与依赖安装，不改进程级环境变量。": "Only affects downloads and dependency installs started by EnvKit; process-level env vars are untouched.",
   "只收 .sql 文件哦，「{0}」先还给你": "I only take .sql files — \"{0}\" is returned to you",
   "只看异常": "Issues only",
   "只说明取数来源，不在这里编数字": "Shows where each number comes from; nothing is invented here",
   "只读": "Read-only",
+  "只读截图。你桌面上开着什么，手机上就看到什么。": "Read-only screenshot — whatever is on your desktop shows up on the phone.",
   "可用": "Available",
   "可达": "Reachable",
   "可达 · {0}ms": "Reachable · {0}ms",
@@ -410,6 +414,7 @@ const I18N_EN = {
   "固定发 1（该模型只接受 1）": "Always sends 1 (this model accepts only 1)",
   "在呢~": "Here~",
   "在打雷，能不出门就别出去。": "Thunder out there — stay in if you can.",
+  "在电脑上执行任意命令，等同于你本人坐在电脑前打字。": "Runs any command on the PC — the same as you typing at the keyboard.",
   "在顶栏「个人中心」下打开「手机访问」，并看日志里有没有「端口无法监听」": "Turn on Mobile access under Account in the top bar, and check the log for a port bind failure",
   "城市，如 上海 / Shanghai": "City, e.g. Shanghai",
   "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
@@ -571,6 +576,7 @@ const I18N_EN = {
   "已有一条 AI 对话在进行中（另一个标签页？），请等它结束或点「停止」": "Another AI conversation is already running (another tab?) — wait for it or press Stop",
   "已有一条 AI 对话在进行中，请等它结束或点「停止」": "Another AI conversation is already running — wait for it or press Stop",
   "已清空为默认（点「保存」生效）": "Cleared to defaults (takes effect on Save)",
+  "已生成新密钥，请用口令器重新扫码": "New key generated — re-scan it with your authenticator",
   "已用批量授权执行：{0}（剩余 {1} 次）": "Executed under batch grant: {0} ({1} left)",
   "已确认，继续执行…": "Confirmed — continuing…",
   "已经加过了": "Already attached",
@@ -668,12 +674,18 @@ const I18N_EN = {
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
   "我遇到了环境问题，以下是最近的错误日志。请帮我定位原因并给出解决步骤：\n": "I hit an environment problem. Below are recent error logs — help me find the cause and give fix steps:\n",
   "或 JSON 数组；重复内容自动更新而非新增": "or a JSON array; duplicate content updates in place instead of adding a new entry",
+  "手机上已关闭：{0}": "Disabled for the phone: {0}",
+  "手机上已开启：{0}": "Enabled for the phone: {0}",
+  "手机与电脑互相复制文本。手机上复制的会覆盖电脑剪贴板。": "Copy text between phone and PC. Text sent from the phone replaces the PC clipboard.",
+  "手机能做什么（默认只开只读的）": "What the phone may do (read-only is on by default)",
   "才不是大肥鱼！": "I'm not a big fat fish!",
   "打开 ": "Open ",
   "打开 AI 抽屉": "Open AI drawer",
   "打开 SSH 终端": "Open SSH terminal",
   "打开 {0}": "Open {0}",
   "打开 ↗": "Open ↗",
+  "打开后，手机上可以在电脑上执行任意命令（等同你本人操作）。继续？": "Once on, the phone can run any command on this PC (same as you doing it yourself). Continue?",
+  "打开后，新手机配对时必须再输口令器里的 6 位验证码。已经配对的手机不受影响。继续？": "Once on, a new phone must also enter the 6-digit code from your authenticator. Already-paired phones are unaffected. Continue?",
   "打开对话面板": "Open chat panel",
   "打开数据浏览": "Open data browser",
   "执行": "Run",
@@ -974,6 +986,7 @@ const I18N_EN = {
   "甜到冒泡泡～": "Sweet enough to bubble~",
   "生成诊断报告": "build diagnostic report",
   "生效 SQL 到数据库": "Apply SQL to database",
+  "用口令器扫码": "Scan with your authenticator",
   "用户": "User",
   "用户修正率": "User-correction rate",
   "用户彻底怒了，我得乖一点": "The user is furious — better behave",
@@ -997,6 +1010,7 @@ const I18N_EN = {
   "目标主机与 SSH": "Target host & SSH",
   "目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Target: PUA:Win32/Softcnapp family (WROberlay*.dll injecting adware).\nIt injects a DLL into newly started processes, making go / npm / mysqldump randomly exit with zero output.\n\nWill do:\n· Ask Defender to remove detected threats\n· Delete every WROberlay* file under C:\\Windows (renamed to .quarantine if locked)\n· Clean the related CLSID and icon-overlay registry entries\n· Restart Explorer to unload the injected DLL\n\nRunning EnvKit as administrator is recommended to avoid the UAC prompt. Reboot once afterwards.",
   "相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
+  "看屏幕": "View screen",
   "真赶不走啊你！": "You really don't take a hint!",
   "知道了": "Got it",
   "破坏性": "Destructive",
@@ -1243,6 +1257,7 @@ const I18N_EN = {
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
   "部分不可用": "Partly unavailable",
   "部分完成": "Partial",
+  "配对要验证码": "Require a code when pairing",
   "配置": "Configure",
   "配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。": "Changes are saved automatically, then the provider's /models endpoint is called to fetch available models (a successful fetch also proves the key and URL are correct; on failure you can still use the built-in list or type a model name). The API key is DPAPI-encrypted and only decryptable on this machine.",
   "配置已保存": "Config saved",
@@ -1252,6 +1267,8 @@ const I18N_EN = {
   "重新提问": "Ask again",
   "重新检测": "Re-check",
   "重新检测组件": "re-check components",
+  "重新生成密钥": "Regenerate key",
+  "重新生成密钥后，已经扫过旧密钥的口令器立即失效，需要重新扫。继续？": "After regenerating, any authenticator holding the old key stops working and must be re-scanned. Continue?",
   "重新读取": "Reload",
   "重置": "Reset",
   "重置失败": "Reset failed",
@@ -1317,6 +1334,7 @@ const I18N_EN = {
   "（无表）": "(no tables)",
   "（无输出）": "(no output)",
   "（空结果）": "(empty result)",
+  "（还没有密钥，打开开关会自动生成）": "(no key yet — one is generated when you turn this on)",
   "（需要内容时用 read_file 读取；沙箱外路径会被拒绝）": "(read them with read_file when needed; paths outside the sandbox are refused)",
   "（预演）": " (dry run)",
   "）下可用；分发版 exe 旁边没有脚本，会如实报「不可用」而不是硬跑。": " folder); the shipped exe has no scripts, so it reports “unavailable” instead of pretending to run.",
@@ -8171,8 +8189,46 @@ function ekLanPairPaint(j){
   if(qr){
     const ok = j.enabled && (j.addrs || []).length > 0;
     qr.style.display = ok ? '' : 'none';
-    if(ok) ekLanLoadQR(qr);
+    if(ok) ekLanLoadQR(qr, '/api/lan/qr?t=' + Date.now());
   }
+  ekLanPaintCaps(j);
+  ekLanPaintOTP(j);
+}
+
+/* 三个能力开关：画的是**实际生效值**（eff_*），不是 raw。
+   raw 为 null 表示用户从没设过（老配置），此时生效值是代码里的缺省
+   （看屏幕开、剪贴板关、终端关）。画 raw 会让"从没设过"显示成"全关"，
+   而实际截屏是开着的 —— 那是最容易让人误判的一种不一致。 */
+function ekLanPaintCaps(j){
+  const rows = [
+    ['lp_shot', 'eff_shot'],
+    ['lp_clip', 'eff_clip'],
+    ['lp_term', 'eff_term'],
+  ];
+  for(const [id, key] of rows){
+    const el = document.getElementById(id);
+    if(el) el.checked = !!j[key];
+  }
+  /* 这台机器没有 ConPTY（Win10 1809 以下）时别让用户打开一个必然失败的开关 */
+  const termRow = document.getElementById('lp_term_row');
+  if(termRow && j.conpty === false){
+    termRow.classList.add('disabled');
+    const box = document.getElementById('lp_term');
+    if(box){ box.checked = false; box.disabled = true; }
+  }
+}
+
+/* 二次验证：开关 + 密钥二维码 + 密钥原文（口令器扫不出时手输） */
+function ekLanPaintOTP(j){
+  const on = document.getElementById('lp_otp_on');
+  if(on) on.checked = !!j.require_otp;
+  const key = document.getElementById('lp_otp_key');
+  if(key) key.textContent = j.otp_secret || t('（还没有密钥，打开开关会自动生成）');
+  const box = document.getElementById('lp_otp_box');
+  const qimg = document.getElementById('lp_otp_qr');
+  const show = !!j.require_otp && !!j.otp_secret;
+  if(box) box.style.display = show ? '' : 'none';
+  if(show && qimg) ekLanLoadQR(qimg, '/api/lan/qr?otp=1&t=' + Date.now());
 }
 
 /* 加载二维码。
@@ -8186,9 +8242,9 @@ function ekLanPairPaint(j){
    用 URL.createObjectURL 会被 CSP 拦掉，img.onerror 触发，
    用户看到的还是"二维码坏了"（本项目 AI 图片附件踩过同一个坑，见 app.js 5941 行）。
    data URL 在 img-src 白名单里，不用改 CSP。 */
-async function ekLanLoadQR(qr){
+async function ekLanLoadQR(qr, url){
   try{
-    const r = await fetch('/api/lan/qr?t=' + Date.now());
+    const r = await fetch(url || ('/api/lan/qr?t=' + Date.now()));
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
     const rd = new FileReader();
@@ -8381,4 +8437,54 @@ async function ekSetSaveUpdate(recheck){
      他一碰就把它关了（真实会发生的事，不是理论风险）。
      开关在个人中心下，状态就必须自己负责读，不能指望别的面板顺带刷新。 */
   ekSetLoadLan();
+
+  /* v3.6.2：手机端本地能力开关 + 二次验证。
+     一律「先存、再整块重画」：存失败时要回到服务端的真实值，
+     只改勾选框会让用户以为已经改成了（而实际没落盘）。 */
+  const capBind = [
+    ['lp_shot', 'allow_shot', '看屏幕'],
+    ['lp_clip', 'allow_clip', '剪贴板'],
+    ['lp_term', 'allow_term', '终端'],
+  ];
+  for(const [id, key, label] of capBind){
+    const el = document.getElementById(id);
+    if(!el) continue;
+    el.addEventListener('change', async ()=>{
+      const patch = {};
+      patch[key] = el.checked;
+      /* 终端是"什么都能干"的入口，单独给一次确认 —— 它不是普通开关。 */
+      if(key === 'allow_term' && el.checked &&
+         !confirm(t('打开后，手机上可以在电脑上执行任意命令（等同你本人操作）。继续？'))){
+        el.checked = false;
+        return;
+      }
+      const j = await ekSetSaveLan(patch);
+      await ekSetLoadLan();
+      if(!j) return;
+      toast(el.checked ? t('手机上已开启：{0}', label) : t('手机上已关闭：{0}', label));
+    });
+  }
+
+  const otpOn = document.getElementById('lp_otp_on');
+  if(otpOn){
+    otpOn.addEventListener('change', async ()=>{
+      if(otpOn.checked && !confirm(t('打开后，新手机配对时必须再输口令器里的 6 位验证码。已经配对的手机不受影响。继续？'))){
+        otpOn.checked = false;
+        return;
+      }
+      const j = await ekSetSaveLan({require_otp: otpOn.checked});
+      await ekSetLoadLan();
+      if(j && otpOn.checked) toast(t('二次验证已开启：用口令器扫右边的二维码'));
+    });
+  }
+
+  const otpNew = document.getElementById('lp_otp_new');
+  if(otpNew){
+    otpNew.addEventListener('click', async ()=>{
+      if(!confirm(t('重新生成密钥后，已经扫过旧密钥的口令器立即失效，需要重新扫。继续？'))) return;
+      const j = await ekSetSaveLan({new_otp:true});
+      await ekSetLoadLan();
+      if(j) toast(t('已生成新密钥，请用口令器重新扫码'));
+    });
+  }
 })();

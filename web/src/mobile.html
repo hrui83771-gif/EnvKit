@@ -15,10 +15,21 @@ body{
   font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   -webkit-text-size-adjust:100%;
+  overscroll-behavior-y:contain;
 }
 .wrap{max-width:560px;margin:0 auto;padding:16px}
-h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
+h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
 .sub{color:#7d8794;font-size:12.5px;margin-bottom:16px}
+
+/* 顶栏：右上角是抽屉入口。标题与按钮同高对齐，避免"按钮浮在文字上" */
+.topbar{display:flex;align-items:center;gap:10px;margin:8px 0 2px;min-height:44px}
+.topbar h1{flex:1;min-width:0}
+.iconbtn{
+  flex:none;width:44px;height:44px;border:1px solid #e2ddd3;background:#fff;border-radius:12px;
+  color:#4a5a6e;font-size:20px;line-height:1;font-family:inherit;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.iconbtn:active{background:#f1ede5}
 
 .card{
   background:#fff;border:1px solid #e6e1d8;border-radius:14px;
@@ -48,9 +59,10 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 .btn.danger{background:#fff;border-color:#e0b5ae;color:#b4553f}
 .btn.danger.armed{background:#c96a5f;border-color:#c96a5f;color:#fff}
 .btn:disabled{opacity:.45}
+.btn.sm{min-height:36px;padding:0 12px;font-size:13px}
 
 /* 资源 */
-.res{display:flex;gap:16px;color:#6c7787;font-size:12.5px;flex-wrap:wrap}
+.res{display:flex;gap:16px;color:#6c7787;font-size:12.5px;flex-wrap:wrap;align-items:center}
 .res b{color:#37424f;font-weight:600}
 
 /* 对话 */
@@ -86,6 +98,106 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 #ask input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
 .hint{color:#98a2ae;font-size:11.5px;margin-top:8px;line-height:1.5}
 
+/* 通用行 */
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row .btn{min-height:40px;padding:0 14px;font-size:13.5px}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:#5c6675}
+.chk input{width:18px;height:18px;accent-color:#4a6fa5;margin:0}
+.field{width:100%;min-height:44px;border:1px solid #d8d1c4;border-radius:10px;padding:0 12px;
+  font-size:14px;font-family:inherit;background:#fff;color:#2f3742}
+.field:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+
+/* 电脑屏幕 */
+.shotwrap{margin:0 0 10px;border:1px solid #e6e1d8;border-radius:10px;background:#f3f1ec;
+  overflow:hidden;min-height:110px;display:flex;align-items:center;justify-content:center;position:relative}
+.shotwrap img{display:block;width:100%;height:auto}
+.shotwrap .zoomhint{position:absolute;right:8px;bottom:8px;background:rgba(47,55,66,.72);color:#fff;
+  font-size:11.5px;padding:3px 8px;border-radius:8px;pointer-events:none}
+.shotwrap .ph{color:#98a2ae;font-size:12.5px;padding:32px 12px;text-align:center;line-height:1.6}
+
+/* 截图放大层：独立一层，不影响卡片里的小图。
+   背景必须**完全不透明** —— 写 rgba(...,.97) 时底下页面的标题和按钮会透上来，
+   在深色遮罩上形成重影，看细节时特别干扰（实测截图里能清楚读出"服务/前端/后端"）。 */
+#shotView{position:fixed;inset:0;z-index:70;background:#12151a;
+  display:flex;flex-direction:column;touch-action:none}
+#svgBar{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;
+  padding-top:calc(8px + env(safe-area-inset-top));background:#262b33;color:#dfe4ea;font-size:13px}
+#svgBar .sp{flex:1}
+#svgBar .btn{min-height:32px;padding:0 12px;font-size:12.5px;
+  background:#333a44;border-color:#3f4753;color:#e6eaf0}
+#svgStage{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#svgImg{max-width:none;max-height:none;will-change:transform;transform-origin:center center;
+  -webkit-user-select:none;user-select:none;pointer-events:none}
+
+/* 剪贴板 */
+#clipText{width:100%;min-height:78px;border:1px solid #d8d1c4;border-radius:10px;padding:10px 12px;
+  font:13px/1.5 Consolas,Menlo,monospace;background:#fff;color:#2f3742;resize:vertical}
+#clipText:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+
+/* 终端全屏层：手机上终端必须占满整屏，半屏的终端用来敲命令只会让人抓狂 */
+#termView{position:fixed;inset:0;z-index:60;background:#1e2228;display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.termbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;
+  padding:8px 12px;background:#262b33;color:#dfe4ea;font-size:13px}
+.termbar .btn{min-height:32px;padding:0 12px;font-size:12.5px;
+  background:#333a44;border-color:#3f4753;color:#e6eaf0}
+#termHost{flex:1;min-height:0;padding:4px 0 0 6px;overflow:hidden}
+#termHost .xterm{height:100%}
+/* 手机软键盘上打不出 Esc / Tab / 方向键，这条是必需品不是锦上添花 */
+.termkeys{display:flex;gap:6px;padding:6px 8px;overflow-x:auto;background:#262b33;flex:none;
+  -webkit-overflow-scrolling:touch}
+.termkeys .btn{min-height:36px;padding:0 12px;font-size:13px;flex:none;
+  background:#333a44;border-color:#3f4753;color:#e6eaf0}
+
+/* 抽屉：右上角折叠栏。三个分组默认只展开第一个（最常开的） */
+#drawerMask{position:fixed;inset:0;z-index:54;background:rgba(24,28,33,.34);
+  opacity:0;transition:opacity .18s;pointer-events:none}
+#drawerMask.on{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;bottom:0;z-index:55;width:min(88vw,380px);
+  background:#faf8f5;border-left:1px solid #e6e1d8;box-shadow:-8px 0 28px rgba(47,55,66,.14);
+  display:flex;flex-direction:column;transform:translateX(102%);transition:transform .2s ease;
+  padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+#drawer.on{transform:translateX(0)}
+#drawerBar{flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border-bottom:1px solid #ece7de;background:#fff}
+#drawerBar b{flex:1;font-size:15px}
+#drawerBar .btn{min-height:36px;padding:0 12px;font-size:13px}
+#drawerBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px}
+
+/* <details> 折叠组 */
+.grp{background:#fff;border:1px solid #e6e1d8;border-radius:12px;margin-bottom:10px;overflow:hidden}
+.grp>summary{list-style:none;cursor:pointer;padding:12px 14px;font-size:14px;font-weight:600;
+  color:#3b4654;display:flex;align-items:center;gap:8px;min-height:46px}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary::before{content:"▸";color:#9aa4b0;font-size:12px;transition:transform .15s;flex:none}
+.grp[open]>summary::before{transform:rotate(90deg)}
+.grp[open]>summary{border-bottom:1px solid #f0ece5}
+.grp .body{padding:12px 14px 14px}
+.grp .body>.row+.row{margin-top:9px}
+.grp .hint{margin-top:9px}
+
+/* 日志 */
+#logBox{background:#f6f4f0;border:1px solid #e8e3da;border-radius:10px;padding:8px 10px;
+  font:11.5px/1.55 Consolas,Menlo,monospace;color:#3d4653;max-height:44vh;overflow:auto;
+  white-space:pre-wrap;word-break:break-all;-webkit-overflow-scrolling:touch}
+#logBox .lg-f{color:#b4553f;font-weight:600}
+#logBox .lg-w{color:#a4761f;font-weight:600}
+#logBox .lg-empty{color:#98a2ae;font-family:inherit}
+/* 统计小方块 */
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat div{background:#f6f4f0;border:1px solid #ebe6dd;border-radius:10px;padding:8px 10px;text-align:center}
+.stat b{display:block;font-size:17px;color:#37424f;font-weight:600;line-height:1.3}
+.stat span{display:block;font-size:11px;color:#8c96a2}
+#briefBox{font-size:13.5px;color:#3b4654;max-height:46vh;overflow:auto;line-height:1.65;
+  -webkit-overflow-scrolling:touch}
+#briefBox h1,#briefBox h2,#briefBox h3{font-size:14.5px;margin:12px 0 6px}
+#briefBox p{margin:0 0 8px}
+#briefBox ul,#briefBox ol{margin:6px 0;padding-left:20px}
+#briefBox code{background:#eef1f5;padding:1px 4px;border-radius:4px;font-family:Consolas,monospace;font-size:12.5px}
+#briefBox pre{background:#f3f5f8;border:1px solid #e6e9ee;border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:pre}
+#briefBox table{border-collapse:collapse;font-size:12.5px;display:block;overflow-x:auto}
+#briefBox th,#briefBox td{border:1px solid #e6e9ee;padding:4px 7px;text-align:left}
+
 /* 配对 */
 #pair .card{padding:20px}
 #pair input{
@@ -99,7 +211,7 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 /* 轻提示 */
 #tip{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
   background:rgba(47,55,66,.94);color:#fff;font-size:13px;padding:9px 16px;border-radius:10px;
-  max-width:86vw;text-align:center;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
+  max-width:86vw;text-align:center;z-index:95;opacity:0;transition:opacity .2s;pointer-events:none}
 #tip.show{opacity:1}
 </style>
 </head>
@@ -115,6 +227,10 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
     <h2>输入配对码</h2>
     <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="off"
            spellcheck="false" placeholder="6 位数字或密码" maxlength="64">
+    <!-- 二次验证输入框：只有电脑端开了"配对要验证码"、且配对码已经通过时才展开。
+         一开始就摆着会让所有人以为自己需要口令器。 -->
+    <input id="otp" class="hidden" type="text" inputmode="numeric" autocomplete="one-time-code"
+           spellcheck="false" placeholder="口令器里的 6 位验证码" maxlength="6">
     <button class="btn primary" id="pairBtn">连接</button>
     <div id="pairMsg"></div>
     <p class="hint">配对码在电脑托盘图标里，每次启动都会变；如果你在设置里设过密码，输密码也可以。</p>
@@ -123,7 +239,10 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 
 <!-- 主界面 -->
 <div id="app" class="wrap hidden">
-  <h1>EnvKit</h1>
+  <div class="topbar">
+    <h1>EnvKit</h1>
+    <button class="iconbtn" id="drawerOpen" aria-label="更多">☰</button>
+  </div>
   <div class="sub"><span id="addr">手机端</span> · <span id="ver2">__LAN_VERSION__</span></div>
 
   <div class="card">
@@ -132,8 +251,19 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
     <div class="res" style="margin-top:12px">
       <span>内存 <b id="rss">–</b></span>
       <span>CPU <b id="cpu">–</b></span>
-      <button class="btn" id="allBtn" style="margin-left:auto;min-height:36px;padding:0 12px;font-size:13px">全部启动</button>
+      <button class="btn sm" id="allBtn" style="margin-left:auto">全部启动</button>
     </div>
+  </div>
+
+  <!-- 电脑屏幕留在主页：它是"看一眼就好"的东西，塞进抽屉里要多点两下 -->
+  <div class="card hidden" id="shotCard">
+    <h2>电脑屏幕 <span id="shotAt" style="float:right;font-weight:400;color:#a8b0bb"></span></h2>
+    <div class="shotwrap" id="shotWrap"><span class="ph">点「刷新」看电脑现在的画面</span></div>
+    <div class="row">
+      <button class="btn" id="shotBtn">刷新</button>
+      <label class="chk"><input type="checkbox" id="shotAuto">每 5 秒自动刷新</label>
+    </div>
+    <p class="hint">只读截图（会缩到 1280 宽）。点画面可全屏放大看细节。注意场合。</p>
   </div>
 
   <div class="card">
@@ -145,6 +275,138 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
     </div>
     <p class="hint">想重启服务请用上面的按钮——那一步不由 AI 代劳。</p>
   </div>
+</div>
+
+<!-- 右上角折叠栏：三个区域，默认只展开最常用的那一个 -->
+<div id="drawerMask"></div>
+<aside id="drawer" aria-hidden="true">
+  <div id="drawerBar">
+    <b>控制台</b>
+    <button class="btn" id="drawerClose">关闭</button>
+  </div>
+  <div id="drawerBody">
+
+    <!-- ① shell 与剪贴板 -->
+    <details class="grp" open>
+      <summary>终端 &amp; 剪贴板</summary>
+      <div class="body">
+        <div class="row hidden" id="termCard">
+          <button class="btn" id="termOpen" style="flex:1">电脑终端（PowerShell）</button>
+        </div>
+        <div class="row hidden" id="sshCard">
+          <button class="btn" id="sshOpen" style="flex:1">链端终端（SSH）</button>
+        </div>
+        <p class="hint hidden" id="termHint">在电脑上或链端机器上执行命令，<b>等同于你坐在那台机器前打字</b>。每次打开都会记进审计日志。</p>
+
+        <div id="clipCard" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px dashed #ece7de">
+          <div class="row" style="margin-bottom:8px">
+            <b style="font-size:13.5px">剪贴板</b>
+            <span style="margin-left:auto;color:#a8b0bb;font-size:11.5px">手机 ⇄ 电脑</span>
+          </div>
+          <textarea id="clipText" placeholder="在这里输入，点「发到电脑」就能在电脑上粘贴；也可以点「取电脑的」把电脑剪贴板拉下来"></textarea>
+          <div class="row" style="margin-top:9px">
+            <button class="btn primary" id="clipPush">发到电脑</button>
+            <button class="btn" id="clipPull">取电脑的</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ② 主操作 -->
+    <details class="grp">
+      <summary>主操作</summary>
+      <div class="body">
+        <div class="row">
+          <button class="btn primary" id="opAllStart" style="flex:1">全部启动</button>
+          <button class="btn danger" id="opAllStop" style="flex:1">全部停止</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="opRefresh" style="flex:1">刷新状态</button>
+          <button class="btn" id="opShot">截一张屏</button>
+        </div>
+        <p class="hint">启停走的是电脑上同一套逻辑（含启动后复验），不是手机另起一套。
+          「全部停止」需要连点两次。</p>
+      </div>
+    </details>
+
+    <!-- ③ 日志报告 -->
+    <details class="grp">
+      <summary>日志报告</summary>
+      <div class="body">
+        <div class="row" style="margin-bottom:10px">
+          <button class="btn sm primary" id="repStat">统计</button>
+          <button class="btn sm" id="repBrief">晨报</button>
+          <button class="btn sm" id="repLog">实时日志</button>
+        </div>
+
+        <div id="paneStat" class="hidden">
+          <div class="stat">
+            <div><b id="stOps">–</b><span>24h 操作</span></div>
+            <div><b id="stFail">–</b><span>失败</span></div>
+            <div><b id="stVer">–</b><span>复验通过</span></div>
+          </div>
+          <div id="stTop" style="font-size:12.5px;color:#6c7787;line-height:1.7"></div>
+        </div>
+
+        <div id="paneBrief" class="hidden">
+          <div class="row" style="margin-bottom:8px">
+            <span id="briefAt" style="color:#98a2ae;font-size:11.5px"></span>
+            <button class="btn sm" id="briefReload" style="margin-left:auto">刷新</button>
+          </div>
+          <div id="briefBox"></div>
+        </div>
+
+        <div id="paneLog" class="hidden">
+          <div class="row" style="margin-bottom:8px">
+            <select class="field" id="logScope" style="flex:1;min-height:36px;font-size:13px">
+              <option value="all">全部</option>
+              <option value="start">程序启动</option>
+              <option value="sys">系统</option>
+              <option value="chain">链端</option>
+              <option value="install">环境安装</option>
+              <option value="config">配置</option>
+              <option value="eval">评测</option>
+            </select>
+            <button class="btn sm" id="logReload">刷新</button>
+          </div>
+          <div id="logBox"><span class="lg-empty">点「刷新」拉取最近的日志</span></div>
+        </div>
+
+        <p class="hint" id="repHint">报告与日志都是只读的，不会改动任何东西。</p>
+      </div>
+    </details>
+
+  </div>
+</aside>
+
+<!-- 终端全屏层：本地与链端共用一套 xterm 与键盘条 -->
+<div id="termView" class="hidden">
+  <div class="termbar">
+    <span id="termTitle">终端</span>
+    <button class="btn" id="termClose">关闭</button>
+  </div>
+  <div id="termHost"></div>
+  <div class="termkeys">
+    <button class="btn" data-k="esc">Esc</button>
+    <button class="btn" data-k="tab">Tab</button>
+    <button class="btn" data-k="ctrlc">Ctrl-C</button>
+    <button class="btn" data-k="up">↑</button>
+    <button class="btn" data-k="down">↓</button>
+    <button class="btn" data-k="left">←</button>
+    <button class="btn" data-k="right">→</button>
+  </div>
+</div>
+
+<!-- 截图放大层 -->
+<div id="shotView" class="hidden">
+  <div id="svgBar">
+    <span id="svgInfo">电脑屏幕</span>
+    <span class="sp"></span>
+    <button class="btn" id="svgSave">保存</button>
+    <button class="btn" id="svgFit">适应</button>
+    <button class="btn" id="svgClose">关闭</button>
+  </div>
+  <div id="svgStage"><img id="svgImg" alt="电脑屏幕"></div>
 </div>
 
 <script>
@@ -191,15 +453,27 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 
   function doPair(){
     var code = $('code').value.trim();
+    var otpEl = $('otp');
+    var totp = (otpEl.value || '').trim();
     if(!code){ $('pairMsg').textContent = '请输入配对码'; return; }
     $('pairBtn').disabled = true;
     $('pairMsg').textContent = '正在配对…';
-    post('/api/lan/pair', {code:code}).then(function(r){
+    post('/api/lan/pair', {code:code, totp:totp}).then(function(r){
       return r.json().catch(function(){ return {ok:false,msg:'服务返回异常（HTTP '+r.status+'）'}; });
     }).then(function(j){
       $('pairBtn').disabled = false;
-      if(j && j.ok){ $('code').value=''; showApp(); toast('配对成功'); }
-      else { $('pairMsg').textContent = (j && j.msg) || '配对失败'; }
+      if(j && j.ok){
+        $('code').value = ''; otpEl.value = ''; otpEl.classList.add('hidden');
+        showApp(); toast('配对成功');
+        return;
+      }
+      /* need_otp：配对码已经对了，还差口令器里的那 6 位。
+         就地展开输入框，配对码留在框里 —— 让用户从头再输一遍是最没必要的挫败感。 */
+      if(j && j.need_otp){
+        otpEl.classList.remove('hidden');
+        otpEl.focus();
+      }
+      $('pairMsg').textContent = (j && j.msg) || '配对失败';
     }).catch(function(){
       $('pairBtn').disabled = false;
       $('pairMsg').textContent = '连不上电脑（是不是关掉了手机访问？）';
@@ -226,6 +500,19 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
     doPair();
   })();
 
+  /* ---------- 抽屉 ---------- */
+
+  var drawerOpened = false;
+  function drawerSet(on){
+    drawerOpened = !!on;
+    $('drawer').classList.toggle('on', drawerOpened);
+    $('drawerMask').classList.toggle('on', drawerOpened);
+    $('drawer').setAttribute('aria-hidden', drawerOpened ? 'false' : 'true');
+  }
+  $('drawerOpen').onclick = function(){ drawerSet(!drawerOpened); };
+  $('drawerClose').onclick = function(){ drawerSet(false); };
+  $('drawerMask').onclick = function(){ drawerSet(false); };
+
   /* ---------- 状态轮询 ---------- */
 
   var services = [];
@@ -237,9 +524,7 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
   var pendingStart = {};
 
   /* v3.6.2：状态一律按服务端给的 phase 显示（五态），
-     前端不再自己猜"跑着没有"。
-     旧实现只读 running/ok 两个布尔，而服务端那两个字段的口径本身就有问题
-     （查 progState 时键名写错，手机端永远显示"未启动"）。 */
+     前端不再自己猜"跑着没有"。 */
   function dotClass(s){
     switch(s.phase){
       case 'running':   return s.verified ? 'dot on' : 'dot wait';
@@ -356,10 +641,49 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
         $('rss').textContent = Math.round(self.rss_mb) + ' MB';
         $('cpu').textContent = (self.cpu_pct || 0).toFixed(1) + '%';
       }
+      /* 本地能力：开关在电脑上改，手机每轮轮询跟着变。
+         关掉终端时顺手把已经打开的终端层关掉 —— 否则用户会留下一个
+         "电脑上已经关了、手机上还能敲"的窗口，那是最不该出现的一类不一致。 */
+      var caps = j.caps || {};
+      $('shotCard').classList.toggle('hidden', !caps.shot);
+      $('clipCard').classList.toggle('hidden', !caps.clip);
+      $('termCard').classList.toggle('hidden', !caps.term);
+      $('sshCard').classList.toggle('hidden', !caps.ssh);
+      $('termHint').classList.toggle('hidden', !(caps.term || caps.ssh));
+      window.__lastCaps = caps;
+      if(!caps.shot) shotAutoOff();
+      /* 按**能力键**判断，不是按终端种类：种类是 local/ssh，
+         而服务端 caps 里的键是 term/ssh。写成 caps[termKind] 会让
+         "打开本地终端"当场被判成"电脑端已关闭"，一开就自己收掉。
+         本地终端开关关掉、链端还开着时，也不该把链端那个窗口踹掉。 */
+      var capKey = termKind && TERM_META[termKind] ? TERM_META[termKind].cap : '';
+      if(capKey && !caps[capKey] && !$('termView').classList.contains('hidden')){
+        termClose();
+      }
     }).catch(function(){ /* 网络抖动：下一次轮询自己会补上 */ });
   }
 
-  $('allBtn').onclick = function(){
+  $('allBtn').onclick = function(){ startAll(); };
+  $('opAllStart').onclick = function(){ startAll(); };
+  $('opAllStop').onclick = function(){
+    var b = $('opAllStop');
+    if(!b.classList.contains('armed')){
+      b.classList.add('armed'); b.textContent = '确认全部停止';
+      setTimeout(function(){ b.classList.remove('armed'); b.textContent = '全部停止'; }, 3500);
+      return;
+    }
+    b.classList.remove('armed'); b.textContent = '全部停止';
+    post('/api/lan/stop', {key:'all'}).then(function(){
+      toast('已发出停止请求'); setTimeout(tick, 800);
+    }).catch(function(){ toast('请求失败'); });
+  };
+  $('opRefresh').onclick = function(){ tick(); toast('已刷新'); };
+  $('opShot').onclick = function(){
+    if(!$('shotCard').classList.contains('hidden')){ shotTick(); toast('已截取'); }
+    else toast('电脑端没有打开「看屏幕」');
+  };
+
+  function startAll(){
     var b = $('allBtn'); b.disabled = true; b.textContent = '启动中…';
     pendingStart['web'] = true; pendingStart['backend'] = true;
     renderSvc();
@@ -372,7 +696,7 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
     }).finally(function(){
       setTimeout(function(){ b.disabled = false; b.textContent = '全部启动'; tick(); }, 1500);
     });
-  };
+  }
 
   /* ---------- 对话 ---------- */
 
@@ -574,6 +898,444 @@ h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
 
   $('sendBtn').onclick = send;
   $('q').addEventListener('keydown', function(e){ if(e.key === 'Enter') send(); });
+
+  /* ---------- 电脑屏幕 ----------
+     直接给 <img src="/api/lan/shot"> 就行：手机页走 cookie 鉴权，
+     浏览器发图片请求时会自己带上，不需要像桌面端那样 fetch 完转 data URL。
+     唯一要注意的是**必须换 URL**（加时间戳），否则按「刷新」时
+     浏览器直接复用缓存，看起来像没反应。 */
+
+  var shotTimer = null;
+
+  function shotAutoOff(){
+    if(shotTimer){ clearInterval(shotTimer); shotTimer = null; }
+    var c = $('shotAuto');
+    if(c) c.checked = false;
+  }
+
+  function shotTick(){
+    var wrap = $('shotWrap');
+    var img = $('shotImg');
+    if(!img){
+      img = document.createElement('img');
+      img.id = 'shotImg';
+      img.alt = '电脑屏幕';
+      img.onerror = function(){
+        wrap.innerHTML = '<span class="ph">取不到画面<br>（锁屏、远程桌面切换中，或电脑端刚关了「看屏幕」）</span>';
+        shotAutoOff();
+      };
+      /* 点小图 → 全屏看细节。手机上 1280 宽缩成卡片宽，字是看不清的，
+         "能看清楚"才是截图这个功能的意义。 */
+      img.onclick = function(){
+        if(img.getAttribute('src')) shotViewOpen(img.getAttribute('src'));
+      };
+      wrap.innerHTML = '';
+      wrap.appendChild(img);
+      var zh = document.createElement('span');
+      zh.className = 'zoomhint';
+      zh.textContent = '点击放大';
+      wrap.appendChild(zh);
+    }
+    img.src = '/api/lan/shot?max=1280&_=' + Date.now();
+    $('shotAt').textContent = new Date().toLocaleTimeString();
+  }
+
+  $('shotBtn').onclick = shotTick;
+  $('shotAuto').onchange = function(){
+    shotAutoOff();
+    if(this.checked){
+      this.checked = true;   // shotAutoOff 会清掉勾，这里按用户意图再勾回来
+      shotTick();
+      shotTimer = setInterval(shotTick, 5000);
+    }
+  };
+
+  /* ---------- 截图放大层 ----------
+     为什么要自己写而不是让浏览器 pinch：页面 viewport 允许缩放，
+     在全屏 fixed 层上手势会缩放整个页面布局（顶栏飞走、按钮错位），
+     退出后还得靠用户自己还原。这里只缩放图像本身，页面布局纹丝不动。 */
+  var svScale = 1, svX = 0, svY = 0;
+  var svPtrs = new Map();
+  var svPinch0 = 0, svScale0 = 1;
+
+  function svApply(){
+    $('svgImg').style.transform =
+      'translate(' + svX + 'px,' + svY + 'px) scale(' + svScale + ')';
+  }
+  function svFit(){
+    svScale = 1; svX = 0; svY = 0; svApply();
+  }
+  function shotViewOpen(src){
+    /* 放大层取的是**更高分辨率**的那一张（2560），不是卡片里那张缩略图：
+       拿缩略图放大等于放大马赛克，不如不做。 */
+    var img = $('svgImg');
+    img.onload = function(){
+      /* 按容器宽度适配：竖屏手机上 2560 宽的图直接铺满会溢出到看不见边界，
+         先缩到"宽 = 舞台宽"，再由用户自己放大看局部。 */
+      var stage = $('svgStage');
+      var w = stage.clientWidth || window.innerWidth;
+      svScale = img.naturalWidth > w ? (w / img.naturalWidth) : 1;
+      svX = 0; svY = 0; svApply();
+      $('svgInfo').textContent = '电脑屏幕 · ' + img.naturalWidth + '×' + img.naturalHeight;
+    };
+    img.src = src.replace(/max=\d+/, 'max=2560').replace(/&_=\d+/, '&_=' + Date.now());
+    $('shotView').classList.remove('hidden');
+  }
+  function shotViewClose(){
+    $('shotView').classList.add('hidden');
+    $('svgImg').removeAttribute('src');
+    svFit();
+  }
+  $('svgClose').onclick = shotViewClose;
+  $('svgFit').onclick = svFit;
+
+  /* 「保存到手机」—— 手机上把一张图弄进相册没有统一做法，按能力从强到弱试：
+     ① Web Share（iOS Safari 15+/Android Chrome 认 file）：分享面板里就有
+        「存储图像 / 保存到相册」，这是唯一能直接进相册的路；
+     ② a[download] + blob：Android 落到「下载」目录，iOS 会退化成新页签打开；
+     ③ 都没有就明说「长按图片保存」。
+     **Blob 必须在点击的同一个同步帧里做出来**：Safari 对 navigator.share 只认
+     transient activation，`await fetch(...)` 之后再调会被拒（NotAllowedError）。
+     图片已经在 DOM 里且同源，用 canvas 同步取像素比再发一次请求既快又不破手势。
+     不把图转 data URL 去 download：iOS 不认 download 属性，而 2560 宽的 PNG 转
+     base64 还要多占三分之一内存。 */
+  function svStamp(){
+    var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+      p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function svBlobSync(img){
+    try{
+      var c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      var ctx = c.getContext('2d');
+      if(!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      var durl = c.toDataURL('image/png');
+      var bin = atob(durl.slice(durl.indexOf(',') + 1));
+      var arr = new Uint8Array(bin.length);
+      for(var k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k) & 0xff;
+      return new Blob([arr], {type:'image/png'});
+    }catch(e){ return null; }
+  }
+  function svDownload(blob, url, name){
+    var href = url, tmp = '';
+    if(blob && window.URL && URL.createObjectURL){
+      try { href = tmp = URL.createObjectURL(blob); } catch(e){ href = url; }
+    }
+    var a = document.createElement('a');
+    a.href = href; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if(tmp) setTimeout(function(){ URL.revokeObjectURL(tmp); }, 15000);
+    toast('已请求保存；若没反应，长按图片选「存储图像」');
+  }
+  function svSave(){
+    var img = $('svgImg'), url = img.getAttribute('src');
+    if(!url) return;
+    if(!img.complete || !img.naturalWidth){ toast('图片还在加载…'); return; }
+    var name = 'envkit-shot-' + svStamp() + '.png';
+    var blob = svBlobSync(img);
+    var file = null;
+    if(blob){ try { file = new File([blob], name, {type:'image/png'}); } catch(e){ file = null; } }
+    if(file && navigator.share && navigator.canShare &&
+       navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title:'电脑屏幕截图'}).then(function(){
+        toast('已交给系统保存');
+      }, function(e){
+        if(e && e.name === 'AbortError') return;   // 用户在分享面板点了取消，不是失败
+        svDownload(blob, url, name);
+      });
+      return;
+    }
+    svDownload(blob, url, name);
+  }
+  $('svgSave').onclick = svSave;
+
+  (function(){
+    var stage = $('svgStage');
+    stage.addEventListener('pointerdown', function(e){
+      stage.setPointerCapture(e.pointerId);
+      svPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      if(svPtrs.size === 2){
+        var a = Array.from(svPtrs.values());
+        svPinch0 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1;
+        svScale0 = svScale;
+      }
+    });
+    stage.addEventListener('pointermove', function(e){
+      if(!svPtrs.has(e.pointerId)) return;
+      var prev = svPtrs.get(e.pointerId);
+      svPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      if(svPtrs.size === 1){
+        /* 单指只在放大后才平移：没放大时拖动没有意义，还会误触发 */
+        if(svScale > 1.02){ svX += e.clientX - prev.x; svY += e.clientY - prev.y; svApply(); }
+        return;
+      }
+      if(svPtrs.size === 2){
+        var a = Array.from(svPtrs.values());
+        var d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1;
+        svScale = Math.min(8, Math.max(0.5, svScale0 * (d / svPinch0)));
+        svApply();
+      }
+    });
+    function up(e){
+      svPtrs.delete(e.pointerId);
+      if(svPtrs.size < 2) svPinch0 = 0;
+    }
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+    /* 双击切换 1x / 2.5x —— 手机上最直观的缩放方式 */
+    var lastTap = 0;
+    stage.addEventListener('click', function(){
+      var now = Date.now();
+      if(now - lastTap < 300){
+        var stage2 = $('svgStage');
+        var w = stage2.clientWidth || window.innerWidth;
+        var nat = $('svgImg').naturalWidth || w;
+        var fitZ = nat > w ? (w / nat) : 1;
+        if(svScale > fitZ * 1.2){ svScale = fitZ; svX = 0; svY = 0; }
+        else { svScale = fitZ * 2.5; svX = 0; svY = 0; }
+        svApply();
+        lastTap = 0;
+        return;
+      }
+      lastTap = now;
+    });
+  })();
+
+  /* ---------- 剪贴板 ---------- */
+
+  $('clipPush').onclick = function(){
+    var txt = $('clipText').value;
+    if(!txt){ toast('先输点内容'); return; }
+    post('/api/lan/clip', {text:txt}).then(function(r){ return r.json(); }).then(function(j){
+      if(j && j.ok) toast('已发到电脑剪贴板');
+      else toast((j && j.msg) || '发送失败');
+    }).catch(function(e){ toast('发送失败：' + e); });
+  };
+
+  $('clipPull').onclick = function(){
+    fetch('/api/lan/clip', {credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(j){
+      if(j && j.ok){
+        $('clipText').value = j.text || '';
+        toast(j.text ? '已取回电脑剪贴板' : '电脑剪贴板是空的');
+      } else {
+        toast((j && j.msg) || '读取失败');
+      }
+    }).catch(function(e){ toast('读取失败：' + e); });
+  };
+
+  /* ---------- 终端（本地 ConPTY / 链端 SSH 共用） ----------
+     xterm.js 按需加载：平时不开终端的人不必为一个看不见的组件付流量。
+     加载的地址是**本 mux 下的 /xterm/***，不是主控制台的 —— 手机连的是
+     手机访问那个独立端口，主控制台的路径在这里根本不存在。
+
+     两个终端共用同一个 xterm 实例：切过去时先断旧 WS 再清屏，
+     比同时活着两个终端省内存，也避免"到底往哪边打字"的歧义。 */
+
+  var term = null, termFit = null, termWS = null, termKind = null;
+  var termEnc = new TextEncoder();
+
+  var TERM_META = {
+    local: { url:'/api/lan/term', title:'电脑终端（PowerShell）', hint:'[已连接电脑终端]', cap:'term' },
+    ssh:   { url:'/api/lan/ssh',  title:'链端终端（SSH）',       hint:'[已连接链端 SSH]', cap:'ssh' }
+  };
+
+  function loadJsOnce(src){
+    return new Promise(function(res, rej){
+      if(document.querySelector('script[data-ek="' + src + '"]')) return res();
+      var s = document.createElement('script');
+      s.src = src;
+      s.setAttribute('data-ek', src);
+      s.onload = function(){ res(); };
+      s.onerror = function(){ rej(new Error(src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadCssOnce(href){
+    if(document.querySelector('link[data-ek="' + href + '"]')) return;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    l.setAttribute('data-ek', href);
+    document.head.appendChild(l);
+  }
+
+  function termResize(){
+    if(!termFit || !term) return;
+    try{ termFit.fit(); }catch(_){}
+    if(termWS && termWS.readyState === 1){
+      termWS.send(JSON.stringify({type:'resize', cols:term.cols, rows:term.rows}));
+    }
+  }
+
+  function termSend(u8){
+    if(termWS && termWS.readyState === 1) termWS.send(u8);
+    else if(termWS) return;
+    else termConnect(termKind || 'local');
+  }
+
+  function termClose(){
+    $('termView').classList.add('hidden');
+    if(termWS){ try{ termWS.close(); }catch(_){} termWS = null; }
+    termKind = null;
+  }
+
+  function termConnect(kind){
+    var meta = TERM_META[kind] || TERM_META.local;
+    if(termWS){
+      /* 换了目标就把旧连接掐掉，否则旧会话的输出会继续写进同一个终端 */
+      try{ termWS.close(); }catch(_){}
+      termWS = null;
+    }
+    if(term){ try{ term.reset(); }catch(_){ term.clear(); } }
+    var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    /* 不带令牌参数：这个页面走 cookie 鉴权，浏览器做 WS 握手时会自动带上。
+       桌面端要带 ?t=，是因为那边的令牌只在内存里、没有 cookie。 */
+    termWS = new WebSocket(proto + '://' + location.host + meta.url);
+    termWS.binaryType = 'arraybuffer';
+    termWS.onopen = function(){
+      term.write('\x1b[32m' + meta.hint + '\x1b[0m\r\n');
+      termResize();
+      term.focus();
+    };
+    termWS.onmessage = function(ev){
+      if(ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data));
+      else term.write(ev.data);
+    };
+    termWS.onclose = function(){
+      if(term) term.write('\r\n\x1b[33m[连接已关闭]\x1b[0m\r\n');
+      termWS = null;
+    };
+    termWS.onerror = function(){
+      if(term) term.write('\r\n\x1b[31m[连接错误：电脑端可能没打开「终端」开关，或链端 SSH 未配置]\x1b[0m\r\n');
+    };
+  }
+
+  function termOpen(kind){
+    termKind = kind;
+    var meta = TERM_META[kind] || TERM_META.local;
+    $('termTitle').textContent = meta.title;
+    $('termView').classList.remove('hidden');
+    drawerSet(false);
+    if(term){ setTimeout(termResize, 80); term.focus(); termConnect(kind); return; }
+    Promise.all([loadJsOnce('/xterm/xterm.js'), loadJsOnce('/xterm/addon-fit.js')]).then(function(){
+      loadCssOnce('/xterm/xterm.css');
+      term = new window.Terminal({
+        fontSize: 13,
+        fontFamily: 'Consolas, Menlo, monospace',
+        cursorBlink: true,
+        scrollback: 2000,
+        theme: {background:'#1e2228', foreground:'#dfe4ea', cursor:'#8fb3e0'}
+      });
+      termFit = new window.FitAddon.FitAddon();
+      term.loadAddon(termFit);
+      term.open($('termHost'));
+      /* 输入一律转成 UTF-8 字节再发：服务端按**二进制帧**收键盘输入，
+         直接 send(string) 会被当成控制消息（那边只认 resize JSON）。 */
+      term.onData(function(s){ termSend(termEnc.encode(s)); });
+      termResize();
+      termConnect(kind);
+    }).catch(function(e){
+      $('termHost').innerHTML = '<div style="color:#e08a7a;padding:16px;font-size:13px">' +
+        '终端组件加载失败：' + (e && e.message ? e.message : '未知原因') + '</div>';
+    });
+  }
+
+  $('termOpen').onclick = function(){ termOpen('local'); };
+  $('sshOpen').onclick = function(){ termOpen('ssh'); };
+  $('termClose').onclick = termClose;
+
+  /* 手机软键盘上没有 Esc/Tab/方向键，这几个按钮是终端能不能用的分界线 */
+  (function(){
+    var seq = {
+      esc: '\x1b', tab: '\t', ctrlc: '\x03',
+      up: '\x1b[A', down: '\x1b[B', left: '\x1b[D', right: '\x1b[C'
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('.termkeys .btn'), function(b){
+      b.onclick = function(){
+        var s = seq[b.getAttribute('data-k')];
+        if(s) termSend(termEnc.encode(s));
+        if(term) term.focus();
+      };
+    });
+  })();
+
+  window.addEventListener('resize', function(){
+    if(!$('termView').classList.contains('hidden')) termResize();
+    if(!$('shotView').classList.contains('hidden')) svFit();
+  });
+
+  /* ---------- 日志报告 ----------
+     三段各自点开才取数：抽屉里一打开就发三个请求是浪费，
+     而且"实时日志"这种高频刷新的东西更该由用户决定什么时候看。 */
+
+  function paneShow(which){
+    ['paneStat','paneBrief','paneLog'].forEach(function(id){
+      $(id).classList.toggle('hidden', id !== which);
+    });
+    $('repHint').classList.toggle('hidden', which === 'paneLog');
+  }
+
+  function loadBrief(){
+    fetch('/api/lan/brief', {credentials:'same-origin'}).then(function(r){ return r.json(); })
+      .then(function(j){
+        if(!j || !j.ok) return;
+        var s = j.stats || {};
+        $('stOps').textContent = (s.ops == null ? '–' : s.ops);
+        $('stFail').textContent = (s.fail == null ? '–' : s.fail);
+        $('stVer').textContent = (s.verify_ok == null ? '–' : s.verify_ok);
+        var ta = s.top_actions || {};
+        var arr = Object.keys(ta).sort(function(a,b){ return ta[b] - ta[a]; }).slice(0, 6);
+        $('stTop').innerHTML = arr.length
+          ? '<b style="color:#37424f">最常做的动作：</b>' + arr.map(function(k){
+              return mdEsc(k) + ' ×' + ta[k];
+            }).join('　·　')
+          : (s.ops ? '' : '<span style="color:#98a2ae">24 小时里没有操作记录</span>');
+
+        $('briefAt').textContent = j.report_at ? '生成于 ' + j.report_at : '';
+        $('briefBox').innerHTML = j.text
+          ? mdToHtml(j.text)
+          : '<p style="color:#98a2ae">电脑上还没有晨报。「日志报告」在电脑端按计划生成，' +
+            '手机这里只读最近的一份，不会替你生成。</p>';
+        window.__lastBrief = { report: j.report, hasText: !!j.text };
+      }).catch(function(){ toast('报告读取失败'); });
+  }
+
+  function loadLogs(){
+    var scope = $('logScope').value || 'all';
+    var box = $('logBox');
+    box.textContent = '读取中…';
+    fetch('/api/lan/logs?scope=' + encodeURIComponent(scope) + '&n=200',
+          {credentials:'same-origin'})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var lines = (j && j.lines) || [];
+        window.__lastLogs = lines;
+        if(!lines.length || (lines.length === 1 && lines[0] === '(无日志)')){
+          box.innerHTML = '<span class="lg-empty">这个分区还没有日志</span>';
+          return;
+        }
+        /* 先整体转义再上色：日志内容是子进程输出，属于不可信输入 */
+        box.innerHTML = lines.map(function(L){
+          var e = mdEsc(L)
+            .replace(/\[FAIL\]/g, '<span class="lg-f">[FAIL]</span>')
+            .replace(/\[WARN\]/g, '<span class="lg-w">[WARN]</span>');
+          return e;
+        }).join('\n');
+        box.scrollTop = box.scrollHeight;
+      }).catch(function(){ box.innerHTML = '<span class="lg-empty">读取失败</span>'; });
+  }
+
+  $('repStat').onclick = function(){ paneShow('paneStat'); loadBrief(); };
+  $('repBrief').onclick = function(){ paneShow('paneBrief'); loadBrief(); };
+  $('repLog').onclick = function(){ paneShow('paneLog'); loadLogs(); };
+  $('briefReload').onclick = loadBrief;
+  $('logReload').onclick = loadLogs;
+  $('logScope').onchange = loadLogs;
 
   /* ---------- 启动 ---------- */
 

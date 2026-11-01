@@ -39,12 +39,20 @@ func wsWriteError(ws *websocket.Conn, msg string) {
 }
 
 func handleChainTermWS(w http.ResponseWriter, r *http.Request) {
+	chainTermWS(w, r, &wsUpgrader)
+}
+
+// chainTermWS 把 WS 桥到链端 SSH 会话。upgrader 由调用方给 ——
+// 桌面控制台用 wsUpgrader（只认回环 Origin），手机端用 lanWSUpgrader
+// （认局域网 Origin + 本机地址白名单）。协议与实现完全共用，
+// 免得两份 PTY 桥各自演化出各自的 bug。
+func chainTermWS(w http.ResponseWriter, r *http.Request, up *websocket.Upgrader) {
 	c := chainCfg()
 	if c.SSHHost == "" {
 		http.Error(w, "未配置 SSH 主机", 400)
 		return
 	}
-	ws, err := wsUpgrader.Upgrade(w, r, nil)
+	ws, err := up.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}

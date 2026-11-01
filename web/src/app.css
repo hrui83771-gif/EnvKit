@@ -87,6 +87,22 @@
   #lanpair .lanpair-qrtip{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.6}
   #lanpair .lanpair-ops{display:flex;gap:8px;margin-top:10px}
   #lanpair .lanpair-ops button{flex:1;padding:6px 8px;font-size:12px}
+  /* v3.6.2：手机能做什么 —— 三条带说明的复选行。
+     全局 input{width:100%} 会把这些框拉成一条横杠，必须逐项复位（MEMORY 第 4 条）。 */
+  #lanpair .lan-cap{display:flex;flex-direction:column;gap:7px}
+  #lanpair .cap{display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0}
+  #lanpair .cap input[type=checkbox]{width:15px;height:15px;flex:none;margin:2px 0 0;accent-color:var(--brand,#4a6fa5)}
+  #lanpair .cap span{display:block;min-width:0}
+  #lanpair .cap b{display:block;font-size:12.5px;font-weight:600;color:var(--text);line-height:1.4}
+  #lanpair .cap i{display:block;font-style:normal;font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:1px}
+  #lanpair .cap.disabled{opacity:.45;cursor:not-allowed}
+  #lanpair .lanpair-otp{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+  #lanpair .lanpair-otpbox{margin-top:9px;text-align:center}
+  #lanpair .lanpair-otpbox img{width:150px;height:150px;display:block;margin:0 auto;
+    border:1px solid var(--line);border-radius:10px;background:#fff}
+  #lanpair .lanpair-otpkey{font-family:Consolas,monospace;font-size:11px;color:var(--muted);
+    word-break:break-all;margin:7px 0;line-height:1.5}
+  #lanpair .lanpair-otpbox button{width:100%;padding:6px 8px;font-size:12px}
   @media(max-width:600px){
     #lanpair .lanpair-body{flex-direction:column-reverse}
     #lanpair .lanpair-r{width:auto}

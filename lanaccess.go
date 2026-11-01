@@ -6,9 +6,10 @@
 // 如果只是把它绑到 0.0.0.0 再按来源分流，那么**分流逻辑的任何一处疏漏都等于全权限泄漏**，
 // 而这类疏漏在 90 个路由里几乎不可能靠人工审干净。
 //
-// 所以这里另起一个 net.Listener + 独立 ServeMux，上面**只有 7 个 handler**
-// （手机页 + 6 个 API）。配置页、审计、终端那些 handler 在这个 mux 上根本不存在 ——
-// 请求进来是 404，不是"被判断成不允许"。**能写错的表面积从 90 个路由缩到 6 个 API。**
+// 所以这里另起一个 net.Listener + 独立 ServeMux，上面只有 13 条路由
+// （手机页 + 12 个 API，见 lanMux）。配置页、审计、导数据库那些 handler
+// 在这个 mux 上根本不存在 —— 请求进来是 404，不是"被判断成不允许"。
+// **能写错的表面积从 90 多个路由缩到 12 个 API。**
 //
 // 主控制台继续只听 127.0.0.1，一行没动。
 //
@@ -45,6 +46,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -103,6 +106,17 @@ type LanConfig struct {
 	Port     *int        `json:"port,omitempty"`
 	PassHash string      `json:"pass_hash,omitempty"` // bcrypt；空 = 未设密码，只认配对码
 	Devices  []LanDevice `json:"devices,omitempty"`
+
+	// v3.6.2：手机能看到/摸到哪些本地能力。
+	// 三项都用 *bool：老配置里没有这三个字段，必须和"用户明确关掉"区分开
+	// （缺省值见 localdev.go 的 lanAllowXxxOn）。
+	AllowShot *bool `json:"allow_shot,omitempty"` // 截屏（只读，默认开）
+	AllowClip *bool `json:"allow_clip,omitempty"` // 剪贴板（读写，默认关）
+	AllowTerm *bool `json:"allow_term,omitempty"` // 本地终端（执行，默认关）
+
+	// 配对时的第二个因子。RequireOTP 打开才启用；OTPSecret 是 base32 密钥。
+	RequireOTP *bool  `json:"require_otp,omitempty"`
+	OTPSecret  string `json:"otp_secret,omitempty"`
 }
 
 func (c LanConfig) on() bool { return c.Enabled != nil && *c.Enabled }
@@ -633,10 +647,16 @@ func lanSecurityMW(next http.Handler) http.Handler {
 	})
 }
 
-// lanMux 手机端路由表 —— 首页 + **6 个 API**，多一条都要先问清楚。
+// lanMux 手机端路由表 —— 首页 + 12 个 API，多一条都要先问清楚。
 //
-// 想加新能力时先问：它需要"执行"还是"查看"？手机上只该有启停和对话，
-// 其余的（改配置、跑命令、看审计、导数据库）一律不加，否则这里会慢慢长成第二个主控制台。
+// 想加新能力时先问：它需要"执行"还是"查看"？手机上只该有启停、对话、
+// 三个**显式开关控制**的本地能力（截屏/剪贴板/终端，链端 SSH 与本地终端共用一个开关），
+// 以及两条**只读**的观察入口（日志、统计+晨报）。
+// 其余的（改配置、跑命令、看审计、导数据库）一律不加，
+// 否则这里会慢慢长成第二个主控制台。
+//
+// 判断标准不是"这条路由危险不危险"，而是"它能不能改变这台机器的状态"。
+// 只读的观察入口不需要开关：手机本来就该能看；需要开关的一律是"能改"的。
 func lanMux() *http.ServeMux {
 	m := http.NewServeMux()
 	m.HandleFunc("/", lanPage)
@@ -646,6 +666,21 @@ func lanMux() *http.ServeMux {
 	m.HandleFunc("/api/lan/start", lanStartPost)
 	m.HandleFunc("/api/lan/stop", lanStopPost)
 	m.HandleFunc("/api/lan/chat", lanChat)
+	// v3.7.0 本地能力：三个都受 Allow* 开关控制，默认值见 localdev.go
+	m.HandleFunc("/api/lan/shot", lanShotGet)
+	m.HandleFunc("/api/lan/clip", lanClipAny)
+	m.HandleFunc("/api/lan/term", lanTermWS)
+	// 链端 SSH 终端：与本地终端同一个开关、同一份实现（chainTermWS），只换 upgrader。
+	m.HandleFunc("/api/lan/ssh", lanSSHWS)
+	// 日志报告区：只读的"最近日志"与"统计 + 最近一份晨报"。
+	// 不加开关：这两条都是读，手机本来就该能看；真正需要开关的是"能改"的能力。
+	m.HandleFunc("/api/lan/logs", lanLogsGet)
+	m.HandleFunc("/api/lan/brief", lanBriefGet)
+	// 终端用的 xterm.js 走本 mux 自取：手机页面不能引用主控制台的 /xterm/*，
+	// 那些路径在这个 mux 上不存在（不是"被拦"，是根本没有）。
+	m.HandleFunc("/xterm/xterm.js", staticBytes("application/javascript; charset=utf-8", xtermJS))
+	m.HandleFunc("/xterm/addon-fit.js", staticBytes("application/javascript; charset=utf-8", xtermFitJS))
+	m.HandleFunc("/xterm/xterm.css", staticBytes("text/css; charset=utf-8", xtermCSS))
 	return m
 }
 
@@ -697,6 +732,7 @@ func lanPairPost(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Code string `json:"code"`
+		Totp string `json:"totp"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
 	code := strings.TrimSpace(body.Code)
@@ -720,6 +756,29 @@ func lanPairPost(w http.ResponseWriter, r *http.Request) {
 		auditNow(actUser, "lan_pair", ip, "", resDenied, "配对码或密码不正确")
 		lanWriteJSON(w, http.StatusForbidden, map[string]any{"ok": false, "msg": "配对码或密码不正确"})
 		return
+	}
+	// 第二个因子在**配对码通过之后**才判：配对码错的时候不该告诉对方
+	// "这台机器还要求验证码"——那等于免费泄露一条策略信息。
+	// 同理，need_otp 只在码对的情况下才会出现，手机端据此展开输入框。
+	if lanBoolOr(c.RequireOTP, false) && c.OTPSecret != "" {
+		if strings.TrimSpace(body.Totp) == "" {
+			lanWriteJSON(w, http.StatusForbidden, map[string]any{
+				"ok": false, "need_otp": true,
+				"msg": "这台电脑开了二次验证，请输入口令器里的 6 位验证码",
+			})
+			return
+		}
+		passed, replay := lanOTPCode(c.OTPSecret, body.Totp)
+		if !passed {
+			msg := "验证码不正确"
+			if replay {
+				msg = "这个验证码刚用过，等口令器刷新出下一个再试"
+			}
+			lanRateFail(ip)
+			auditNow(actUser, "lan_pair", ip, "", resDenied, "二次验证未通过："+msg)
+			lanWriteJSON(w, http.StatusForbidden, map[string]any{"ok": false, "need_otp": true, "msg": msg})
+			return
+		}
 	}
 	lanRatePass(ip)
 
@@ -900,7 +959,23 @@ func lanStateGet(w http.ResponseWriter, r *http.Request) {
 		Version  string   `json:"version"`
 		Logs     []string `json:"logs"`
 		Port     int      `json:"port"`
+		// v3.6.2：这台手机现在能用哪些本地能力。
+		// 页面据此显示/隐藏整块卡片 —— 不给"点了才告诉你没开"的体验。
+		Caps map[string]bool `json:"caps"`
 	}{OK: true, Version: appVersion, Logs: []string{}}
+
+	// 每次查状态都重算而不缓存：开关可能刚在电脑上被改掉，
+	// 手机这边 3 秒轮询一次，改完一轮就能看到。
+	if c := lanSnap(); c.on() {
+		out.Caps = map[string]bool{
+			"shot": lanAllowShotOn(c),
+			"clip": lanAllowClipOn(c),
+			"term": lanAllowTermOn(c) && conptyAvailable(),
+			// 链端终端与本地终端同一个开关；额外要求链端 SSH 已配置，
+			// 没配就不显示入口 —— 摆一个点进去必然报错的按钮不算"功能"。
+			"ssh": lanAllowTermOn(c) && strings.TrimSpace(chainCfg().SSHHost) != "",
+		}
+	}
 
 	for _, kv := range []struct{ key, name string }{{"web", "前端"}, {"backend", "后端"}} {
 		st := runtimeService(kv.key)
@@ -916,6 +991,133 @@ func lanStateGet(w http.ResponseWriter, r *http.Request) {
 	out.Stats = procStatsSnapshotForLan()
 	out.Port = listenPortCur
 	lanWriteJSON(w, http.StatusOK, out)
+}
+
+// lanSSHWS 手机连链端 Linux 的 SSH 终端。
+//
+// ## 为什么和本地终端共用一个开关
+//
+// 用户会直觉认为"只开链端终端"比"开本机终端"安全 —— 事实相反：
+// 链端那台机器上通常有 sudo，而手机一旦能登上去，本机这边的所有闸
+// （写工具要确认、破坏性操作 428、AI 只读）全都不再是障碍。
+// 所以两者是同一档权限，由一个开关统管，不给"看起来更安全"的错觉。
+//
+// 与桌面的 handleChainTermWS 走**同一份实现**（chainTermWS），
+// 只换 upgrader：桌面那份只认回环 Origin，手机 Origin 是局域网地址。
+func lanSSHWS(w http.ResponseWriter, r *http.Request) {
+	dev, ok := lanFeature(w, r, lanAllowTermOn(lanSnap()), "终端")
+	if !ok {
+		return
+	}
+	if c := chainCfg(); strings.TrimSpace(c.SSHHost) == "" {
+		http.Error(w, "链端 SSH 未配置：请先在电脑的「程序配置 → 链端」里填写主机与账号",
+			http.StatusBadRequest)
+		return
+	}
+	info(scSys, "手机访问", "%s 打开链端终端（%s）", dev.Name, chainCfg().SSHHost)
+	auditNow(actUser, "lan_ssh", "chain", dev.ID, resOK, "手机打开链端终端："+dev.Name)
+	chainTermWS(w, r, &lanWSUpgrader)
+}
+
+// lanLogsGet 手机端实时日志（只读）。
+//
+// 走 aiGetLogs 而不是另写一份切片：日志的"最近 N 行 + scope 前缀"只有一种口径，
+// 两处各自实现迟早对不上（手机看到的行和 AI 看到的行不是同一批，排查时会互相打脸）。
+func lanLogsGet(w http.ResponseWriter, r *http.Request) {
+	if _, ok := lanAuth(w, r); !ok {
+		return
+	}
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	switch scope {
+	case "", "all", scInstall, scConfig, scStart, scChain, scSys, scEval:
+	default:
+		lanWriteJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "msg": "未知日志分区"})
+		return
+	}
+	n := 200
+	if v, err := strconv.Atoi(r.URL.Query().Get("n")); err == nil {
+		n = v
+	}
+	if n < 20 {
+		n = 20
+	}
+	if n > 500 {
+		n = 500
+	}
+	lanWriteJSON(w, http.StatusOK, map[string]any{
+		"ok":    true,
+		"scope": scope,
+		"lines": aiGetLogs(scope, n),
+	})
+}
+
+// lanBriefGet 手机端的"统计 + 最近一份晨报"。
+//
+// 只读**已落盘**的报告，不现场生成：生成会写文件、统计磁盘、还可能触发轮转，
+// 一个"看一眼"的请求不该有副作用。没有报告就如实说没有 —— 现编一份
+// 会让用户以为系统每天早上都在出报告，其实只是他刚点了一下。
+func lanBriefGet(w http.ResponseWriter, r *http.Request) {
+	if _, ok := lanAuth(w, r); !ok {
+		return
+	}
+	out := map[string]any{"ok": true}
+	// 统计：与桌面晨报同源（briefWorkStats 只读审计与轨迹），不自己另算
+	// 否则"手机上的数"和"报告里的数"会不一致。
+	wk := briefWorkStats(time.Now())
+	out["stats"] = map[string]any{
+		"ops":         wk.Ops,
+		"ok":          wk.OK,
+		"fail":        wk.Fail,
+		"denied":      wk.Denied,
+		"started":     wk.Started,
+		"unverified":  wk.Unverified,
+		"verify":      wk.VerifyCount,
+		"verify_ok":   wk.VerifyOK,
+		"top_actions": wk.Actions,
+	}
+	dir := briefingDirFn()
+	name, at, text := lanBriefLatest(dir)
+	out["report"] = name
+	out["report_at"] = at
+	out["text"] = text
+	lanWriteJSON(w, http.StatusOK, out)
+}
+
+// lanBriefLatest 取目录里最新的一份晨报（按文件名 = 按时间倒序）。
+// 返回文件名、生成时间（文件名里的 2006-01-02-1504）与正文。
+func lanBriefLatest(dir string) (string, string, string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", "", ""
+	}
+	var best string
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".md") || len(n) != len("2006-01-02-1504.md") {
+			continue
+		}
+		if n > best {
+			best = n
+		}
+	}
+	if best == "" {
+		return "", "", ""
+	}
+	b, err := os.ReadFile(filepath.Join(dir, best))
+	if err != nil {
+		return "", "", ""
+	}
+	text := string(b)
+	// 手机屏幕上没人会滚三万字：截断并明说截断，比让页面卡住好。
+	const lanBriefMax = 40000
+	if len(text) > lanBriefMax {
+		text = text[:lanBriefMax] + "\n\n（报告过长，已在手机端截断；完整内容见电脑上的「报告」页）"
+	}
+	at := strings.TrimSuffix(best, ".md")
+	if ts, err := time.ParseInLocation("2006-01-02-1504", at, time.Local); err == nil {
+		at = ts.Format("2006-01-02 15:04")
+	}
+	return best, at, text
 }
 
 // lanStartPost 启动前端 / 后端 / 两个都起（由 key 决定）。
@@ -1130,6 +1332,14 @@ func handleLanConfig(w http.ResponseWriter, r *http.Request) {
 		Port          *int    `json:"port"`
 		Password      *string `json:"password"`
 		ClearPassword *bool   `json:"clear_password"`
+		// v3.6.2：三个本地能力开关 + 二次验证。
+		// 全是 *bool —— 缺省表示"这次没改这一项"，nil-guard merge 是唯一写入口。
+		AllowShot  *bool `json:"allow_shot"`
+		AllowClip  *bool `json:"allow_clip"`
+		AllowTerm  *bool `json:"allow_term"`
+		RequireOTP *bool `json:"require_otp"`
+		NewOTP     *bool `json:"new_otp"`   // 重新生成 TOTP 密钥（旧口令器立即失效）
+		ClearOTP   *bool `json:"clear_otp"` // 直接关掉二次验证并丢弃密钥
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 8192)).Decode(&body); err != nil {
 		http.Error(w, "参数错误", 400)
@@ -1155,6 +1365,18 @@ func handleLanConfig(w http.ResponseWriter, r *http.Request) {
 		newHash = string(h)
 	}
 
+	// 生成新密钥要在锁外做（totp.Generate 会走一次随机数），失败就整次请求失败，
+	// 而不是"开关打开但密钥是空的"—— 那样用户会以为二次验证生效了，其实配不了对。
+	var newSecret string
+	if body.NewOTP != nil && *body.NewOTP {
+		s, err := lanNewOTPSecret()
+		if err != nil {
+			lanWriteJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "msg": "生成二次验证密钥失败"})
+			return
+		}
+		newSecret = s
+	}
+
 	before := lanSnap()
 	c := lanMutate(func(l *LanConfig) {
 		if body.Enabled != nil {
@@ -1171,7 +1393,44 @@ func handleLanConfig(w http.ResponseWriter, r *http.Request) {
 		if body.ClearPassword != nil && *body.ClearPassword {
 			l.PassHash = ""
 		}
+		if body.AllowShot != nil {
+			v := *body.AllowShot
+			l.AllowShot = &v
+		}
+		if body.AllowClip != nil {
+			v := *body.AllowClip
+			l.AllowClip = &v
+		}
+		if body.AllowTerm != nil {
+			v := *body.AllowTerm
+			l.AllowTerm = &v
+		}
+		if newSecret != "" {
+			l.OTPSecret = newSecret
+			// 换了密钥就顺手打开：用户的意图是"我要用二次验证"，
+			// 只换密钥不开开关，等于让他再点一次才生效（少点一次不会更不安全）。
+			on := true
+			l.RequireOTP = &on
+		}
+		if body.RequireOTP != nil {
+			// 打开时密钥必空 → 顺手生成一个，否则开关开了也配不了对。
+			if *body.RequireOTP && l.OTPSecret == "" && newSecret == "" {
+				if s, err := lanNewOTPSecret(); err == nil {
+					l.OTPSecret = s
+				}
+			}
+			v := *body.RequireOTP
+			l.RequireOTP = &v
+		}
+		if body.ClearOTP != nil && *body.ClearOTP {
+			l.OTPSecret = ""
+			off := false
+			l.RequireOTP = &off
+		}
 	})
+	if body.ClearOTP != nil && *body.ClearOTP {
+		lanOTPResetStep()
+	}
 	// 监听变更必须在锁外做（lanServeApply 会写日志）
 	lanServeApply(c)
 	if before.port() != c.port() && c.on() {
@@ -1190,6 +1449,29 @@ func handleLanConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.ClearPassword != nil && *body.ClearPassword {
 		changed = append(changed, "已清除密码")
+	}
+	// 三个能力开关：按"名字=新值"记，审计里能看出是打开还是关掉。
+	for _, kv := range []struct {
+		p    *bool
+		name string
+		now  bool
+	}{
+		{body.AllowShot, "看屏幕", lanAllowShotOn(c)},
+		{body.AllowClip, "剪贴板", lanAllowClipOn(c)},
+		{body.AllowTerm, "终端", lanAllowTermOn(c)},
+	} {
+		if kv.p != nil {
+			changed = append(changed, fmt.Sprintf("%s=%v", kv.name, kv.now))
+		}
+	}
+	if newSecret != "" {
+		changed = append(changed, "已生成新的二次验证密钥")
+	}
+	if body.RequireOTP != nil {
+		changed = append(changed, fmt.Sprintf("二次验证=%v", lanBoolOr(c.RequireOTP, false)))
+	}
+	if body.ClearOTP != nil && *body.ClearOTP {
+		changed = append(changed, "已关闭二次验证")
 	}
 	if len(changed) > 0 {
 		auditNow(actUser, "lan_config", "config.json", "lan", resOK, strings.Join(changed, "、"))
@@ -1230,7 +1512,30 @@ func lanConfigView(c LanConfig) map[string]any {
 		"devices":         devs,
 		"addrs":           lanAddrURLs(lanDisplayPort(c)),
 		"running":         lanServeRunning(),
+		// v3.6.2 本地能力：三个开关 + 它们此刻的实际生效值。
+		// 同时给出 raw（用户设定）和 effective（含缺省值），
+		// 页面画开关用 raw 会缺省成"关闭"，但真实生效值可能是开的 —— 两个都返回，
+		// 谁也别猜。
+		"allow_shot":  rawBool(c.AllowShot),
+		"allow_clip":  rawBool(c.AllowClip),
+		"allow_term":  rawBool(c.AllowTerm),
+		"eff_shot":    lanAllowShotOn(c),
+		"eff_clip":    lanAllowClipOn(c),
+		"eff_term":    lanAllowTermOn(c),
+		"conpty":      conptyAvailable(),
+		"require_otp": lanBoolOr(c.RequireOTP, false),
+		"otp_secret":  c.OTPSecret,
+		"otp_url":     lanOTPURL(c.OTPSecret),
 	}
+}
+
+// rawBool 把"用户设过没有"和"值是多少"分开交给前端。
+// nil（从没设过）返回 nil，JSON 里是 null —— 页面据此把开关画成缺省状态。
+func rawBool(p *bool) any {
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // handleLanRotate 换一个配对码（手机上已配对的设备不受影响）。

@@ -115,9 +115,20 @@ func endStartFlag(target string, r OpResult) {
 	progMu.Lock()
 	ps, has := progState[key]
 	progMu.Unlock()
-	if !has || !ps.Running {
+	if !has {
 		return
 	}
+	// 用户主动停止是一个**终态结论**：停止之后的复验失败只是在确认"它确实停了"，
+	// 把它改写成"失败"会让界面多出一条不存在的故障。除此之外一律允许覆盖 —
+	// 理由见下。
+	if !ps.Running && ps.Status == progStopped {
+		return
+	}
+	// 曾经这里是 `if !has || !ps.Running { return }`，只在"启动中"时落结论。
+	// 那个守卫会漏掉一类真实情形：**一轮启动先被幂等跳过（Running 已置 false），
+	// 紧接着的复验才通过** —— 此时最新、最权威的结论进不来，
+	// 状态里留着上一轮的红字，而卡片（走 runtimeService）是绿的。
+	// 结论应当服从**最近一次客观复验**，而不是服从"这面旗标还立着没有"。
 	msg := firstLines(r.Msg, 120)
 	if msg == "" {
 		msg = "启动流程已结束"

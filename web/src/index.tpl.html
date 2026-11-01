@@ -1182,6 +1182,17 @@
           </ul>
         </div>
         <div class="lanpair-row">
+          <label>手机能做什么（默认只开只读的）</label>
+          <div class="lan-cap">
+            <label class="cap"><input type="checkbox" id="lp_shot">
+              <span><b>看屏幕</b><i>只读截图。你桌面上开着什么，手机上就看到什么。</i></span></label>
+            <label class="cap"><input type="checkbox" id="lp_clip">
+              <span><b>剪贴板</b><i>手机与电脑互相复制文本。手机上复制的会覆盖电脑剪贴板。</i></span></label>
+            <label class="cap" id="lp_term_row"><input type="checkbox" id="lp_term">
+              <span><b>终端</b><i>在电脑上执行任意命令，等同于你本人坐在电脑前打字。</i></span></label>
+          </div>
+        </div>
+        <div class="lanpair-row">
           <label>已配对的设备</label>
           <div class="lan-devs" id="lp_devs"></div>
         </div>
@@ -1190,6 +1201,15 @@
         <div class="lanpair-qr">
           <img id="lp_qr" alt="扫码配对" />
           <div class="lanpair-qrtip">用手机相机扫一扫<br>直接进配对页</div>
+        </div>
+        <div class="lanpair-otp">
+          <label class="cap"><input type="checkbox" id="lp_otp_on">
+            <span><b>配对要验证码</b><i>口令器（Authenticator）里的 6 位数字，挡得住配对码被人瞥见。</i></span></label>
+          <div class="lanpair-otpbox" id="lp_otp_box" style="display:none">
+            <img id="lp_otp_qr" alt="用口令器扫码" />
+            <div class="lanpair-otpkey" id="lp_otp_key">——</div>
+            <button class="ghost" id="lp_otp_new">重新生成密钥</button>
+          </div>
         </div>
         <div class="lanpair-ops">
           <button class="ghost" id="lp_rotate">换一个码</button>

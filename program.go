@@ -712,6 +712,31 @@ func svcStartSkip(target string) (OpResult, bool) {
 		"hint=复验未通过时可用 restart_service 停旧起新，不要反复 start"), true
 }
 
+// progSetSkip 把"幂等跳过"落成正确的三态，而不是非真即假。
+//
+// 语义边界：跳过 = 这一轮**没有执行任何启动动作**，结论只能来自既往复验。
+//
+//	已复验通过 → ok    （真的在跑，且验过）
+//	未复验     → warn  （在跑，但这一轮没有新鲜证据；**不是失败**）
+//	!Ok        → fail  （理论到不了：命中跳过说明 Running 为真）
+//
+// 为什么必须单独一个函数：setProg(key, running, ok2, msg) 只有两态，
+// 表达不了"既没在启动、也没失败"这一档，只能压成 fail。
+func progSetSkip(key string, r OpResult) {
+	st := progWarn
+	switch {
+	case !r.Ok:
+		st = progFail
+	case r.Verified:
+		st = progOK
+	}
+	msg := r.Msg
+	if msg == "" {
+		msg = "已在运行，未重复启动"
+	}
+	setProgStatus(key, false, st, msg)
+}
+
 // startTimeoutFact 启动任务被看门狗超时终止后，强制核对实际状态（v3.0 T1.4，修 G4）。
 //
 // 旧实现超时只释放锁、不核对："以为超时其实成功了"只能靠下一次复验偶然发现。
@@ -742,7 +767,16 @@ func opStartWeb(dir, script, actor string) OpResult {
 	setProg("web-start", true, false, "启动中...")
 	// v3.0 T1.3 幂等前置（修 G3）：已在运行就不重复派生（见 svcStartSkip）。
 	if res, hit := svcStartSkip("web"); hit {
-		setProg("web-start", false, res.Verified, res.Msg)
+		// 幂等跳过是**正常结局**，不是失败。
+		//
+		// 老实现写的是 setProg(key, false, res.Verified, msg)：res.Verified=false 时
+		// setProg 的 switch 落到 progFail —— "服务明明在跑"被记成"启动失败"。
+		// 触发条件很常见：上一次启动慢（首次 vite 编译超窗口）→ 复验未通过 →
+		// 用户再点一次启动 → 命中幂等跳过 → 状态被写成 fail。
+		// 随后 handleWebStart 里的 verifyService 其实通过了，也救不回来
+		// （endStartFlag 见 Running=false 会直接 return）。
+		// 于是界面卡片是绿的、这份状态是红的，两个读数打架。
+		progSetSkip("web-start", res)
 		fin(resOK, "幂等跳过："+res.Msg)
 		return res
 	}
@@ -917,7 +951,7 @@ func opStartBackend(dir, actor string) OpResult {
 	// 后端连 go build 一起跳过——"改代码后想重新编译"用 restart_service，
 	// 它先停旧再起新，不存在半新半旧的中间态。
 	if res, hit := svcStartSkip("backend"); hit {
-		setProg("backend-start", false, res.Verified, res.Msg)
+		progSetSkip("backend-start", res)
 		fin(resOK, "幂等跳过："+res.Msg)
 		return res
 	}

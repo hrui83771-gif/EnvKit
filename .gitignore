@@ -98,3 +98,10 @@ tools/_img/
 # ---------- AI 图片附件的落盘目录（<exeDir>/aiattach）----------
 # 用户拖进来的截图，24 小时自动清理；和 logs/ 同一性质的本机运行数据。
 aiattach/
+
+# ---------- 本机构建临时目录（go test 的 GOTMPDIR）----------
+# 本机 %TEMP% 路径里带特殊字符，go 在系统临时目录里派生 test.exe 会被拒
+# （fork/exec ... Access is denied），所以本地跑测试时把 GOTMPDIR 指到仓库内的 .gotmp/。
+# 里面只有编译中间产物与临时日志，不入库。
+/.gotmp/
+
