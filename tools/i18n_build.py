@@ -21,7 +21,9 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HTML = os.path.join(ROOT, "web", "src", "app.js")   # 前端已拆分：字典在源文件里，index.html 由 web_build.py 生成
+# 前端已拆分（v3.7.2）：字典在 web/src/js/10-i18n.js，产物由 web_build.py 按序拼接。
+# 字典必须写回**片段**而不是 web/index.html：后者是构建产物，改它会在下次构建时被覆盖。
+HTML = os.path.join(ROOT, "web", "src", "js", "10-i18n.js")
 TABLE = os.path.join(ROOT, "tools", "i18n_en.json")
 
 
@@ -36,9 +38,9 @@ def main():
     # 注意：re.sub 的替换串会把 \n 之类当转义处理，必须用函数形式返回替换内容
     out, n = re.subn(r"const I18N_EN = \{[\s\S]*?\n\};", lambda m: new_block, html, count=1)
     if n != 1:
-        raise SystemExit("未找到 I18N_EN 字典块（它应当在 web/src/app.js 里）")
+        raise SystemExit("未找到 I18N_EN 字典块（它应当在 web/src/js/10-i18n.js 里）")
     io.open(HTML, "w", encoding="utf-8", newline="\n").write(out)
-    print("已注入 %d 条译文到 web/src/app.js（%d 字节）" % (len(table), len(out.encode())))
+    print("已注入 %d 条译文到 web/src/js/10-i18n.js（%d 字节）" % (len(table), len(out.encode())))
     # 前端已拆分：写完源文件必须立刻拼回 index.html，否则页面仍是旧的（这个坑很难查）
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import web_build

@@ -210,14 +210,10 @@ func TestAbortSettleIsWiredIntoLoop(t *testing.T) {
 // 跨语言契约：前端用字面量判断 reason，Go 侧改常量却漏改前端 = 提示静默失效。
 // 这个用例就是那道提醒——它红的时候说明两边对不上了。
 func TestDoneReasonContractWithFrontend(t *testing.T) {
-	b, err := os.ReadFile("web/src/app.js")
-	if err != nil {
-		t.Fatalf("读不到前端脚本：%v", err)
-	}
-	src := string(b)
+	src := readFrontendJS(t)
 	for _, s := range []string{"'" + doneCompleted + "'", "'" + doneAwaitConfirm + "'"} {
 		if !strings.Contains(src, s) {
-			t.Fatalf("前端 app.js 里找不到 %s：done 的原因判断与 Go 常量脱钩了，"+
+			t.Fatalf("前端脚本里找不到 %s：done 的原因判断与 Go 常量脱钩了，"+
 				"用户会重新回到「它自己停了，不知道为什么」", s)
 		}
 	}

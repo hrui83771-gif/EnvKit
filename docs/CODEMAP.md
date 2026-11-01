@@ -114,14 +114,31 @@ RSS/CPU/线程/句柄/运行时长/60 点历史，`/api/proc/stats` 只读；增
 `docs/`（设计文档、评测装置、原型 `docs/prototypes/`、图片 `docs/assets/`）·
 `eval/`（评测 fixture）· `tools/`（评测脚本/i18n）· `dist/`、`distassets/`（分发产物）
 
-### 前端（v3.2 起已拆分）
+### 前端（v3.2 起已拆分；v3.7.2 把 js 再按面板拆开）
 
 | 路径 | 是什么 | 能不能直接改 |
 |---|---|---|
 | `web/src/index.tpl.html` | HTML 骨架，含 `<!--@css-->` / `<!--@appjs-->` 两个占位符 | **改这里** |
 | `web/src/app.css` | 全部样式 | **改这里** |
-| `web/src/app.js` | 全部逻辑 + `I18N_EN` 字典 | **改这里** |
+| `web/src/js/*.js` | 全部前端逻辑，**文件名数字前缀即拼接顺序**；`10-i18n.js` 里是 `I18N_EN` 字典（由 `tools/i18n_build.py` 写回） | **改这里** |
 | `web/index.html` | 三件套拼出来的单文件（`go:embed` 的对象） | ❌ 生成物，别手改 |
+
+| 片段 | 面板 / 职责 |
+|---|---|
+| `00-core.js` | 文件头、`$`、全局错误收集、`cfg` / `EK_SET` |
+| `10-i18n.js` | `I18N_EN` 字典、`t()`、语言切换 |
+| `20-shell.js` | API 令牌、toast、日志、路由、配置自动保存、内置浏览器、主题 |
+| `30-profile.js` | 个人中心、内嵌 SSH 终端、杀软白名单、深度清除 |
+| `40-ops.js` | 安装、导入导出、备份还原、诊断、体检、审计、统计、链端校验、启停 |
+| `50-pet.js` | 桌宠（表情、喂食、拖拽、气泡） |
+| `60-ai.js` | AI 助手对话、Markdown、历史、轨迹、审计树、用量 |
+| `62-agent.js` | 行动 / 报告 / 预案库 / 成长指标 / 文件引用 / AI 面板绑定 |
+| `64-ai-settings.js` | AI 表单自动保存、自动拉模型、错误一键发 AI |
+| `70-settings.js` | 设置页三区（基础 / 开发者 / 评测）与交互绑定 |
+| `80-runtime.js` | 全局通知、告警、定时行动、手机访问、防火墙诊断、更新检查 |
+
+新增片段**不要用 `zz-` 往末尾扔**：前缀决定拼接顺序，顺序即语义
+（`const` 会 TDZ）。取一个落在正确位置的前缀，例如 `45-`。
 
 改完跑 `python tools/web_build.py`（`i18n_build.py` 会自动代跑）；提交前可跑
 `python tools/web_build.py --check` 确认产物与源一致。

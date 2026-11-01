@@ -131,17 +131,14 @@ func TestHealthHandlerCarriesIssues(t *testing.T) {
 // 这条测试直接盯 web/src 的两个位置：容器在模板里，action 在渲染函数里。
 // 谁把其中一半删掉，这里立刻红（与 TestBuiltHTMLHasMissionTab 同一个思路）。
 func TestHealthCheckPaneShowsActions(t *testing.T) {
-	js, err := os.ReadFile("web/src/app.js")
-	if err != nil {
-		t.Fatalf("读 web/src/app.js: %v", err)
-	}
+	js := readFrontendJS(t)
 	for _, want := range []string{
 		"s_health_issues", // 渲染目标
 		"i.action",        // 读的是 action，不是只数个数
 		"建议：{0}",          // 与首页同一句「该怎么办」
 	} {
-		if !strings.Contains(string(js), want) {
-			t.Errorf("app.js 缺 %q —— 体检只报数量、把 action 丢了", want)
+		if !strings.Contains(js, want) {
+			t.Errorf("前端脚本缺 %q —— 体检只报数量、把 action 丢了", want)
 		}
 	}
 	tpl, err := os.ReadFile("web/src/index.tpl.html")

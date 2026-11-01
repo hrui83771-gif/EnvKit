@@ -95,6 +95,15 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # 前端源码在 web/src/（js 已按面板拆成 web/src/js/*.js），
+      # 而 exe 里 go:embed 的是构建产物 web/index.html。
+      # Go 测试读的是**源**，所以「改了片段忘了跑 web_build.py」在 go test 里
+      # 完全看不出来，线上页面却还是旧的 —— 只能靠这一条比对产物。
+      - name: 前端产物与源一致
+        run: |
+          python tools/web_build.py --check
+          python tools/i18n_gap.py --check
+
       - name: Go 单元测试
         run: go test -count=1 ./...
         timeout-minutes: 20

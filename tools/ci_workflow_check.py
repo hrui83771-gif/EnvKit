@@ -30,6 +30,7 @@ EXPECTED_STEPS = [
     "actions/setup-python@v5",
     "判分器自检",
     "go vet",
+    "前端产物与源一致",
     "Go 单元测试",
     "全量评测 + 门禁",
     "冻结基线（仅手动勾选时）",

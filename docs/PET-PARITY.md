@@ -1,7 +1,7 @@
 # 大肥鱼桌宠：原版 vs EnvKit 功能对照
 
 > 依据：原仓库 `1190fasheqi/dafeiyu-pet` @ main（`桌宠.py` 38.5 KB、README）逐项读源码；
-> EnvKit 侧对照 `web/src/app.js` 桌宠模块与 `web/src/index.tpl.html` 的 `#pet-ctx` 菜单。
+> EnvKit 侧对照 `web/src/js/50-pet.js` 桌宠模块与 `web/src/index.tpl.html` 的 `#pet-ctx` 菜单。
 > 结论均可源码复核，不含推测。
 
 ## 一、已还原（做得一致或更好）

@@ -29,7 +29,7 @@ except Exception:
     pass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-JS = os.path.join(ROOT, "web", "src", "app.js")
+JSDIR = os.path.join(ROOT, "web", "src", "js")   # v3.7.2 起前端按面板拆成多个片段
 TPL = os.path.join(ROOT, "web", "src", "index.tpl.html")
 TABLE = os.path.join(ROOT, "tools", "i18n_en.json")
 
@@ -88,9 +88,15 @@ def unescape_js(s):
 
 
 def js_keys():
-    src = strip_comments(io.open(JS, encoding="utf-8").read())
-    found = re.findall(r"\bt\(\s*'((?:[^'\\\n]|\\.)*)'", src)
-    found += re.findall(r'\bt\(\s*"((?:[^"\\\n]|\\.)*)"', src)
+    # 逐片段扫描再合并：注释状态机不能跨文件连续（一个片段末尾的行注释
+    # 不能把下一个片段的开头也吃掉），所以按文件分别 strip。
+    found = []
+    for name in sorted(os.listdir(JSDIR)):
+        if not name.endswith(".js"):
+            continue
+        src = strip_comments(io.open(os.path.join(JSDIR, name), encoding="utf-8").read())
+        found += re.findall(r"\bt\(\s*'((?:[^'\\\n]|\\.)*)'", src)
+        found += re.findall(r'\bt\(\s*"((?:[^"\\\n]|\\.)*)"', src)
     return [unescape_js(s) for s in found if CJK.search(s)]
 
 
