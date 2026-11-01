@@ -143,6 +143,8 @@ func main() {
 	http.HandleFunc("/api/pick-dir", handlePickDir)
 	http.HandleFunc("/api/pick-file", handlePickFile)
 	http.HandleFunc("/api/ls", handleLS)
+	http.HandleFunc("/api/paths", handlePaths)        // 真实目录（exe / 日志 / 备份）——界面"打开目录"用
+	http.HandleFunc("/api/open/path", handleOpenPath) // 在资源管理器中打开一个目录（只读）
 	http.HandleFunc("/api/health", handleHealth)
 	http.HandleFunc("/api/elevate", handleElevate)
 	http.HandleFunc("/api/chain/check", handleChainCheck)

@@ -25,6 +25,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -120,5 +121,34 @@ func TestHealthHandlerCarriesIssues(t *testing.T) {
 		if strings.TrimSpace(is.Action) == "" {
 			t.Errorf("issue %q 没有 action —— 只报问题不给下一步等于把负担推回给用户", is.What)
 		}
+	}
+}
+
+// TestHealthCheckPaneShowsActions 「本机体检」必须把 issues[].action 显示出来。
+//
+// 后端为每条问题都算好了 action，但设置页原来只写「N 个警告」——
+// **信息在渲染层丢了**，用户知道有两个警告却不知道下一步点哪里。
+// 这条测试直接盯 web/src 的两个位置：容器在模板里，action 在渲染函数里。
+// 谁把其中一半删掉，这里立刻红（与 TestBuiltHTMLHasMissionTab 同一个思路）。
+func TestHealthCheckPaneShowsActions(t *testing.T) {
+	js, err := os.ReadFile("web/src/app.js")
+	if err != nil {
+		t.Fatalf("读 web/src/app.js: %v", err)
+	}
+	for _, want := range []string{
+		"s_health_issues", // 渲染目标
+		"i.action",        // 读的是 action，不是只数个数
+		"建议：{0}",          // 与首页同一句「该怎么办」
+	} {
+		if !strings.Contains(string(js), want) {
+			t.Errorf("app.js 缺 %q —— 体检只报数量、把 action 丢了", want)
+		}
+	}
+	tpl, err := os.ReadFile("web/src/index.tpl.html")
+	if err != nil {
+		t.Fatalf("读 web/src/index.tpl.html: %v", err)
+	}
+	if !strings.Contains(string(tpl), `id="s_health_issues"`) {
+		t.Error("模板里没有 #s_health_issues —— 渲染函数写了也无处落地")
 	}
 }

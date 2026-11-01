@@ -250,6 +250,10 @@ type DevConfig struct {
 	MissionDeadlineDays int `json:"mission_deadline_days,omitempty"`
 	// MissionKeepDays 终态行动的保留天数（0 = 30）。
 	MissionKeepDays int `json:"mission_keep_days,omitempty"`
+	// BackupKeep 数据库备份保留份数（0 = 10）。超出后从最老的开始删。
+	// v3.7.1 从 dbops.go 的写死常量搬到这里：同一台机器上"备份留几份"
+	// 取决于备份大小与磁盘，10 份对 1GB 的库就是 10GB，不该由作者拍板。
+	BackupKeep int `json:"backup_keep,omitempty"`
 
 	// —— 控制台端口 ——
 	// ServerPort 控制台起始端口（0 = 默认 18765，被占用则 findPort 顺延）。
@@ -305,6 +309,7 @@ const (
 	devDefaultShadowRetentionDay = 30
 	devDefaultMissionDeadlineDay = 30
 	devDefaultMissionKeepDay     = 30
+	devDefaultBackupKeep         = 10 // 数据库备份保留份数（dbops.go 的 pruneBackups 用它）
 	devDefaultServerPort         = 18765
 	devDefaultPortScanSpan       = 50 // 从起始端口起的顺延名额数（上界 = 起始 + 50）
 
@@ -346,6 +351,7 @@ func (d DevConfig) resolved() DevConfig {
 	d.ShadowRetentionDays = devOr(d.ShadowRetentionDays, devDefaultShadowRetentionDay)
 	d.MissionDeadlineDays = devOr(d.MissionDeadlineDays, devDefaultMissionDeadlineDay)
 	d.MissionKeepDays = devOr(d.MissionKeepDays, devDefaultMissionKeepDay)
+	d.BackupKeep = devOr(d.BackupKeep, devDefaultBackupKeep)
 	d.ServerPort = devOr(d.ServerPort, devDefaultServerPort)
 	d.PortScanLimit = devOr(d.PortScanLimit, d.ServerPort+devDefaultPortScanSpan)
 	d.LogMaxMB = devOr(d.LogMaxMB, devDefaultLogMaxMB)
@@ -388,6 +394,9 @@ func (d DevConfig) missionDeadline() time.Duration {
 }
 func (d DevConfig) missionKeep() time.Duration {
 	return time.Duration(devOr(d.MissionKeepDays, devDefaultMissionKeepDay)) * 24 * time.Hour
+}
+func (d DevConfig) backupKeep() int {
+	return devOr(d.BackupKeep, devDefaultBackupKeep)
 }
 func (d DevConfig) serverPort() int {
 	p := devOr(d.ServerPort, devDefaultServerPort)

@@ -454,6 +454,7 @@ const I18N_EN = {
   "基础 · 开发者 · 评测": "Basics · Developer · Evaluation",
   "基础设置已保存": "Basics saved",
   "基线": "Baseline",
+  "备份保留": "Backups kept",
   "备份数据库": "back up database",
   "备份文件写到：{0}": "Backups are written to: {0}",
   "备份目录": "Backup folder",
@@ -746,8 +747,11 @@ const I18N_EN = {
   "打开 ↗": "Open ↗",
   "打开后，手机上可以在电脑上执行任意命令（等同你本人操作）。继续？": "Once on, the phone can run any command on this PC (same as you doing it yourself). Continue?",
   "打开后，新手机配对时必须再输口令器里的 6 位验证码。已经配对的手机不受影响。继续？": "Once on, a new phone must also enter the 6-digit code from your authenticator. Already-paired phones are unaffected. Continue?",
+  "打开失败": "Could not open folder",
+  "打开失败：": "Could not open folder: ",
   "打开对话面板": "Open chat panel",
   "打开数据浏览": "Open data browser",
+  "打开目录": "Open folder",
   "打开配对弹窗": "Open the pairing dialog",
   "执行": "Run",
   "执行 SQL": "Apply SQL",
@@ -1022,6 +1026,7 @@ const I18N_EN = {
   "没拿到天气数据": "No weather data came back",
   "没接到文件呢": "Hmm, no file received",
   "没有可导出的数据": "Nothing to export",
+  "没有可打开的目录": "No folder to open",
   "没有命中": "No matches",
   "没检测到手机能连上的地址（这台电脑没连 WiFi/网线？）": "No address your phone could reach (is this PC offline?)",
   "注意": "Note",
@@ -7372,6 +7377,31 @@ function ekSetBackupHint(v){
   el.textContent = s ? t('备份文件写到：{0}', s) : t('未指定：用 exe 同级的 backups 目录');
 }
 
+/* 打开目录（备份 / 日志）：路径由服务端 /api/paths 解析。
+   前端不自己拼——备份目录留空时真实位置是 exe 同级的 backups，
+   而页面所在的工作目录不等于 exe 目录，拼出来只会打开一个不存在的路径。 */
+document.addEventListener('click', async (e)=>{
+  const btn = (e.target && e.target.closest) ? e.target.closest('[data-open]') : null;
+  if(!btn) return;
+  e.preventDefault();
+  const which = btn.getAttribute('data-open');
+  btn.disabled = true;
+  try{
+    const p = await (await fetch('/api/paths')).json();
+    const path = which==='backup' ? p.backup_dir : (which==='logs' ? p.log_dir : p.exe_dir);
+    if(!path){ toast(t('没有可打开的目录'), 'err'); return; }
+    const r = await fetch('/api/open/path', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path})});
+    if(!r.ok){
+      const j = await r.json().catch(()=>({}));
+      toast((j && j.error) || t('打开失败'), 'err');
+    }
+  }catch(err){
+    toast(t('打开失败：') + err, 'err');
+  }finally{
+    btn.disabled = false;
+  }
+});
+
 /* "8080, 8888" / "8080 8888" / "8080、8888" → [8080,8888]
    非法项一律丢弃：把 "abc" 当端口写进配置的后果是复验去连一个永远不存在的端口，
    而用户看到的只是一句"启动后没验到"。宁可退回"由项目画像推断"。 */
@@ -7413,6 +7443,17 @@ function ekSetHealth(h){
     {k:'后端服务', v: b.v, cls: b.cls},
     {k:'待处理', v: iv, cls: ic}
   ]);
+  /* 只写「N 个警告」等于把状态源算好的 action 丢掉：用户知道有 2 个警告，
+     却不知道下一步点哪里。这里逐条列出问题与建议，markup 与首页
+     renderIssues 一致——两处显示同一份数据，口径不可能分叉。 */
+  const hb = $('#s_health_issues');
+  if(hb){
+    hb.innerHTML = iss.map(i=>{
+      const cls = i.level==='error' ? 'err' : (i.level==='warn' ? 'warn' : 'info');
+      return '<li class="'+cls+'"><b>'+esc(i.what)+'</b>'+
+             (i.action ? '<span class="act">'+esc(t('建议：{0}', i.action))+'</span>' : '')+'</li>';
+    }).join('');
+  }
 }
 
 async function ekSetLoadBase(){
@@ -7624,6 +7665,7 @@ const EK_DEV_MAP = [
   {k:'shadow_retention_days', s:'#sd_shadow_days',    n:'#sd_shadow_days_n'},
   {k:'mission_deadline_days', s:'#sd_mission_dl',     n:'#sd_mission_dl_n'},
   {k:'mission_keep_days',     s:'#sd_mission_keep',   n:'#sd_mission_keep_n'},
+  {k:'backup_keep',           s:'#sd_backup_keep',    n:'#sd_backup_keep_n'},
   {k:'server_port',           s:null,                 n:'#sd_server_port'},
   {k:'port_scan_limit',       s:null,                 n:'#sd_port_limit'},
   {k:'explore_max_kb',        s:'#sd_explore_kb',     n:'#sd_explore_kb_n'},

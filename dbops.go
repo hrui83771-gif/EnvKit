@@ -19,8 +19,9 @@ import (
 
 // ---------- MySQL 备份 / 还原 ----------
 
-// prunedBackupsKeep 备份保留份数（超出后从最老的开始删除）。
-const prunedBackupsKeep = 10
+// 备份保留份数的默认值在 state.go（devDefaultBackupKeep），
+// 运行时取值走 dev.backup_keep —— 不再是写死常量（v3.7.1 审计项：
+// 同一台机器上"留几份"取决于备份大小与磁盘，作者拍不了板）。
 
 // backupDir 备份目录。
 // 历史坑：曾经优先用 SQL 文件所在目录（= 项目源码目录），dump 会混进业务代码被 git 提交，
@@ -312,8 +313,9 @@ func doBackup(actor string, h *TaskHandle) string {
 	}
 	// 成功：写校验和 + 按保留策略清理旧备份
 	writeChecksum(dest)
-	if n := pruneBackups(dir, p.DBName, prunedBackupsKeep); n > 0 {
-		info(scConfig, "备份", "已清理 %d 份超出保留上限（%d 份）的旧备份", n, prunedBackupsKeep)
+	keep := devSnap().backupKeep()
+	if n := pruneBackups(dir, p.DBName, keep); n > 0 {
+		info(scConfig, "备份", "已清理 %d 份超出保留上限（%d 份）的旧备份", n, keep)
 	}
 	ok(scConfig, "备份", "备份完成：%s（%.1f KB）", dest, float64(mustFileSize(dest))/1024)
 	fin(resOK, dest)

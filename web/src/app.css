@@ -973,6 +973,15 @@
   .ro-row .v.bad{color:var(--err);font-weight:600}
   .ro-row .v.warn{color:var(--warn);font-weight:600}
   .ro-empty{font-size:12px;color:var(--muted);padding:6px 0}
+  /* 体检里的问题清单：「问题 + 建议」两行一条，配色与首页 #issues-list 同源 */
+  .h-issues{list-style:none;padding:0;margin:8px 0 0}
+  .h-issues li{padding:6px 0 6px 10px;border-left:3px solid var(--line);margin-bottom:6px;font-size:12px;line-height:1.5}
+  .h-issues li:last-child{margin-bottom:0}
+  .h-issues li.err{border-left-color:var(--err)}
+  .h-issues li.warn{border-left-color:var(--warn)}
+  .h-issues li.info{border-left-color:var(--info)}
+  .h-issues .act{display:block;color:var(--muted);margin-top:2px}
+  .h-issues:empty{display:none}
   /* 手机访问（v3.6.2）：配对码要"一眼能念给手机听"，所以字号放大 + 等宽数字 */
   .lan-code-row{display:flex;align-items:flex-end;gap:10px;margin-top:8px}
   .lan-code{font:700 22px/1.2 ui-monospace,Consolas,"Courier New",monospace;

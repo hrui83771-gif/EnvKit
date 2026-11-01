@@ -47,6 +47,7 @@ func handleDevConfig(w http.ResponseWriter, r *http.Request) {
 		ShadowRetentionDays *int `json:"shadow_retention_days"`
 		MissionDeadlineDays *int `json:"mission_deadline_days"`
 		MissionKeepDays     *int `json:"mission_keep_days"`
+		BackupKeep          *int `json:"backup_keep"`
 
 		ServerPort    *int `json:"server_port"`
 		PortScanLimit *int `json:"port_scan_limit"`
@@ -91,6 +92,7 @@ func handleDevConfig(w http.ResponseWriter, r *http.Request) {
 	set("影子保留天数", &next.ShadowRetentionDays, body.ShadowRetentionDays)
 	set("行动超期天数", &next.MissionDeadlineDays, body.MissionDeadlineDays)
 	set("行动保留天数", &next.MissionKeepDays, body.MissionKeepDays)
+	set("备份保留份数", &next.BackupKeep, body.BackupKeep)
 	set("控制台端口", &next.ServerPort, body.ServerPort)
 	set("端口上界", &next.PortScanLimit, body.PortScanLimit)
 	set("日志单文件上限", &next.LogMaxMB, body.LogMaxMB)

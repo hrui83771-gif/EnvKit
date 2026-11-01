@@ -173,6 +173,8 @@
           <button class="mini" data-log="install" data-act="copy">复制</button>
           <button class="mini" data-log="install" data-act="download">下载</button>
           <button class="mini" data-log="install" data-act="light">浅色</button>
+          <!-- 日志与 exe 同目录：给一个直接打开的口子，不用手抄路径 -->
+          <button class="mini" data-open="logs">打开目录</button>
           <button class="mini on" data-log="install" data-act="auto">自动滚动</button>
           <button class="mini" data-log="install" data-act="clear">清空</button>
           <button class="mini" data-log="install" data-act="toggle">展开</button>
@@ -782,7 +784,7 @@
                  留空才回落到 exe 同级的 backups/。放在这里之后，"备份存到哪块盘"
                  终于是界面上能改的一件事。 -->
             <label for="s_backup_dir">备份目录</label>
-            <div class="dirrow"><input id="s_backup_dir" placeholder="留空 = exe 同级的 backups" /><button class="ghost" data-spick="s_backup_dir">选择</button></div>
+            <div class="dirrow"><input id="s_backup_dir" placeholder="留空 = exe 同级的 backups" /><button class="ghost" data-spick="s_backup_dir">选择</button><button class="ghost" data-open="backup">打开</button></div>
             <div class="hint" id="s_backup_now">—</div>
           </div>
 
@@ -821,6 +823,9 @@
             <!-- 只放别处没有的结论：数据库/链端的明细在下面两张卡里，
                  这里再抄一遍等于同一个指标两处显示（口径迟早分叉）。 -->
             <div class="ro-list" id="s_health_view" style="margin-top:2px"></div>
+            <!-- 体检不能只报「N 个警告」：状态源为每条问题都算好了 action，
+                 把它丢在接口里等于让用户自己去猜下一步。这里逐条列出「问题 + 建议」。 -->
+            <ul class="h-issues" id="s_health_issues"></ul>
           </div>
 
           <div class="set-card">
@@ -946,6 +951,11 @@
             <div class="set-field"><div class="set-flabel"><b>行动保留</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_mission_keep" min="1" max="180" step="1" />
               <input type="number" class="set-num" id="sd_mission_keep_n" min="0" max="3650" /></div>
+            <!-- 数据库备份保留份数（v3.7.1 从 dbops.go 的写死常量搬来）：
+                 1GB 的库留 10 份就是 10GB，"留几份"取决于备份大小与磁盘。 -->
+            <div class="set-field"><div class="set-flabel"><b>备份保留</b><span class="unit">份</span></div>
+              <input type="range" class="set-slider" id="sd_backup_keep" min="1" max="50" step="1" />
+              <input type="number" class="set-num" id="sd_backup_keep_n" min="0" max="100" /></div>
           </div>
         </div>
 

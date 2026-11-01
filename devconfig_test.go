@@ -278,3 +278,30 @@ func TestMissionCfgEqual(t *testing.T) {
 		t.Fatalf("显式 false 与默认开不应相等")
 	}
 }
+
+// TestBackupKeepFromConfig 备份保留份数必须能配，且默认值与写死时代一致。
+//
+// v3.7.1 从 dbops.go 的 prunedBackupsKeep=10 搬进 dev 段。这条测试守两件事：
+//   - 没配时仍是 10（老用户行为不变，不会因为升级突然只留 1 份备份）；
+//   - 配了以后运行时读到的是配置值（不是常量）。
+func TestBackupKeepFromConfig(t *testing.T) {
+	var unset DevConfig
+	if got := unset.backupKeep(); got != devDefaultBackupKeep {
+		t.Fatalf("未配置时应回落到默认 %d，实际 %d", devDefaultBackupKeep, got)
+	}
+	if got := (DevConfig{BackupKeep: 3}).backupKeep(); got != 3 {
+		t.Fatalf("配置 3 份时应读到 3，实际 %d", got)
+	}
+	// 设置页回显的应当是生效值，而不是 0
+	if got := (DevConfig{}).resolved().BackupKeep; got != devDefaultBackupKeep {
+		t.Fatalf("resolved() 应填默认值，实际 %d", got)
+	}
+	// 越界值归一化：0 表示未设置（保留 0 让 devOr 兜底），负数与 101 压回界内
+	for in, want := range map[int]int{0: 0, -3: 1, 1: 1, 100: 100, 101: 100} {
+		d := DevConfig{BackupKeep: in}
+		normalizeDev(&d)
+		if d.BackupKeep != want {
+			t.Errorf("normalizeDev(BackupKeep=%d) = %d，期望 %d", in, d.BackupKeep, want)
+		}
+	}
+}

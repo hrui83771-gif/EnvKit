@@ -401,6 +401,9 @@ func normalizeDev(d *DevConfig) {
 	d.ShadowRetentionDays = span(d.ShadowRetentionDays, 1, 3650)
 	d.MissionDeadlineDays = span(d.MissionDeadlineDays, 1, 3650)
 	d.MissionKeepDays = span(d.MissionKeepDays, 1, 3650)
+	// 备份保留份数：下限 1（留 0 份 = 每次备份完立刻删掉，等于没备份），
+	// 上限 100 —— 再大就只是把磁盘当仓库，真正的清理该在系统层面做。
+	d.BackupKeep = span(d.BackupKeep, 1, 100)
 	d.ServerPort = pos(d.ServerPort)
 	d.PortScanLimit = pos(d.PortScanLimit)
 	// 日志配额：MB 与份数都压界。上限不设太大 —— 单文件 64MB × 30 份已经是
@@ -460,6 +463,7 @@ func checkDevConfig(d DevConfig) []configProblem {
 		{"dev.subproc_retries", d.SubprocRetries, 1, 5, "次"},
 		{"dev.subproc_backoff_secs", d.SubprocBackoffSecs, 1, 30, "秒"},
 		{"dev.explore_max_kb", d.ExploreMaxKB, 16, 1024, "KB"},
+		{"dev.backup_keep", d.BackupKeep, 1, 100, "份"},
 	} {
 		if f.v != 0 && (f.v < f.lo || f.v > f.hi) {
 			hard(f.name, "需在 %d-%d %s，当前 %d", f.lo, f.hi, f.unit, f.v)
