@@ -149,6 +149,31 @@ def check_python_encoding(steps):
         )
 
 
+GATED_STEPS = ("门禁判定", "冻结基线（仅手动勾选时）")
+
+
+def check_judge_guarded(steps):
+    """判定步骤必须挂在上一步的 output 上，不能无条件跑。
+
+    全量评测在未配 secret 时是"优雅跳过"，但如果门禁判定照样执行，
+    eval_gate 找不到 report-*.json 会 append「缺少评测报告」→ 红。
+    那是一条**什么都没测**的红，比绿更误导人。
+    """
+    for s in steps:
+        label = step_label(s)
+        if label not in GATED_STEPS:
+            continue
+        cond = str(s.get("if") or "")
+        if "steps." in cond and "outputs." in cond:
+            continue
+        raise Bad(
+            "step「%s」没有挂 `steps.<id>.outputs.ran` 之类的前置条件。\n"
+            "  全量评测被跳过（未配 secret）时它仍会执行，而 eval_gate\n"
+            "  找不到 report-*.json 会追加「缺少评测报告」，让门禁红在\n"
+            "  一个什么都没测的状态上。" % label
+        )
+
+
 def check_go_version(doc):
     """setup-go 的版本不能低于 go.mod 的 go 行。"""
     want = None
@@ -192,6 +217,7 @@ def main():
         check_run_scripts(steps)
         check_bash_shell(steps)
         check_python_encoding(steps)
+        check_judge_guarded(steps)
         gov = check_go_version(doc)
 
         n_run = sum(1 for s in steps if s.get("run"))

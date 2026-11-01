@@ -107,6 +107,7 @@ jobs:
       # 好在它遇到**没有 dpapi: 前缀**的值会直接返回原文，
       # 所以明文 key 是可用的 —— 由下面这段从 secret 写进配置。
       - name: 全量评测 + 门禁
+        id: full
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
@@ -117,6 +118,7 @@ jobs:
           set -euo pipefail
 
           if [ -z "${MODEL_API_KEY:-}" ]; then
+            echo "ran=0" >> "$GITHUB_OUTPUT"
             echo "::warning title=跳过全量评测::未配置 secret MODEL_API_KEY，只跑了快速层。"
             exit 0
           fi
@@ -155,16 +157,21 @@ jobs:
 
           # 33 次调用 + 六维判分，约 25~30 分钟
           python tools/recovery_sandbox.py --allow-writes --repeat 3 --min-samples 3
+          echo "ran=1" >> "$GITHUB_OUTPUT"
 
       # 冻结基线要**显式传参**，不能写成短路表达式 ——
       # GitHub Actions 没有三元运算符，`a && b || c` 在 a 为假时会把 c 也取出来。
       # （这句说明**只能**留在 YAML 注释里：写进 run 脚本会被当成真表达式求值。）
+      #
+      # 两个判定步骤都挂 steps.full.outputs.ran：**没跑评测就不判分**。
+      # 否则未配 secret 时全量评测被跳过，而 eval_gate 找不到 report-*.json
+      # 会 append「缺少评测报告」→ 门禁红在一个"什么都没测"的状态上。
       - name: 冻结基线（仅手动勾选时）
-        if: github.event_name == 'workflow_dispatch' && inputs.set_baseline == 'true'
+        if: steps.full.outputs.ran == '1' && github.event_name == 'workflow_dispatch' && inputs.set_baseline == 'true'
         run: python tools/eval_gate.py --set-baseline
 
       - name: 门禁判定
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        if: steps.full.outputs.ran == '1'
         run: python tools/eval_gate.py
 
       # 无论成败都清掉 key。runner 是临时的，但不清理会让后续步骤

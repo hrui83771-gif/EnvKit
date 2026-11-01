@@ -70,6 +70,11 @@ MUTATIONS = [
      "      - name: 清除配置里的 key\n"
      "        if: always()\n"
      "        run: |\n"),
+
+    # 6. 门禁判定无条件跑 —— 没产出报告时会红在"什么都没测"的状态上
+    ("判定步骤失去前置条件",
+     "      - name: 门禁判定\n        if: steps.full.outputs.ran == '1'\n",
+     "      - name: 门禁判定\n"),
 ]
 
 
