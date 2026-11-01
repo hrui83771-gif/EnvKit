@@ -135,6 +135,15 @@ type aiTool struct {
 	Execute func(args map[string]any) (string, error)
 }
 
+// restartPhaseNotify 是 restart 的观测点：生产环境什么都不做，
+// 测试里用它精确落在「已停旧进程、未起新进程」这个窗口上。
+//
+// **不能用 sleep 去猜这个窗口**：端口本来就空闲时，stopByKey 和
+// restartWaitPorts 都是瞬间返回，窗口可能只有几微秒。本机碰巧有服务
+// 占着端口时才测得出来，CI 上必现失败 —— run#34 就是这么红的，
+// 而当时红的位置（持锁断言）离真因（测试假设过期）很远。
+var restartPhaseNotify = func(string) {}
+
 var aiToolRegistry = map[string]aiTool{
 	"get_system_state": {
 		Desc:    "获取当前环境完整状态：组件检测结果、前后端服务运行状态、数据库健康、链端信息",
@@ -377,6 +386,7 @@ var aiToolRegistry = map[string]aiTool{
 			switch svc {
 			case "web":
 				stopByKey(scStart, "web", "web-start")
+				restartPhaseNotify("web-stopped")
 				// v3.0 T1.9：等端口真正释放再起新（旧实现盲等 2 秒——
 				// 进程杀了不等于端口立即可用，第三方占用更不会自己走）。
 				if why := restartWaitPorts("web"); why != "" {
@@ -391,6 +401,7 @@ var aiToolRegistry = map[string]aiTool{
 				return aiOpResultText("前端重启", rw), nil
 			case "backend":
 				stopByKey(scStart, "backend", "backend-start")
+				restartPhaseNotify("backend-stopped")
 				if why := restartWaitPorts("backend"); why != "" {
 					fin(resFail, why)
 					return "", fmt.Errorf("后端未重启：%s", why)
@@ -404,6 +415,7 @@ var aiToolRegistry = map[string]aiTool{
 			case "all":
 				stopByKey(scStart, "web", "web-start")
 				stopByKey(scStart, "backend", "backend-start")
+				restartPhaseNotify("all-stopped")
 				// 先后端再前端。后端等端口释放时 web 的候选端口里可能还有
 				// backend 的进程名——restartWaitPorts 的 keepNames 会排除它们，
 				// 不会把活着的另一个服务误判成"没释放"。

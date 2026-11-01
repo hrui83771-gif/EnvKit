@@ -155,26 +155,66 @@ func TestStopServiceTakesLock(t *testing.T) {
 }
 
 // TestRestartHoldsLockAcrossPhases 重启的"停"与"起"之间必须没有空档。
-// 验证方式：restart 执行期间（含 2 秒等待）另起线程抢同组锁，必须抢不到。
+//
+// 观测方式：**用钩子精确落在"已停未起"那一刻**，不用 sleep 猜。
+// 原先写的是「sleep 300ms 后抢锁，应当抢不到」，前提是"stop 后的
+// 等待真实存在"。但 T1.9 把盲等 2 秒改成了 restartWaitPorts（等端口
+// 真正释放）—— 端口本来就空闲时它瞬间返回，窗口可能只有几微秒。
+// 结果就是本机碰巧有服务占着端口才测得过，CI 上必红（run#34）。
+//
+// 顺带修掉一个连锁误报：原来第一条断言若意外抢到了锁却没释放，
+// 第二条"结束后应释放"也会跟着红，看着像两个缺陷，其实只有一个。
 func TestRestartHoldsLockAcrossPhases(t *testing.T) {
 	withAuditDir(t, nil)
 	// 不配前端目录：opStartWeb 会以 bad_config 快速失败，
-	// 但 stopByKey 后的 2 秒等待真实存在——足够观测锁的持有。
+	// 这样整段 restart 的耗时只由"停 → 等端口"决定，没有编译噪音。
 	oldDir := cfg.Projects.FrontendDir
 	cfg.Projects.FrontendDir = ""
 	defer func() { cfg.Projects.FrontendDir = oldDir }()
+
+	atWindow := make(chan struct{}, 1) // 已停、未起
+	release := make(chan struct{}, 1)  // 测试放行
+	oldNotify := restartPhaseNotify
+	restartPhaseNotify = func(phase string) {
+		if phase != "web-stopped" {
+			return
+		}
+		select {
+		case atWindow <- struct{}{}:
+		default:
+		}
+		<-release
+	}
+	t.Cleanup(func() {
+		restartPhaseNotify = oldNotify
+		// 兜底放行：断言失败走 t.Fatal 时，restart 协程还卡在钩子里
+		select {
+		case release <- struct{}{}:
+		default:
+		}
+	})
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		_, _ = aiToolRegistry["restart_service"].Execute(map[string]any{"service": "web"})
 	}()
-	// 等它进入持锁段（stopByKey 之后的 sleep 2s 之前）
-	time.Sleep(300 * time.Millisecond)
-	if _, ok := beginTaskHG("插队", []string{grpWeb}, true); ok {
+
+	// 确认真的进入了那个窗口 —— 否则下面的断言是空转（钩子没被调到还判绿）。
+	select {
+	case <-atWindow:
+	case <-time.After(10 * time.Second):
+		t.Fatal("restart 没走到「已停未起」窗口，钩子可能没被调用")
+	}
+
+	if h, ok := beginTaskHG("插队", []string{grpWeb}, true); ok {
+		h.Done() // 已抢到就立刻放掉，别把第二条断言也带红
 		t.Error("restart 持锁期间同组任务必须被拒（停→起之间存在空档）")
 	}
+
+	release <- struct{}{}
 	<-done
+
 	// 结束后锁应释放
 	if _, ok := beginTaskHG("插队2", []string{grpWeb}, true); !ok {
 		t.Error("restart 结束后应释放组锁")
