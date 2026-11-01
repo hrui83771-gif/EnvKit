@@ -13,7 +13,7 @@ name: eval-gate
 # 每次 push 跑一遍一天就烧完；额度耗尽后 job 会被**静默挂起**，
 # 而静默失效的门禁比没有门禁更坏 —— 它给人"有保护"的错觉。
 #
-# ## 这个文件踩过的四个坑（2026-11-01 修）
+# ## 这个文件踩过的五个坑（2026-11-01 修）
 #
 # 1. **注释里的 `${{ }}` 也会被求值**。原来在 run 脚本的注释里写了一句
 #    "不能用 a && b || c"，GitHub 把花括号里的东西当成真表达式，
@@ -32,6 +32,11 @@ name: eval-gate
 #
 # 4. **setup-go 的版本必须 >= go.mod 的 go 行**。go.mod 写 `go 1.26.0`，
 #    原来装 1.25，会在最简单的编译前就报 `requires go >= 1.26.0`。
+#
+# 5. **`python -c` 在 Windows runner 上 stdout 是 cp1252**。
+#    清理步骤里有一句中文 print，直接抛 UnicodeEncodeError，
+#    一个辅助步骤把整个门禁判成红 —— 而判分本身是通过的。
+#    → 涉及非 ASCII 输出的 python step 必须设 `PYTHONUTF8: '1'`。
 
 on:
   workflow_dispatch:
@@ -107,6 +112,7 @@ jobs:
         env:
           MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
           MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
+          PYTHONUTF8: '1'
         run: |
           set -euo pipefail
 
@@ -163,8 +169,14 @@ jobs:
 
       # 无论成败都清掉 key。runner 是临时的，但不清理会让后续步骤
       # （比如 upload-artifact）有机会把它打包进去。
+      #
+      # PYTHONUTF8 不能省：Windows runner 上 `python -c` 的 stdout 是 cp1252，
+      # 下面那句中文 print 会抛 UnicodeEncodeError —— 一个"清理"步骤
+      # 把整个门禁判成红，而判分本身其实是通过的。
       - name: 清除配置里的 key
         if: always()
+        env:
+          PYTHONUTF8: '1'
         run: |
           python -c "
           import json, pathlib

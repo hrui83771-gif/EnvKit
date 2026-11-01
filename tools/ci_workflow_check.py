@@ -115,6 +115,40 @@ def check_bash_shell(steps):
             )
 
 
+INLINE_PY = re.compile(r"python\s+-(?:c\b|<<)")
+
+
+def check_python_encoding(steps):
+    """内联 python 含非 ASCII 输出时，必须开 UTF-8 模式。
+
+    Windows runner 上 `python -c` 的 stdout 是 cp1252，一句中文 print 就抛
+    UnicodeEncodeError —— 会让一个辅助步骤把整个门禁判成红，
+    而判分其实是过的。这个坑比"测试失败"更难查：红的位置和原因在两处。
+    """
+    for s in steps:
+        body = s.get("run") or ""
+        if not INLINE_PY.search(body):
+            continue
+        try:
+            body.encode("ascii")
+        except UnicodeEncodeError:
+            pass
+        else:
+            continue  # 全 ASCII，不会踩这个坑
+
+        env = s.get("env") or {}
+        utf8 = str(env.get("PYTHONUTF8", "")).strip().lower() in ("1", "true")
+        ioe = str(env.get("PYTHONIOENCODING", "")).strip().lower()
+        if utf8 or ioe.startswith("utf-8") or ioe == "utf8":
+            continue
+        raise Bad(
+            "step「%s」里有内联 python（`-c` / heredoc）且含非 ASCII 输出，\n"
+            "  但没设 `PYTHONUTF8: '1'`。\n"
+            "  Windows runner 的 stdout 是 cp1252，中文 print 会抛\n"
+            "  UnicodeEncodeError，把整个门禁判红。" % step_label(s)
+        )
+
+
 def check_go_version(doc):
     """setup-go 的版本不能低于 go.mod 的 go 行。"""
     want = None
@@ -157,6 +191,7 @@ def main():
         steps = check_steps(doc)
         check_run_scripts(steps)
         check_bash_shell(steps)
+        check_python_encoding(steps)
         gov = check_go_version(doc)
 
         n_run = sum(1 for s in steps if s.get("run"))

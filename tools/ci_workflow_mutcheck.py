@@ -59,6 +59,17 @@ MUTATIONS = [
     ("bash 语法缺 shell: bash",
      "        shell: bash\n",
      ""),
+
+    # 5. 内联 python 有中文输出但没开 UTF-8
+    ("python 内联缺 PYTHONUTF8",
+     "      - name: 清除配置里的 key\n"
+     "        if: always()\n"
+     "        env:\n"
+     "          PYTHONUTF8: '1'\n"
+     "        run: |\n",
+     "      - name: 清除配置里的 key\n"
+     "        if: always()\n"
+     "        run: |\n"),
 ]
 
 
