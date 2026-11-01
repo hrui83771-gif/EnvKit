@@ -87,3 +87,14 @@ distassets/README.md
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ---------- CDP 回归的专属测试构建目录 ----------
+# 里面是 16MB 的测试 exe、Chrome profile、以及从真实 config.json 复制来的
+# AI 配置（含 dpapi: 密文）。任何一样都不该入库。
+# 目录由 tools/cdp_*.js 自己创建；exe 需手动 go build 进去（脚本会提示命令）。
+tools/_p2b/
+tools/_img/
+
+# ---------- AI 图片附件的落盘目录（<exeDir>/aiattach）----------
+# 用户拖进来的截图，24 小时自动清理；和 logs/ 同一性质的本机运行数据。
+aiattach/

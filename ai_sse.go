@@ -97,12 +97,48 @@ func sseUsage(u *aiUsage) map[string]any {
 }
 
 func sseDoneUsage(w http.ResponseWriter, fl http.Flusher, u *aiUsage) {
+	sseDoneWith(w, fl, u, doneCompleted, "")
+}
+
+// done 事件的 reason：为什么这一轮结束。
+const (
+	doneCompleted    = "completed"        // 模型正常答完
+	doneAborted      = "aborted"          // 流被中途打断（连接断了/被掐）
+	doneEmpty        = "empty"            // 模型一句话都没返回
+	doneAwaitConfirm = "awaiting_confirm" // 等用户点确认，回合还没结束
+)
+
+// sseDoneWith 在 done 事件里带上**为什么结束**。
+//
+// done 以前只有 {"type":"done"}，前端也就无从显示：预算耗尽、中途断流、
+// 模型空回复在界面上长得一模一样 —— 都是"它自己停了"，用户既不知道为什么，
+// 也不知道能不能接着拿结果，只能重发一条消息试探（2026-10-30 真实反馈：
+// "探索完自己就停了，不知道咋回事，我可能要重新对话才能获取结果"）。
+//
+// 所以收尾必须带上原因。note 是给用户看的一句话，没有就别硬编。
+func sseDoneWith(w http.ResponseWriter, fl http.Flusher, u *aiUsage, reason, note string) {
 	recordTurnUsage(u)
 	if u.Prompt > 0 || u.Completion > 0 {
 		sseWrite(w, fl, sseUsage(u))
 	}
-	sseWrite(w, fl, map[string]any{"type": "done"})
+	ev := map[string]any{"type": "done", "reason": reason}
+	if note != "" {
+		ev["note"] = note
+	}
+	sseWrite(w, fl, ev)
 }
+
+// aiAbortNotice 流被中途打断时，先把"走到哪一步"交代清楚。
+//
+// 与 budgetNotice 的分工：那个说"预算用完，我按计划停"（这是有终点的），
+// 这个说"没走到终点，中途断了"。两者都不能静默 —— 用户看到的都是话没说完，
+// 但能不能接着拿结果，取决于他知不知道发生了什么。
+func aiAbortNotice(w http.ResponseWriter, fl http.Flusher, p *planTrack) {
+	if s := planSummary(p, "中途中断"); s != "" {
+		sseWrite(w, fl, map[string]any{"type": "plan_end", "text": s})
+	}
+}
+
 func sseDoneConfirm(w http.ResponseWriter, fl http.Flusher, u *aiUsage) {
 	recordTurnUsage(u)
 	if u.Prompt > 0 || u.Completion > 0 {
@@ -111,7 +147,7 @@ func sseDoneConfirm(w http.ResponseWriter, fl http.Flusher, u *aiUsage) {
 	// 待用户确认：这不是失败也不是成功，**不写 outcome**——
 	// 让它留在 aborted 兜底上，等确认后的下一段回合再定。
 	// 写成 pending 会在看板里凭空多一类"没结论"。
-	sseWrite(w, fl, map[string]any{"type": "done", "reason": "awaiting_confirm"})
+	sseWrite(w, fl, map[string]any{"type": "done", "reason": doneAwaitConfirm})
 }
 
 // recordTurnUsage 把本回合 token 累加进轨迹，并按「有没有产出」定结局。

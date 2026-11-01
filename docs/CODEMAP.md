@@ -41,6 +41,37 @@
 `chain.go`（链端检测/可达性）· `chainip.go`（config.toml 链地址一致性 + sync_chain_ip）
 · `portscan.go` · `detect.go` · `diag.go` · `envreq.go`（环境符合性）
 
+## 可观测性（进程资源 / 系统事件）
+
+`procstats.go`（gopsutil 每 2s 采 EnvKit 自身 + `svcState` 里 Running 的托管进程：
+RSS/CPU/线程/句柄/运行时长/60 点历史，`/api/proc/stats` 只读；增长判据
+「30 分钟涨 50% 且 ≥64MB」→ 疑似泄漏，只提示不动手）·
+`winevents.go`（`wevtutil /f:xml` 拉 Application+System 的 Level 1/2 事件，
+30s 缓存，按本项目栈关键词标 `related`；`/api/win/events` 只读。
+**坑**：只匹配到一条时根元素是 `<Event>` 不是 `<Events>`，两种都要认）
+
+## 手机访问（局域网，v3.6.2）
+
+`lanaccess.go` —— **另开一个端口**（默认 18766），不是把主控制台绑到 0.0.0.0。
+主控制台上有 90 多个端点（改配置/跑命令/导库/杀进程），绑到局域网再按来源分流，
+等于"分流逻辑漏一处 = 全权限泄漏"；另起 mux 后**只注册 6 条路由**，
+配置/审计/终端那些 handler 在这个 mux 上**压根不存在**（404，不是"被拒绝"）。
+
+三道闸：① 独立端口，只在开关打开时监听（关掉就 Close）② Host 白名单
+（只认回环/本机网卡 IP/计算机名，防 DNS rebinding —— "Origin==Host"挡不住）③ 配对码/密码
+→ 下发 HttpOnly cookie，磁盘只存 sha256。6 位码只有 100 万组合，所以失败限速是方案的一部分
+（同 IP 5 次失败锁 10 分钟）。主控制台继续只听 127.0.0.1，一行没动。
+
+手机页 `web/src/mobile.html` → `web/mobile.html`（`go:embed`，自包含单文件）。
+
+**手机端 AI 是只读的**，两道闸：
+① `aiToolDefsReadOnly()` 写工具不发给模型；② `aiExecTool()` 执行层再拦一次。
+**坑**：写工具在主循环里走 `case def.Write && verdict.NeedsConfirm()` → 发确认卡 →
+**就地等用户点按（最长 10 分钟）**。手机页没有确认按钮 → 这一轮会挂到超时，
+而执行层的闸**根本轮不到执行**。所以只读判定必须排在确认分支**之前**
+（`case def.Write && aiReadOnlyCur()`），否则手机端会挂死 10 分钟。
+意图兜底路径（关键词匹配，不经模型）同样要判。
+
 ## 拓扑与守护（v3.0 T2）
 
 `topology.go`（Service 清单+三接口）· `topology_registry.go` ·
@@ -52,7 +83,9 @@
 
 `ai.go`（AIConfig/aiSnap/aiMutate/上游调用）· `ai_sse.go`（流式）· `ai_loop.go`
 （主循环）· `ai_history.go` · `ai_intent.go`（L1 本地意图路由）· `ai_confirm.go` /
-`ai_preconfirm.go`（确认卡）· `ai_tools.go`（工具注册表/执行器）· `ai_dbquery.go`
+`ai_preconfirm.go`（确认卡）· `ai_tools.go`（工具注册表/执行器）· `ai_attach.go`
+（图片附件：拖入/粘贴的图落盘到 `<exeDir>/aiattach/`，消息里只留 id，发上游前才转 data URL；
+**保留期 24 小时**，启动扫一次 + 每小时扫一次，`aiAttachStartGC()` 在 `main.go:107` 接线）· `ai_dbquery.go`
 （只读 DB 查询）· `aibackup.go`（AI 备份助手）· `aidebug.go` · `memory.go`/
 `memory_api.go`（AI 记忆 + 本轮注入视图）· `lesson.go` · `plan.go`/`replan.go` · `explore.go`/
 `filesel.go`/`projectbrief.go`（项目画像/文件探索）· `dbbrowse.go` · `webterm.go`

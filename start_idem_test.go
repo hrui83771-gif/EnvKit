@@ -356,3 +356,45 @@ func TestStartTimeoutFactRunningNoPort(t *testing.T) {
 		t.Fatalf("实际：%q", fact)
 	}
 }
+
+// TestStopByKeyNormalStopNotFailure 手动停止是正常结局，不能落成"失败"。
+//
+// 真实 bug（用户报）：点「停止」后启动页写着"失败 · 已停止"。
+// 根因是 stopByKey 用 setProg(false,false) —— Ok=false 在界面里等价于失败；
+// 而"停止"既不是成功也不是失败，它是结局。现在落 progStopped。
+func TestStopByKeyNormalStopNotFailure(t *testing.T) {
+	const key = "webtest-stop"
+	procMu.Lock()
+	activeProcs[key] = &exec.Cmd{}
+	procMu.Unlock()
+	svcMu.Lock()
+	svcState[key] = &SvcInfo{Running: true}
+	svcMu.Unlock()
+	t.Cleanup(func() {
+		procMu.Lock()
+		delete(activeProcs, key)
+		delete(stoppingProcs, key)
+		procMu.Unlock()
+		svcMu.Lock()
+		delete(svcState, key)
+		svcMu.Unlock()
+		progMu.Lock()
+		delete(progState, key+"-start")
+		progMu.Unlock()
+	})
+
+	stopByKey(scStart, key, key+"-start")
+
+	progMu.Lock()
+	ps := progState[key+"-start"]
+	progMu.Unlock()
+	if ps.Running || ps.Ok {
+		t.Fatalf("停止后不该是 running/ok：%+v", ps)
+	}
+	if ps.Status != progStopped {
+		t.Fatalf("正常停止应落 %q，实际 %q —— 界面会把它画成「失败」", progStopped, ps.Status)
+	}
+	if ps.Msg != "已停止" {
+		t.Fatalf("停止文案应为「已停止」，实际 %q", ps.Msg)
+	}
+}

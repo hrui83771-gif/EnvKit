@@ -13,6 +13,7 @@ package platform
 
 import (
 	"os/exec"
+	"time"
 
 	"github.com/getlantern/systray"
 )
@@ -30,6 +31,11 @@ type TrayActions struct {
 	// ToggleWindow 切换控制台窗口显隐，返回切换后是否处于隐藏态。
 	// 由 main 实现并负责持久化（platform 是叶子包，不碰 config）。
 	ToggleWindow func() bool
+	// LanBadge 返回「手机访问」菜单项的标题（如 "手机访问：配对码 482913"）。
+	// 由 main 定时调用刷新 —— 配对码是进程级的，运行中换码后要能立刻看到。
+	LanBadge func() string
+	// OpenLan 点击「手机访问」时做什么（main 打开设置页里那一节）。
+	OpenLan func()
 }
 
 // RunTray 创建托盘并进入消息循环（阻塞，直到进程退出）。
@@ -47,9 +53,24 @@ func RunTray(icon []byte, act TrayActions) {
 		mLogs := systray.AddMenuItem("打开日志目录", "在资源管理器中打开 EnvKit 所在目录")
 		mShortcut := systray.AddMenuItem("创建桌面快捷方式", "在桌面创建一个指向当前 EnvKit.exe 的快捷方式")
 		systray.AddSeparator()
+		mLan := systray.AddMenuItem("手机访问：未开启", "手机端配对信息（配对码只在电脑上显示）")
+		systray.AddSeparator()
 		mHide := systray.AddMenuItem("隐藏窗口到托盘", "隐藏控制台窗口，EnvKit 继续在后台运行")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出 EnvKit", "停止前端/后端服务后退出")
+
+		// 标题刷新：配对码会在运行中更换（设置页「换一个码」），
+		// 不刷新就会出现"手机上输托盘里那个码，却提示不对"。
+		if act.LanBadge != nil {
+			go func() {
+				for {
+					if t := act.LanBadge(); t != "" {
+						mLan.SetTitle(t)
+					}
+					time.Sleep(2 * time.Second)
+				}
+			}()
+		}
 
 		go func() {
 			for {
@@ -57,6 +78,10 @@ func RunTray(icon []byte, act TrayActions) {
 				case <-mOpen.ClickedCh:
 					if act.OpenConsole != nil {
 						act.OpenConsole()
+					}
+				case <-mLan.ClickedCh:
+					if act.OpenLan != nil {
+						act.OpenLan()
 					}
 				case <-mCfg.ClickedCh:
 					if act.OpenConfig != nil {

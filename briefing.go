@@ -54,6 +54,39 @@ type briefingFacts struct {
 	Free     int64    // 磁盘剩余（HasFree=false 时无意义）
 	HasFree  bool
 	LogBytes int64
+	Ops      int   // 过去 24 小时审计操作数
+	Tokens   int64 // 过去 24 小时 token 总量（输入 + 输出）
+}
+
+// briefWorkWindow 工作统计的滚动窗口。用 24 小时而不是"昨天"：
+// 晨报在 08:30 出，按日历日统计会漏掉昨晚，而那一晚恰恰是故障高发段。
+const briefWorkWindow = 24 * time.Hour
+
+// briefWork 过去 24 小时的审计与轨迹聚合（只读，不推断）。
+type briefWork struct {
+	Ops         int
+	OK          int
+	Fail        int
+	Denied      int
+	Started     int
+	Unverified  int
+	VerifyCount int
+	VerifyOK    int
+	Actors      map[string]int
+	Actions     map[string]int
+
+	Traces       int
+	TraceOK      int
+	TraceFail    int
+	TracePartial int
+	TraceAborted int
+	TraceUnknown int
+
+	TokenSamples int
+	TokenPrompt  int64
+	TokenCompl   int64
+	TokenHit     int64
+	TokenHasHit  bool
 }
 
 // ---------- 对外入口 ----------
@@ -183,6 +216,16 @@ func briefingCompose(dir string, now time.Time, skipID string) (string, briefing
 		}
 		b.WriteString("\n")
 	}
+
+	// —— 过去 24 小时的工作 ——
+	// 数据源与「操作审计」「看板」完全一致（audit-*.jsonl / trace-*.jsonl），
+	// 所以晨报里说"昨天做了 42 次操作、花了 1.5 万 token"时，
+	// 用户点开审计页能对上同一个数。
+	work := briefWorkStats(now)
+	facts.Ops, facts.Tokens = work.Ops, work.TokenPrompt+work.TokenCompl
+	b.WriteString("## 过去 24 小时的工作\n\n")
+	b.WriteString(briefWorkText(work))
+	b.WriteString("\n")
 
 	// —— 崩溃 ——
 	b.WriteString("## 近 24 小时崩溃\n\n")
@@ -379,6 +422,242 @@ func briefComponents() []Component {
 	return append([]Component(nil), cfg.Components...)
 }
 
+// ---------- 过去 24 小时的工作统计 ----------
+//
+// 复用审计与轨迹两个既有数据源，不另起一套口径：
+//   - 操作量/成败/主体/动作 ← audit-YYYYMMDD.jsonl（audit.go）
+//   - 结局/token           ← trace-YYYYMMDD.jsonl（trace.go / stats.go 同源）
+//
+// 统计窗口是**滚动 24 小时**，按每条记录自己的时间戳筛，不按文件日期——
+// 否则 08:30 的晨报会把"昨天 09:00 到 24:00"整段错算成"今天"。
+func briefWorkStats(now time.Time) briefWork {
+	w := briefWork{Actors: map[string]int{}, Actions: map[string]int{}}
+	since := now.Add(-briefWorkWindow)
+	inWindow := func(ts string) bool {
+		if ts == "" {
+			return false
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05.000", ts, time.Local)
+		if err != nil {
+			t, err = time.ParseInLocation("2006-01-02 15:04:05", ts, time.Local)
+		}
+		if err != nil {
+			return false
+		}
+		return !t.Before(since) && !t.After(now)
+	}
+
+	for _, d := range auditDays() {
+		for _, e := range readAuditFile(filepath.Join(auditDir(), "audit-"+d+".jsonl")) {
+			if !inWindow(e.Ts) {
+				continue
+			}
+			w.Ops++
+			w.Actors[e.Actor]++
+			w.Actions[e.Action]++
+			switch e.Result {
+			case resOK:
+				w.OK++
+			case resFail:
+				w.Fail++
+			case resDenied:
+				w.Denied++
+			case resStart:
+				w.Started++
+			case resUnverified:
+				w.Unverified++
+			}
+			if e.Verify != "" {
+				w.VerifyCount++
+				if strings.Contains(e.Verify, "通过") {
+					w.VerifyOK++
+				}
+			}
+		}
+	}
+
+	files, _ := filepath.Glob(filepath.Join(traceDir(), "trace-*.jsonl"))
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, ln := range strings.Split(string(raw), "\n") {
+			ln = strings.TrimSpace(ln)
+			if ln == "" {
+				continue
+			}
+			var tr Trace
+			if json.Unmarshal([]byte(ln), &tr) != nil || !inWindow(tr.Started) {
+				continue
+			}
+			w.Traces++
+			// 与看板同一条划界：无 usage = v2.7 之前的旧轨迹，结局字段不可信，
+			// 单独计数而不是混进 aborted（否则会显示"100% 中止"的假象）。
+			if tr.Usage == nil {
+				w.TraceUnknown++
+				continue
+			}
+			switch tr.Outcome {
+			case outSuccess:
+				w.TraceOK++
+			case outFailed:
+				w.TraceFail++
+			case outPartial:
+				w.TracePartial++
+			default:
+				w.TraceAborted++
+			}
+			w.TokenSamples++
+			w.TokenPrompt += tr.Usage.Prompt
+			w.TokenCompl += tr.Usage.Completion
+			w.TokenHit += tr.Usage.Hit
+			if tr.Usage.HasCache {
+				w.TokenHasHit = true
+			}
+		}
+	}
+	return w
+}
+
+// briefWorkText 把工作统计渲染成 Markdown 列表。无样本就明说"没有/无样本"，
+// 不写 0 —— "测到了、结果是 0"和"没测到"是两件事（同 stats.go 的口径纪律）。
+func briefWorkText(w briefWork) string {
+	var b strings.Builder
+	if w.Ops == 0 && w.Traces == 0 {
+		b.WriteString("过去 24 小时没有操作与 AI 轨迹记录。\n")
+		return b.String()
+	}
+	if w.Ops == 0 {
+		b.WriteString("- 操作：过去 24 小时没有审计记录\n")
+	} else {
+		line := fmt.Sprintf("- 操作 %d 次：成功 %d · 失败 %d · 被拦 %d", w.Ops, w.OK, w.Fail, w.Denied)
+		if w.Started > 0 {
+			line += fmt.Sprintf(" · 已启动 %d", w.Started)
+		}
+		if w.Unverified > 0 {
+			line += fmt.Sprintf(" · 未证明恢复 %d", w.Unverified)
+		}
+		b.WriteString(line + "\n")
+		if w.VerifyCount == 0 {
+			b.WriteString("- 复验：无样本（没有带复验结论的操作）\n")
+		} else {
+			b.WriteString(fmt.Sprintf("- 复验：%d 次有结论，通过 %d 次（%s）\n",
+				w.VerifyCount, w.VerifyOK, briefPct(w.VerifyOK, w.VerifyCount)))
+		}
+		b.WriteString("- 按主体：" + briefCountMap(w.Actors) + "\n")
+		b.WriteString("- 高频动作：" + briefTopActions(w.Actions, 5) + "\n")
+	}
+
+	if w.Traces == 0 {
+		b.WriteString("- AI 轨迹：过去 24 小时没有记录\n")
+		return b.String()
+	}
+	line := fmt.Sprintf("- AI 轨迹 %d 条：成功 %d · 失败 %d · 部分 %d · 中止 %d",
+		w.Traces, w.TraceOK, w.TraceFail, w.TracePartial, w.TraceAborted)
+	if w.TraceUnknown > 0 {
+		line += fmt.Sprintf("（另有 %d 条结局不可信：v2.7 前的旧数据）", w.TraceUnknown)
+	}
+	b.WriteString(line + "\n")
+	if w.TokenSamples == 0 {
+		b.WriteString("- Token：无记录（轨迹的 usage 字段从 v2.7 起才有）\n")
+	} else {
+		line = fmt.Sprintf("- Token：输入 %s + 输出 %s = %s（%d 条轨迹带用量）",
+			briefCount(w.TokenPrompt), briefCount(w.TokenCompl),
+			briefCount(w.TokenPrompt+w.TokenCompl), w.TokenSamples)
+		if w.TokenHasHit {
+			line += "；缓存命中 " + briefCount(w.TokenHit)
+		}
+		b.WriteString(line + "\n")
+	}
+	return b.String()
+}
+
+// briefActorCN 与审计页同一个词表：报告里换一套译名会让人对不上账。
+var briefActorCN = map[string]string{
+	actUser: "用户手动", actAI: "助手执行", actGuard: "守护自动",
+	actSys: "系统", actShadow: "影子评估",
+}
+
+// briefCountMap 主体分布，按固定顺序输出（map 遍历顺序随机，报告要可复现）。
+func briefCountMap(m map[string]int) string {
+	order := []string{actUser, actAI, actGuard, actSys, actShadow}
+	var parts []string
+	for _, k := range order {
+		if n := m[k]; n > 0 {
+			parts = append(parts, briefOr(briefActorCN[k], k)+" "+briefCount(int64(n)))
+		}
+	}
+	var extra []string
+	for k, n := range m {
+		if _, known := briefActorCN[k]; !known && n > 0 {
+			extra = append(extra, k+" "+briefCount(int64(n)))
+		}
+	}
+	sort.Strings(extra)
+	parts = append(parts, extra...)
+	if len(parts) == 0 {
+		return "无"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// briefTopActions 取前 n 个动作，次数相同按名字排序（稳定输出，测试可断言）。
+func briefTopActions(m map[string]int, n int) string {
+	type kv struct {
+		k string
+		v int
+	}
+	all := make([]kv, 0, len(m))
+	for k, v := range m {
+		if v > 0 {
+			all = append(all, kv{k, v})
+		}
+	}
+	if len(all) == 0 {
+		return "无"
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].v != all[j].v {
+			return all[i].v > all[j].v
+		}
+		return all[i].k < all[j].k
+	})
+	if len(all) > n {
+		all = all[:n]
+	}
+	parts := make([]string, 0, len(all))
+	for _, x := range all {
+		parts = append(parts, fmt.Sprintf("%s %d 次", x.k, x.v))
+	}
+	return strings.Join(parts, "、")
+}
+
+// briefPct 百分比（分母保证 > 0；报告里不出现 NaN）。
+func briefPct(a, b int) string {
+	if b <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.0f%%", float64(a)*100/float64(b))
+}
+
+// briefCount 千分位数字：token 动辄六位数，不加分隔线没人能一眼读出量级。
+func briefCount(n int64) string {
+	neg := ""
+	if n < 0 {
+		neg, n = "-", -n
+	}
+	s := fmt.Sprintf("%d", n)
+	var out []byte
+	for i, c := range []byte(s) {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, c)
+	}
+	return neg + string(out)
+}
+
 // ---------- 磁盘历史（趋势的唯一来源是"以前记过什么"）----------
 
 type diskSnap struct {
@@ -517,7 +796,8 @@ func briefingAttach(id string, now time.Time) {
 		return
 	}
 	auditNow(actSys, "briefing", id, facts.Report, resOK,
-		fmt.Sprintf("需关注 %d 项，近 24h 崩溃 %d 条", len(facts.Attn), facts.Crash))
+		fmt.Sprintf("需关注 %d 项，近 24h 崩溃 %d 条，操作 %d 次，token %d",
+			len(facts.Attn), facts.Crash, facts.Ops, facts.Tokens))
 	info(scSys, "晨报", "已生成 %s（需关注 %d 项）", facts.Report, len(facts.Attn))
 	notifyMissions()
 }

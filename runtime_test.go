@@ -226,6 +226,7 @@ func TestRuntimeServiceStartingPhase(t *testing.T) {
 	svcMu.Lock()
 	svcState["web"] = &SvcInfo{Running: false}
 	svcMu.Unlock()
+	svcForgetVerify("web")
 	progMu.Lock()
 	progState["web-start"] = ProgStatus{Running: true}
 	progMu.Unlock()
@@ -237,6 +238,107 @@ func TestRuntimeServiceStartingPhase(t *testing.T) {
 
 	if st := runtimeService("web"); st.Phase != phStarting {
 		t.Fatalf("启动任务进行中应为 starting，实际 %q", st.Phase)
+	}
+}
+
+// TestRuntimeServiceNotStartingAfterVerified v3.6.2 修「已经好了，还显示启动中」。
+//
+// 这条钉的是一个**互斥关系**：服务已复验通过 ⟹ 一定不在"启动中"。
+//
+// 起因（真实 bug）：progState["web-start"].Running 这面旗标表示"一轮启动还在进行"，
+// 但旧实现只在进程退出时才清它 —— 只要进程活着，它就永远为真，
+// runtimeService 于是永远判 phStarting。用户在界面上看到的就是
+// "服务明明已经起来，状态灯还写着启动中"。
+//
+// 为什么用"已复验"当判据而不是"进程在跑"：
+// 进程刚派生、端口还没起来的那几秒里，它确实既在跑又没验过 ——
+// 那段时间显示"启动中"是对的。等复验过了还显示"启动中"就是错的。
+// 这条断言宁可少报一次"启动中"，也不能把"已经好了"说成"还在启动"
+// （把对判成错，比漏报严重得多）。
+func TestRuntimeServiceNotStartingAfterVerified(t *testing.T) {
+	svcMu.Lock()
+	svcState["web"] = &SvcInfo{Running: true, PID: 999, Since: "2026-10-31 10:00:00"}
+	svcMu.Unlock()
+	// 复验通过（Verified=true）
+	svcRecordVerify("web", "前端已就绪：端口 8080 在监听", "", true)
+	// 但"启动中"旗标还在（模拟漏复位的老路径）
+	progMu.Lock()
+	progState["web-start"] = ProgStatus{Running: true, Msg: "启动中..."}
+	progMu.Unlock()
+	defer func() {
+		progMu.Lock()
+		delete(progState, "web-start")
+		progMu.Unlock()
+		svcMu.Lock()
+		svcState["web"] = &SvcInfo{}
+		svcMu.Unlock()
+		svcForgetVerify("web")
+	}()
+
+	st := runtimeService("web")
+	if st.Phase == phStarting {
+		t.Fatal("服务已复验通过，却还报「启动中」—— 状态永远翻不了页")
+	}
+	if st.Phase != phRunning {
+		t.Fatalf("已复验通过应为 running，实际 %q", st.Phase)
+	}
+	if !st.Verified {
+		t.Error("复验结论已记录，Verified 应为 true")
+	}
+}
+
+// TestEndStartFlagClearsStartingFlag 复验收口要真的把"启动中"旗标清掉。
+//
+// 这是复位动作本身：verifyService 是所有启动路径（按钮 / AI / 守护）的共同出口，
+// 它收尾时必须把 progState["<target>-start"].Running 置否。
+// 少了这一步，状态就永远停在"启动中"（真 bug 的根因）。
+//
+// 这里**走 verifyService 这条真实路径**（而不是直接调 endStartFlag）——
+// 直接调只能证明那个函数本身能用，证明不了"复验收口真的调了它"。
+// 真正的 bug 恰恰是"复位函数写对了，但复验收口忘了调"。
+// 用一个既不是 web 也不是 backend 的 target：verifyServiceInner 会立刻判
+// bad_config 返回（不碰网络、不等端口），但 svcRecordVerify + endStartFlag
+// 仍会执行 —— 正是我们要验的那段收尾逻辑。
+func TestEndStartFlagClearsStartingFlag(t *testing.T) {
+	progMu.Lock()
+	progState["webtest-start"] = ProgStatus{Running: true, Msg: "启动中..."}
+	progMu.Unlock()
+	defer func() {
+		progMu.Lock()
+		delete(progState, "webtest-start")
+		progMu.Unlock()
+		// svcRecordVerify 会给这个 target 建一条运行时记录。
+		// 不清掉的话，后面的快照测试会多看到一个服务（跨测试污染）。
+		svcRT.Lock()
+		delete(svcRT.m, "webtest")
+		svcRT.Unlock()
+	}()
+
+	verifyService("webtest", 0)
+
+	progMu.Lock()
+	ps := progState["webtest-start"]
+	progMu.Unlock()
+	if ps.Running {
+		t.Error("复验收口后「启动中」旗标仍为 true —— 状态会永远卡在启动中")
+	}
+}
+
+// endStartFlag 自己不该凭空造出一条记录
+// （否则会把一条历史结论覆盖成"启动流程已结束"）。
+func TestEndStartFlagNoopWhenNotStarting(t *testing.T) {
+	progMu.Lock()
+	_, exists := progState["backend-start"]
+	progMu.Unlock()
+	if exists {
+		t.Fatal("前置条件不成立：backend-start 已存在")
+	}
+	endStartFlag("backend", opOK("verify_service", "backend", "不该被写进来"))
+	progMu.Lock()
+	_, exists = progState["backend-start"]
+	progMu.Unlock()
+	if exists {
+		t.Error("没有正在进行的启动时不该创建旗标记录")
 	}
 }
 
@@ -312,5 +414,74 @@ func TestRuntimeStateShape(t *testing.T) {
 	st2 := currentRuntimeState()
 	if st2.Env.Ready != st.Env.Ready {
 		t.Error("慢变部分在缓存期内不应变化")
+	}
+}
+
+// TestEndStartFlagTriState 启动收口的三种结论必须分开落，不能都压成"失败"。
+//
+// 真实 bug（用户报）：45 秒窗口内没监听端口 → 程序其实已经启动好了，
+// 界面却写"失败"。根因是 endStartFlag 只拿到一个 bool——"已派生但未复验"
+// 与"脚本报错"在那里同形，前端只能一起画红。
+func TestEndStartFlagTriState(t *testing.T) {
+	cases := []struct {
+		name string
+		res  OpResult
+		want string
+	}{
+		{"已复验通过", opVerified("verify_service", "web", "端口 + HTTP 正常"), progOK},
+		{"已派生但未复验", opOK("verify_service", "web", "进程已派生，但 45 秒内未观察到端口监听"), progWarn},
+		{"硬失败", opFail("verify_service", "web", errKindSpawnFail, "进程已退出"), progFail},
+	}
+	for _, c := range cases {
+		progMu.Lock()
+		progState["web-start"] = ProgStatus{Running: true, Status: progRun, Msg: "启动中..."}
+		progMu.Unlock()
+
+		endStartFlag("web", c.res)
+
+		progMu.Lock()
+		ps := progState["web-start"]
+		progMu.Unlock()
+		if ps.Running {
+			t.Fatalf("%s：收口后仍标记为进行中", c.name)
+		}
+		if ps.Status != c.want {
+			t.Errorf("%s：status = %q，期望 %q（中间态不能被说成失败）", c.name, ps.Status, c.want)
+		}
+		if c.want == progFail && ps.Ok {
+			t.Errorf("%s：失败结论不该带 Ok=true", c.name)
+		}
+	}
+	progMu.Lock()
+	delete(progState, "web-start")
+	progMu.Unlock()
+}
+
+// TestSetProgStatusNormalStop setProgStatus 的契约：正常停止是结局，不是失败。
+func TestSetProgStatusNormalStop(t *testing.T) {
+	setProgStatus("web-start", false, progStopped, "已停止")
+	progMu.Lock()
+	ps := progState["web-start"]
+	progMu.Unlock()
+	defer func() {
+		progMu.Lock()
+		delete(progState, "web-start")
+		progMu.Unlock()
+	}()
+	if ps.Running || ps.Ok {
+		t.Fatalf("正常停止不该是 running/ok：%+v", ps)
+	}
+	if ps.Status != progStopped {
+		t.Fatalf("正常停止的 status 应为 %q，实际 %q", progStopped, ps.Status)
+	}
+
+	// 旧写法（setProg(false,false,...)）必须仍然表达"失败"，
+	// 否则真失败的路径会被改坏成"已停止"。
+	setProg("web-start", false, false, "npm 派生失败")
+	progMu.Lock()
+	ps = progState["web-start"]
+	progMu.Unlock()
+	if ps.Status != progFail {
+		t.Fatalf("setProg(false,false) 应落 %q，实际 %q", progFail, ps.Status)
 	}
 }

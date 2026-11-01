@@ -59,6 +59,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer aiChatMu.Unlock()
+	// 手机端走只读模式。标志**必须在拿到锁之后**才写：上面 TryLock 失败的请求
+	// 直接 409 返回，如果那时也置位，就会把桌面上正在跑的那一轮降级成只读。
+	aiReadOnly.Store(lanMarked(r))
+	defer aiReadOnly.Store(false)
 	usage := aiUsage{} // 空请求错误路径不会产生用量，这里只为复用统一的收尾 helper
 	var body aiChatReq
 	// ===== 读取顺序是**有讲究的**：先读体，再动响应头 =====
@@ -204,6 +208,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if len(msgs) > 40 {
 		msgs = msgs[len(msgs)-40:]
 	}
+	// 图片附件：把引用（id）读盘成 data URL。放在裁剪之后，只给真正还要发出去的消息读盘；
+	// 只让最近几条带图消息携带图片，更早的换成文字占位（历史每轮重发，一张图 1024 token）。
+	msgs = aiAttachHydrate(msgs)
 	// 确认回执：执行（或拒绝）写工具，然后继续对话
 	result := ""
 	confirmed := false
@@ -456,6 +463,45 @@ func aiUpstreamReadErr(readErr error, sawDone bool) string {
 	return readErr.Error()
 }
 
+// aiAbortSettle 断流后的收尾：先说进度，能补就补结论，最后一定给出原因。
+//
+// 返回值 rescued 只用于选文案（补到了 / 没补到），**不影响 reason**——
+// 无论哪条路，done.reason 都是 aborted。把"断过但补上了"写成 completed，
+// 就是又一次把失败说成成功。
+func aiAbortSettle(w http.ResponseWriter, fl http.Flusher, plan *planTrack, msgs []aiMsg, turnEmpty bool) (rescued bool, note string) {
+	aiAbortNotice(w, fl, plan)
+	// 有工具结果、本轮却没有正文 —— 探索已经做完，缺的只是总结。
+	if len(plan.Steps) > 0 && turnEmpty && aiAbortRescue(w, fl, msgs) {
+		return true, "这轮连接断过一次，上面的结论是断线后用已经查到的信息补出来的。想继续深挖就说一声。"
+	}
+	return false, "连接在出结果前断了。已查到的步骤在上面，回一句「继续」我就基于它们接着答，不用从头再来。"
+}
+
+// aiAbortRescue 断流后替用户把结论补出来。
+//
+// 只在"已有工具结果、本轮一个字都没说"时调用：这说明探索已经做完，
+// 缺的只是最后那段总结。补一次（非流式、不带工具）比让用户重开一段对话便宜得多——
+// 重开意味着刚查到的结果全部丢掉，模型要从头再探索一遍。
+//
+// **不是掩盖失败**：无论补答成功与否，done 的 reason 都是 aborted，
+// 用户看到的是"断过一次"，不是"一切正常"。
+func aiAbortRescue(w http.ResponseWriter, fl http.Flusher, msgs []aiMsg) bool {
+	sseWrite(w, fl, map[string]any{"type": "info", "text": "连接断了一次，正在用已查到的信息补结论…"})
+	head := make([]aiMsg, 0, len(msgs)+1)
+	head = append(head, msgs...)
+	head = append(head, aiMsg{Role: "user", Content: "（系统提示）上面的工具结果已经拿到了，但你还欠用户一个回答。" +
+		"请直接给结论：用户问的是什么、查到了什么、结论与下一步建议。" +
+		"不要再调用工具，也不要复述工具输出原文。"})
+	txt, err := aiCallLLMFunc(head, nil)
+	txt = strings.TrimSpace(txt)
+	if err != nil || txt == "" {
+		warn(scSys, "AI", "断流后补结论失败（%v），已如实告知用户", err)
+		return false
+	}
+	sseWrite(w, fl, map[string]any{"type": "delta", "text": "\n" + txt + "\n"})
+	return true
+}
+
 // aiIsAbortErr 判断一条上游读取错误是否只是"我们自己收尾"的产物。
 //
 // 背景：流式读取跑在独立 goroutine 里扫 resp.Body；主循环在客户端断开 / 单轮超时 /
@@ -506,7 +552,10 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		if n := aiResolveNumberInput(lastUser, msgs); n != "" {
 			cand = n
 		}
-		if tool, args, isWrite := aiBacktrackIntent(cand, msgs); tool != "" {
+		// 只读模式（手机端）跳过"写操作预检"：这条路径是**确定性关键词匹配**，
+		// 不经过模型选工具，所以光靠"不把写工具发给模型"拦不住它 ——
+		// 用户在手机上打"帮我重启后端"，照样会弹确认卡。
+		if tool, args, isWrite := aiBacktrackIntent(cand, msgs); tool != "" && !(isWrite && aiReadOnlyCur()) {
 			preChecked = true
 			info(scSys, "AI", "预检命中：%q \u2192 %s（写操作=%v）", firstLines(lastUser, 30), tool, isWrite)
 			callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())
@@ -530,7 +579,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				}
 				res = aiConfirmApply(w, fl, tool, d)
 			} else {
-				res, exErr = aiToolRegistry[tool].Execute(args)
+				res, exErr = aiExecTool(tool, args)
 			}
 			resText := res
 			if exErr != nil {
@@ -605,7 +654,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			full = append(full, aiMsg{Role: "user", Content: "（系统提示）本回合首轮已提供环境快照，此处不再重复。上面是你刚执行得到的最新结果；" +
 				"若需要重新确认环境，请调用 get_system_state / verify_environment，不要凭印象回答。"})
 		}
-		payload := aiPayload(full, aiToolDefs(), acTurn.quirkRead(), -1, true)
+		payload := aiPayload(full, aiToolDefsForTurn(), acTurn.quirkRead(), -1, true)
 		b, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(), strings.NewReader(string(b)))
 		if err != nil {
@@ -663,7 +712,17 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					continue
 				}
 			}
-			sseWrite(w, fl, map[string]any{"type": "error", "text": fmt.Sprintf("AI 服务返回 HTTP %d：%s", resp.StatusCode, msg)})
+			// 「这个模型不吃图片」是**用户配错了**，不是服务故障：把上游那句英文
+			// （"This model does not support image"）翻成能照做的下一步。
+			// 不翻译的话，用户只会看到一行英文 400，根本想不到要去改模型名。
+			errText := fmt.Sprintf("AI 服务返回 HTTP %d：%s", resp.StatusCode, msg)
+			if aiIsImageUnsupported(msg) {
+				errText = "当前模型不支持图片输入（上游原话：" + strings.TrimSpace(msg) + "）。" +
+					"请到「程序配置 → AI 助手」把模型换成支持视觉的（DeepSeek 官方是 deepseek-flash），" +
+					"或先移除图片再发送。"
+				warn(scSys, "AI", "模型不支持图片输入：%s", strings.TrimSpace(msg))
+			}
+			sseWrite(w, fl, map[string]any{"type": "error", "text": errText})
 			traceSetOutcome(outFailed) // v2.7
 			sseDoneUsage(w, fl, &usage)
 			return
@@ -919,7 +978,25 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// connection"）。把它当"AI 服务返回错误"报给用户，是把**我们主动收尾**说成了
 		// 上游故障：用户看到一条红色错误，实际什么也没坏。
 		if upErr != "" && aiIsAbortErr(upErr) {
-			info(scSys, "AI", "上游读取被本地中断（%s）——按正常收尾处理", upErr)
+			info(scSys, "AI", "上游读取被本地中断（%s）", upErr)
+			// 这条分支以前一律"按正常收尾处理"、什么都不说。
+			// 但两种情况长得一样、对用户的意义完全不同：
+			//
+			//	ctx 已取消 → 用户点了「停止」或关了页面。前端自己会说「已停止生成」，
+			//	             这里再补一句是噪音。
+			//	ctx 未取消 → body 是我们为了收尾关的，或连接被中间层掐断。
+			//	             界面上**什么都没发生**，用户看到的是"它自己停了"，
+			//	             只能重发一条消息试探（2026-10-30 日志实证：
+			//	             21:07:44 第 5 轮探索读中断 → 静默收尾 → 21:08:06 用户重发）。
+			//
+			// 后者必须留下原因，否则就是"把中断说成正常结束"——
+			// 与 v2.0 修掉的"把失败说成成功"是同一个错误。
+			if ctx.Err() == nil {
+				_, note := aiAbortSettle(w, fl, plan, msgs, contentB.Len() == 0)
+				traceSetOutcome(outPartial) // 断过就是 partial：补答成功也一样
+				sseDoneWith(w, fl, &usage, doneAborted, note)
+				return
+			}
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -958,7 +1035,15 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())
 					var res string
 					var exErr error
-					if isWrite {
+					if isWrite && aiReadOnlyCur() {
+						// 手机端只读：写操作在**进确认流程之前**就拒掉。
+						// 否则会走下面那条 isWrite 分支 → 发确认卡 → 就地等用户点按，
+						// 而手机页面上没有确认按钮，这一轮会挂到 10 分钟超时。
+						res, exErr = "", fmt.Errorf("手机端是只读的，不支持执行「%s」；请到电脑上操作", aiToolCnName(tool, args))
+						auditNow(actAI, "lan_write_blocked", tool, policyTargetOf(tool, args), resDenied,
+							"手机端只读上下文里拒绝了写工具："+tool)
+						warn(scSys, "AI", "手机端只读上下文拒绝了写工具「%s」（意图兜底路径）", tool)
+					} else if isWrite {
 						// 与预检路径同样的问题：只发卡不登记 → 确认必然 no_pending。这里一并修掉。
 						aiRememberPending(callID, tool, args)
 						sseWrite(w, fl, map[string]any{"type": "confirm_request", "tool_call_id": callID, "tool": tool, "args": args,
@@ -970,7 +1055,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 						}
 						res = aiConfirmApply(w, fl, tool, d)
 					} else {
-						res, exErr = aiToolRegistry[tool].Execute(args)
+						res, exErr = aiExecTool(tool, args)
 					}
 					resText := res
 					if exErr != nil {
@@ -1019,7 +1104,20 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			//   · 正常答完 → success
 			// **不能只看"模型有没有输出文字"** —— 那等于把「说了话」当「做成了」，
 			// 与本项目反复反对的「执行即成功」是同一个错误。
-			traceSetOutcome(aiTurnOutcome(hasToolFailure, contentB.Len(), holdMenu))
+			outcome := aiTurnOutcome(hasToolFailure, contentB.Len(), holdMenu)
+			// 整轮一句话都没说出来、也没有任何工具步骤 —— 界面上不会出现任何新内容。
+			// 此时若不补一句原因，用户看到的与"断流"一模一样："它自己停了"。
+			// 有条件这么判：内容长度与步骤数都是本地事实，不是对模型意图的猜测。
+			if contentB.Len() == 0 && len(plan.Steps) == 0 && !holdMenu {
+				if outcome == outSuccess {
+					outcome = outFailed // 一句话都没有，不能算成功
+				}
+				traceSetOutcome(outcome)
+				sseDoneWith(w, fl, &usage, doneEmpty,
+					"这一轮模型没有返回内容（可能被上游限流、截断，或请求参数不被接受）。可以重发一次，或换个说法描述你的问题。")
+				return
+			}
+			traceSetOutcome(outcome)
 			sseDoneUsage(w, fl, &usage)
 			return
 		}
@@ -1068,6 +1166,27 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
 				sseToolResult(w, fl, a.Name, toolMsg.Content, false)
+			case def.Write && aiReadOnlyCur():
+				// 手机端只读：写工具在这里就被挡住，**不进确认流程**。
+				//
+				// 为什么必须放在这个位置（而不是只靠 aiExecTool）：
+				// 下面那个 `case def.Write && verdict.NeedsConfirm()` 会先把写工具
+				// 转成确认卡，然后**就地等用户点按**（最长 10 分钟）。
+				// 手机页面上没有确认按钮 —— 于是这一轮会一直挂着，
+				// 用户看到的是"手机端对话转了十分钟不出结果"。
+				// 执行层的闸在这种情况下根本轮不到执行（等不到确认就返回了）。
+				//
+				// 所以这里要在**进确认流程之前**就明确拒绝，
+				// 并给模型一句能转述给用户的话。
+				msg := "（系统）手机端是只读的，不支持执行「" + aiToolCnName(a.Name, args) +
+					"」。请直接回答用户的问题；需要改动环境时请让用户在电脑上操作。"
+				auditNow(actAI, "lan_write_blocked", a.Name, policyTargetOf(a.Name, args), resDenied,
+					"手机端只读上下文里拒绝了写工具："+a.Name)
+				warn(scSys, "AI", "手机端只读上下文拒绝了写工具「%s」", a.Name)
+				toolMsg.Content = msg
+				sseToolResult(w, fl, a.Name, msg, false)
+				msgs = append(msgs, aiMsg{Role: "user", Content: msg})
+				continue
 			case verdict.Level == PolicyForbidden:
 				policyRecord(verdict, "denied")
 				tracePolicyDenied(verdict)
@@ -1189,7 +1308,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				sseWrite(w, fl, map[string]any{"type": "plan_step",
 					"seq": len(plan.Steps), "tool": a.Name,
 					"target": tgt, "text": planLine(a.Name, tgt)})
-				res, exErr := def.Execute(args)
+				res, exErr := aiExecTool(a.Name, args)
 				toolDur := time.Since(t0).Milliseconds()
 				// 只截"可重查"的工具（日志/SQL/搜索/审计/诊断），且截断时把"怎么继续查"
 				// 一起写给模型；read_file 与判据类工具不截——砍它们等于砍能力。

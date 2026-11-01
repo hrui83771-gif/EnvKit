@@ -257,7 +257,13 @@ func saveExternalConfig(c Config) {
 		return
 	}
 	rotateConfigBackup(path)
-	_ = os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return
+	}
+	// 告诉 configwatch：这份内容是我们自己写下去的，别当成"用户在外部改配置"再重载一遍。
+	// 必须用 data（加密后的原始字节）而不是内存里的 cfg —— DPAPI 每次加密同一明文
+	// 都会产出不同密文，拿内存值和磁盘字节比哈希永远不相等。
+	cfgMarkDisk(data)
 }
 
 func protectIfPlain(v string) string {

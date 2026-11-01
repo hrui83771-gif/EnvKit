@@ -308,6 +308,140 @@ func TestBriefingAttachMarksMissionDone(t *testing.T) {
 	}
 }
 
+// TestBriefingWorkStatsLast24h 晨报要带"过去一天做了什么"——
+// 数据必须来自审计与轨迹本身，且严格按 24 小时窗口筛（多算一天比少算更坏）。
+func TestBriefingWorkStatsLast24h(t *testing.T) {
+	defer withBriefingEnv(t)()
+
+	now := time.Now().Truncate(time.Second)
+	auditRoot := withAuditDir(t, nil)
+
+	traceRoot := t.TempDir()
+	oldTrace := traceDir
+	traceDir = func() string { return traceRoot }
+	t.Cleanup(func() { traceDir = oldTrace })
+
+	mkAudit := func(at time.Time, e AuditEntry) (string, string) {
+		e.Ts = at.Format("2006-01-02 15:04:05.000")
+		b, err := json.Marshal(e)
+		if err != nil {
+			t.Fatalf("marshal 审计：%v", err)
+		}
+		return "audit-" + at.Format("20060102") + ".jsonl", string(b) + "\n"
+	}
+	auditFiles := map[string]string{}
+	for _, row := range []struct {
+		at time.Time
+		e  AuditEntry
+	}{
+		{now.Add(-time.Hour), AuditEntry{Actor: actUser, Action: "start_service", Target: "web",
+			Result: resOK, Verify: "已复验通过：端口 + HTTP"}},
+		{now.Add(-2 * time.Hour), AuditEntry{Actor: actAI, Action: "db_backup", Target: "farm",
+			Result: resFail}},
+		// 25 小时前：属于"昨天"但不在窗口内，必须排除（否则统计会虚高）
+		{now.Add(-25 * time.Hour), AuditEntry{Actor: actGuard, Action: "chain_autorecover",
+			Target: "node0", Result: resOK}},
+	} {
+		name, line := mkAudit(row.at, row.e)
+		auditFiles[name] += line
+	}
+	for name, body := range auditFiles {
+		writeAuditFile(t, auditRoot, name, body)
+	}
+
+	traceFiles := map[string]string{}
+	for _, tr := range []Trace{
+		{TraceID: "t-in", Started: now.Add(-3 * time.Hour).Format("2006-01-02 15:04:05.000"),
+			Outcome: outSuccess, Usage: &TraceUsage{Prompt: 1200, Completion: 300, Hit: 800, HasCache: true}},
+		// 26 小时前：同样不计入
+		{TraceID: "t-old", Started: now.Add(-26 * time.Hour).Format("2006-01-02 15:04:05.000"),
+			Outcome: outFailed, Usage: &TraceUsage{Prompt: 99999, Completion: 99999}},
+	} {
+		at, _ := time.ParseInLocation("2006-01-02 15:04:05.000", tr.Started, time.Local)
+		name := "trace-" + at.Format("20060102") + ".jsonl"
+		b, err := json.Marshal(tr)
+		if err != nil {
+			t.Fatalf("marshal 轨迹：%v", err)
+		}
+		traceFiles[name] += string(b) + "\n"
+	}
+	for name, body := range traceFiles {
+		if err := os.WriteFile(filepath.Join(traceRoot, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("写轨迹：%v", err)
+		}
+	}
+
+	facts, err := briefingGenerate(now)
+	if err != nil {
+		t.Fatalf("生成失败：%v", err)
+	}
+	if facts.Ops != 2 {
+		t.Errorf("过去 24h 操作应计 2 次，实为 %d", facts.Ops)
+	}
+	if facts.Tokens != 1500 {
+		t.Errorf("过去 24h token 应计 1500（1200+300），实为 %d", facts.Tokens)
+	}
+
+	b, _ := os.ReadFile(filepath.Join(briefingDirFn(), facts.Report))
+	md := string(b)
+	for _, want := range []string{
+		"## 过去 24 小时的工作",
+		"操作 2 次",
+		"成功 1",
+		"失败 1",
+		"复验：1 次有结论，通过 1 次（100%）",
+		"按主体：用户手动 1 · 助手执行 1",
+		"start_service 1 次",
+		"AI 轨迹 1 条：成功 1",
+		"Token：输入 1,200 + 输出 300 = 1,500",
+		"缓存命中 800",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("工作统计缺少 %q：\n%s", want, md)
+		}
+	}
+	// 窗口外的记录不能混进来
+	for _, bad := range []string{"chain_autorecover", "99999", "操作 3 次"} {
+		if strings.Contains(md, bad) {
+			t.Errorf("24h 窗口外的记录/数字混进了报告：%q\n%s", bad, md)
+		}
+	}
+}
+
+// TestBriefingWorkStatsHonestOnEmpty 没有审计与轨迹时明说"没有"，不报 0。
+func TestBriefingWorkStatsHonestOnEmpty(t *testing.T) {
+	defer withBriefingEnv(t)()
+
+	withAuditDir(t, nil)
+	traceRoot := t.TempDir()
+	oldTrace := traceDir
+	traceDir = func() string { return traceRoot }
+	t.Cleanup(func() { traceDir = oldTrace })
+
+	facts, err := briefingGenerate(time.Now())
+	if err != nil {
+		t.Fatalf("生成失败：%v", err)
+	}
+	b, _ := os.ReadFile(filepath.Join(briefingDirFn(), facts.Report))
+	md := string(b)
+	if !strings.Contains(md, "过去 24 小时没有操作与 AI 轨迹记录") {
+		t.Fatalf("空数据应明说没有记录，而不是报 0：\n%s", md)
+	}
+}
+
+// TestBriefCount 千分位（token 六位数不加分隔线读不出量级）。
+func TestBriefCount(t *testing.T) {
+	cases := map[int64]string{
+		0: "0", 12: "12", 999: "999", 1000: "1,000",
+		1234567: "1,234,567", -2500: "-2,500",
+	}
+	for in, want := range cases {
+		if got := briefCount(in); got != want {
+			t.Errorf("briefCount(%d) = %q，期望 %q", in, got, want)
+		}
+	}
+}
+
 // TestHumanBytes 展示用格式化（不参与判定，但错得很显眼）。
 func TestHumanBytes(t *testing.T) {
 	cases := map[int64]string{

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>EnvKit · 手机端</title>
+<style>
+/* 手机端独立样式：不复用 app.css（那份是给 1440px 桌面布局写的，
+   移动端要的是 44px 触摸目标、单列、无 hover）。水彩底与主控制台同一色系。 */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:#faf8f5;color:#2f3742;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:18px;margin:8px 0 2px;font-weight:600;letter-spacing:.5px}
+.sub{color:#7d8794;font-size:12.5px;margin-bottom:16px}
+
+.card{
+  background:#fff;border:1px solid #e6e1d8;border-radius:14px;
+  padding:14px 15px;margin-bottom:12px;
+  box-shadow:0 1px 2px rgba(74,111,165,.05);
+}
+.card h2{font-size:13px;color:#7d8794;font-weight:600;margin:0 0 10px;letter-spacing:.4px}
+
+/* 服务行 */
+.svc{display:flex;align-items:center;gap:10px;padding:6px 0}
+.svc+.svc{border-top:1px dashed #ece7de;margin-top:6px;padding-top:12px}
+.dot{width:9px;height:9px;border-radius:50%;background:#c9c3b8;flex:none}
+.dot.on{background:#5fa87a;box-shadow:0 0 0 3px rgba(95,168,122,.16)}
+.dot.wait{background:#d9a441;box-shadow:0 0 0 3px rgba(217,164,65,.16)}
+.dot.bad{background:#c96a5f}
+.svc-name{flex:1;min-width:0}
+.svc-name b{display:block;font-weight:600;font-size:14.5px}
+.svc-name span{display:block;color:#8c96a2;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{
+  border:1px solid #d8d1c4;background:#fbf9f5;color:#3b4654;
+  border-radius:10px;min-height:44px;padding:0 16px;font-size:14px;font-weight:600;
+  font-family:inherit;cursor:pointer;
+}
+.btn:active{background:#f1ede5}
+.btn.primary{background:#4a6fa5;border-color:#4a6fa5;color:#fff}
+.btn.primary:active{background:#3f5f8e}
+.btn.danger{background:#fff;border-color:#e0b5ae;color:#b4553f}
+.btn.danger.armed{background:#c96a5f;border-color:#c96a5f;color:#fff}
+.btn:disabled{opacity:.45}
+
+/* 资源 */
+.res{display:flex;gap:16px;color:#6c7787;font-size:12.5px;flex-wrap:wrap}
+.res b{color:#37424f;font-weight:600}
+
+/* 对话 */
+#msgs{display:flex;flex-direction:column;gap:9px;max-height:46vh;overflow-y:auto;margin-bottom:10px;
+  -webkit-overflow-scrolling:touch}
+.msg{padding:9px 12px;border-radius:12px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.msg.me{background:#eef2f8;align-self:flex-end;max-width:88%;border:1px solid #dfe6f0}
+.msg.ai{background:#fbf9f5;border:1px solid #ece7de;align-self:flex-start;max-width:92%}
+.msg.meta{background:transparent;border:0;color:#98a2ae;font-size:12px;padding:0 4px;align-self:flex-start}
+.msg.err{background:#fdf1ef;border:1px solid #f0d3cc;color:#a8523c}
+/* AI 回复按 Markdown 渲染：块级元素需要 normal 换行，行内代码/表格要能读 */
+.msg.md{white-space:normal}
+.msg.md p{margin:0 0 8px}
+.msg.md p:last-child{margin-bottom:0}
+.msg.md h1,.msg.md h2,.msg.md h3,.msg.md h4,.msg.md h5,.msg.md h6{margin:10px 0 6px;font-size:15px;font-weight:600;line-height:1.4}
+.msg.md h1{font-size:17px}.msg.md h2{font-size:16px}
+.msg.md ul,.msg.md ol{margin:6px 0;padding-left:20px}
+.msg.md li{margin:2px 0}
+.msg.md blockquote{margin:6px 0;padding:2px 0 2px 9px;border-left:3px solid #e0e5ec;color:#7d8794}
+.msg.md hr{border:0;border-top:1px solid #e6e9ee;margin:10px 0}
+.msg.md a{color:#4a6fa5;word-break:break-all}
+.msg.md code{background:#eef1f5;padding:1px 4px;border-radius:4px;font-family:Consolas,monospace;font-size:12.5px}
+.msg.md pre{background:#f3f5f8;border:1px solid #e6e9ee;border-radius:8px;padding:8px 10px;overflow-x:auto;margin:8px 0;white-space:pre}
+.msg.md pre code{background:transparent;padding:0;display:block}
+.msg.md table{border-collapse:collapse;margin:8px 0;font-size:13px;display:block;overflow-x:auto}
+.msg.md th,.msg.md td{border:1px solid #e6e9ee;padding:4px 8px;text-align:left;vertical-align:top}
+.msg.md th{background:#f5f7fa;font-weight:600}
+#ask{display:flex;gap:8px}
+#ask input{
+  flex:1;min-width:0;min-height:44px;border:1px solid #d8d1c4;border-radius:10px;
+  padding:0 12px;font-size:15px;font-family:inherit;background:#fff;color:#2f3742;
+}
+#ask input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+.hint{color:#98a2ae;font-size:11.5px;margin-top:8px;line-height:1.5}
+
+/* 配对 */
+#pair .card{padding:20px}
+#pair input{
+  width:100%;min-height:48px;border:1px solid #d8d1c4;border-radius:10px;padding:0 14px;
+  font-size:20px;letter-spacing:4px;text-align:center;font-family:inherit;background:#fff;
+}
+#pair input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+#pair .btn{width:100%;margin-top:12px}
+#pairMsg{color:#b4553f;font-size:13px;min-height:20px;text-align:center;margin-top:8px}
+.hidden{display:none!important}
+/* 轻提示 */
+#tip{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+  background:rgba(47,55,66,.94);color:#fff;font-size:13px;padding:9px 16px;border-radius:10px;
+  max-width:86vw;text-align:center;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
+#tip.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="tip"></div>
+
+<!-- 配对页 -->
+<div id="pair" class="wrap">
+  <h1>EnvKit</h1>
+  <div class="sub">手机端 · <span id="ver">__LAN_VERSION__</span></div>
+  <div class="card">
+    <h2>输入配对码</h2>
+    <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="off"
+           spellcheck="false" placeholder="6 位数字或密码" maxlength="64">
+    <button class="btn primary" id="pairBtn">连接</button>
+    <div id="pairMsg"></div>
+    <p class="hint">配对码在电脑托盘图标里，每次启动都会变；如果你在设置里设过密码，输密码也可以。</p>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div id="app" class="wrap hidden">
+  <h1>EnvKit</h1>
+  <div class="sub"><span id="addr">手机端</span> · <span id="ver2">__LAN_VERSION__</span></div>
+
+  <div class="card">
+    <h2>服务</h2>
+    <div id="svcList"></div>
+    <div class="res" style="margin-top:12px">
+      <span>内存 <b id="rss">–</b></span>
+      <span>CPU <b id="cpu">–</b></span>
+      <button class="btn" id="allBtn" style="margin-left:auto;min-height:36px;padding:0 12px;font-size:13px">全部启动</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>问 AI（只读：能查状态，不能替你改动）</h2>
+    <div id="msgs"></div>
+    <div id="ask">
+      <input id="q" type="text" autocomplete="off" placeholder="问点什么…" enterkeyhint="send">
+      <button class="btn primary" id="sendBtn">发送</button>
+    </div>
+    <p class="hint">想重启服务请用上面的按钮——那一步不由 AI 代劳。</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var talking = false;
+
+  /* 轻提示：手机上没有桌面那套 toast，失败/成功都要给一句话反馈，
+     否则用户只看到"什么都没发生"。 */
+  var tipTimer = null;
+  function toast(msg){
+    var el = $('tip');
+    if(!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    if(tipTimer) clearTimeout(tipTimer);
+    tipTimer = setTimeout(function(){ el.classList.remove('show'); }, 2600);
+  }
+
+  function post(url, body){
+    return fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body: JSON.stringify(body || {})
+    });
+  }
+
+  /* ---------- 配对 ---------- */
+
+  function showPair(msg){
+    $('app').classList.add('hidden');
+    $('pair').classList.remove('hidden');
+    if(msg) $('pairMsg').textContent = msg;
+  }
+
+  function showApp(){
+    $('pair').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    $('addr').textContent = location.host;
+    tick();
+  }
+
+  function doPair(){
+    var code = $('code').value.trim();
+    if(!code){ $('pairMsg').textContent = '请输入配对码'; return; }
+    $('pairBtn').disabled = true;
+    $('pairMsg').textContent = '正在配对…';
+    post('/api/lan/pair', {code:code}).then(function(r){
+      return r.json().catch(function(){ return {ok:false,msg:'服务返回异常（HTTP '+r.status+'）'}; });
+    }).then(function(j){
+      $('pairBtn').disabled = false;
+      if(j && j.ok){ $('code').value=''; showApp(); toast('配对成功'); }
+      else { $('pairMsg').textContent = (j && j.msg) || '配对失败'; }
+    }).catch(function(){
+      $('pairBtn').disabled = false;
+      $('pairMsg').textContent = '连不上电脑（是不是关掉了手机访问？）';
+    });
+  }
+
+  $('pairBtn').onclick = doPair;
+  $('code').addEventListener('keydown', function(e){ if(e.key === 'Enter') doPair(); });
+
+  /* v3.6.2：扫码进来的地址带 ?code=xxxxxx —— 自动填入并直接提交。
+     扫一次码就完成"进页面 + 配对"两件事，不用手输 6 位数字。 */
+  (function(){
+    var m = /[?&]code=([^&]+)/.exec(location.search || '');
+    if(!m) return;
+    var code = decodeURIComponent(m[1] || '').trim();
+    if(!code) return;
+    $('code').value = code;
+    /* 顺手把 code 从地址栏去掉：它留在 URL 里会被复制/收藏出去，
+       等于把钥匙留在地址栏。 */
+    try{
+      var clean = location.pathname;
+      history.replaceState(null, '', clean);
+    }catch(_){ /* 老浏览器：留着也无妨 */ }
+    doPair();
+  })();
+
+  /* ---------- 状态轮询 ---------- */
+
+  var services = [];
+  /* pendingStart：本地已发起启动、还没拿到结论的服务。
+     **不能靠改 services[i].phase 来表达"启动中"** ——
+     下一轮 tick() 会用服务端数据整个替换掉 services，那个"启动中"就没了，
+     按钮闪回"启动"，用户以为没点上（这正是"点了没回馈"的由来）。
+     所以"启动中"单独记在这里，直到服务端给出结论才清。 */
+  var pendingStart = {};
+
+  /* v3.6.2：状态一律按服务端给的 phase 显示（五态），
+     前端不再自己猜"跑着没有"。
+     旧实现只读 running/ok 两个布尔，而服务端那两个字段的口径本身就有问题
+     （查 progState 时键名写错，手机端永远显示"未启动"）。 */
+  function dotClass(s){
+    switch(s.phase){
+      case 'running':   return s.verified ? 'dot on' : 'dot wait';
+      case 'starting':  return 'dot wait';
+      case 'degraded':  return 'dot wait';
+      case 'failed':    return 'dot bad';
+      default:          return 'dot';
+    }
+  }
+  function stateText(s){
+    switch(s.phase){
+      case 'running':   return s.verified ? '运行中' : '运行中 · 未复验';
+      case 'starting':  return '启动中，请耐心等待…';
+      case 'degraded':  return '运行中 · 未通过复验';
+      case 'failed':    return '失败：' + (s.last_err || s.last_verify || '进程已退出');
+      default:          return '未启动';
+    }
+  }
+  /* 启动中时按钮要禁用并显示等待文案 —— 用户点完没反馈是最容易被当成"坏了"的地方。 */
+  function isStarting(s){
+    return s.phase === 'starting' || !!pendingStart[s.key];
+  }
+  function btnLabel(s){
+    if(isStarting(s)) return '启动中…';
+    return s.running ? '停止' : '启动';
+  }
+
+  function renderSvc(){
+    var box = $('svcList');
+    box.innerHTML = '';
+    services.forEach(function(s){
+      var row = document.createElement('div'); row.className = 'svc';
+      var d = document.createElement('div'); d.className = dotClass(s);
+      var nm = document.createElement('div'); nm.className = 'svc-name';
+      var b = document.createElement('b'); b.textContent = s.name;
+      var sp = document.createElement('span');
+      sp.textContent = isStarting(s) ? '启动中，请耐心等待…' : stateText(s);
+      nm.appendChild(b); nm.appendChild(sp);
+      var btn = document.createElement('button');
+      var busy = isStarting(s);
+      btn.className = 'btn ' + (s.running ? 'danger' : 'primary');
+      btn.textContent = btnLabel(s);
+      btn.disabled = busy;
+      if(!busy){
+        btn.onclick = function(){ s.running ? askStop(s, btn) : doStart(s.key, btn); };
+      }
+      row.appendChild(d); row.appendChild(nm); row.appendChild(btn);
+      box.appendChild(row);
+    });
+  }
+
+  function doStart(key, btn){
+    /* 本地立刻记"启动中"：等服务端返回可能要几十秒（要编译），
+       这段时间按钮必须有反馈，否则用户以为没点上。
+       记在 pendingStart 里（不是 services[].phase）—— 后者会被下一轮轮询冲掉。 */
+    pendingStart[key] = true;
+    renderSvc();
+    post('/api/lan/start', {key:key}).then(function(r){
+      /* 启动请求返回只说明"命令发出去了"。真正的结论要看服务状态，
+         所以这里不急着清 pendingStart —— 交给下一轮 tick 按服务端结论来清。 */
+      if(r && r.status >= 400){
+        /* 明确的失败（比如忙、参数不对）才立刻给一句话反馈。 */
+        return r.text().then(function(txt){
+          delete pendingStart[key];
+          toast('启动失败：' + (txt || ('HTTP ' + r.status)));
+          renderSvc();
+        });
+      }
+      setTimeout(tick, 800);
+    }).catch(function(){
+      delete pendingStart[key];
+      renderSvc();
+      toast('请求失败，请检查电脑上的手机访问是否还开着');
+    });
+  }
+
+  /* 停止走"点两次"：手机上手指一滑就点到，误停正在跑的链端很烦 */
+  var armed = null;
+  function askStop(s, btn){
+    if(armed !== s.key){
+      armed = s.key;
+      btn.classList.add('armed');
+      btn.textContent = '确认停止';
+      setTimeout(function(){
+        if(armed === s.key){ armed = null; btn.classList.remove('armed'); btn.textContent = '停止'; }
+      }, 3500);
+      return;
+    }
+    armed = null; btn.classList.remove('armed'); btn.disabled = true; btn.textContent = '停止中…';
+    post('/api/lan/stop', {key:s.key}).then(function(){ setTimeout(tick, 800); })
+      .catch(function(){ btn.disabled = false; btn.textContent = '停止'; });
+  }
+
+  function tick(){
+    fetch('/api/lan/state', {credentials:'same-origin'}).then(function(r){
+      if(r.status === 401 || r.status === 403){ showPair(); return null; }
+      return r.json();
+    }).then(function(j){
+      if(!j || !j.ok) return;
+      services = j.services || [];
+      /* 给端到端脚本（tools/cdp_lan_mobile_test.js）看一眼最后的 phase：
+         页面上的五个状态都是**按 phase 渲染**的，脚本若自己另算一遍就等于
+         在两个地方维护同一套判断 —— 这里直接暴露渲染用的那份数据。 */
+      window.__lastServices = services;
+      /* 服务端给出结论了（跑起来了 / 失败 / 干脆没动）→ 清掉本地的"启动中"。
+         只在结论明确时清，否则"启动中"会永远挂着（那比不显示更糟）。 */
+      services.forEach(function(s){
+        if(pendingStart[s.key] && s.phase !== 'starting') delete pendingStart[s.key];
+      });
+      renderSvc();
+      var self = null;
+      ((j.stats && j.stats.rows) || []).forEach(function(r){ if(r.key === 'self') self = r; });
+      if(self){
+        $('rss').textContent = Math.round(self.rss_mb) + ' MB';
+        $('cpu').textContent = (self.cpu_pct || 0).toFixed(1) + '%';
+      }
+    }).catch(function(){ /* 网络抖动：下一次轮询自己会补上 */ });
+  }
+
+  $('allBtn').onclick = function(){
+    var b = $('allBtn'); b.disabled = true; b.textContent = '启动中…';
+    pendingStart['web'] = true; pendingStart['backend'] = true;
+    renderSvc();
+    post('/api/lan/start', {key:'all'}).then(function(){
+      setTimeout(tick, 800);
+    }).catch(function(){
+      delete pendingStart['web']; delete pendingStart['backend'];
+      renderSvc();
+      toast('请求失败，请检查电脑上的手机访问是否还开着');
+    }).finally(function(){
+      setTimeout(function(){ b.disabled = false; b.textContent = '全部启动'; tick(); }, 1500);
+    });
+  };
+
+  /* ---------- 对话 ---------- */
+
+  var hist = [];   // [{role,content}] —— 只放内存，刷新即清
+
+  /* ---------- 轻量 Markdown 渲染 ----------
+     手机页是离线自包含单文件，不能像桌面端那样直接调 window.marked，
+     所以这里带一份够用的小实现：围栏代码、标题、列表、引用、表格、
+     粗体/斜体/删除线/行内代码/链接。
+     安全边界：**先整体转义 HTML，再只生成白名单标签**。
+     模型输出是不可信输入（日志、网页、用户文件都可能进上下文），
+     绝不能把原文直接塞 innerHTML。链接只放行 http(s)/mailto/#。 */
+  function mdEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function mdInline(s){
+    var codes = [];
+    s = s.replace(/`([^`\n]+)`/g, function(_, c){
+      codes.push(c);
+      return '\u0000' + (codes.length - 1) + '\u0000';
+    });
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    s = s.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+    s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+|#[^\s)]*)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    s = s.replace(/\u0000(\d+)\u0000/g, function(_, i){ return '<code>' + codes[+i] + '</code>'; });
+    return s;
+  }
+  function mdCells(line){
+    var t = line.trim();
+    if(t.charAt(0) === '|') t = t.slice(1);
+    if(t.charAt(t.length - 1) === '|') t = t.slice(0, -1);
+    return t.split('|').map(function(c){ return c.trim(); });
+  }
+  /* 块内文本的统一入口：**先转义、再做行内语法**。
+     顺序反了就是 XSS 洞——mdInline 生成的 <strong> 会把原文里的
+     <img onerror=…> 一起放行（这条路径踩过一次）。 */
+  function mdText(s){ return mdInline(mdEsc(s)); }
+  function mdToHtml(src){
+    var lines = String(src == null ? '' : src).replace(/\r\n?/g, '\n').split('\n');
+    var out = [], para = [], i = 0;
+    function flush(){
+      if(!para.length) return;
+      out.push('<p>' + mdText(para.join('\n')).replace(/\n/g, '<br>') + '</p>');
+      para = [];
+    }
+    while(i < lines.length){
+      var line = lines[i];
+
+      // 围栏代码块（流式响应里可能还没有收尾围栏，照渲染）
+      if(/^\s*```/.test(line)){
+        flush();
+        var code = [];
+        i++;
+        while(i < lines.length && !/^\s*```/.test(lines[i])){ code.push(lines[i]); i++; }
+        if(i < lines.length) i++;
+        out.push('<pre><code>' + mdEsc(code.join('\n')) + '</code></pre>');
+        continue;
+      }
+      if(/^\s*$/.test(line)){ flush(); i++; continue; }
+
+      var h = /^(#{1,6})\s+(.*)$/.exec(line);
+      if(h){
+        flush();
+        var lv = h[1].length;
+        out.push('<h' + lv + '>' + mdText(h[2]) + '</h' + lv + '>');
+        i++;
+        continue;
+      }
+      if(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)){
+        flush(); out.push('<hr>'); i++; continue;
+      }
+      if(/^\s*>\s?/.test(line)){
+        flush();
+        var quote = [];
+        while(i < lines.length && /^\s*>\s?/.test(lines[i])){
+          quote.push(lines[i].replace(/^\s*>\s?/, '')); i++;
+        }
+        out.push('<blockquote>' + mdText(quote.join('\n')).replace(/\n/g, '<br>') + '</blockquote>');
+        continue;
+      }
+      var ordered = /^\s*\d+[.)]\s+/.test(line);
+      if(ordered || /^\s*[-*+]\s+/.test(line)){
+        flush();
+        var re = ordered ? /^\s*\d+[.)]\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/;
+        var items = [];
+        while(i < lines.length && re.test(lines[i])){
+          items.push(re.exec(lines[i])[1]); i++;
+          // 缩进续行归到上一项（Markdown 里的软换行）
+          while(i < lines.length && /^\s{2,}\S/.test(lines[i]) && !re.test(lines[i])){
+            items[items.length - 1] += '\n' + lines[i].trim(); i++;
+          }
+        }
+        var tag = ordered ? 'ol' : 'ul';
+        out.push('<' + tag + '>' + items.map(function(x){
+          return '<li>' + mdText(x).replace(/\n/g, '<br>') + '</li>';
+        }).join('') + '</' + tag + '>');
+        continue;
+      }
+      // 表格：表头行 + 分隔行（|---|---|）
+      if(line.indexOf('|') >= 0 && i + 1 < lines.length &&
+         /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(lines[i + 1])){
+        flush();
+        var head = mdCells(line);
+        i += 2;
+        var rows = [];
+        while(i < lines.length && lines[i].indexOf('|') >= 0 && !/^\s*$/.test(lines[i])){
+          rows.push(mdCells(lines[i])); i++;
+        }
+        var html = '<table><thead><tr>' + head.map(function(c){
+          return '<th>' + mdText(c) + '</th>';
+        }).join('') + '</tr></thead><tbody>';
+        rows.forEach(function(r){
+          html += '<tr>' + head.map(function(_, j){
+            return '<td>' + mdText(r[j] || '') + '</td>';
+          }).join('') + '</tr>';
+        });
+        out.push(html + '</tbody></table>');
+        continue;
+      }
+      para.push(line);
+      i++;
+    }
+    flush();
+    return out.join('');
+  }
+
+  function addMsg(cls, text, md){
+    var d = document.createElement('div');
+    d.className = 'msg ' + cls + (md ? ' md' : '');
+    if(md && cls === 'ai') d.innerHTML = mdToHtml(text);
+    else d.textContent = text;
+    $('msgs').appendChild(d);
+    $('msgs').scrollTop = $('msgs').scrollHeight;
+    return d;
+  }
+
+  function send(){
+    var q = $('q').value.trim();
+    if(!q || talking) return;
+    $('q').value = '';
+    addMsg('me', q);
+    hist.push({role:'user', content:q});
+    var bubble = addMsg('ai', '', true);
+    var acc = '';
+    talking = true;
+    $('sendBtn').disabled = true;
+
+    fetch('/api/lan/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body: JSON.stringify({messages:hist, lang:'zh'})
+    }).then(function(r){
+      if(r.status === 401){ showPair('配对已失效，请重新输入'); throw new Error('unauth'); }
+      if(!r.body) throw new Error('这条浏览器不支持流式响应');
+      var rd = r.body.getReader(), dec = new TextDecoder('utf-8'), buf = '';
+      function pump(){
+        return rd.read().then(function(res){
+          if(res.done){
+            if(acc) hist.push({role:'assistant', content:acc});
+            return;
+          }
+          buf += dec.decode(res.value, {stream:true});
+          var i;
+          while((i = buf.indexOf('\n\n')) >= 0){
+            var line = buf.slice(0, i).trim(); buf = buf.slice(i+2);
+            if(line.indexOf('data: ') !== 0) continue;
+            var ev; try{ ev = JSON.parse(line.slice(6)); }catch(_){ continue; }
+            if(ev.type === 'delta'){
+              acc += ev.text || '';
+              bubble.innerHTML = mdToHtml(acc);
+              $('msgs').scrollTop = $('msgs').scrollHeight;
+            } else if(ev.type === 'tool_result'){
+              addMsg('meta', '· ' + (ev.text || ev.tool || '查询中'));
+            } else if(ev.type === 'confirm_request'){
+              addMsg('meta', '· 这一步需要执行动作，手机端不提供，请在电脑上操作');
+            } else if(ev.type === 'error'){
+              addMsg('err', ev.text || '出错了');
+            }
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function(e){
+      if(e && e.message === 'unauth') return;
+      addMsg('err', '连接中断：' + (e && e.message ? e.message : '未知原因'));
+    }).then(function(){
+      talking = false;
+      $('sendBtn').disabled = false;
+      if(!acc && bubble.textContent === '') bubble.textContent = '（没有返回内容）';
+    });
+  }
+
+  $('sendBtn').onclick = send;
+  $('q').addEventListener('keydown', function(e){ if(e.key === 'Enter') send(); });
+
+  /* ---------- 启动 ---------- */
+
+  // 已配对就直接进主界面，未配对落到配对页（不闪一下空白）
+  fetch('/api/lan/state', {credentials:'same-origin'}).then(function(r){
+    if(r.ok) showApp(); else showPair();
+  }).catch(function(){
+    /* 连不上要说清"可能是哪一边的问题"，而不是干巴巴一句"连不上电脑"。
+       最常见的两类：电脑上的手机访问开关关了 / Windows 防火墙没放行这个端口。
+       配对码页是手机上唯一能给出下一步的地方。 */
+    showPair('连不上电脑 —— 请确认电脑上「手机访问」已开启，且 Windows 防火墙已放行该端口');
+  });
+
+  setInterval(function(){
+    if(!$('app').classList.contains('hidden')) tick();
+  }, 3000);
+})();
+</script>
+</body>
+</html>

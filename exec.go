@@ -543,7 +543,9 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 				// 之后 stopByKey 找不到进程——"停不掉"。
 				procDropIfCurrent(key, cmd)
 				svcMarkStoppedIfCurrent(key, cmd)
-				setProg(progKey, false, false, "已停止")
+				// 正常停止是**结局**，不是失败：用 progStopped 让界面显示"已停止"，
+				// 而不是因为 Ok=false 被画成红色"失败"。
+				setProgStatus(progKey, false, progStopped, "已停止")
 				infoS(scope, key, step, "进程已停止")
 				break
 			}
@@ -777,6 +779,6 @@ func stopByKey(scope, key, progKey string) {
 		s.PID = 0
 	}
 	svcMu.Unlock()
-	setProg(progKey, false, false, "已停止")
+	setProgStatus(progKey, false, progStopped, "已停止")
 	infoS(scope, key, "停止", "已发送停止信号")
 }

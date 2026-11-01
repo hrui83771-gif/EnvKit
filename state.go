@@ -107,6 +107,12 @@ type Config struct {
 	// "dev" 段时为 nil，所有读取点走 devSnap() + getter 兜底，不判空就崩的写法一律不允许。
 	// 老页面的 configBody() 不回传 dev，靠 mergeFormConfig 的 nil 保护不被自动保存抹掉。
 	Dev *DevConfig `json:"dev,omitempty"`
+	// Lan 手机访问（v3.6.2）。指针段：老配置没有 "lan" 段时为 nil → 视为关闭。
+	//
+	// 开启后另起一个监听（默认 0.0.0.0:18766），上面只注册手机端 6 个路由：
+	// 配对、状态、启停、AI 对话。主控制台仍然只听 127.0.0.1 —— 两者不是同一个 mux，
+	// 所以"手机能做什么"由路由表本身决定，而不是由某个 if 决定。见 lanaccess.go。
+	Lan *LanConfig `json:"lan,omitempty"`
 	// UpdateURL 自版本检查地址。两种都认：
 	//   ① 静态 JSON：{"version":"x.y.z","notes":"…"}
 	//   ② GitHub Releases API：/repos/{owner}/{repo}/releases/latest
@@ -436,7 +442,24 @@ type ProgStatus struct {
 	Ok      bool   `json:"ok"`
 	Msg     string `json:"msg"`
 	At      string `json:"at"`
+	// Status 是比 Ok 更细的结论，给"已启动但未复验""正常停止"这类中间态用。
+	//
+	// 为什么不能只有 Ok：Ok 是二值的，于是"45 秒窗口内没监听到端口（可能还在编译）"
+	// 和"启动脚本报错"在界面上同形，都被画成红色"失败"；手动停止也因为没有成功
+	// 可选，被显示成"失败"。**把没坏事说成坏事，会让人去修一个没坏的服务。**
+	// 取值见 progRun/progOK/progWarn/progFail/progStopped；为空时前端按 Ok 推断
+	// （旧存档里没有这个字段）。
+	Status string `json:"status,omitempty"`
 }
+
+// ProgStatus.Status 的取值。
+const (
+	progRun     = "running" // 任务进行中
+	progOK      = "ok"      // 完成且已验证
+	progWarn    = "warn"    // 已执行但未通过复验（不是失败）
+	progFail    = "fail"    // 确实失败
+	progStopped = "stopped" // 用户主动停止（正常结局，不是失败）
+)
 
 type LogMsg struct {
 	Scope string `json:"scope"`

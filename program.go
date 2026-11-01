@@ -811,6 +811,12 @@ func opStartWeb(dir, script, actor string) OpResult {
 	okS(scStart, "web", "前端", "已启动（npm run %s）", script)
 	fin(resOK, script+"（"+scriptSrc+"）")
 	// 诚实措辞：此刻只证明"进程已派生且未立即退出"，尚未做端口/HTTP 可用性复验（见 v2.0 P2 验证层）
+	//
+	// v3.6.2 注意：这里**故意不复位** "web-start" 标志。
+	// 它表示的是"这一轮启动还没结束"（含随后的可用性复验等待），
+	// 复位点在 verifyService —— 那是所有启动路径（按钮 / AI / 守护）的共同收口。
+	// 早期版本在成功路径就复位、失败路径不复位，两边都错；
+	// 另一版只在进程退出时复位，于是只要进程活着，界面永远停在「启动中」。
 	return opOK("start_service", "web", "npm run "+script+" 进程已派生（尚未做服务可用性复验）",
 		"dir="+dir, "script="+script)
 }
@@ -967,7 +973,8 @@ func opStartBackend(dir, actor string) OpResult {
 	}
 	okS(scStart, "backend", "后端", "已启动（go run main.go）")
 	fin(resOK, "backend")
-	// 与前端同理：此处只证明"构建通过且进程已派生"，端口/HTTP 可用性复验见 v2.0 P2
+	// 与前端同理：此处只证明"构建通过且进程已派生"，端口/HTTP 可用性复验见 v2.0 P2。
+	// "backend-start" 标志同理由 verifyService 复位（详见 opStartWeb 同处注释）。
 	return opOK("start_service", "backend", "后端进程已派生（go build 通过，尚未做服务可用性复验）", "dir="+dir)
 }
 

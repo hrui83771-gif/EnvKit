@@ -239,8 +239,24 @@ func setPhase(p string) {
 }
 
 func setProg(key string, running, ok2 bool, msg string) {
+	status := progFail
+	switch {
+	case running:
+		status = progRun
+	case ok2:
+		status = progOK
+	}
+	setProgStatus(key, running, status, msg)
+}
+
+// setProgStatus 带三态以上结论的进度写入。正常停止用 progStopped，
+// "已启动但未通过复验"用 progWarn —— 二者都不是失败（见 ProgStatus.Status）。
+func setProgStatus(key string, running bool, status, msg string) {
 	progMu.Lock()
-	progState[key] = ProgStatus{Running: running, Ok: ok2, Msg: msg, At: time.Now().Format("15:04:05")}
+	progState[key] = ProgStatus{
+		Running: running, Ok: status == progOK, Msg: msg,
+		Status: status, At: time.Now().Format("15:04:05"),
+	}
 	progMu.Unlock()
 }
 

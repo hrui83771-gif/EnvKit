@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,19 +24,59 @@ type aiMsg struct {
 	ToolCalls        []aiToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string       `json:"tool_call_id,omitempty"`
 	Name             string       `json:"name,omitempty"`
+	// Images 只出现在前端 ↔ 后端的消息里（落盘引用的元数据）。
+	// **绝不出现在发往上游的请求里**：上游认的是 content 块数组，
+	// 多一个自定义键会让部分 OpenAI 兼容实现直接 400。MarshalJSON 里统一清空。
+	Images []aiImage `json:"images,omitempty"`
 }
 
 // MarshalJSON：思考型模型要求"助手消息必须带 reasoning_content"，缺失会报 HTTP 400。
 // 因此 role=assistant 时始终输出该字段（无内容则为空串），其它角色不输出以免触发校验。
+//
+// 带图片的 user 消息按 OpenAI 多模态格式输出（content 是块数组）。**只在有图时换形状**：
+// 无图消息的 JSON 必须与改造前逐字节一致，否则所有请求的字节前缀都会变，
+// DeepSeek 的上下文缓存（按前缀命中）会整体失效 —— 那是真金白银的代价。
 func (m aiMsg) MarshalJSON() ([]byte, error) {
+	if m.Role == "user" && len(m.Images) > 0 {
+		return json.Marshal(aiMultiPartMsg(m))
+	}
 	type plain aiMsg
+	p := plain(m)
+	p.Images = nil // 上游从未见过这个键，别让严格实现的兼容层因此报错
 	if m.Role == "assistant" {
 		return json.Marshal(struct {
 			plain
 			ReasoningContent string `json:"reasoning_content"`
-		}{plain: plain(m), ReasoningContent: m.ReasoningContent})
+		}{plain: p, ReasoningContent: m.ReasoningContent})
 	}
-	return json.Marshal(plain(m))
+	return json.Marshal(p)
+}
+
+// aiMultiPartMsg 把一条带图消息转成 OpenAI 兼容的多模态形状：
+//
+//	{"role":"user","content":[{"type":"text","text":"…"},
+//	                          {"type":"image_url","image_url":{"url":"data:image/png;base64,…"}}]}
+//
+// 图片块必须排在文字块之后：DeepSeek 文档的例子都是这个顺序，且"先说要问什么、
+// 再给图"对模型更自然。
+func aiMultiPartMsg(m aiMsg) map[string]any {
+	parts := make([]any, 0, len(m.Images)+1)
+	if strings.TrimSpace(m.Content) != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": m.Content})
+	}
+	for _, im := range m.Images {
+		if im.DataURL == "" { // 读盘失败/已降级的不会有 DataURL，不占位发空块
+			continue
+		}
+		parts = append(parts, map[string]any{
+			"type":      "image_url",
+			"image_url": map[string]any{"url": im.DataURL},
+		})
+	}
+	if len(parts) == 0 { // 兜底：至少给个文字块，空 content 数组上游会 400
+		parts = append(parts, map[string]any{"type": "text", "text": ""})
+	}
+	return map[string]any{"role": "user", "content": parts}
 }
 
 type aiToolCall struct {
@@ -730,9 +771,17 @@ func aiToolDefs() []aiUpstreamTool {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	return aiToolDefsFrom(names)
+}
+
+// aiToolDefsFrom 按给定名字建清单（顺序由调用方保证，测试也走这里）。
+func aiToolDefsFrom(names []string) []aiUpstreamTool {
 	defs := make([]aiUpstreamTool, 0, len(names))
 	for _, name := range names {
-		t := aiToolRegistry[name]
+		t, ok := aiToolRegistry[name]
+		if !ok {
+			continue
+		}
 		var d aiUpstreamTool
 		d.Type = "function"
 		d.Function.Name = name
@@ -742,6 +791,79 @@ func aiToolDefs() []aiUpstreamTool {
 	}
 	return defs
 }
+
+// aiReadOnly 本轮对话是否只读（手机端）。
+//
+// 为什么可以用包级变量：/api/ai/chat 由 aiChatMu 串行，一次只有一个对话在跑，
+// 而这里**只在拿到锁之后**才写、defer 复位。没拿到锁的请求（TryLock 失败直接 409）
+// 根本走不到赋值那一步 —— 否则手机上一次被拒的请求会把桌面上正在跑的对话降级成只读。
+var aiReadOnly atomic.Bool
+
+func aiReadOnlyCur() bool { return aiReadOnly.Load() }
+
+// aiExecTool 执行一个工具，**统一在这里做只读闸**。
+//
+// ## 为什么闸要放在这一层，而不是每个调用点各自判断
+//
+// 写工具在代码里有四个执行点（AI 工具表 + 记忆 + 链端 IP）：
+//
+//	ai_loop.go  意图预检命中 → 直接执行
+//	ai_loop.go  无工具调用时的意图兜底 → 直接执行
+//	ai_loop.go  模型自己发起 tool_call → 直接执行
+//	ai_confirm.go 用户点「确认执行」后 → 执行登记副本
+//
+// 之前只在第一处加了只读判断，另外三处漏了。漏掉的后果不是"多一个功能"，
+// 而是**手机端只读这个承诺直接失效**：手机页不显示确认卡，
+// 意图兜底那条路（关键词匹配"重启后端"）会自己把写工具执行掉；
+// 模型那条路更直接 —— 就算写工具没发给模型，模型仍可能凭记忆或幻觉
+// 报出一个写工具名，服务端照样执行。
+//
+// 放在统一入口的理由：**新增执行路径时不需要记得加判断**。
+// 漏一处判断的后果是权限泄漏，而这类漏在代码审查里几乎看不出来
+// （每处看起来都合理）。
+func aiExecTool(name string, args map[string]any) (string, error) {
+	t, known := aiToolRegistry[name]
+	if !known {
+		return "", fmt.Errorf("错误：该工具不在白名单内")
+	}
+	if t.Write && aiReadOnlyCur() {
+		// 审计留痕：谁在什么时候试图在只读上下文里执行写工具。
+		// 不记的话，"手机端为什么停了后端"这类问题查无对证。
+		auditNow(actAI, "lan_write_blocked", name, policyTargetOf(name, args), resDenied,
+			"手机端只读上下文里拒绝了写工具："+name)
+		warn(scSys, "AI", "手机端只读上下文拒绝了写工具「%s」", name)
+		return "", fmt.Errorf("手机端是只读的，不支持执行「%s」；请到电脑上操作", aiToolCnName(name, args))
+	}
+	return t.Execute(args)
+}
+
+// aiToolDefsReadOnly 只读工具清单：写工具**不发给模型**。
+//
+// 双保险的第一道。第二道在 aiExecTool（所有执行的唯一入口）——
+// 因为"模型看不到"只是让它不去调，不是它调不动。
+func aiToolDefsReadOnly() []aiUpstreamTool {
+	names := make([]string, 0, len(aiToolRegistry))
+	for name, t := range aiToolRegistry {
+		if t.Write {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return aiToolDefsFrom(names)
+}
+
+// aiToolDefsForTurn 本轮该发给模型的工具清单。
+func aiToolDefsForTurn() []aiUpstreamTool {
+	if aiReadOnlyCur() {
+		return aiToolDefsReadOnly()
+	}
+	return aiToolDefs()
+}
+
+// aiCallLLMFunc 间接层：只为测试能在不联网的前提下验证
+// "断流后用已有结果补结论"这条路径（aiAbortRescue）。
+var aiCallLLMFunc = aiCallLLM
 
 // aiCallLLM 非流式调用（连通性测试用）
 // aiCallLLM 非流式调用（测试连接 / 工具轮）：参数被上游拒绝时自动降级重试并记忆

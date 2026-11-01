@@ -32,6 +32,11 @@ CSS = os.path.join(SRC, "app.css")
 JS = os.path.join(SRC, "app.js")
 OUT = os.path.join(ROOT, "web", "index.html")
 
+# 手机端页面（v3.6.2）：自包含单文件，没有拼接占位符，只是从 src 拷到 web/。
+# 之所以也走这个脚本，是为了让 `--check` 能一并发现"改了 src 忘了同步产物"。
+MOBILE = os.path.join(SRC, "mobile.html")
+MOBILE_OUT = os.path.join(ROOT, "web", "mobile.html")
+
 CSS_MARK = "<!--@css-->"
 JS_MARK = "<!--@appjs-->"
 
@@ -48,17 +53,24 @@ def build():
 
 def main():
     out = build()
+    mobile = io.open(MOBILE, encoding="utf-8").read()
     if "--check" in sys.argv:
         cur = io.open(OUT, encoding="utf-8").read() if os.path.exists(OUT) else ""
         if cur != out:
             print("index.html 与 web/src 不一致——请运行 python tools/web_build.py")
             return 1
-        print("index.html 与 web/src 一致（%d 字符）" % len(out))
+        curm = io.open(MOBILE_OUT, encoding="utf-8").read() if os.path.exists(MOBILE_OUT) else ""
+        if curm != mobile:
+            print("mobile.html 与 web/src 不一致——请运行 python tools/web_build.py")
+            return 1
+        print("index.html / mobile.html 与 web/src 一致（%d + %d 字符）"
+              % (len(out), len(mobile)))
         return 0
     io.open(OUT, "w", encoding="utf-8", newline="\n").write(out)
-    print("已生成 web/index.html：%d 字符（css %d + js %d）"
+    io.open(MOBILE_OUT, "w", encoding="utf-8", newline="\n").write(mobile)
+    print("已生成 web/index.html：%d 字符（css %d + js %d）、web/mobile.html：%d 字符"
           % (len(out), len(io.open(CSS, encoding="utf-8").read()),
-             len(io.open(JS, encoding="utf-8").read())))
+             len(io.open(JS, encoding="utf-8").read()), len(mobile)))
     return 0
 
 

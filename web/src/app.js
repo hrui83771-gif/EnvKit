@@ -77,6 +77,7 @@ const I18N_EN = {
   "W 脚本": "W script",
   "WeBASE-Front 地址": "WeBASE-Front URL",
   "Webhook 地址": "Webhook URL",
+  "Windows 防火墙没放行这个端口，手机的请求到不了 EnvKit": "Windows Firewall is not allowing this port, so the phone's requests never reach EnvKit",
   "docs/eval 下最近 60 份": "Latest 60 files under docs/eval",
   "docs/eval 下还没有 .json 产物": "No .json artifacts under docs/eval yet",
   "http://127.0.0.1:7890（留空 = 直连）": "http://127.0.0.1:7890 (empty = direct)",
@@ -104,6 +105,7 @@ const I18N_EN = {
   "{0} 天有记录": "{0} days with records",
   "{0} 失败了，点红标看日志": "{0} failed — click the red badge for the log",
   "{0} 已启动": "{0} started",
+  "{0} 已启动，但还没通过复验": "{0} started, but has not passed verification yet",
   "{0} 条": "{0} entries",
   "{0} 步": "{0} steps",
   "{0} 秒": "{0}s",
@@ -327,6 +329,7 @@ const I18N_EN = {
   "历史估算 token 超过该值才压缩": "Compress only once estimated history tokens exceed this",
   "历史回合的轨迹（只读）": "Trace of an earlier turn (read-only)",
   "压力一只蓝色大肥鱼？": "Bullying a big blue fish?",
+  "原因": "Cause",
   "原地待着": "Stay put",
   "原始大小": "Normal size",
   "去别的地方玩！不要耽误 AGI 训练！": "Go play elsewhere! Don't hold up AGI training!",
@@ -407,6 +410,7 @@ const I18N_EN = {
   "固定发 1（该模型只接受 1）": "Always sends 1 (this model accepts only 1)",
   "在呢~": "Here~",
   "在打雷，能不出门就别出去。": "Thunder out there — stay in if you can.",
+  "在顶栏「个人中心」下打开「手机访问」，并看日志里有没有「端口无法监听」": "Turn on Mobile access under Account in the top bar, and check the log for a port bind failure",
   "城市，如 上海 / Shanghai": "City, e.g. Shanghai",
   "域名无法解析：检查 Base URL 拼写与网络": "Domain cannot be resolved: check the Base URL spelling and your network",
   "基础": "Basics",
@@ -516,6 +520,7 @@ const I18N_EN = {
   "已保存（{0}）": "Saved ({0})",
   "已保存（{0}），留空保留": "Saved ({0}), leave empty to keep",
   "已保存（配置）": "Saved",
+  "已停止": "Stopped",
   "已停止生成": "Generation stopped",
   "已停止自动重启（连续失败达上限）": "Auto-restart halted (consecutive failures hit the limit)",
   "已停止自动重启（连续失败达上限）· {0} 秒后放行一次探针": "Auto-restart halted (failures hit the limit) · one probe restart allowed in {0}s",
@@ -528,6 +533,7 @@ const I18N_EN = {
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
   "已启动": "Started",
+  "已启动 · 未通过复验": "Started · not verified",
   "已启用": "Enabled",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
@@ -557,6 +563,8 @@ const I18N_EN = {
   "已按本轮时间窗过滤": "Filtered to this turn's time window",
   "已授权：本任务内{0}最多再执行 {1} 次，不再逐次询问": "Authorized: up to {1} more {0} action(s) in this task without asking again",
   "已收藏脚本 {0}": "Saved script {0}",
+  "已改为 {0}，重启 EnvKit 后生效（当前仍用 {1}）": "Changed to {0}; takes effect after EnvKit restarts (still using {1})",
+  "已放行 TCP/{0}": "TCP/{0} allowed",
   "已整理": "Tidied",
   "已是最新": "Up to date",
   "已是最新版本": "Already up to date",
@@ -602,6 +610,7 @@ const I18N_EN = {
   "应用": "Apply",
   "延迟 p50": "Latency p50",
   "建库并执行 SQL": "Create DB and apply SQL",
+  "建议": "Suggestion",
   "建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Run EnvKit as administrator to skip the UAC prompt. Reboot once when done.",
   "建议：{0}": "Suggestion: {0}",
   "开发者": "Developer",
@@ -724,6 +733,10 @@ const I18N_EN = {
   "改这里要手改 config.json 的 recovery 段": "Change these by hand in the recovery section of config.json",
   "放大": "Expand",
   "放我下来！……好吧，再玩一次。": "Put me down! ...Fine, one more round.",
+  "放行中…（在 UAC 窗口点「是」）": "Allowing… (choose Yes in the UAC prompt)",
+  "放行失败": "Allow failed",
+  "放行失败：{0}": "Allow failed: {0}",
+  "放行防火墙（需要管理员权限）": "Allow through firewall (needs admin)",
   "故障恢复率（七维）": "Failure recovery (7 dimensions)",
   "数据保留": "Data retention",
   "数据库": "Database",
@@ -812,6 +825,7 @@ const I18N_EN = {
   "未打开": "Not open",
   "未找到": "Not found",
   "未收口自动记 expired": "Auto-marked expired when never closed",
+  "未放行 TCP/{0}": "TCP/{0} not allowed",
   "未检测": "Not checked",
   "未检测到": "Not found",
   "未检测到数据库（点「刷新」重试）": "No databases found (click Refresh to retry)",
@@ -880,6 +894,7 @@ const I18N_EN = {
   "检查新版本": "Check for new versions",
   "检查更新": "Check for updates",
   "检查请求体是否能完整到达服务端（不调用模型，不花钱）": "Check whether the request body reaches the server intact (no model call, no cost)",
+  "检查防火墙": "Check firewall",
   "检测": "Check",
   "检测 · 配置 · 安装": "Check · Configure · Install",
   "检测中": "Checking…",
@@ -936,6 +951,8 @@ const I18N_EN = {
   "溜达溜达～": "Wander wander~",
   "滚动摘要什么时候触发、保留多少": "When rolling summarization kicks in, and how much it keeps",
   "演练安装": "Dry-run install",
+  "点「放行防火墙」按钮，在弹出的 UAC 窗口点「是」": "Click “Allow through firewall” and choose Yes in the UAC prompt",
+  "点「检查防火墙」看 Windows 是否放行这个端口": "Click “Check firewall” to see whether Windows allows this port",
   "点开看本轮用量明细": "Click for this turn's token breakdown",
   "点我确认！": "Click me to confirm!",
   "熊猫": "Panda",
@@ -989,6 +1006,7 @@ const I18N_EN = {
   "确定要退出 EnvKit 吗？": "Are you sure you want to exit EnvKit?",
   "确认": "Confirm",
   "确认后将真实执行该操作。": "It will really run after you confirm.",
+  "确认手机连的是同一个 WiFi（不是移动数据、不是访客网络）；路由器的「AP 隔离/客户端隔离」要关掉": "Make sure the phone is on the same Wi-Fi (not cellular or a guest network); turn off AP/client isolation on the router",
   "确认执行": "Run it",
   "私钥": "Private key",
   "秒": "s",
@@ -1011,6 +1029,9 @@ const I18N_EN = {
   "端口": "Port",
   "端口与链信息": "Ports & chain info",
   "端口占用诊断": "Port diagnostics",
+  "端口已保存": "Port saved",
+  "端口已保存，重启 EnvKit 后生效": "Port saved; it takes effect after EnvKit restarts",
+  "端口没在监听：手机访问的开关可能已关闭，或端口被别的程序占了": "Nothing is listening on the port: mobile access may be off, or another program took the port",
   "等你确认": "Waiting for you",
   "等待你确认：{0}": "Waiting for your confirmation: {0}",
   "等确认": "Awaiting confirm",
@@ -1050,6 +1071,7 @@ const I18N_EN = {
   "缺少：前端目录": "Missing: frontend directory",
   "缺少：后端目录": "Missing: backend directory",
   "缺少：数据库名": "Missing: database name",
+  "网络": "Network",
   "网络代理": "Network proxy",
   "网络错误：": "Network error: ",
   "置信度": "Confidence",
@@ -1109,6 +1131,7 @@ const I18N_EN = {
   "评测": "Evaluation",
   "评测只在开发仓库（含": "Evaluation only works inside the dev repository (with a ",
   "评测日志": "Evaluation log",
+  "诊断失败：{0}": "Diagnostics failed: {0}",
   "诊断报告": "Diagnostic report",
   "诊断报告 AI 解读": "AI analysis of diagnostic report",
   "诊断报告解读与对话能力见「关于」": "Report analysis and chat are described in About",
@@ -1157,6 +1180,7 @@ const I18N_EN = {
   "运行中": "Running",
   "运行中 · 已复验": "Running · verified",
   "运行中 · 未复验": "Running · not verified",
+  "运行中 · 未通过复验": "Running · not verified yet",
   "运行中…": "Running…",
   "运行时": "Runtime",
   "运行状态": "Running status",
@@ -1250,6 +1274,9 @@ const I18N_EN = {
   "门禁问题": "Gate problems",
   "问我任何环境问题...（Enter 发送）": "Ask me anything about your environment... (Enter to send)",
   "问我任何环境问题...（Enter 发送，可拖入文件）": "Ask any environment question... (Enter to send, drag files in)",
+  "防火墙": "Firewall",
+  "防火墙已放行": "Firewall now allows the port",
+  "防火墙已放行、服务端也在监听 —— 如果手机仍连不上，多半是手机不在同一个 WiFi，或路由器开了「AP 隔离」": "Firewall is open and the server is listening — if the phone still cannot connect, it is most likely on another Wi-Fi or the router has AP isolation on",
   "降级 · 未通过复验": "Degraded · verification failed",
   "随时待命": "Standing by",
   "隐藏": "Hidden",
@@ -1805,7 +1832,19 @@ let cfResolveFn = null;
 // 窄框 + 比例字体会让几千字变成一大坨，所以单独给一个宽版。
 function askConfirm(title, msg, okText, danger, cancelText, opts){
   $('#cf-title').textContent = title;
-  $('#cf-msg').textContent = msg;
+  const cm = $('#cf-msg');
+  /* opts.html：msg 是**已净化**的 HTML（目前只有晨报用 aiMd 渲染，走同一套白名单）。
+     纯文本走 textContent —— 直接把模型/文件内容塞 innerHTML 是被禁止的。
+     Markdown 里的表格/标题需要 normal 换行；普通文本仍靠 pre-wrap 保留换行。 */
+  if(opts && opts.html){
+    cm.innerHTML = msg;
+    cm.classList.add('md-body');
+    cm.style.whiteSpace = 'normal';
+  } else {
+    cm.textContent = msg;
+    cm.classList.remove('md-body');
+    cm.style.whiteSpace = 'pre-wrap';
+  }
   $('#cf-ok').textContent = okText || '确定';
   $('#cf-cancel').textContent = cancelText || '取消';
   const box = document.querySelector('#confirm .mbox');
@@ -3083,7 +3122,7 @@ function svcLabel(s){
   switch(s.phase){
     case 'running': return s.verified ? t('运行中 · 已复验') : t('运行中 · 未复验');
     case 'starting': return t('启动中');
-    case 'degraded': return t('降级 · 未通过复验');
+    case 'degraded': return t('运行中 · 未通过复验');
     case 'failed': return t('失败');
     default: return t('未启动');
   }
@@ -3510,8 +3549,16 @@ $('#btn-elevate').onclick = async ()=>{ await post('/api/elevate'); };
 const ACTIONS = {'db-test':['st-db-test','未检测'],'init-db':['st-db-test','未检测'],'web-install':['st-web-install','前端 未执行'],'backend-tidy':['st-web-install','前端 未执行'],'web-start':['st-web-start','未运行'],'backend-start':['st-backend-start','未运行']};
 function renderProg(st){
   const show=(id,label,state)=>{ const el=document.getElementById(id); if(!el) return; let cls='idle';
-    if(state.running)cls='run'; else if(state.ok)cls='ok'; else if(state.msg)cls='fail';
-    el.className='status '+cls; el.textContent=label+(state.msg?(' · '+state.msg):''); };
+    /* status 是后端给的三态以上结论（running/ok/warn/fail/stopped）。
+       没有它才退回旧的 ok 推断——旧存档/旧后端里没有这个字段。
+       warn = 已执行但没验到（例如还在编译），stopped = 正常停止：
+       这两种以前都会被画成红色"失败"，用户会去修一个没坏的服务。 */
+    if(state.running) cls='run';
+    else if(state.status==='ok') cls='ok';
+    else if(state.status==='stopped') cls='idle';
+    else if(state.status==='warn') cls='warn';
+    else if(state.ok)cls='ok'; else if(state.msg)cls='fail';
+    el.className='status '+cls; el.textContent=label+(state.msg && state.msg!==label ? (' · '+state.msg) : ''); };
   if(st['db-test']) show('st-db-test', st['db-test'].running?'检测中':(st['db-test'].ok?'连接正常':'失败'), st['db-test']);
   else if(st['init-db']) show('st-db-test', st['init-db'].running?'执行中':(st['init-db'].ok?'已就绪':'失败'), st['init-db']);
   else show('st-db-test','未检测',{});
@@ -3521,9 +3568,119 @@ function renderProg(st){
   show('st-web-start', stateLabel(st['web-start']), st['web-start']||{});
   show('st-backend-start', stateLabel(st['backend-start']), st['backend-start']||{});
   petTasksSync(st);   // 桌宠联动：运行中任务 → 进度环；失败 → 红标；重活完成 → 庆祝
+  progResSync();      // 进程资源（内部节流，失败静默——旧后端没有这个端点也不该报错）
 }
-function stateLabel(s){ if(!s) return '未运行'; if(s.running) return '运行中'; return s.ok?'已退出':'失败'; }
+function stateLabel(s){
+  if(!s) return '未运行';
+  if(s.running) return '运行中';
+  /* 停止/未复验都是正常结局，只有真失败才说"失败"（详见后端 ProgStatus.Status）。 */
+  if(s.status==='stopped') return t('已停止');
+  if(s.status==='warn') return t('已启动 · 未通过复验');
+  return s.ok?t('已启动'):t('失败');
+}
 async function pollProg(){ try{ renderProg(await (await fetch('/api/program/state')).json()); }catch(e){} }
+
+/* ---------- 服务进程资源（/api/proc/stats） ----------
+   采样在后端每 2 秒一次，前端只读快照。这里再节流一次：
+   pollProg 本身就是 2s 一轮，两处叠加不做限制的话会变成 2s 两次请求。
+   注意只画"在跑"的进程——进程停了就清空，不显示上一次的数字冒充当前值。 */
+let resAt = 0;
+function fmtUptime(s){
+  if(!s) return '—';
+  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+  if(d) return t('{0} 天 {1} 小时', d, h);
+  if(h) return t('{0} 小时 {1} 分', h, m);
+  return t('{0} 分', m);
+}
+function sparkline(hist, w, h){
+  if(!hist || hist.length < 2) return '';
+  const min = Math.min.apply(null, hist), max = Math.max.apply(null, hist);
+  const span = Math.max(0.5, max - min);
+  const pts = hist.map(function(v,i){
+    const x = (i/(hist.length-1)*w).toFixed(1);
+    const y = (h - (v-min)/span*(h-2) - 1).toFixed(1);
+    return x+','+y;
+  }).join(' ');
+  return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><polyline points="'+pts+'"/></svg>';
+}
+function paintRes(key, p){
+  const el = document.getElementById('sr-'+key);
+  if(!el) return;
+  if(!p || !p.alive || typeof p.rss_mb !== 'number'){ el.innerHTML=''; el.title=''; return; }
+  let html = sparkline(p.hist, 74, 16);
+  let txt = t('内存 {0} MB', p.rss_mb.toFixed(1));
+  if(p.cpu_pct > 0) txt += ' · ' + t('CPU {0}%', p.cpu_pct.toFixed(1));
+  html += '<span>' + txt + '</span>';
+  if(p.growing) html += '<span class="grow">' + t('2 分钟涨 {0} MB', Number(p.growth_mb||0).toFixed(0)) + '</span>';
+  el.innerHTML = html;
+  el.title = t('线程 {0} · 句柄 {1} · 已运行 {2}', p.threads||0, p.handles||0, fmtUptime(p.uptime_sec||0));
+}
+async function progResSync(){
+  const now = Date.now();
+  if(now - resAt < 1800) return;
+  resAt = now;
+  let j;
+  try{ j = await (await fetch('/api/proc/stats')).json(); }catch(e){ return; }
+  const map = {};
+  (j.procs||[]).forEach(function(p){ map[p.key] = p; });
+  paintRes('web', map['web']);
+  paintRes('backend', map['backend']);
+}
+
+/* ---------- 系统事件（Windows 事件日志） ----------
+   用途：进程闪退时，EnvKit 只能说"exit status 1"；真正的崩溃模块名在
+   应用程序日志里（Application Error / .NET Runtime）。这里把最近 40 条
+   严重/错误事件列出来，命中本项目栈关键词的标黄——标黄只代表"描述里提到了它"，
+   不代表"就是它崩的"，所以原样给出命中词让人自己判断。 */
+function slItem(e){
+  const d = document.createElement('div');
+  d.className = 'sitem' + (e.related ? ' rel' : '');
+  const h = document.createElement('div');
+  h.className = 'sitem-h';
+  const id = document.createElement('span');
+  id.className = 'sitem-id';
+  id.textContent = (e.level === 1 ? t('严重') : t('错误')) + ' ' + e.id;
+  h.appendChild(id);
+  h.appendChild(document.createTextNode((e.time||'') + ' · ' + (e.log||'') + ' · ' + (e.source||'')));
+  d.appendChild(h);
+  const p = document.createElement('div');
+  p.className = 'sitem-txt';
+  p.textContent = e.text || t('（该事件没有可读描述）');
+  d.appendChild(p);
+  if(e.related && e.hint){
+    const tip = document.createElement('div');
+    tip.className = 'sitem-hint';
+    tip.textContent = t('描述里提到：{0}', e.hint);
+    d.appendChild(tip);
+  }
+  return d;
+}
+async function syslogLoad(force){
+  const box = document.getElementById('syslog-list');
+  const meta = document.getElementById('syslog-meta');
+  if(!box) return;
+  box.textContent = t('正在读取事件日志…');
+  let j;
+  try{ j = await (await fetch('/api/win/events' + (force ? '?force=1' : ''))).json(); }
+  catch(e){ box.textContent = t('读取失败：{0}', e.message); return; }
+  box.textContent = '';
+  const evs = j.events || [];
+  if(!j.ok && !evs.length){
+    box.textContent = t('读取不到事件日志：{0}', j.err || t('未知原因'));
+    if(meta) meta.textContent = '';
+    return;
+  }
+  if(!evs.length) box.textContent = t('最近没有严重或错误级事件。');
+  evs.forEach(function(e){ box.appendChild(slItem(e)); });
+  if(meta){
+    meta.textContent = t('共 {0} 条 · 读取于 {1}', evs.length, new Date((j.fetched||0)*1000).toLocaleTimeString()) +
+      (j.err ? ' · ' + t('部分日志读取失败') : '');
+  }
+}
+$('#btn-syslog').onclick = function(){ $('#syslog').classList.add('show'); syslogLoad(false); };
+$('#syslog-close').onclick = function(){ $('#syslog').classList.remove('show'); };
+$('#syslog-refresh').onclick = function(){ syslogLoad(true); };
+$('#syslog').addEventListener('click', function(e){ if(e.target.id === 'syslog') $('#syslog').classList.remove('show'); });
 
 /* ---------- 启动 ---------- */
 (async function init(){
@@ -3769,8 +3926,12 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
       if(p){
         if(s.running && !p.running){ setSt('success'); say(t('{0} 已启动', label)); }
         else if(!s.running && p.running){
-          if(s.msg && s.msg !== '已停止'){ setSt('error'); say(t('{0} 失败了，点红标看日志', label)); }
-          else if(st==='busy'){ setSt('idle'); }   // 手动停止：安静回待机
+          /* 三种结局要分开：正常停止（stopped）安静回待机；
+             "已启动但没验到"（warn，例如还在编译）说一句但不报错；
+             只有真失败才亮红灯。以前后两种同形，正常停止也会挨一句"失败了"。 */
+          if(s.status==='stopped' || s.msg === '已停止'){ if(st==='busy'){ setSt('idle'); } }
+          else if(s.status==='warn'){ if(st==='busy'){ setSt('idle'); } say(t('{0} 已启动，但还没通过复验', label), false); }
+          else { setSt('error'); say(t('{0} 失败了，点红标看日志', label)); }
         }
       }
       svcPrev[k] = {running:!!s.running, msg:s.msg||''};
@@ -4218,9 +4379,19 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   pet.addEventListener('dragleave', ()=>{ pet.classList.remove('drop-hint'); if(st==='idle') hideBubble(); });
   pet.addEventListener('drop', async e=>{
     e.preventDefault(); pet.classList.remove('drop-hint'); wake();
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    const files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+    // 图片优先：拖图上来是"帮我看这个"，不是"帮我执行 SQL"。
+    // 载入后顺手把抽屉打开 —— 否则图进去了，用户却在桌宠上等，不知道下一步该干嘛。
+    const pics = files.filter(f=>AI_IMG_IN.test(f.type || ''));
+    if(pics.length){
+      aiOpen();
+      const n = await aiAttachAdd(pics);
+      say(n ? t('图收到了，说一句你想让我看什么~') : t('这张图我读不出来…'), true);
+      return;
+    }
+    const f = files[0];
     if(!f){ say(t('没接到文件呢')); return; }
-    if(!/\.sql$/i.test(f.name)){ say(t('只收 .sql 文件哦，「{0}」先还给你', f.name)); notes(1); return; }
+    if(!/\.sql$/i.test(f.name)){ say(t('只收 .sql 文件和图片哦，「{0}」先还给你', f.name)); notes(1); return; }
     const dbInput = document.getElementById('db_name');
     const db = (dbInput && dbInput.value.trim()) || (typeof cfg!=='undefined' && cfg && cfg.Projects && cfg.Projects.DBName) || '';
     askConfirm(t('生效 SQL 到数据库'),
@@ -4397,6 +4568,11 @@ const AI_PROV_ICONS = {
 let aiMessages = [];   // OpenAI 格式消息历史（内存 + localStorage 持久化，刷新页面不丢）
 let aiBusy = false;
 const $ai = id => document.getElementById(id);
+
+/* 待发送的图片（拖入 / 粘贴进来、还没随消息发出去的）。
+   同样是**状态必须放顶部**：aiHistRestore 在页面加载时就会跑，它要清理上次残留的
+   `aiImgs`（附件已落盘但消息没发出，重开后不该浮在输入区）。 */
+let aiImgs = [];
 
 /* ---------- 放大态 / 检查器 / 轨迹 / 文件引用的**状态** ----------
    声明必须早于 aiAdd 与 aiHistRestore：aiAdd 会读 aiTurnAnchor，
@@ -4632,10 +4808,13 @@ function aiToolbar(d, reask){
 /* 发送一段用户文本：发送按钮与「重新提问」共用。
    抽成函数是因为重新提问要复刻发送的全套动作——剥悬挂确认卡、记时间戳、进历史、
    起流式回合；两处各写一遍，迟早只改一处（确认卡悬挂那次事故就是这么来的）。 */
-async function aiSendText(tx, missionId){
+async function aiSendText(tx, missionId, imgs){
   if(aiBusy) return;
   tx = String(tx || '').trim();
-  if(!tx) return;
+  // imgs：已经落盘的图片引用（{id,name,mime}）。只有图片、没写字也要能发 ——
+  // "你看看这个报错"在截图场景里本来就只是一张图。
+  const pics = (imgs || []).filter(x=>x && x.id);
+  if(!tx && !pics.length) return;
   // 行动绑定（Phase 1）：带 missionId = 本回合是该行动的执行回合；
   // 不带 = 普通对话，清掉旧绑定（一次对话只属于一个行动，红线 5 同源）。
   aiCurMission = missionId || null;
@@ -4644,8 +4823,13 @@ async function aiSendText(tx, missionId){
   // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
   if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
   const sendTs = aiNow();
-  aiAdd('user', tx, sendTs);
-  aiMessages.push({role:'user', content:tx, ts:sendTs});
+  const el = aiAdd('user', tx, sendTs);
+  const um = {role:'user', content:tx, ts:sendTs};
+  if(pics.length){
+    um.images = pics;
+    aiMsgImgsRender(el, pics);   // 气泡里回显：用户得能确认"我发的确实是这张"
+  }
+  aiMessages.push(um);
   await aiConsume('/api/ai/chat', {messages: aiMessages});
 }
 /* ---------- Markdown 渲染 ----------
@@ -4734,7 +4918,16 @@ function aiHistSave(){
     const h = aiMessages.slice();
     // 尾部悬挂的 assistant(tool_calls)（确认卡还没批）不入档：恢复后缺 tool 结果会打坏下一轮请求
     while(h.length && h[h.length-1].tool_calls) h.pop();
-    const slim = h.slice(-60).map(m => { const o = {role: m.role, content: String(m.content == null ? '' : m.content)}; if(aiTsOk(m.ts)) o.ts = m.ts; return o; });
+    const slim = h.slice(-60).map(m => {
+      const o = {role: m.role, content: String(m.content == null ? '' : m.content)};
+      if(aiTsOk(m.ts)) o.ts = m.ts;
+      // 图片只存引用（id/name/mime），几十字节：base64 存进来会写爆 5MB 配额，
+      // 而 QuotaExceededError 被这里的 try/catch 吞掉后，表现是"历史莫名丢了"。
+      if(Array.isArray(m.images) && m.images.length){
+        o.images = m.images.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', mime:x.mime || ''}));
+      }
+      return o;
+    });
     if(slim.length){ localStorage.setItem('ek-ai-hist', JSON.stringify(slim)); }
     else { localStorage.removeItem('ek-ai-hist'); }
   }catch(_){}
@@ -4744,9 +4937,19 @@ function aiHistRestore(){
   try{ h = JSON.parse(localStorage.getItem('ek-ai-hist') || 'null'); }catch(_){}
   if(!Array.isArray(h)) return;
   aiMessages = h.filter(m => m && (m.role === 'user' || m.role === 'assistant') &&
-    typeof m.content === 'string' && m.content.trim());
+    typeof m.content === 'string' &&
+    // 只有图片没有文字的消息必须留下：否则"发张截图问一句"的那一轮，图回来了、问题没了
+    (m.content.trim() || (Array.isArray(m.images) && m.images.length)));
+  aiMessages.forEach(m=>{
+    if(!Array.isArray(m.images)) return;
+    m.images = m.images.filter(x=>x && x.id);
+    if(!m.images.length) delete m.images;
+  });
   if(!aiMessages.length) return;
-  aiMessages.forEach(m => aiAdd(m.role === 'user' ? 'user' : 'ai', m.content, aiTsOk(m.ts) ? m.ts : undefined));
+  aiMessages.forEach(m => {
+    const el = aiAdd(m.role === 'user' ? 'user' : 'ai', m.content, aiTsOk(m.ts) ? m.ts : undefined);
+    if(m.role === 'user' && m.images) aiMsgImgsRender(el, m.images);
+  });
   aiAdd('sys', t('已恢复上次的对话（{0} 条）', aiMessages.length));
 }
 aiHistRestore();
@@ -5350,9 +5553,10 @@ function aiMissionsRender(){
 }
 
 /* ---------- 报告（晨报）查看与下载 ----------
-   报告正文是 Markdown，但这里用等宽纯文本展示而不是渲染：
-   它是"给机器留档的事实清单"，渲染成花哨排版反而看不出原文结构；
-   而下载下来的 .md 谁想渲染谁渲染。 */
+   报告正文是 Markdown（表格、标题、列表），在这里按 Markdown 渲染：
+   纯文本展示会把表格压成一堆竖线，读者得自己在脑子里排版。
+   渲染走 aiMd 的同一条白名单净化链路——报告里可能带主机名、日志片段等
+   不可信文本，不能直接 innerHTML。下载下来的仍是原始 .md。 */
 async function aiMsReport(m){
   let txt = '';
   try{
@@ -5364,8 +5568,8 @@ async function aiMsReport(m){
     }
     txt = await r.text();
   }catch(_){ toast(t('读取失败'), 'err'); return; }
-  const want = await askConfirm(t('报告：{0}', m.goal || ''), txt,
-    t('下载 .md'), false, t('关闭'), {wide:true, mono:true});
+  const want = await askConfirm(t('报告：{0}', m.goal || ''), aiMd(txt),
+    t('下载 .md'), false, t('关闭'), {wide:true, html:true});
   if(want) aiMsDownload(m);
 }
 
@@ -5711,10 +5915,225 @@ function aiPickAdd(p, name){
   aiChipsRender(); aiPickClose();
   toast(t('已附加引用：{0}', name || p));
 }
+/* ==================== 图片附件：拖入 / 粘贴 → 载入 ====================
+   DeepSeek 官方 deepseek-flash 已原生支持视觉，这里把那条件打通：
+   拖到对话区、拖到桌宠、或在输入框里直接 Ctrl+V 粘贴截图，都能载入。
+
+   **图片不内联进消息**，而是先落盘（POST /api/ai/attach）拿一个 id，
+   消息里只留 {id,name,mime}。三条硬理由见 ai_attach.go 文件头：
+   请求体 16MB 上限、历史每轮整体重发、localStorage 只有 5MB。
+
+   为什么要在前端先压缩：一张 4032×3024 的手机照片 5MB，base64 之后 6.7MB，
+   而 DeepSeek 会把图片缩到等效约 1300×1300 再算 token —— 上传原图是纯浪费带宽。
+   长边 1600 是"缩完仍比上游的目标尺寸大一点"的取值，文字截图不会糊。 */
+const AI_IMG_IN = /^image\/(png|jpeg|jpg|gif|webp)$/i;
+const AI_IMG_MAX = 6;      // 单条消息最多几张（一张 ≈ 1024 token，6 张已经很奢侈）
+const AI_IMG_EDGE = 1600;  // 长边上限
+const AI_IMG_RAW_KEEP = 2 * 1024 * 1024; // 已够小且不超这个体积就原样上传（无损）
+
+function aiAttachToggle(){
+  const box = $ai('ai-attach');
+  if(box) box.hidden = aiImgs.length === 0;
+}
+
+function aiAttachRender(){
+  const box = $ai('ai-attach');
+  if(!box) return;
+  box.textContent = '';
+  aiImgs.forEach((it, i)=>{
+    const d = document.createElement('div');
+    d.className = 'thumb' + (it.busy ? ' busy' : '') + (it.err ? ' err' : '');
+    d.title = it.err ? (it.err + ' — ' + t('点击 × 移除')) : (it.name || '');
+    if(it.url){
+      const im = document.createElement('img');
+      im.src = it.url; im.alt = it.name || t('图片');
+      d.appendChild(im);
+    }
+    const rm = document.createElement('button');
+    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.onclick = ()=>{ aiImgs.splice(i, 1); aiAttachRender(); };
+    d.appendChild(rm);
+    box.appendChild(d);
+  });
+  aiAttachToggle();
+}
+
+/* 压缩：长边 ≤ 1600，质量与插值都按"能不能读懂截图里的字"来定。
+   **GIF 一律原样上传**：canvas 会把动图压成第一帧，那是静默改内容，比文件大糟糕得多。
+
+   三个参数都是实测出来的（判据是"模型能不能读出截图里的 13px 正文小字"，见
+   tools/cdp_ai_image_test.js 的 PROBE 用例），不是凭感觉调的：
+
+   - imageSmoothingQuality:'high' —— Chrome 默认是 'low'，把 1920 宽的界面截图缩到
+     1600 时走的是廉价双线性，13px 中文正文的笔画被抹平成灰块，模型只能认出标题。
+     换成 high 走带预滤波的高质量重采样，**不增加任何体积**。
+   - PNG 源给 q0.92、其它给 q0.86 —— PNG 源绝大多数是界面截图（大片纯色 + 细笔画），
+     JPEG 的 8×8 块效应专啃这种高频细节；照片本身有噪声，0.86 与 0.92 肉眼无差，省三成体积。
+   - 尺寸不够大就别重编码（≤2MB 原样上传）—— PNG 是无损的，重编码成 JPEG 只会更糊。
+
+   **加载源必须是 data URL，不能用 URL.createObjectURL。**
+   CSP 的 img-src 是 `'self' data:`，不含 blob: —— 用 blob: 会被拦，img.onerror 触发，
+   这个函数就 resolve(file) 原样返回：**看起来在压缩，实际一个字节都没缩**。
+   这个缺陷曾静默存在了很久（5MB 手机照片照原样上传，只是没人量过）。
+   data URL 顺带让预览和上传共用同一份数据，少一次 FileReader。
+   返回 data: URL。 */
+function aiImgShrink(file){
+  return aiImgDataURL(file).then(dataUrl=>new Promise(resolve=>{
+    if(/^image\/gif$/i.test(file.type)){ resolve(dataUrl); return; }
+    const img = new Image();
+    img.onload = ()=>{
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, AI_IMG_EDGE / Math.max(w, h));
+      // 已经够小就别重新编码：JPEG 二次压缩会掉画质，PNG 截图重编码反而变大
+      if(scale >= 1 && file.size <= AI_IMG_RAW_KEEP){ resolve(dataUrl); return; }
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * scale));
+      cv.height = Math.max(1, Math.round(h * scale));
+      const cx = cv.getContext('2d');
+      cx.imageSmoothingEnabled = true;
+      cx.imageSmoothingQuality = 'high';   // 缩图质量：默认 low 会把小字糊掉
+      cx.fillStyle = '#fff';                       // PNG 透明区转 JPEG 会变黑，先铺白底
+      cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      const shot = /^image\/png$/i.test(file.type); // PNG 源按"截图"对待，多给点质量
+      cv.toBlob(b=>{
+        if(!b){ resolve(dataUrl); return; }        // 编码失败就退回原图，别把图弄丢
+        aiImgDataURL(b).then(resolve, ()=>resolve(dataUrl));
+      }, 'image/jpeg', shot ? 0.92 : 0.86);
+    };
+    img.onerror = ()=>resolve(dataUrl);
+    img.src = dataUrl;
+  })).catch(()=>null);
+}
+
+/* 从 data URL 里取实际 MIME（服务端按内容判定，这里只用来回填展示） */
+function aiImgMimeOf(dataUrl){
+  const m = /^data:([^;,]+)/.exec(String(dataUrl || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+
+function aiImgDataURL(blob){
+  return new Promise((res, rej)=>{
+    const rd = new FileReader();
+    rd.onload = ()=>res(rd.result);
+    rd.onerror = ()=>rej(rd.error || 'read error');
+    rd.readAsDataURL(blob);
+  });
+}
+
+/* 载入一批 File（来自 drop / paste / 选择器）。返回真正挂上去的张数。
+   每张各自异步上传，互不阻塞：一张 8MB 的图卡住不该让后面几张排队干等。 */
+function aiAttachAdd(files){
+  const list = Array.prototype.slice.call(files || []).filter(f=>f && AI_IMG_IN.test(f.type || ''));
+  if(!list.length) return Promise.resolve(0);
+  const jobs = [];
+  for(const f of list){
+    if(aiImgs.length >= AI_IMG_MAX){
+      toast(t('一条消息最多 {0} 张图片', AI_IMG_MAX), 'err');
+      break;
+    }
+    const item = {id:'', name:f.name || t('粘贴的图片'), mime:f.type || '', url:'', busy:true, err:'', p:null};
+    aiImgs.push(item);
+    const task = (async ()=>{
+      try{
+        const dataUrl = await aiImgShrink(f);
+        if(!dataUrl) throw new Error(t('读取图片失败'));
+        item.url = dataUrl;                 // 压缩后的图既做预览又做上传内容（data: 地址，
+        aiAttachRender();                   // CSP 的 img-src 是 'self' data:，blob: 会被拦）
+        const mime = aiImgMimeOf(dataUrl) || item.mime;
+        const r = await fetch('/api/ai/attach', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({name: item.name, mime: mime, content: dataUrl})});
+        if(!r.ok){ throw new Error((await r.text()).slice(0, 200) || ('HTTP ' + r.status)); }
+        const j = await r.json();
+        item.id = j.id; item.mime = j.mime || mime; item.bytes = j.bytes || 0;
+      }catch(e){
+        item.err = String((e && e.message) || e);
+        toast(t('图片载入失败：{0}', item.name), 'err');
+      }finally{
+        item.busy = false;
+        aiAttachRender();
+      }
+    })();
+    item.p = task;
+    jobs.push(task);
+  }
+  aiAttachRender();
+  return Promise.all(jobs).then(()=>aiImgs.filter(x=>x.id && !x.err).length);
+}
+
+/* 取出待发送图片并清空输入区。等所有上传落地再返回 —— 否则会出现
+   "消息发出去了，图片还在传"，服务端拿到的是一条纯文字消息（模型答"图呢？"）。 */
+async function aiAttachTake(){
+  const running = aiImgs.filter(x=>x.busy || x.p).map(x=>x.p).filter(Boolean);
+  if(running.length) await Promise.all(running);
+  const ok = aiImgs.filter(x=>x.id && !x.err).map(x=>({id:x.id, name:x.name, mime:x.mime}));
+  const bad = aiImgs.filter(x=>x.err).length;
+  aiImgs = [];
+  aiAttachRender();
+  if(bad && !ok.length) return null;   // 全失败：让调用方决定还发不发
+  return ok;
+}
+
+/* 已发出的图片在消息气泡里回显。
+   用服务端地址而不是本地 data URL：刷新后历史恢复时本地预览早没了，
+   而服务端那份还在（附件保留 24 小时，之后按 TTL 自动清理）。img 不能带自定义头，令牌走 ?t=。 */
+function aiMsgImgsRender(host, imgs){
+  if(!host || !imgs || !imgs.length) return;
+  const box = document.createElement('div');
+  box.className = 'ai-msg-imgs';
+  imgs.forEach(im=>{
+    if(!im || !im.id) return;
+    const href = '/api/ai/attach?id=' + encodeURIComponent(im.id) + '&t=' + encodeURIComponent(window.__EK_TOKEN__ || '');
+    const a = document.createElement('a');
+    a.href = href; a.target = '_blank'; a.rel = 'noopener';
+    const el = document.createElement('img');
+    el.src = href; el.alt = im.name || t('图片'); el.title = im.name || '';
+    // 过了 24 小时保留期这里必然 404（也可以被浏览器缓存撑过一阵）。
+    // 裂图看着像坏了、还占着 72px 空框；换成一句"已过期"，用户才知道该重新拖一次。
+    el.onerror = ()=>{
+      const ph = document.createElement('span');
+      ph.className = 'ai-msg-img-gone';
+      ph.textContent = t('图片已过期');
+      ph.title = t('附件只保留 24 小时，需要的话请重新拖入');
+      a.replaceWith(ph);
+    };
+    a.appendChild(el);
+    box.appendChild(a);
+  });
+  if(box.childNodes.length) host.appendChild(box);
+}
+
+/* 粘贴处理。抽成独立函数是为了能被测试直接调用：
+   ClipboardEvent 的 clipboardData 在浏览器里是只读的，
+   用 `new ClipboardEvent('paste', {clipboardData})` 造不出来 —— 所以
+   "从 clipboardData 里挑图片"这件事只能靠传一个形状相同的对象来验。
+   **纯文本粘贴必须原样放过**（不 preventDefault），否则用户粘一段日志进输入框会失效。 */
+function aiPasteHandle(e){
+  const items = (e && e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for(const it of items){
+    if(it.kind !== 'file' || !AI_IMG_IN.test(it.type || '')) continue;
+    const f = it.getAsFile();
+    if(f) files.push(f);
+  }
+  if(!files.length) return false;   // 纯文本：交回浏览器默认行为
+  e.preventDefault();
+  aiAttachAdd(files).then(n=>{ if(n) toast(t('已载入 {0} 张图片，回车发送', n)); });
+  return true;
+}
+
+/* 把一批文件按类型分流：图片走附件通道，其它当文本读。
+   原来这里一律 f.text()，拖进来一张截图会读成乱码塞进输入框。 */
 async function aiDropFiles(files){
+  const arr = Array.prototype.slice.call(files || []);
+  const imgs = arr.filter(f=>f && AI_IMG_IN.test(f.type || ''));
+  const rests = arr.filter(f=>f && !AI_IMG_IN.test(f.type || ''));
+  // 图片走附件通道（模型真的能看到像素）；文本仍走"贴进输入框 + untrusted_data 包裹"
+  if(imgs.length) await aiAttachAdd(imgs);
+  if(!rests.length){ const ta = $ai('ai-in'); if(ta && imgs.length) ta.focus(); return; }
   const MAX = 64 * 1024;
   const ta = $ai('ai-in'); if(!ta) return;
-  for(const f of files){
+  for(const f of rests){
     if(f.size > MAX){ toast(t('文件超过 64KB，已跳过：{0}', f.name), 'err'); continue; }
     let txt = '';
     try{ txt = await f.text(); }catch(e){ toast(t('读取失败：{0}', f.name), 'err'); continue; }
@@ -5813,14 +6232,34 @@ async function aiDecide(approved){
   on('ai-plus', 'click', ()=>{ const pop = $ai('ai-pick'); if(pop && pop.classList.contains('show')) aiPickClose(); else aiPickOpen(); });
   on('ai-pick-close', 'click', aiPickClose);
   on('ai-pick-up', 'click', ()=>{ const up = aiParent(aiPickPath); aiPickLs(up || ''); });
-  const msgs = $ai('ai-msgs');
-  if(msgs){
-    msgs.addEventListener('dragover', e=>{ e.preventDefault(); });
-    msgs.addEventListener('drop', e=>{
-      if(!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+  /* 拖拽：挂在整条抽屉上，而不是只挂对话区。
+     用户说"拖到 AI 区域"就是**任何位置都应该接住**——把图拖到输入框上、
+     拖到消息列表空白处、拖到侧栏上，期望都一样。只挂 #ai-msgs 时，
+     拖到偏下的输入区会变成浏览器默认行为（直接打开那张图，把对话顶掉）。 */
+  const drawer = $ai('ai-drawer');
+  if(drawer){
+    let depth = 0;   // dragenter/dragleave 会在子元素间反复触发，用计数防抖
+    const hint = on=>{
+      if(on){ drawer.dataset.dropHint = t('松手载入图片'); drawer.classList.add('ai-dropping'); }
+      else { drawer.classList.remove('ai-dropping'); delete drawer.dataset.dropHint; }
+    };
+    drawer.addEventListener('dragenter', e=>{ e.preventDefault(); depth++; hint(true); });
+    drawer.addEventListener('dragover', e=>{
       e.preventDefault();
+      if(e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    drawer.addEventListener('dragleave', ()=>{ depth = Math.max(0, depth - 1); if(!depth) hint(false); });
+    drawer.addEventListener('drop', e=>{
+      e.preventDefault(); depth = 0; hint(false);
+      if(!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
       aiDropFiles(Array.prototype.slice.call(e.dataTransfer.files));
     });
+  }
+  /* 粘贴：截图工具（Win+Shift+S / 微信截图）出来的就是剪贴板里的位图，
+     用户的下意识动作是 Ctrl+V，而不是先存成文件再拖进来。 */
+  const taIn = $ai('ai-in');
+  if(taIn){
+    taIn.addEventListener('paste', e=>aiPasteHandle(e));
   }
   // Esc：先关文件选择器，再关抽屉（避免误关正在输入的对话）
   document.addEventListener('keydown', e=>{
@@ -6249,7 +6688,12 @@ async function aiConsume(path, body){
   // 也放进请求头兜底，body 丢失时服务端据此恢复。
   let fb = {last: '', recent: [], confirm: body.confirm || null, lang: EK_LANG};
   const ms = body.messages || [];
-  for(let i = ms.length - 1; i >= 0; i--){ if(ms[i] && ms[i].role === 'user'){ fb.last = String(ms[i].content || '').slice(0, 2000); break; } }
+  for(let i = ms.length - 1; i >= 0; i--){ if(ms[i] && ms[i].role === 'user'){
+    // 只发了图没写字的回合：回退头至少给出"[图片]"，否则恢复出来的历史里
+    // 这一条是空 user 消息，模型会当成"用户什么都没问"。
+    fb.last = String(ms[i].content || '').slice(0, 2000) ||
+      ((Array.isArray(ms[i].images) && ms[i].images.length) ? '[图片]' : '');
+    break; } }
   // 最近 6 条（每条截 200 字）：只带 last 的话，body 一旦被吃，模型等于失忆——
   // 它会重新问一遍（那些"菜单式无效回复"往往就是这么来的），这一轮缓存也全废。
   // 6×200 编码后约 3~4KB，仍在常见代理的头长限制内。
@@ -6344,6 +6788,13 @@ async function aiConsume(path, body){
       if(m.tool_calls) o.tool_calls = m.tool_calls;
       if(m.tool_call_id) o.tool_call_id = m.tool_call_id;
       if(m.name) o.name = m.name;
+      // 图片引用必须跟着走：这里是白名单式重建，漏一个字段就是**静默丢图**
+      // （2026-10-31 实测：气泡里图好好的，模型答"我没收到图片"）。
+      // 只传 id/name/mime —— 本地预览用的 url（data URL）绝不能进请求体。
+      if(Array.isArray(m.images) && m.images.length){
+        o.images = m.images.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', mime:x.mime || ''}));
+        if(!o.images.length) delete o.images;
+      }
       return o;
     });
     const _bodyStr = JSON.stringify(Object.assign({}, body, {messages: _msgs}));
@@ -6537,6 +6988,15 @@ async function aiConsume(path, body){
           $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
         } else if(ev.type === 'error'){
           dropThink(); aiErr(ev.text);
+        } else if(ev.type === 'done'){
+          /* 结束原因必须可见。断流 / 模型空回复 / 预算耗尽在界面上的样子
+             与"正常答完"完全一样 —— 用户的描述只能是"它自己停了，
+             不知道咋回事，得重新对话才能拿到结果"。
+             completed 与 awaiting_confirm 是预期路径，不打扰。 */
+          if(ev.reason && ev.reason !== 'completed' && ev.reason !== 'awaiting_confirm' && ev.note){
+            dropThink();
+            aiAdd('sys', t(ev.note));
+          }
         }      }
     }
     if(cur){
@@ -6587,13 +7047,16 @@ $ai('ai-stop').onclick = ()=>{ if(aiCtrl){ try{ aiCtrl.abort(); }catch(e){} } };
 $ai('ai-send').onclick = async ()=>{
   if(aiBusy) return;
   const raw = $ai('ai-in').value.trim();
-  if(!raw) return;
+  if(!raw && !aiImgs.length) return;   // 文字和图片都没有：什么都不发
+  // 图片先落地（等所有上传完成），再组消息。失败项交给用户处理，不静默丢弃。
+  const pics = await aiAttachTake();
+  if(pics === null){ toast(t('图片都没载入成功，先别发；点缩略图上的 × 移除后再试'), 'err'); return; }
   // 已选文件只以"路径引用"的形式并入这条消息（读取由 read_file 在沙箱内完成）
   const tx = aiFileRef() + raw;
   $ai('ai-in').value = '';
   // 复用 aiSendText（剥悬挂卡、记时间戳、进历史、起流式回合都在里面）——
   // 这里原先把那套动作又抄了一遍，改一处漏一处的事故已经发生过一次。
-  await aiSendText(tx);
+  await aiSendText(tx, null, pics || []);
 };
 $ai('ai-in').addEventListener('keydown', e=>{
   // isComposing：中文输入法里按 Enter 是确认候选词，不是发送（否则拼音还没上屏消息就飞出去了）
@@ -7344,10 +7807,11 @@ async function ekSetBreakerReset(){
    共同原则：改完立刻存、存完重读回显。同一份数据让用户在两处手动同步，
    迟早会出现「这边显示已开、实际没开」。
 */
-const EK_EXT = {alert:null, ms:null, upd:null, notify:null};
+const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan()]);
+  ekSetLanFWIdle();
 }
 
 /* ---------- 全局通知 ---------- */
@@ -7471,6 +7935,323 @@ async function ekSetSaveMissions(){
   }catch(e){ toast(t('网络错误：')+e, 'err'); }
 }
 
+/* ---------- 手机访问（v3.6.2） ----------
+   手机上能做什么，由服务端的路由表决定（另一个 mux，只有 6 条路由），
+   不靠前端的 if。这里只是开关和查看。
+
+   v3.6.2 调整：
+   · 开关从「程序配置」卡片迁到顶栏「个人中心」下（#pp_lan_on），
+     **唯一写入口**在这一处 —— 同一个开关有两处写入口必然对不上（MEMORY 第 2 条）。
+   · 配对信息（配对码 / 网址 / 注意项 / 二维码）走弹窗 #lanpair。 */
+
+async function ekSetLoadLan(){
+  try{
+    const j = await fetch('/api/lan/config').then(r=>r.json());
+    EK_EXT.lan = j;
+    /* 个人中心里的开关与副标题 */
+    const sw = document.getElementById('pp_lan_on');
+    if(sw) sw.checked = !!j.enabled;
+    const sub = document.getElementById('pp_lan_sub');
+    if(sub){
+      if(!j.enabled) sub.textContent = t('关');
+      else if(!j.running) sub.textContent = t('已开启但端口没在监听');
+      else sub.textContent = t('已开启 · 手机访问 {0}', (j.addrs && j.addrs[0]) || t('（没找到可连的地址）'));
+    }
+    const pwState = document.getElementById('s_lan_pw_state');
+    if(pwState){
+      pwState.textContent = j.has_password
+        ? t('已设置密码（可与配对码二选一）') : t('未设置密码');
+    }
+    const pwClear = document.getElementById('btn-lan-pw-clear');
+    if(pwClear) pwClear.style.display = j.has_password ? '' : 'none';
+    const portEl = document.getElementById('s_lan_port');
+    /* 端口输入框只在**用户没动过**时才回填。
+       反过来（无条件回填）会抹掉用户正在输入的值 —— 他改到一半，
+       一次后台刷新就把他的输入冲掉了。 */
+    if(portEl && !portEl.dataset.touched) portEl.value = j.port || '';
+    const pwEl = document.getElementById('s_lan_pw');
+    if(pwEl) pwEl.value = '';
+    ekSetRenderLanAddrs(j);
+    ekSetRenderLanDevs(j.devices || [], '#lp_devs');
+    ekLanPairPaint(j);
+  }catch(e){
+    ekRo('#s_lan_addr', [{k:t('状态'), v:t('读取失败：{0}', e), cls:'bad'}]);
+  }
+}
+
+function ekSetRenderLanAddrs(j){
+  const rows = [];
+  if(!j.enabled){
+    rows.push({k:t('状态'), v:t('未开启（在顶栏「个人中心」下打开）'), cls:''});
+  }else if(!j.running){
+    /* 开关开着但没监听：端口被占 / 监听失败。这种情况必须说清楚，
+       否则用户会一直拿手机连一个根本没有在听的端口。 */
+    rows.push({k:t('状态'), v:t('已开启但端口未在监听（看日志：可能被占用）'), cls:'bad'});
+  }else{
+    const addrs = j.addrs || [];
+    if(addrs.length){
+      addrs.forEach((a,i)=>rows.push({k: i===0 ? t('手机访问') : '', v:a, cls:'ok'}));
+    }else{
+      rows.push({k:t('状态'), v:t('没检测到手机能连上的地址（这台电脑没连 WiFi/网线？）'), cls:'warn'});
+    }
+  }
+  /* 配置端口改了但还没重启：上面列的地址按**实际**监听端口生成，
+     这里必须说清楚，否则用户会以为"改了端口没生效 = 改坏了"。 */
+  if(j.pending_restart){
+    rows.push({k:t('端口'), v:t('已改为 {0}，重启 EnvKit 后生效（当前仍用 {1}）', j.port, j.listen_port), cls:'warn'});
+  }
+  ekRo('#s_lan_addr', rows);
+}
+
+/* ---------- 防火墙诊断 ---------- */
+
+/* 初始提示。**不自动查**：诊断要跑两次 PowerShell（读规则 + 读网络类别），
+   每次打开设置页都跑太贵，用户也未必关心。 */
+function ekSetLanFWIdle(){
+  const box = document.getElementById('s_lan_fw');
+  if(!box || box.dataset.loaded) return;
+  ekRo(box, [{k:t('防火墙'), v:t('点「检查防火墙」看 Windows 是否放行这个端口')}]);
+}
+
+/* 手机连不上的第一嫌疑不是 EnvKit，而是 Windows 防火墙 ——
+   本机访问 200、端口在监听，包却停在系统那一层，从程序里完全看不出来。
+   这里把规则状态、当前网络类别和该做什么一起给出来，避免用户到处试。 */
+async function ekSetLoadLanFW(){
+  const box = document.getElementById('s_lan_fw');
+  if(box) box.dataset.loaded = '1';
+  try{
+    const r = await fetch('/api/lan/fw');
+    const txt = await r.text();
+    let j = {};
+    try{ j = JSON.parse(txt); }catch(_){}
+    if(!r.ok) throw new Error((j && j.msg) || txt.trim() || ('HTTP ' + r.status));
+    ekSetRenderLanFW(j.diag || {});
+  }catch(e){
+    ekRo('#s_lan_fw', [{k:t('防火墙'), v:t('诊断失败：{0}', e), cls:'bad'}]);
+  }
+}
+
+function ekSetRenderLanFW(d){
+  const box = document.getElementById('s_lan_fw');
+  if(box) box.dataset.loaded = '1';
+  const rows = [];
+  rows.push({
+    k: t('防火墙'),
+    v: d.allowed ? t('已放行 TCP/{0}', d.port) : t('未放行 TCP/{0}', d.port),
+    cls: d.allowed ? 'ok' : 'bad'
+  });
+  if(d.network_name){
+    rows.push({k:t('网络'), v: d.network_name + (d.network_category ? '（' + d.network_category + '）' : ''), cls:''});
+  }
+  if(d.hint) rows.push({k:t('原因'), v:t(d.hint), cls: d.allowed ? '' : 'warn'});
+  if(d.advice) rows.push({k:t('建议'), v:t(d.advice), cls:''});
+  ekRo('#s_lan_fw', rows);
+  /* 已放行就别再留按钮：重复点只会再弹一次 UAC。 */
+  const btn = document.getElementById('btn-lan-fw');
+  if(btn) btn.style.display = d.allowed ? 'none' : '';
+}
+
+/* 放行按钮。POST 是**同步等确认**的（最长 90 秒，等用户在 UAC 窗口点「是」），
+   所以按钮期间必须禁用并改文案，否则用户会以为点了没反应而反复点。 */
+async function ekSetLanFWAllow(){
+  const btn = document.getElementById('btn-lan-fw');
+  if(btn){ btn.disabled = true; btn.textContent = t('放行中…（在 UAC 窗口点「是」）'); }
+  try{
+    const r = await fetch('/api/lan/fw',{method:'POST'});
+    const txt = await r.text();
+    let j = {};
+    try{ j = JSON.parse(txt); }catch(_){}
+    if(!r.ok) throw new Error((j && j.msg) || txt.trim() || ('HTTP ' + r.status));
+    ekSetRenderLanFW(j.diag || {});
+    if(j.diag && j.diag.allowed) toast(t('防火墙已放行'));
+    else toast(t('放行失败'), 'err');
+  }catch(e){
+    toast(t('放行失败：{0}', e), 'err');
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = t('放行防火墙（需要管理员权限）');
+    }
+  }
+}
+
+function ekLanAgo(ts){
+  if(!ts) return '';
+  const s = Math.max(0, Math.floor(Date.now()/1000) - ts);
+  if(s < 60) return t('刚刚');
+  if(s < 3600) return Math.floor(s/60) + t(' 分钟前');
+  if(s < 86400) return Math.floor(s/3600) + t(' 小时前');
+  return Math.floor(s/86400) + t(' 天前');
+}
+
+function ekSetRenderLanDevs(list, sel){
+  const box = document.querySelector(sel || '#s_lan_devs');
+  if(!box) return;
+  box.innerHTML = '';
+  if(!list.length){
+    const e = document.createElement('div');
+    e.className = 'ro-empty';
+    e.textContent = t('还没有手机配对过');
+    box.appendChild(e);
+    return;
+  }
+  list.forEach(d=>{
+    const row = document.createElement('div'); row.className = 'lan-dev';
+    const nm = document.createElement('span'); nm.className = 'nm';
+    nm.textContent = d.name || t('未知设备');
+    const tm = document.createElement('span'); tm.className = 'tm';
+    tm.textContent = ekLanAgo(d.last);
+    const b = document.createElement('button'); b.className = 'ghost';
+    b.textContent = t('移除');
+    b.onclick = async ()=>{
+      if(!confirm(t('移除后这台手机要重新配对，继续？'))) return;
+      try{
+        await fetch('/api/lan/kick',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:d.id})});
+        ekSetLoadLan();
+        toast(t('已移除该设备'));
+      }catch(e){ toast(t('网络错误：')+e, 'err'); }
+    };
+    row.appendChild(nm); row.appendChild(tm); row.appendChild(b);
+    box.appendChild(row);
+  });
+}
+
+async function ekSetSaveLan(patch){
+  try{
+    const r = await fetch('/api/lan/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(patch)});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){
+      toast((j && j.msg) || t('保存失败'), 'err');
+      return null;
+    }
+    EK_EXT.lan = j;
+    return j;
+  }catch(e){ toast(t('网络错误：')+e, 'err'); return null; }
+}
+
+/* 个人中心开关。开启成功后**自动弹出配对窗** ——
+   用户开这个开关的目的就是"让手机连上"，开完还让他自己去设置页找地址，
+   等于把下一步藏起来了。 */
+async function ekLanToggle(on){
+  if(on){
+    const j = await ekSetSaveLan({enabled:true});
+    if(!j){ ekLanPaintSwitch(false); return; }
+    await ekSetLoadLan();
+    toast(t('手机访问已开启'));
+    ekLanPairOpen();
+    return;
+  }
+  const j = await ekSetSaveLan({enabled:false});
+  if(!j){ ekLanPaintSwitch(true); return; }
+  await ekSetLoadLan();
+  toast(t('手机访问已关闭'));
+}
+
+/* 开关 + 副标题。单独抽出来：失败回滚时要用，不能只改 checked 不改文案。 */
+function ekLanPaintSwitch(on){
+  const sw = document.getElementById('pp_lan_on');
+  if(sw) sw.checked = !!on;
+  const sub = document.getElementById('pp_lan_sub');
+  if(sub && !on) sub.textContent = t('关');
+}
+
+/* 配对弹窗内容 */
+function ekLanPairPaint(j){
+  j = j || EK_EXT.lan || {};
+  const code = document.getElementById('lp_code');
+  if(code) code.textContent = j.pair_code || '——';
+  const url = document.getElementById('lp_url');
+  if(url){
+    const a = (j.addrs && j.addrs[0]) || '';
+    url.textContent = a ? a + (a.indexOf('?') >= 0 ? '&' : '?') + 'code=' + (j.pair_code||'') : t('（没找到手机能连的地址）');
+  }
+  const qr = document.getElementById('lp_qr');
+  if(qr){
+    const ok = j.enabled && (j.addrs || []).length > 0;
+    qr.style.display = ok ? '' : 'none';
+    if(ok) ekLanLoadQR(qr);
+  }
+}
+
+/* 加载二维码。
+   **不能直接写 <img src="/api/lan/qr">** ——
+   <img> 发请求不会带 X-EnvKit-Token 头，而主控制台的接口要令牌，
+   结果就是一片碎图标（用户看到的是"二维码坏了"）。
+   所以走 fetch（带令牌头）→ 转成 data URL。
+
+   为什么用 data URL 而不是 objectURL：
+   **CSP 的 img-src 是 `'self' data:`，不含 blob:** ——
+   用 URL.createObjectURL 会被 CSP 拦掉，img.onerror 触发，
+   用户看到的还是"二维码坏了"（本项目 AI 图片附件踩过同一个坑，见 app.js 5941 行）。
+   data URL 在 img-src 白名单里，不用改 CSP。 */
+async function ekLanLoadQR(qr){
+  try{
+    const r = await fetch('/api/lan/qr?t=' + Date.now());
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const rd = new FileReader();
+    rd.onload = ()=>{ qr.src = rd.result; };
+    rd.onerror = ()=>{ qr.alt = t('二维码加载失败'); };
+    rd.readAsDataURL(blob);
+  }catch(e){
+    qr.alt = t('二维码加载失败（{0}）', e);
+  }
+}
+
+function ekLanPairOpen(){
+  const m = document.getElementById('lanpair');
+  if(!m) return;
+  m.classList.add('show');
+  ekSetLoadLan();
+}
+
+function ekLanPairClose(){
+  const m = document.getElementById('lanpair');
+  if(m) m.classList.remove('show');
+}
+
+async function ekSetLanRotate(){
+  try{
+    const r = await fetch('/api/lan/rotate',{method:'POST'});
+    if(!r.ok){ toast(t('更换失败'), 'err'); return; }
+    const j = await r.json();
+    await ekSetLoadLan();
+    toast(t('配对码已更换，旧码立即失效'));
+  }catch(e){ toast(t('网络错误：')+e, 'err'); }
+}
+
+async function ekSetLanSetPw(){
+  const pw = $('#s_lan_pw').value;
+  if(pw.length < 6){ toast(t('密码至少 6 位'), 'err'); return; }
+  const j = await ekSetSaveLan({password:pw});
+  if(!j) return;
+  await ekSetLoadLan();
+  toast(t('密码已设置，手机上可以用它代替配对码'));
+}
+
+async function ekSetLanClearPw(){
+  if(!confirm(t('清除后手机只能用配对码进入，继续？'))) return;
+  const j = await ekSetSaveLan({clear_password:true});
+  if(!j) return;
+  await ekSetLoadLan();
+  toast(t('密码已清除'));
+}
+
+async function ekSetLanPort(){
+  const el = $('#s_lan_port');
+  const n = parseInt(el.value, 10);
+  if(isNaN(n) || n < 1024 || n > 65535){ toast(t('端口需在 1024-65535'), 'err'); return; }
+  const j = await ekSetSaveLan({port:n});
+  if(!j) return;
+  /* 存成功才算"用户已经定下这个值"，之后后台刷新不再覆盖它。 */
+  el.dataset.touched = '1';
+  /* 已经开着且端口不同 → 得重启；开关关着时下一次开启就会用新端口，不必吓唬用户。 */
+  toast(j.pending_restart ? t('端口已保存，重启 EnvKit 后生效') : t('端口已保存'));
+  await ekSetLoadLan();
+}
+
 /* ---------- 更新检查 ---------- */
 
 async function ekSetLoadUpdate(){
@@ -7546,10 +8327,58 @@ async function ekSetSaveUpdate(recheck){
   auto('s_update_url', ()=>ekSetSaveUpdate(false));
   auto('s_upd_interval', ()=>ekSetSaveUpdate(false));
   auto('s_upd_ignore', ()=>ekSetSaveUpdate(false));
+  /* 手机访问：端口用 change（改完即存）。开关不在这里 ——
+     v3.6.2 已迁到顶栏「个人中心」（#pp_lan_on），那里是唯一写入口。 */
+  auto('s_lan_port', ekSetLanPort);
   document.addEventListener('click', ev=>{
     const el = ev.target;
     if(!el || !el.id) return;
     if(el.id === 'btn-s-alert-test') ekSetAlertTest();
     else if(el.id === 'btn-s-upd-check') ekSetSaveUpdate(true);
+    else if(el.id === 'btn-lan-pw') ekSetLanSetPw();
+    else if(el.id === 'btn-lan-pw-clear') ekSetLanClearPw();
+    else if(el.id === 'btn-lan-fw') ekSetLanFWAllow();
+    else if(el.id === 'btn-lan-fw-check') ekSetLoadLanFW();
+    else if(el.id === 'btn-lan-open' || el.id === 'btn-lan-open2') ekLanPairOpen();
+    else if(el.id === 'lp_rotate') ekSetLanRotate();
+    else if(el.id === 'lp-close') ekLanPairClose();
+    else if(el.id === 'lp_copy'){
+      const u = document.getElementById('lp_url');
+      const txt = u ? u.textContent : '';
+      if(!txt) return;
+      navigator.clipboard.writeText(txt).then(
+        ()=> toast(t('网址已复制')),
+        ()=> toast(t('复制失败，请手动选中网址'), 'err'));
+    }
   });
+})();
+
+/* ---------- 手机访问：个人中心开关与配对弹窗（v3.6.2） ---------- */
+(function(){
+  const sw = document.getElementById('pp_lan_on');
+  if(sw){
+    sw.addEventListener('change', ()=>{
+      ekLanToggle(sw.checked);
+    });
+  }
+  /* 弹窗点背景关闭（点 .mbox 内部不关）。 */
+  const m = document.getElementById('lanpair');
+  if(m){
+    m.addEventListener('click', e=>{
+      if(e.target === m) ekLanPairClose();
+    });
+  }
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape' && m && m.classList.contains('show')) ekLanPairClose();
+  });
+  /* 打开个人中心时刷新一次状态（开关可能被别人改过）。 */
+  const btn = document.getElementById('btn-profile');
+  if(btn) btn.addEventListener('click', ()=>{ setTimeout(()=>ekSetLoadLan(), 60); });
+
+  /* **页面一进来就把开关状态读回来**。
+     旧实现只在打开「程序配置」页时调 ekSetLoadLan，于是个人中心里那个开关
+     一开始显示的是未勾选 —— 用户看到"关着"，实际是开着的；
+     他一碰就把它关了（真实会发生的事，不是理论风险）。
+     开关在个人中心下，状态就必须自己负责读，不能指望别的面板顺带刷新。 */
+  ekSetLoadLan();
 })();

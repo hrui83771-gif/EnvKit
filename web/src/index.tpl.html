@@ -71,6 +71,17 @@
             <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
           </div>
           <div class="pp-sep"></div>
+          <!-- v3.6.2：手机访问独立开关放在个人中心下，不再混在「程序配置」的卡片里。
+               点开弹出配对弹窗（配对码 / 注意项 / 网址 / 二维码）。 -->
+          <div class="pp-lan" id="pp-lan-row">
+            <label class="switch"><input type="checkbox" id="pp_lan_on"><span class="sl"></span></label>
+            <div class="cktext">
+              <b id="pp_lan_title">手机访问</b>
+              <span class="hint" id="pp_lan_sub">关</span>
+            </div>
+          </div>
+          <button class="pp-lan-open" id="btn-lan-open">配对与扫码…</button>
+          <div class="pp-sep"></div>
           <button class="pp-exit" id="btn-exit-app">退出程序</button>
         </div>
       </div>
@@ -706,6 +717,38 @@
           </div>
 
           <div class="set-card">
+            <div class="set-card-head"><span class="t">手机访问</span><span class="tag">局域网</span></div>
+            <!-- v3.6.2：开关与配对信息已迁到顶栏「个人中心」下（#pp_lan_on + 配对弹窗）。
+                 这里只留"当前状态"和跳转入口，避免同一个开关有两处写入口
+                 （MEMORY 第 2 条：同一字段只许一个写入口）。 -->
+            <div class="ro-list" id="s_lan_addr" style="margin-top:0"></div>
+            <div class="row" style="margin-top:10px">
+              <button class="ghost" id="btn-lan-open2">打开配对弹窗</button>
+              <span class="hint">开关在顶栏「个人中心」下</span>
+            </div>
+            <label for="s_lan_pw">访问密码（可选，长期有效）</label>
+            <div class="dirrow">
+              <input id="s_lan_pw" type="password" placeholder="不设就只用配对码" autocomplete="new-password" />
+              <button class="ghost" id="btn-lan-pw">设置</button>
+            </div>
+            <div class="row" style="margin-top:4px">
+              <span class="hint" id="s_lan_pw_state">未设置密码</span>
+              <button class="ghost" id="btn-lan-pw-clear" style="display:none;margin-left:auto">清除密码</button>
+            </div>
+            <label for="s_lan_port">端口</label>
+            <input id="s_lan_port" type="number" min="1024" max="65535" placeholder="18766" />
+            <!-- 防火墙诊断：手机连不上时最容易被误判成"EnvKit 坏了"的一环。
+                 本机访问正常、端口也在监听，包却停在 Windows 那里。
+                 **只在点「检查」时查**：诊断要跑两次 PowerShell，设置页每次打开都跑
+                 太贵（这条是用户在 v3.6.2 明确要求的，见 cdp_lan_fw_test.js）。 -->
+            <div class="ro-list" id="s_lan_fw" style="margin-top:8px"></div>
+            <div class="row" style="margin-top:6px">
+              <button class="ghost" id="btn-lan-fw-check">检查防火墙</button>
+              <button class="ghost" id="btn-lan-fw">放行防火墙（需要管理员权限）</button>
+            </div>
+          </div>
+
+          <div class="set-card">
             <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
             <label for="s_proxy_http">HTTP 代理</label>
             <input id="s_proxy_http" placeholder="http://127.0.0.1:7890" />
@@ -1004,6 +1047,7 @@
       </div>
       <div class="svcitem">
         <div class="svcitem-top"><span>前端</span><span class="svcstate" id="su-web">未启动</span></div>
+        <div class="svcres" id="sr-web"></div>
         <a class="svclink" id="sl-web" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-web" style="display:none">
           <button class="mini" id="btn-brk-web" data-brk="web">复位断路器</button>
@@ -1011,6 +1055,7 @@
       </div>
       <div class="svcitem">
         <div class="svcitem-top"><span>后端</span><span class="svcstate" id="su-backend">未启动</span></div>
+        <div class="svcres" id="sr-backend"></div>
         <a class="svclink" id="sl-backend" target="_blank" style="display:none"></a>
         <div class="brk-row" id="brk-backend" style="display:none">
           <button class="mini" id="btn-brk-backend" data-brk="backend">复位断路器</button>
@@ -1021,6 +1066,7 @@
         <a class="svclink" id="sl-webase" target="_blank" style="display:none"></a>
       </div>
     </div>
+    <button class="side-link" id="btn-syslog">系统事件（最近错误）</button>
     <button class="side-link" id="btn-about">关于 / 免责声明</button>
   </aside>
 </div>
@@ -1046,6 +1092,18 @@
     <div class="mfoot">
       <button class="ghost" id="cf-cancel">取消</button>
       <button id="cf-ok">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="syslog">
+  <div class="mbox">
+    <div class="mhead">系统事件（最近错误）</div>
+    <div class="slist" id="syslog-list"></div>
+    <div class="mfoot">
+      <span class="muted" id="syslog-meta" style="margin-right:auto;font-size:11.5px"></span>
+      <button class="ghost" id="syslog-refresh">重新读取</button>
+      <button id="syslog-close">关闭</button>
     </div>
   </div>
 </div>
@@ -1097,6 +1155,50 @@
     <div class="mfoot">
       <button class="ghost" id="exit-cancel">取消</button>
       <button id="exit-confirm" style="background:#c0392b;color:#fff">退出</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="lanpair">
+  <div class="mbox" style="width:min(560px,94vw)">
+    <div class="mhead">手机访问 · 配对</div>
+    <div class="lanpair-body">
+      <div class="lanpair-l">
+        <div class="lanpair-row">
+          <label>配对码（每次启动都会变）</label>
+          <div class="lanpair-code" id="lp_code">——</div>
+        </div>
+        <div class="lanpair-row">
+          <label>访问网址</label>
+          <div class="lanpair-url" id="lp_url">——</div>
+        </div>
+        <div class="lanpair-row">
+          <label>注意</label>
+          <ul class="lanpair-notes">
+            <li>手机要和这台电脑在<b>同一个 WiFi</b>下；连的是移动数据就连不上。</li>
+            <li>配对码<b>每次启动 EnvKit 都会变</b>；想换新的点「换一个码」，旧码立刻失效。</li>
+            <li>配对后这台手机就<b>长期受信任</b>了（30 天）。不想要了就关掉开关，或在下面移除设备。</li>
+            <li>同一个 WiFi 下的其他设备也能看到这个地址，<b>配对码就是唯一的门</b>。</li>
+          </ul>
+        </div>
+        <div class="lanpair-row">
+          <label>已配对的设备</label>
+          <div class="lan-devs" id="lp_devs"></div>
+        </div>
+      </div>
+      <div class="lanpair-r">
+        <div class="lanpair-qr">
+          <img id="lp_qr" alt="扫码配对" />
+          <div class="lanpair-qrtip">用手机相机扫一扫<br>直接进配对页</div>
+        </div>
+        <div class="lanpair-ops">
+          <button class="ghost" id="lp_rotate">换一个码</button>
+          <button class="ghost" id="lp_copy">复制网址</button>
+        </div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="ghost" id="lp-close">关闭</button>
     </div>
   </div>
 </div>
@@ -1184,9 +1286,10 @@
     <div class="ai-main">
       <div id="ai-msgs" aria-live="polite"><div class="ai-msg sys">你好！我可以查看日志与状态、执行备份/检测/启停等操作（写操作需你确认）。试试问我"后端为什么起不来"或"帮我备份数据库"。</div></div>
       <div class="ai-chips" id="ai-chips" hidden></div>
+      <div class="ai-attach" id="ai-attach" hidden></div>
       <div class="ai-input">
         <button class="ai-plus" id="ai-plus" title="选择文件引用">＋</button>
-        <textarea id="ai-in" rows="2" placeholder="问我任何环境问题...（Enter 发送，可拖入文件）"></textarea>
+        <textarea id="ai-in" rows="2" placeholder="问我任何环境问题...（Enter 发送；可拖入图片/文件，或直接 Ctrl+V 粘贴截图）"></textarea>
         <button id="ai-send">发送</button>
       </div>
       <div class="ai-pick" id="ai-pick">

@@ -13,6 +13,9 @@ type TrayActions struct {
 	Ready          func()
 	CreateShortcut func()
 	ToggleWindow   func() bool
+	// LanBadge / OpenLan：与 Windows 版同一语义（见 tray_windows.go）。
+	LanBadge func() string
+	OpenLan  func()
 }
 
 // RunTray 非 Windows 直接返回，main 会回到正常的阻塞式服务循环。

@@ -84,7 +84,52 @@ func verifyService(target string, wait time.Duration) OpResult {
 		svcRecordCrash(target, errKindCrash, firstLines(r.Msg, 120), 0)
 	}
 	svcRecordVerify(target, firstLines(r.Msg, 160), kind, ok)
+	// v3.6.2：复验有结论 = 这一轮启动结束了 —— 在这里收掉"启动中"标志。
+	//
+	// 为什么收在这里而不是 opStartWeb 里：按钮路径、AI 路径、守护路径三条启动流程
+	// **都**以 verifyService 收尾，它是唯一的共同出口。放在任一条路径里都会漏。
+	//
+	// 旧实现只在进程退出时才清这面旗标，于是只要进程活着，runtimeService 就永远
+	// 判 phStarting —— 用户看到的就是"服务明明已经好了，界面还写着启动中"。
+	// 这面旗标的语义是"一轮启动还在进行中（含复验等待）"，不是"进程还活着"。
+	endStartFlag(target, r)
 	return r
+}
+
+// endStartFlag 结束一轮启动的"启动中"标志。
+//
+// 只在旗标**确实处于进行中**时才写 —— 免得把一条历史结论覆盖成"已复验"。
+// 读锁与写锁分开：setProg 自己会拿 progMu，持有时再调就是自锁。
+//
+// 结论按三态落，而不是只按 True/False：
+//
+//	Ok && Verified  → ok      （真的起来了，且过了存活观察窗）
+//	Ok && !Verified → warn    （进程已派生但复验窗口内没验到，可能还在编译）
+//	!Ok             → fail    （进程退出 / 脚本报错 / 参数不对）
+//
+// 中间那一档以前被压成 false，界面于是把"45 秒没听到端口"画成红色"失败"——
+// 而服务往往只是慢，编译完就自己起来了。**误杀比漏报更糟**：它会让人去修
+// 一个没坏的服务，下次真失败时反而不信了。
+func endStartFlag(target string, r OpResult) {
+	key := target + "-start"
+	progMu.Lock()
+	ps, has := progState[key]
+	progMu.Unlock()
+	if !has || !ps.Running {
+		return
+	}
+	msg := firstLines(r.Msg, 120)
+	if msg == "" {
+		msg = "启动流程已结束"
+	}
+	status := progFail
+	switch {
+	case r.Ok && r.Verified:
+		status = progOK
+	case r.Ok:
+		status = progWarn
+	}
+	setProgStatus(key, false, status, msg)
 }
 
 func verifyServiceInner(target string, wait time.Duration) OpResult {

@@ -267,7 +267,7 @@ func aiConfirmApply(w http.ResponseWriter, fl http.Flusher, tool string, d aiCon
 		aiToolCnName(tool, d.Args) + "…（可能需要几十秒到几分钟，请稍候）\n"})
 	// **按服务端登记的副本执行**：哈希一致之外的双保险——
 	// 回传参数与登记参数哪怕逐字节相等，也不走客户端那份。
-	out, err := aiToolRegistry[tool].Execute(d.Args)
+	out, err := aiExecTool(tool, d.Args)
 	// ---- v3.0 T1.7：确认续跑这条路的复验结论也要发事件 ----
 	//
 	// 写工具（start_service / restart_service / db_backup …）**全部**

@@ -102,6 +102,20 @@ func main() {
 
 	go updateLoop() // 自版本检查（未配置 update_url 或已关闭时静默跳过；间隔可配）
 
+	// 图片附件目录（<exeDir>/aiattach）24 小时自动清理。
+	// 启动先扫一遍：用户关掉 EnvKit 的那些天里没人扫，重启时该清的当场清掉。
+	aiAttachStartGC()
+
+	// 进程资源后台采样（2s 一轮）+ 配置文件热重载（监听 exe 同目录）。
+	// 两者都只读、都不改变启动流程；监听必须在 loadConfig 之后接线，
+	// 否则首次事件会把"启动时读到的内容"当成外部改动。
+	procStatsStart()
+	cfgWatchStart()
+
+	// 手机访问：生成本次进程的配对码；开关已打开时另起一个监听（0.0.0.0:18766）。
+	// 主控制台仍然只听 127.0.0.1 —— 两个 mux 不是同一个对象，见 lanaccess.go 开头。
+	lanInit()
+
 	// 控制台关闭钩子：点窗口 X 先弹确认，退出前停掉启动的子进程（internal/platform）
 	// Ctrl+C / 关窗口事件 → 停子进程 → 退出，绝不留无窗口的后台孤儿。
 	platform.InstallConsoleHook(func() {
@@ -153,6 +167,8 @@ func main() {
 	http.HandleFunc("/api/program/exit", handleProgramExit)
 	http.HandleFunc("/api/ports/scan", handlePortScan)
 	http.HandleFunc("/api/ports/kill", handlePortKill)
+	http.HandleFunc("/api/proc/stats", handleProcStats) // 进程资源（只读，后台采样的快照）
+	http.HandleFunc("/api/win/events", handleWinEvents) // Windows 事件日志（只读，30s 缓存）
 	http.HandleFunc("/api/program/cleanup", handleCleanupProcs)
 	http.HandleFunc("/api/program/breaker-reset", handleBreakerReset)
 	http.HandleFunc("/api/program/state", handleProgState)
@@ -165,6 +181,7 @@ func main() {
 	http.HandleFunc("/api/ai/debug", handleAIDebug)
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/attach", handleAIAttach)   // 图片附件：拖入/粘贴的图片落盘，消息里只留引用
 	http.HandleFunc("/api/ai/confirm", handleAIConfirm) // v3.2：确认卡就地等待的投递口
 	http.HandleFunc("/api/ai/echo", handleAIEcho)       // v3.2：传输自检（请求体有没有被吃）
 	http.HandleFunc("/api/ai/explain", handleAIExplain)
@@ -208,6 +225,13 @@ func main() {
 	http.HandleFunc("/api/eval/run", handleEvalRun)       // v3.4 四档评测（破坏性档走 428）
 	http.HandleFunc("/api/dist/export", handleDistExport)
 	http.HandleFunc("/api/self-update", handleSelfUpdate)
+	// 手机访问（v3.6.2）：开关/端口/密码/设备管理都只在本机控制台上。
+	// 手机端走的是另一个 mux（见 lanaccess.go），这些端点在那上面不存在。
+	http.HandleFunc("/api/lan/config", handleLanConfig)
+	http.HandleFunc("/api/lan/rotate", handleLanRotate)
+	http.HandleFunc("/api/lan/kick", handleLanKick)
+	http.HandleFunc("/api/lan/qr", handleLanQR)
+	http.HandleFunc("/api/lan/fw", handleLanFW)
 
 	// 控制台端口来自 dev 段（默认 18765，被占用则顺延到 port_scan_limit）
 	dv := devSnap()
@@ -266,6 +290,17 @@ func main() {
 		OpenConsole: func() { openBrowser(openURL) },
 		OpenConfig:  func() { openBrowser(openURL + "#config") },
 		OpenLogs:    func() { platform.OpenFolder(exeDir()) },
+		LanBadge: func() string {
+			c := lanSnap()
+			if !c.on() {
+				return "手机访问：未开启"
+			}
+			if !lanServeRunning() {
+				return "手机访问：未监听（端口被占用？看日志）"
+			}
+			return "手机访问：配对码 " + lanPairCodeCur()
+		},
+		OpenLan: func() { openBrowser(openURL + "#config") },
 		CreateShortcut: func() {
 			// 用 os.Executable 的绝对路径，不用 exeDir()+文件名拼——临时改过名的 exe
 			// （比如 EnvKit_ab.exe）也能指向它自己，快捷方式不会失效。

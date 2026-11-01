@@ -227,20 +227,28 @@ func runtimeService(target string) ServiceState {
 		}
 	}
 	st.Phase = phStopped
+	// 复验结论来自统一注册表（svcstate.go）。
+	//
+	// 判定用 svcVerifyRec.Verified 布尔，**不做字符串匹配**——早先写成
+	// strings.Contains(v, "已复验通过")，一旦 AI 换个说法就误判成"没验过"，
+	// 状态灯会莫名变黄。结论文本是给人看的，布尔才是给机器判断的。
+	rec := svcSnapshot(target)
+	// "启动中"只在**还没验过**时成立。
+	//
+	// v3.6.2 修「已经好了，还显示启动中」：
+	// progState["web-start"].Running 这面旗标的生命周期 = 一轮启动（派生 + 复验）。
+	// 它原先只在进程退出时才被清，于是只要进程活着，界面就永远停在「启动中」。
+	// 现在复位点收在 verifyService（所有启动路径的共同出口），但这里再加一道兜底：
+	// **只要复验已经通过，就不可能还在"启动中"**——这两件事互斥。
+	// 宁可少报一次"启动中"，也不能把"已经好了"说成"还在启动"（把对判成错）。
 	switch {
-	case starting:
+	case starting && !rec.Verified:
 		st.Phase = phStarting
 	case !si.Running:
 		st.Phase = phStopped
 	default:
 		st.Phase = phRunning
 	}
-	// 复验结论与崩溃历史来自统一注册表（svcstate.go）。
-	//
-	// 判定用 svcVerifyRec.Verified 布尔，**不做字符串匹配**——早先写成
-	// strings.Contains(v, "已复验通过")，一旦 AI 换个说法就误判成"没验过"，
-	// 状态灯会莫名变黄。结论文本是给人看的，布尔才是给机器判断的。
-	rec := svcSnapshot(target)
 	if rec.Conclusion != "" || rec.ErrKind != "" {
 		st.LastVerify = rec.Conclusion
 		st.VerifyAt = rec.VerifyAt
