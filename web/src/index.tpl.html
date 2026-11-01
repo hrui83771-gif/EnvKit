@@ -563,43 +563,46 @@
       </div>
 
       <div class="card" id="ai-memory-box" style="margin-top:14px;display:none">
-        <h3>记忆与经验 <span class="stepno">让助手下次不再犯同样的错</span></h3>
+        <div class="mp-head">
+          <h3>记忆与经验 <span class="stepno">让助手下次不再犯同样的错</span></h3>
+          <span class="mp-count" id="mem-sum"></span>
+          <div class="mp-tools">
+            <button class="mini" id="mem-import-btn" title="每行一条，支持「- 内容 | 标签」或 JSON 数组；重复内容自动更新而非新增">批量导入</button>
+            <button class="mini" id="mem-refresh">刷新</button>
+          </div>
+        </div>
         <div id="mem-gate-off" class="hint" style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;display:none">
           记忆层当前<b>未启用</b>：以下内容可查看与编辑，但不会注入到模型对话中。请在「服务商与密钥」处开启「记忆与经验」。
         </div>
-        <div class="muted" style="line-height:1.8;margin-bottom:10px">
+        <div class="mp-note">
           <b>我的记忆</b>是你写给助手的规矩，它必须遵守；<b>自动经验</b>是系统从操作审计里统计出的失败模式，只是建议，你可以逐条否决。
           优先级：<b>你当场的明确要求 &gt; 我的记忆 &gt; 自动经验</b>。
         </div>
 
-        <div class="row" style="margin:0 0 8px;gap:6px;flex-wrap:wrap">
-          <input id="mem-text" placeholder="写一条长期规矩，例如：备份前先停掉后端服务" style="flex:1;min-width:200px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
-          <input id="mem-tags" placeholder="标签（可选）" style="width:110px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
-          <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="mem-always">每轮都注入</label>
-          <label class="hint" style="display:flex;align-items:center;gap:4px;white-space:nowrap" title="默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。"><input type="checkbox" id="mem-global">全局适用</label>
-          <button class="mini" id="mem-add">添加</button>
-        </div>
-        <div class="row" style="margin:0 0 8px;gap:6px;flex-wrap:wrap">
-          <button class="mini" id="mem-import-btn">批量导入</button>
-          <span class="hint">每行一条，支持 <code>- 内容 | 标签</code> 或 JSON 数组；重复内容自动更新而非新增</span>
-          <span style="flex:1"></span>
-          <button class="mini" id="mem-refresh">刷新</button>
-        </div>
-
-        <div class="row" style="margin:0 0 10px;gap:6px;flex-wrap:wrap">
-          <input id="mem-preview-task" placeholder="试算：输入一句话任务，看本轮会注入哪些记忆 / 经验" style="flex:1;min-width:220px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)">
-          <button class="mini" id="mem-preview">试算</button>
-          <span class="hint" id="mem-preview-hint"></span>
+        <!-- 输入区：一句话就写在这里（多行、可拉伸）。选项与按钮放同一行下方，
+             不再和输入框抢宽度。 -->
+        <div class="mp-editor">
+          <textarea id="mem-text" rows="3" placeholder="写一条长期规矩，例如：备份前先停掉后端服务（Ctrl+Enter 添加）"></textarea>
+          <div class="mp-editor-bar">
+            <input id="mem-tags" class="mp-tags" placeholder="标签（可选）">
+            <label class="mp-chk"><input type="checkbox" id="mem-always">每轮都注入</label>
+            <label class="mp-chk" title="默认只在本项目生效。换项目后自动失效——上次那台机器的经验套到当前项目往往是错的。真正通用的规矩（如备份前先停后端）才勾。"><input type="checkbox" id="mem-global">全局适用</label>
+            <button id="mem-add" class="mp-add">添加记忆</button>
+          </div>
+          <div class="mp-tip">要一次写多条，点右上角「批量导入」：每行一条，支持「- 内容 | 标签」或 JSON 数组；内容重复会自动更新而非新增。</div>
         </div>
 
-        <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:260px;min-height:60px;margin-bottom:14px">
+        <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:300px;min-height:60px;margin-bottom:14px">
           <table class="vtab" id="mem-grid" style="min-width:640px">
-            <thead><tr><th style="width:34px">常</th><th style="min-width:180px">记忆内容</th><th style="width:96px">标签</th><th style="width:88px">加入时间</th><th style="width:76px">范围</th><th style="width:132px">操作</th></tr></thead>
+            <thead><tr><th style="width:34px" title="★ = 每轮都注入；空 = 按需注入（话题相关时才带上）">常</th><th style="min-width:180px">记忆内容</th><th style="width:96px">标签</th><th style="width:88px">加入时间</th><th style="width:76px">范围</th><th style="width:156px">操作</th></tr></thead>
             <tbody id="mem-body"></tbody>
           </table>
         </div>
 
-        <h3 style="margin-top:4px">自动经验 <span class="stepno">从操作记录统计，不是你在下的命令</span></h3>
+        <div class="mp-head">
+          <h3>自动经验 <span class="stepno">从操作记录统计，不是你在下的命令</span></h3>
+          <span class="mp-count" id="les-sum"></span>
+        </div>
         <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:300px;min-height:60px">
           <table class="vtab" id="les-grid" style="min-width:820px">
             <thead><tr><th style="width:84px">类型</th><th style="min-width:240px">结论</th><th style="width:72px">成败</th><th style="width:74px">置信度</th><th style="width:96px">适用范围</th><th style="width:44px">次数</th><th style="width:76px">采用</th></tr></thead>
@@ -708,12 +711,23 @@
 
       <!-- ==================== 基础 ==================== -->
       <div class="cfg-pane show" data-set-pane="base">
-        <div class="set-grid">
+        <!-- 两列各自纵向堆叠（v3.7.1）。
+             原来是 auto 两列 grid：矮卡被同行的高卡拉齐后右边留一个大洞
+             （「安装与分发」100px 挨着「手机访问」340px → 空 240px），
+             末行「界面」独占左列、右列整块空着。
+             改成显式两列 + flex 纵向堆之后，同一列里不会再出现"洞"；
+             两列总量按 1100px 上下配平（实测左侧 1335 / 右侧 1295）。 -->
+        <div class="set-cols">
+          <div class="set-col">
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">安装与分发</span><span class="tag">本机</span></div>
+            <div class="set-card-head"><span class="t">本机与外观</span><span class="tag">本机</span></div>
             <label for="s_install_dir">安装目录</label>
             <div class="dirrow"><input id="s_install_dir" placeholder="D:\EnvKit" /><button class="ghost" data-spick="s_install_dir">选择</button></div>
+            <div class="grid">
+              <div><label for="s_app_name">产品名</label><input id="s_app_name" placeholder="EnvKit" /></div>
+              <div><label for="s_app_title">副标题</label><input id="s_app_title" placeholder="统一开发环境助手" /></div>
+            </div>
           </div>
 
           <div class="set-card">
@@ -749,14 +763,6 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
-            <label for="s_proxy_http">HTTP 代理</label>
-            <input id="s_proxy_http" placeholder="http://127.0.0.1:7890" />
-            <label for="s_proxy_https">HTTPS 代理</label>
-            <input id="s_proxy_https" placeholder="http://127.0.0.1:7890" />
-          </div>
-
-          <div class="set-card">
             <div class="set-card-head"><span class="t">镜像与校验</span><span class="tag">Go / npm</span></div>
             <div class="grid">
               <div><label for="s_goproxy">GOPROXY</label><input id="s_goproxy" placeholder="https://goproxy.cn,direct" /></div>
@@ -767,23 +773,54 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">项目目录</span><span class="tag">前端 / 后端</span></div>
+            <div class="set-card-head"><span class="t">项目与路径</span><span class="tag">前端 / 后端 / 备份</span></div>
             <label for="s_fe_dir">前端目录</label>
             <div class="dirrow"><input id="s_fe_dir" placeholder="D:\project\web" /><button class="ghost" data-spick="s_fe_dir">选择</button></div>
             <label for="s_be_dir">后端目录</label>
             <div class="dirrow"><input id="s_be_dir" placeholder="D:\project\server" /><button class="ghost" data-spick="s_be_dir">选择</button></div>
+            <!-- 备份目录以前只能手改 config.json：dbops.go 的 mysqldump 会读它，
+                 留空才回落到 exe 同级的 backups/。放在这里之后，"备份存到哪块盘"
+                 终于是界面上能改的一件事。 -->
+            <label for="s_backup_dir">备份目录</label>
+            <div class="dirrow"><input id="s_backup_dir" placeholder="留空 = exe 同级的 backups" /><button class="ghost" data-spick="s_backup_dir">选择</button></div>
+            <div class="hint" id="s_backup_now">—</div>
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">数据库</span><span class="tag">只读</span></div>
-            <div class="ro-list" id="s_db_view"></div>
-            <div class="row"><button class="ghost" data-goto="config">去程序配置修改</button></div>
+            <div class="set-card-head"><span class="t">端口线索</span><span class="tag">复验 / 诊断</span></div>
+            <!-- projects.scan_ports 原来只存在于 config.json 里：verify.go 用它当
+                 "启动后去哪个端口确认服务真的起来了" 的候选表，端口写错就复验不过，
+                 而界面上根本没地方改。紧挨「项目与路径」，因为它就是项目的端口。 -->
+            <label for="s_scan_ports">服务端口（逗号分隔）</label>
+            <input id="s_scan_ports" placeholder="留空 = 自动推断（8080、8888）" title="启动后复验按这份清单找服务；留空时由项目画像与内置默认推断。" />
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">链端</span><span class="tag">只读</span></div>
-            <div class="ro-list" id="s_chain_view"></div>
-            <div class="row"><button class="ghost" data-goto="chain">去链端校验修改</button></div>
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b></div>
+            </div>
+            <div class="grid">
+              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
+                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
+              <div><label for="s_ms_brief">晨报时刻</label>
+                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
+            </div>
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
+            </div>
+          </div>
+
+          </div>
+          <div class="set-col">
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">本机体检</span><span class="tag">只读</span></div>
+            <!-- 只放别处没有的结论：数据库/链端的明细在下面两张卡里，
+                 这里再抄一遍等于同一个指标两处显示（口径迟早分叉）。 -->
+            <div class="ro-list" id="s_health_view" style="margin-top:2px"></div>
           </div>
 
           <div class="set-card">
@@ -805,6 +842,26 @@
           </div>
 
           <div class="set-card">
+            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
+            <div class="grid">
+              <div><label for="s_proxy_http">HTTP 代理</label><input id="s_proxy_http" placeholder="http://127.0.0.1:7890" /></div>
+              <div><label for="s_proxy_https">HTTPS 代理</label><input id="s_proxy_https" placeholder="http://127.0.0.1:7890" /></div>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">数据库</span><span class="tag">只读</span></div>
+            <div class="ro-list" id="s_db_view"></div>
+            <div class="row"><button class="ghost" data-goto="config">去程序配置修改</button></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">链端</span><span class="tag">只读</span></div>
+            <div class="ro-list" id="s_chain_view"></div>
+            <div class="row"><button class="ghost" data-goto="chain">去链端校验修改</button></div>
+          </div>
+
+          <div class="set-card">
             <div class="set-card-head"><span class="t">告警与通知</span><span class="tag">挂机</span></div>
             <div class="ckrow" style="margin-top:0">
               <label class="switch"><input type="checkbox" id="s_notify_mute"><span class="sl"></span></label>
@@ -820,50 +877,26 @@
             <div class="row" style="margin-top:4px"><span class="hint" id="s_alert_state">—</span></div>
           </div>
 
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
-              <div class="cktext"><b>启用定时巡检与晨报</b></div>
-            </div>
-            <div class="grid">
-              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
-                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
-              <div><label for="s_ms_brief">晨报时刻</label>
-                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
-            </div>
-            <div class="ckrow">
-              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
-              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
-            </div>
           </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">界面</span><span class="tag">显示</span></div>
-            <label for="s_app_name">产品名</label>
-            <input id="s_app_name" placeholder="EnvKit" />
-            <label for="s_app_title">副标题</label>
-            <input id="s_app_title" placeholder="统一开发环境助手" />
-          </div>
-
-          <div class="set-card" style="grid-column:1/-1">
-            <div class="set-card-head"><span class="t">能力开关</span><span class="tag">AI / 桌宠</span></div>
-            <div class="grid">
-              <div>
-                <div class="ckrow" style="margin-top:0">
-                  <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
-                  <div class="cktext"><b>桌宠天气</b></div>
-                </div>
-                <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">保存城市</button></div>
-                <!-- 生效状态必须写在卡片里：过去只有一个"应用"按钮，
-                     勾完开关页面毫无变化，用户没法判断到底生效了没有 -->
-                <div class="hint" id="h-weather" style="margin-top:4px">—</div>
-              </div>
-              <div><div class="ro-list" id="s_ai_view" style="margin-top:0"></div></div>
-            </div>
-          </div>
-
         </div>
+
+        <div class="set-card" style="margin-top:8px">
+          <div class="set-card-head"><span class="t">能力开关</span><span class="tag">AI / 桌宠</span></div>
+          <div class="grid">
+            <div>
+              <div class="ckrow" style="margin-top:0">
+                <label class="switch"><input type="checkbox" id="s_weather_on"><span class="sl"></span></label>
+                <div class="cktext"><b>桌宠天气</b></div>
+              </div>
+              <div class="dirrow" style="margin-top:6px"><input id="s_weather_city" placeholder="上海" /><button class="ghost" id="btn-s-weather">保存城市</button></div>
+              <!-- 生效状态必须写在卡片里：过去只有一个"应用"按钮，
+                   勾完开关页面毫无变化，用户没法判断到底生效了没有 -->
+              <div class="hint" id="h-weather" style="margin-top:4px">—</div>
+            </div>
+            <div><div class="ro-list" id="s_ai_view" style="margin-top:0"></div></div>
+          </div>
+        </div>
+
         <div class="set-savebar">
           <button id="btn-set-save">保存基础设置</button>
           <button class="ghost" id="btn-set-reload">重新读取</button>
@@ -1175,10 +1208,10 @@
         <div class="lanpair-row">
           <label>注意</label>
           <ul class="lanpair-notes">
-            <li>手机要和这台电脑在<b>同一个 WiFi</b>下；连的是移动数据就连不上。</li>
-            <li>配对码<b>每次启动 EnvKit 都会变</b>；想换新的点「换一个码」，旧码立刻失效。</li>
-            <li>配对后这台手机就<b>长期受信任</b>了（30 天）。不想要了就关掉开关，或在下面移除设备。</li>
-            <li>同一个 WiFi 下的其他设备也能看到这个地址，<b>配对码就是唯一的门</b>。</li>
+            <li>手机要和这台电脑在同一个 WiFi 下；连的是移动数据就连不上。</li>
+            <li>配对码每次启动 EnvKit 都会变；想换新的点「换一个码」，旧码立刻失效。</li>
+            <li>配对后这台手机就长期受信任了（30 天）。不想要了就关掉开关，或在下面移除设备。</li>
+            <li>同一个 WiFi 下的其他设备也能看到这个地址，配对码就是唯一的门。</li>
           </ul>
         </div>
         <div class="lanpair-row">

@@ -407,6 +407,13 @@ func ok(scope, step, f string, a ...interface{})   { logf(scope, "OK", step, f, 
 func warn(scope, step, f string, a ...interface{}) { logf(scope, "WARN", step, f, a...) }
 func fail(scope, step, f string, a ...interface{}) { logf(scope, "FAIL", step, f, a...) }
 
+// hint 是"提醒，不是异常"：环境前置条件类消息走这里。
+//
+// 为什么不直接用 warn：warn 会被当成"这次启动有问题"，而"没以管理员身份
+// 运行"是绝大多数人的**常态**，不是异常；前端也把 WARN 画成黄色告警点。
+// HINT 在界面上仍是提示色，但语义是"知道了就行"，不参与"有没有出错"的判断。
+func hint(scope, step, f string, a ...interface{}) { logf(scope, "HINT", step, f, a...) }
+
 func infoS(scope, src, step, f string, a ...interface{}) { logfSrc(scope, src, "INFO", step, f, a...) }
 func okS(scope, src, step, f string, a ...interface{})   { logfSrc(scope, src, "OK", step, f, a...) }
 func warnS(scope, src, step, f string, a ...interface{}) { logfSrc(scope, src, "WARN", step, f, a...) }

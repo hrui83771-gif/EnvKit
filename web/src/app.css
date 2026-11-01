@@ -902,15 +902,51 @@
   /* 附件过了 24 小时保留期被清掉后的占位：不裂图、不留空框 */
   .ai-msg.user .ai-msg-imgs .ai-msg-img-gone{display:inline-flex;align-items:center;height:72px;padding:0 10px;border-radius:7px;border:1px dashed var(--line);background:var(--soft);color:var(--muted);font-size:11px;line-height:1.3;max-width:120px}
 
+  /* ==================== 记忆与经验面板（v3.7.1 布局重排） ====================
+     原来输入框、标签、两个勾选、「添加」全挤在同一行，加上批量导入/刷新一行、
+     试算一行，三行小控件占掉半个屏幕，而真正要写的那句话只剩一指宽。
+     现在把「写」提成一整块编辑器：多行 textarea 独占一行，选项与按钮收在下面
+     一行，批量导入/刷新上移到标题右侧，「试算」整行删除。
+     注意全局 label{display:block;margin:8px 0 4px} 与 input,select{width:100%}
+     在这里同样生效，label 与定宽输入框必须逐项复位。 */
+  .mp-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+  .mp-head h3{margin:0}
+  .mp-count{font-size:11.5px;color:var(--muted);font-weight:600;background:var(--off);border-radius:999px;padding:2px 9px}
+  .mp-count:empty{display:none}
+  .mp-tools{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .mp-note{font-size:12px;color:var(--muted);line-height:1.7;margin:0 0 10px}
+  .mp-editor{border:1px solid var(--line);border-radius:10px;background:var(--soft);padding:10px;margin:0 0 12px}
+  /* textarea 不在全局 input,select 规则里，样式从零写全 */
+  .mp-editor textarea{display:block;box-sizing:border-box;width:100%;min-height:66px;max-height:220px;resize:vertical;
+    padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);
+    font:inherit;font-size:13px;line-height:1.65}
+  .mp-editor textarea:focus{outline:none;border-color:var(--brand2);background:var(--focusbg)}
+  .mp-editor-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+  /* 标签框从全局 100% 宽改回定宽，否则它会把后面的勾选与按钮挤到下一行 */
+  .mp-editor-bar .mp-tags{width:170px;flex:none;padding:5px 9px;font-size:12.5px;
+    border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text)}
+  .mp-editor-bar .mp-tags:focus{outline:none;border-color:var(--brand2)}
+  .mp-chk{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:12px;
+    color:var(--muted);font-weight:500;white-space:nowrap;cursor:pointer}
+  .mp-chk input{width:auto;margin:0;flex:none}
+  .mp-add{margin-left:auto;flex:none;padding:6px 16px;font-size:12.5px;border-radius:8px}
+  .mp-tip{margin-top:7px;font-size:11.5px;color:var(--muted);line-height:1.6}
+
   /* ==================== 设置页（v3.4） ====================
      三区共用 .cfg-tabs/.cfg-tab/.cfg-pane 的既有观感，只在内容层新增卡片与字段行。
      注意全局 label{display:block;margin:8px 0 4px} 与 input,select{width:100%;padding:8px 10px}
      对这里同样生效：滑块的 padding/border/background 必须逐项复位，否则会变成一条粗框。 */
-    /* align-items:start：不把矮卡拉伸成和同行最高的一样高。
-     没有它时「界面」会被「更新检查」拉到两三倍高度，框里内容全挤在顶部，
-     看着像坏了（v3.4.1 撤掉说明文字后这个差异被放大了）。 */
-  .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
-  @media (max-width:900px){ .set-grid{grid-template-columns:1fr} }
+    /* v3.7.1：两列各自纵向堆叠，**不再用 auto 两列 grid**。
+     grid 的每一行按行内最高的卡对齐，矮卡右边就留一个大洞 —— 实测
+     「安装与分发」(100px) 挨着「手机访问」(340px) 时空出 240px；末行
+     「界面」独占左列、右列整块空白。改成一列一个 flex 容器后，同列内
+     卡片首尾相接，只可能在整页最底部留一点落差（肉眼几乎看不出）。 */
+  .set-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+  @media (max-width:900px){ .set-cols{grid-template-columns:1fr} }
+  .set-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  /* 卡片在 flex 列里默认 min-width:auto，内含长路径/长 URL 的输入框会把列撑破
+     （全局 input{width:100%} 也救不了）。必须逐张卡压回 0。 */
+  .set-col > .set-card{min-width:0}
   .set-card{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
   .set-card-head{display:flex;align-items:center;gap:8px;margin:0 0 2px}
   .set-card-head .t{font-size:13px;font-weight:700;color:var(--text)}

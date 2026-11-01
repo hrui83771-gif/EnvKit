@@ -105,6 +105,9 @@ const MISSIONS = [
 function seed() {
   const bir = path.join(DIR, 'briefings');
   fs.mkdirSync(bir, { recursive: true });
+  // 隔离目录跑完就删（见文件末尾的收尾）：exe 不预置，缺了就从仓库根那份复制一次，
+  // 这样"删干净"之后下一次跑不必再手动 go build。
+  if (!fs.existsSync(EXE)) { try { fs.copyFileSync(path.join(REPO, 'EnvKit.exe'), EXE); } catch (e) {} }
   fs.writeFileSync(path.join(DIR, 'config.json'), JSON.stringify({
     dev: { server_port: PORT },
     missions: { enabled: false, inbound_hook: false, briefing_at: 'off' },
@@ -417,5 +420,11 @@ function seed() {
   }
 
   console.log(fails === 0 ? 'ALL PASS' : ('FAILED ' + fails));
+  // 成功即删隔离目录：每个测试都在 DIR 里复制一份 exe 加一个 Chrome profile，
+  // 不删就会累积（2026-11-01 实测 tools/ 下 17 个目录共 255MB）。
+  // 失败时保留现场 —— 那时 exe / config / 日志本身就是证据。CDP_KEEP=1 强制保留。
+  if (fails === 0 && !process.env.CDP_KEEP) {
+    try { fs.rmSync(DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}
+  }
   process.exit(fails === 0 ? 0 : 1);
 })();

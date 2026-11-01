@@ -26,8 +26,8 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.7.0"
-	buildDate  = "2026-10-27"
+	appVersion = "3.7.1"
+	buildDate  = "2026-11-01"
 )
 
 //go:embed web/index.html
@@ -93,10 +93,19 @@ func main() {
 	os.MkdirAll(cfg.InstallDir, 0755)
 	isAdminFlag = isAdmin()
 	if !isAdminFlag {
+		// 一个进程只提示一次：原先 warn 写在 for 循环里，配置里若挂了多个
+		// mysql 组件，同一秒会打出多条一字不差的消息（看起来像"五个分区都报错"）。
+		// 级别用 HINT 不用 WARN：非管理员启动是常态、不是启动失败，
+		// 而且 WARN 会被"最近错误"收集器当成待处理故障（实测被 AI 误判成环境问题）。
+		needAdmin := false
 		for _, c := range cfg.Components {
 			if c.Special == "mysql" {
-				warn(scSys, "权限", "未以管理员身份运行，MySQL 服务注册可能失败")
+				needAdmin = true
+				break
 			}
+		}
+		if needAdmin {
+			hint(scSys, "权限", "当前不是管理员身份：安装/注册 MySQL 服务需要管理员权限，用到这一步时右键 EnvKit.exe 选「以管理员身份运行」即可；其余功能不受影响。")
 		}
 	}
 
