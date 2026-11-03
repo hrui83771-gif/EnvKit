@@ -99,7 +99,7 @@ func lanServeApply(c LanConfig) {
 	if len(ips) == 0 {
 		info(scSys, "手机访问", "已开启，监听 0.0.0.0:%d（没找到手机能连上的地址：电脑可能没连 WiFi/网线？）", port)
 	} else {
-		info(scSys, "手机访问", "已开启：手机访问 %s ，配对码 %s", ips[0], lanPairCodeCur())
+		info(scSys, "手机访问", "已开启：手机访问 %s ，配对码 %s", lanPairURLForLog(port), lanPairCodeCur())
 	}
 }
 
@@ -160,5 +160,8 @@ func lanMux() *http.ServeMux {
 	m.HandleFunc("/xterm/xterm.js", staticBytes("application/javascript; charset=utf-8", xtermJS))
 	m.HandleFunc("/xterm/addon-fit.js", staticBytes("application/javascript; charset=utf-8", xtermFitJS))
 	m.HandleFunc("/xterm/xterm.css", staticBytes("text/css; charset=utf-8", xtermCSS))
+	// 手机端调试台（Tencent/vConsole）：仅在地址带 ?debug 时由手机页动态加载。
+	// 同域脚本，CSP 合法；平时不请求这份文件。
+	m.HandleFunc("/vendor/vconsole.min.js", staticBytes("application/javascript; charset=utf-8", vconsoleJS))
 	return m
 }

@@ -410,6 +410,20 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
 </div>
 
 <script>
+/* 调试台开关：仅在地址带 ?debug 时加载 vConsole（Tencent/vConsole）。
+   平时完全不加载，避免给普通用户增加流量与干扰。
+   ?debug 不剥夺配对：配对自动提交逻辑只清掉 ?code=，保留 ?debug，
+   所以带码扫码进来的同时仍可在系统自带 DevTools 之外看手机端日志。 */
+(function(){
+  if(/[?&]debug\b/.test(location.search)){
+    var s = document.createElement('script');
+    s.src = '/vendor/vconsole.min.js';
+    s.onload = function(){ try { window.vConsole = new VConsole(); } catch(e){} };
+    document.head.appendChild(s);
+  }
+})();
+</script>
+<script>
 (function(){
   'use strict';
   var $ = function(id){ return document.getElementById(id); };

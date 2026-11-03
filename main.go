@@ -26,7 +26,7 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.7.1"
+	appVersion = "3.7.2"
 	buildDate  = "2026-11-01"
 )
 
@@ -56,6 +56,10 @@ var (
 	markedJS []byte
 	//go:embed web/vendor/highlight.min.js
 	highlightJS []byte
+	// 手机端调试台（Tencent/vConsole）：仅在地址带 ?debug 时由手机页动态加载，
+	// 平时不请求，不给普通用户增加流量与干扰。走既有 embed + staticBytes 套路。
+	//go:embed web/vendor/vconsole.min.js
+	vconsoleJS []byte
 )
 
 func main() {
