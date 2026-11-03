@@ -143,6 +143,18 @@ SOFTWARE.
 
 - **许可**：BSD-3-Clause，Copyright 2009 The Go Authors（条款同上）。
 
+## PDF 解析：github.com/ledongthuc/pdf
+
+拖进 AI 对话区的 `.pdf` 由它抽取文字层（`ai_extract.go` 的 `aiExtractPDF`）。
+
+- **许可**：BSD-3-Clause，Copyright (c) 2009 The Go Authors（该库是 `rsc.io/pdf` 的
+  持续维护分支，沿用原始版权声明；条款全文见上文「BSD-3-Clause License（highlight.js）」）
+- **位置**：编译进 `EnvKit.exe`（Go 模块依赖，纯 Go 实现，无 cgo）
+- **无额外传递依赖**：`go.sum` 里只有它自己
+- **说明**：仅用于**读取**文字层。扫描件（整页为图片、无文字层）抽不出内容，
+  此时 EnvKit 会明确提示改用页面截图；加密 PDF 需先在阅读器里另存为不加密副本。
+  本库不执行 PDF 内的任何脚本或动作。
+
 ## 托盘库：github.com/getlantern/systray
 
 托盘图标与右键菜单（打开控制台 / 程序配置 / 打开日志目录 / 隐藏窗口到托盘 / 退出）。

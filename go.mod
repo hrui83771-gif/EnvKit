@@ -9,6 +9,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
+	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/pquerna/otp v1.5.0
 	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e

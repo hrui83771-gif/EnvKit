@@ -197,6 +197,7 @@ func main() {
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 	http.HandleFunc("/api/ai/attach", handleAIAttach)   // 图片附件：拖入/粘贴的图片落盘，消息里只留引用
+	http.HandleFunc("/api/ai/extract", handleAIExtract) // 文档抽文本：docx/xlsx/pptx/pdf 转成可读文本，不落盘
 	http.HandleFunc("/api/ai/confirm", handleAIConfirm) // v3.2：确认卡就地等待的投递口
 	http.HandleFunc("/api/ai/echo", handleAIEcho)       // v3.2：传输自检（请求体有没有被吃）
 	http.HandleFunc("/api/ai/explain", handleAIExplain)

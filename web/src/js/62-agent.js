@@ -754,24 +754,68 @@ function aiPasteHandle(e){
   return true;
 }
 
-/* 把一批文件按类型分流：图片走附件通道，其它当文本读。
-   原来这里一律 f.text()，拖进来一张截图会读成乱码塞进输入框。 */
+/* 把一批文件按类型分流：图片走附件通道，其它交给后端抽文本。
+   原来这里一律 f.text()，拖进来一张截图会读成乱码塞进输入框；
+   拖进来一个 docx 更是把 zip 的压缩流当 UTF-8 解，得到一屏问号。
+
+   为什么文档必须走后端（/api/ai/extract 而不是前端读）：
+   File.text() 只会按 UTF-8 硬解，改不了编码（GBK 的老日志全是乱码），
+   也判断不了二进制；类型判定、解码、docx/xlsx/pptx/pdf 抽文本
+   全放在后端一处做。前端只负责搬运 —— 和图片走 /api/ai/attach 同一个分工。 */
+const AI_DOC_MAX = 16 * 1024 * 1024;   // 与后端 aiExtractMaxBytes 同一口径
+
+/* 把 File 读成 data:URL（后端统一按 base64 解，省一套 multipart 解析） */
+function aiFileDataURL(f){
+  return new Promise((res, rej)=>{
+    const rd = new FileReader();
+    rd.onload = ()=>res(String(rd.result || ''));
+    rd.onerror = ()=>rej(rd.error || new Error('read error'));
+    rd.readAsDataURL(f);
+  });
+}
+
+/* 请求后端抽文本。失败时抛出的 message 已是一句人话（"旧版 Office 请另存为…"
+   这类），直接显示即可，不要再包一层"操作失败"把原因盖掉。 */
+async function aiExtractFile(f){
+  const content = await aiFileDataURL(f);
+  const r = await fetch('/api/ai/extract', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: f.name || '', mime: f.type || '', content}),
+  });
+  if(!r.ok) throw new Error((await r.text()).slice(0, 300).trim() || ('HTTP ' + r.status));
+  return r.json();
+}
+
 async function aiDropFiles(files){
   const arr = Array.prototype.slice.call(files || []);
   const imgs = arr.filter(f=>f && AI_IMG_IN.test(f.type || ''));
-  const rests = arr.filter(f=>f && !AI_IMG_IN.test(f.type || ''));
-  // 图片走附件通道（模型真的能看到像素）；文本仍走"贴进输入框 + untrusted_data 包裹"
+  const docs = arr.filter(f=>f && !AI_IMG_IN.test(f.type || ''));
+  // 图片走附件通道（模型真的能看到像素）
   if(imgs.length) await aiAttachAdd(imgs);
-  if(!rests.length){ const ta = $ai('ai-in'); if(ta && imgs.length) ta.focus(); return; }
-  const MAX = 64 * 1024;
   const ta = $ai('ai-in'); if(!ta) return;
-  for(const f of rests){
-    if(f.size > MAX){ toast(t('文件超过 64KB，已跳过：{0}', f.name), 'err'); continue; }
-    let txt = '';
-    try{ txt = await f.text(); }catch(e){ toast(t('读取失败：{0}', f.name), 'err'); continue; }
-    // 与项目既有口径一致：外部文件内容一律当**不可信数据**包裹，不让其中的指令生效
-    ta.value += '\n<untrusted_data source="file:' + f.name + '">\n' + txt + '\n</untrusted_data>\n';
-    toast(t('已读入：{0}', f.name));
+  for(const f of docs){
+    if(f.size > AI_DOC_MAX){
+      toast(t('文件超过 {0} MB，已跳过：{1}', AI_DOC_MAX >> 20, f.name), 'err');
+      continue;
+    }
+    // 大文档抽取要几秒（PDF 尤其）：给了状态行，用户才知道是在读、不是没反应。
+    // 正在生成回答时不动状态行 —— 那行归主循环用，覆盖掉会显得"卡在读取"。
+    if(!aiBusy) aiHstat(t('正在读取：{0}', f.name));
+    try{
+      const j = await aiExtractFile(f);
+      // 文件名里的 < > " 会把包裹标签提前闭合，等于让文件内容自己决定边界。
+      // 换成下划线：名字只用于人看和溯源，不需要保留这些字符。
+      const safe = String(f.name || 'file').replace(/[<>&"]/g, '_');
+      // 外部文件内容一律当**不可信数据**包裹，不让其中的指令生效
+      ta.value += '\n<untrusted_data source="file:' + safe + '">\n' + j.text + '\n</untrusted_data>\n';
+      // 后端给的提示（截断了、跳过几页扫描件）跟在包裹外，是给用户看的，不是给模型看的
+      if(j.note) toast(t('已读入：{0}（{1} 字）', f.name, j.chars) + ' · ' + j.note);
+      else toast(t('已读入：{0}（{1} 字）', f.name, j.chars));
+    }catch(e){
+      toast(t('读取失败：{0}', f.name) + ' —— ' + String((e && e.message) || e), 'err');
+    }finally{
+      if(!aiBusy) aiHstat('');
+    }
   }
   ta.focus();
 }
