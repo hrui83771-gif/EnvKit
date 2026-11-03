@@ -889,7 +889,7 @@
      缩略图条在输入框上方，不占输入区那一行：手机拍的长条截图横过来会把输入框挤扁。
      尺寸用固定 46px 而不是 max-width —— 一堆不同宽高比的缩略图并排时，
      固定宽高才能让 × 按钮位置一致，用户扫一眼就知道点哪个。 */
-  .ai-attach{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px 0}
+  .ai-attach{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px 6px}
   .ai-attach[hidden]{display:none}
   @keyframes ekspin{to{transform:rotate(360deg)}}
   .ai-attach .thumb{position:relative;width:46px;height:46px;border-radius:7px;overflow:hidden;border:1px solid var(--line);background:var(--soft);flex:none}
