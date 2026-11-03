@@ -26,7 +26,7 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.7.2"
+	appVersion = "3.7.3"
 	buildDate  = "2026-11-01"
 )
 
@@ -210,6 +210,10 @@ func main() {
 	http.HandleFunc("/api/metrics", handleMetrics)
 	http.HandleFunc("/api/diag", handleDiag)
 	http.HandleFunc("/api/audit", handleAudit)
+	// 轨迹查询：只读，仅主控制台。手机端不给（手机端是"只读 + 有限功能"的面，
+	// 轨迹是调优用的，放上去只会让手机页面多一个几乎不会点的入口）。
+	http.HandleFunc("/api/traces", handleTraces)
+	http.HandleFunc("/api/trace", handleTraceOne)
 	http.HandleFunc("/api/stats", handleStats) // v2.7 审计统计看板（30 天时序）
 	http.HandleFunc("/api/lessons", handleLessons)
 	http.HandleFunc("/api/launch", handleLaunch)

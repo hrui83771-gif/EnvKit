@@ -45,6 +45,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -113,7 +114,13 @@ type TraceUsage struct {
 	Hit      int64 `json:"cache_hit,omitempty"`
 	Miss     int64 `json:"cache_miss,omitempty"`
 	HasCache bool  `json:"has_cache"`
-	Turns    int   `json:"turns,omitempty"` // 上游往返次数
+	// Turns 是**收尾时写用量的次数**，不是上游往返次数。
+	//
+	// 口径必须说清：recordTurnUsage 只在 sseDoneUsage / sseDoneConfirm 里被调用，
+	// 传进来的是整个回合的累计值。所以"两次上游往返 + 一次收尾"这里记 1，
+	// 而"等确认后收尾"会记 2。原先注释写成"上游往返次数"是错的，
+	// 谁按那个口径去算平均往返都会得到偏小的数。
+	Turns int `json:"turns,omitempty"`
 }
 
 // ===== outcome 判定 =====
@@ -323,6 +330,13 @@ func currentTraceSnapshot() *Trace {
 
 // traceToolStep 把一次 AI 工具执行记成轨迹的一步，并据结果追加 verify/failure 步。
 //
+// 调用点只有 aiExecTool 一个（执行层），四个执行入口——预检命中、意图兜底、
+// 模型 tool_call、确认续跑——全都经过它。
+// "无效操作次数"这个指标就是从这些步算的：同一 action 连续失败 ≥2 次、
+// denied 后仍重试、只读工具读了个与任务无关的东西，都能在轨迹里看出来。
+// **记录留在某个调用点上是不行的**：写工具全部走"确认续跑"，那个调用点
+// 永远看不到它们（实测 steps 为空，详见 aiExecTool 里的注释）。
+//
 // 为什么要拆成两步而不是一步：指标口径里"无效操作"看的是 action 序列，
 // 而"验证准确性"要看的是有没有复验结论——混在一条里就都算不清了。
 func traceToolStep(tool string, args map[string]any, res string, err error, durMs int64) {
@@ -386,15 +400,44 @@ func traceWrite(tr *Trace) {
 	_, _ = f.Write(append(b, '\n'))
 }
 
-// traceQuery 读取最近 n 条轨迹（新在前），可按结果过滤。
+// traceFilter 轨迹查询的过滤条件。全零值 = 全部。
+//
+// Q 的大小写归一放在调用处（traceMatches 只接受已小写化的关键词）——
+// 避免"每行都 ToLower 一遍"这种在热路径上重复做同一件事的写法。
+type traceFilter struct {
+	Outcome string    // 结局精确匹配
+	Q       string    // 关键词（大小写不敏感，匹配 goal / trace_id / 每步 action 与 target）
+	Since   time.Time // 起点（含）；零值 = 不限
+	OnlyBad bool      // 只看有问题的（见 traceIsBad）
+}
+
+// traceQuery 读取最近 n 条轨迹（新在前），按结局过滤。
 func traceQuery(n int, outcome string) []Trace {
+	return traceQueryFiltered(n, traceFilter{Outcome: outcome})
+}
+
+// traceQueryFiltered 读取最近 n 条**满足过滤条件**的轨迹（新在前）。
+//
+// 关键点：过滤发生在**截断之前**。老实现是先取满 n 条再过滤的话，
+// "搜一个只在三天前出现过一次的动作"会因为最近 n 条里没有它而永远搜不到——
+// 那是最容易被当成"这功能坏了"的形态。
+func traceQueryFiltered(n int, f traceFilter) []Trace {
 	if n <= 0 {
 		n = 50
 	}
+	q := uq(f.Q)
 	var out []Trace
 	files, _ := filepath.Glob(filepath.Join(traceDir(), "trace-*.jsonl"))
-	for i := len(files) - 1; i >= 0; i-- {
-		b, err := os.ReadFile(files[i])
+	// 按天倒序：文件名里的日期是定长 8 位，字符串排序即时间排序
+	sort.Sort(sort.Reverse(sort.StringSlice(files)))
+	for _, p := range files {
+		if !f.Since.IsZero() {
+			d := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "trace-"), ".jsonl")
+			if t, err := time.ParseInLocation("20060102", d, time.Local); err == nil && t.Before(f.Since) {
+				continue // 整天的文件都早于起点，不必读
+			}
+		}
+		b, err := os.ReadFile(p)
 		if err != nil {
 			continue
 		}
@@ -408,7 +451,7 @@ func traceQuery(n int, outcome string) []Trace {
 			if json.Unmarshal([]byte(ln), &t) != nil {
 				continue
 			}
-			if outcome != "" && t.Outcome != outcome {
+			if !traceMatches(&t, f, q) {
 				continue
 			}
 			out = append(out, t)

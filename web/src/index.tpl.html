@@ -531,6 +531,9 @@
         <div class="frow" id="ai_model_row" style="display:none"><label>模型名</label><input id="ai_model" placeholder="输入模型名，如 deepseek-flash"></div>
         <div class="frow"><label>API Key</label><input id="ai_key" type="password" placeholder="sk-...（留空保留已存值）"></div>
         <div class="frow"><label>温度</label><input id="ai_temp" type="number" step="0.1" min="0" max="2" placeholder="留空 = 0.3（部分模型只接受 1，会自动适配）"></div>
+        <!-- 内部调用模型（utility_model）：只影响「压缩历史」这类用户看不见的后台调用。
+             文案必须说清"不影响你看到的回答"，否则用户会以为换了它就换了助手水平。 -->
+        <div class="frow"><label>内部调用模型</label><input id="ai_utility_model" placeholder="留空 = 与主模型相同；可填更便宜的模型，如 deepseek-flash"></div>
         <div class="frow" id="ai_quirk_row" style="display:none"><label>已自动适配</label><span class="muted" id="ai_quirk"></span></div>
         <div class="ckrow">
           <label class="switch"><input type="checkbox" id="ai_enabled"><span class="sl"></span></label>
@@ -718,7 +721,8 @@
              （「安装与分发」100px 挨着「手机访问」340px → 空 240px），
              末行「界面」独占左列、右列整块空着。
              改成显式两列 + flex 纵向堆之后，同一列里不会再出现"洞"；
-             两列总量按 1100px 上下配平（实测左侧 1335 / 右侧 1295）。 -->
+             配平靠"矮卡往矮的那列挪"：两列高差压在 120px 内才算配平
+             （v3.7.3 把 91px 的「网络代理」从右列挪到左列，实测 1323 / 1252）。 -->
         <div class="set-cols">
           <div class="set-col">
 
@@ -771,6 +775,16 @@
               <div><label for="s_gosumdb">GOSUMDB</label><input id="s_gosumdb" placeholder="off" /></div>
               <div><label for="s_go_cgo">CGO_ENABLED</label><input id="s_go_cgo" placeholder="0" /></div>
               <div><label for="s_npm_registry">npm 源</label><input id="s_npm_registry" placeholder="https://registry.npmmirror.com" /></div>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
+            <!-- 跟着「镜像与校验」走：两件事都是"包从哪来"，放同一列读起来是一条线。
+                 v3.7.2 前它在右列，右列比左列高出 127px，整页也就压不下去。 -->
+            <div class="grid">
+              <div><label for="s_proxy_http">HTTP 代理</label><input id="s_proxy_http" placeholder="http://127.0.0.1:7890" /></div>
+              <div><label for="s_proxy_https">HTTPS 代理</label><input id="s_proxy_https" placeholder="http://127.0.0.1:7890" /></div>
             </div>
           </div>
 
@@ -844,14 +858,6 @@
             </div>
             <div class="ro-list" id="s_upd_state" style="margin-top:6px"></div>
             <div class="row" style="margin-top:6px"><button class="ghost" id="btn-s-upd-check">立即检查</button></div>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
-            <div class="grid">
-              <div><label for="s_proxy_http">HTTP 代理</label><input id="s_proxy_http" placeholder="http://127.0.0.1:7890" /></div>
-              <div><label for="s_proxy_https">HTTPS 代理</label><input id="s_proxy_https" placeholder="http://127.0.0.1:7890" /></div>
-            </div>
           </div>
 
           <div class="set-card">

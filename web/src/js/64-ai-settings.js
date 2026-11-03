@@ -14,6 +14,10 @@ function aiCollectPayload(){
   return {enabled:$ai('ai_enabled').checked, memory_enabled:$ai('ai_memory_on').checked,
     provider:$ai('ai_provider').value, base_url:$ai('ai_base').value.trim(),
     api_key:$ai('ai_key').value.trim(), model,
+    // 内部调用模型：**总是带上**（含空串）。它是可清空的选项，
+    // 不传等于"保留旧值"，用户就再也删不掉了。后端按指针处理：
+    // 传空串 = 清空（回到跟主模型一样），不传 = 不动。
+    utility_model:$ai('ai_utility_model').value.trim(),
     temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))};
 }
 
@@ -93,7 +97,7 @@ function aiScheduleAutoSave(){
 
 // 绑定自动保存：下拉/开关用 change，文本输入用 input（防抖合并击键）
 // provider 的 change 在上面既有绑定里处理（清拉取缓存 + 应用预置），这里只挂保存调度
-['ai_base','ai_key','ai_temp'].forEach(id=>$ai(id).addEventListener('input', aiScheduleAutoSave));
+['ai_base','ai_key','ai_temp','ai_utility_model'].forEach(id=>$ai(id).addEventListener('input', aiScheduleAutoSave));
 ['ai_enabled','ai_memory_on'].forEach(id=>$ai(id).addEventListener('change', aiScheduleAutoSave));
 
 /* 对话消费：读取 SSE 流 */

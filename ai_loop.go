@@ -537,9 +537,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 	// 这样即使模型"只会念菜单"，用户的明确需求也一定会被执行。
 	preChecked := false
 	menuRetried := 0
-	optInBlocked := 0 // opt-in 工具拦截计数：同一轮 ≥3 次判定模型死循环，终止并给可见提示
-	paramFix := 0     // 参数自适应重试次数（temperature / token 字段 / tools 各最多一次）
-	netRetry := 0     // 瞬时故障重试次数（网络错误 / 429 限流 / 5xx，指数退避 1s→3s）
+	optInBlocked := 0     // opt-in 工具拦截计数：同一轮 ≥3 次判定模型死循环，终止并给可见提示
+	var pfix aiParamFixer // 参数自适应名额（按 temperature / token 字段 / tools 分类记账）
+	netRetry := 0         // 瞬时故障重试次数（网络错误 / 429 限流 / 5xx，指数退避 1s→3s）
 	if !confirmed && preflight {
 		lastUser := ""
 		for i := len(msgs) - 1; i >= 0; i-- {
@@ -664,7 +664,9 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+acTurn.keyPlain())
-		resp, err := httpStream.Do(req)
+		// 走统一出口：录像/回放（见 ai_replay.go）挂在这一层。
+		// 生产路径与 httpStream.Do(req) 等价，只是多一次环境变量判断。
+		resp, err := aiUpstreamDo(httpStream, req)
 		if err != nil {
 			// 网络抖动/DNS 抖动等瞬时错误：退避后重试（429/5xx 同理，见下方状态码分支）
 			if netRetry < 2 && ctx.Err() == nil {
@@ -688,14 +690,22 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			b, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
 			resp.Body.Close()
 			msg := firstLines(strings.TrimSpace(string(b)), 300)
-			// 参数自适应：temperature 被拒 → 改 1 → 再不行就不发；token 字段/工具不支持同理
-			if paramFix < 2 {
-				if newQ, changed, hint := aiFixParamError(msg); changed {
-					paramFix++
+			// 参数自适应：temperature 被拒 → 改 1 → 再不行就不发；token 字段/工具不支持同理。
+			//
+			// **名额按类别分开记**（见 aiParamFixer）：temperature 一个槽位自己就要两跳，
+			// 共用计数器会让它把 token 字段 / tools 的名额一起吃光 —— 那类模型就永远配不通。
+			if newQ, changed, hint := aiFixParamError(msg); changed {
+				kind := aiQuirkFixKind(acTurn.quirkRead(), newQ)
+				if pfix.allow(kind) {
+					pfix.take(kind)
 					aiMutate(func(a *AIConfig) { a.setQuirk(newQ); saveExternalConfig(cfg) })
 					warn(scSys, "AI", "%s（模型 %s）：%s", hint, acTurn.Model, firstLines(msg, 120))
 					continue
 				}
+				// 名额用尽不能静默跳过：否则用户只看到原始 400，
+				// 日志里也没有"我们已经试过修、修不动了"的痕迹，排查时会被当成从没修过。
+				warn(scSys, "AI", "参数自适应名额已用尽（%s 类已修 %d 次），不再重试；上游原文：%s",
+					kind, pfix.used[kind], firstLines(msg, 120))
 			}
 			// 429 限流 / 5xx 服务端故障：瞬时性问题，退避重试而不是直接把错误抛给用户
 			if resp.StatusCode == 429 || resp.StatusCode >= 500 {
@@ -1279,7 +1289,6 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					hasToolFailure = true
 				}
 			default:
-				t0 := time.Now()
 				// v2.3 N5：执行前先把"正在做什么"告诉用户。
 				// 以前用户只能在全部跑完后才知道它做了什么，
 				// 中间十几秒完全不知道是在工作还是在卡住。
@@ -1309,15 +1318,12 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					"seq": len(plan.Steps), "tool": a.Name,
 					"target": tgt, "text": planLine(a.Name, tgt)})
 				res, exErr := aiExecTool(a.Name, args)
-				toolDur := time.Since(t0).Milliseconds()
 				// 只截"可重查"的工具（日志/SQL/搜索/审计/诊断），且截断时把"怎么继续查"
 				// 一起写给模型；read_file 与判据类工具不截——砍它们等于砍能力。
 				// 工具结果会永久留在历史里，每轮前缀都要重算它，这是命中率之外的第二笔账。
 				toolMsg.Content = aiClampToolResult(a.Name, res)
-				// v2.3 M9：每次工具执行记一步轨迹。"无效操作次数"这个指标
-				// 就是从这里算的——同一 action 连续失败 ≥2 次、denied 后仍重试、
-				// 只读工具读了个与任务无关的东西，都能在轨迹里看出来。
-				traceToolStep(a.Name, args, res, exErr, toolDur)
+				// 轨迹记步已挪进 aiExecTool（执行层）：写工具走"确认续跑"那条路
+				// 不经过这里，记录留在调用点会漏掉它。
 				if exErr != nil {
 					rp.markFail(a.Name, tgt)
 					hasToolFailure = true

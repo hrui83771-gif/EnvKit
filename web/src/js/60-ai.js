@@ -243,7 +243,9 @@ function aiToolbar(d, reask){
      「审计」按本轮轨迹的时间窗过滤——没有 trace_id 时这是最诚实的做法，
      比"猜哪几条属于这轮"可靠，也不会把别的回合算进来。 */
   const tr = document.createElement('button'); tr.className = 'ai-tb-btn'; tr.textContent = t('轨迹');
-  tr.onclick = ()=>{ aiTraceView = d; aiSide('trace'); };
+  // 点这条消息的「轨迹」= 看本回合，所以要显式切回来：
+  // 否则用户上次停在历史列表，点这里会打开历史列表（看起来像没反应）。
+  tr.onclick = ()=>{ if(typeof aiTrMode !== 'undefined'){ aiTrMode = 'turn'; aiTrDetail = null; } aiTraceView = d; aiSide('trace'); };
   tb.appendChild(tr);
   const au = document.createElement('button'); au.className = 'ai-tb-btn'; au.textContent = t('审计');
   au.onclick = ()=>{ aiAuditFocus(d.__trace); aiSide('audit'); };
@@ -498,8 +500,13 @@ function aiTraceEvent(ev){
 }
 function aiTraceRender(){
   const box = $ai('ai-pane-trace'); if(!box) return;
-  const nodes = (aiTraceView && Array.isArray(aiTraceView.__trace)) ? aiTraceView.__trace : aiTurnNodes;
   box.textContent = '';
+  /* 历史视图整块由 61-ai-trace.js 负责（它自己会画切换条与筛选栏），
+     所以这里直接交出去，不重复画头部。
+     aiTrMode 用 var 声明：本文件在拼接后先执行，用 let 会落进 TDZ。 */
+  if(typeof aiTrMode !== 'undefined' && aiTrMode === 'hist'){ aiTrHistRender(box); return; }
+  box.appendChild(aiTrSwitchRow());
+  const nodes = (aiTraceView && Array.isArray(aiTraceView.__trace)) ? aiTraceView.__trace : aiTurnNodes;
   // 头部先给结论：几步、多久、花多少、命中多少。明细在下面，别让人先读一堆时间戳。
   const head = document.createElement('div'); head.className = 'muted';
   head.style.cssText = 'margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;line-height:1.5';

@@ -18,6 +18,9 @@
 *.md      text eol=lf
 *.html    text eol=lf
 *.css     text eol=lf
+# 回放夹具 / 轨迹是逐行 JSON：多一个 \r 就可能让 body 比对不等。
+# （*.json 那条不覆盖 .jsonl，得单独写。）
+*.jsonl   text eol=lf
 *.sql     text eol=lf
 *.yml     text eol=lf
 *.yaml    text eol=lf

@@ -201,9 +201,13 @@ func aiIsSummaryMsg(m aiMsg) bool {
 	return m.Role == "user" && strings.HasPrefix(m.Content, aiSummaryMark)
 }
 
-// aiSummarizeHistory 用当前配置的模型把历史头部压缩成要点备忘（非流式，一次调用）。
+// aiSummarizeHistory 把历史头部压缩成要点备忘（非流式，一次调用）。
+//
+// 走**杂活模型**（aiUtilityModel）：这是唯一一处"用户看不见、失败也无感"的调用，
+// 配了便宜模型就该用它 —— 一次长对话要压 3~4 次，每次最长 60s，
+// 用旗舰模型纯属白付钱和干等。未配置 utility_model 时自动回落主模型（行为不变）。
 func aiSummarizeHistory(head []aiMsg) (string, error) {
-	out, err := aiCallLLM([]aiMsg{{Role: "user", Content: aiSummaryPrompt(head)}}, nil)
+	out, err := aiCallLLMWith([]aiMsg{{Role: "user", Content: aiSummaryPrompt(head)}}, nil, aiUtilityModel())
 	if err != nil {
 		return "", err
 	}

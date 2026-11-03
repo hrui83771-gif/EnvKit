@@ -24,6 +24,15 @@ type AIConfig struct {
 	Model       string  `json:"model"`
 	Temperature float64 `json:"temperature"`
 	MaxTokens   int     `json:"max_tokens"`
+	// UtilityModel 「杂活」用的模型（滚动摘要这类用户看不见的内部调用）。
+	//
+	// 摘要一次最长 60s、一个长对话要跑 3~4 次，用旗舰模型纯属浪费：
+	// 它干的是"把前文压成要点"，不需要旗舰推理。留空 = 跟主模型一样
+	// （**默认留空**，新能力不该在升级后立刻改变既有行为）。
+	//
+	// 只用于内部调用；用户能看见的回答（含断流补答、诊断解读）一律仍走主模型——
+	// 那些是要交付给用户的结论，不该为了省钱降级。
+	UtilityModel string `json:"utility_model"`
 	// MemoryEnabled 记忆层总开关（v2.0）。默认关闭——新能力不该在升级后立刻改变
 	// 既有 Agent 行为，须由使用者显式确认才介入提示词。
 	MemoryEnabled bool `json:"memory_enabled"`
@@ -36,6 +45,18 @@ func aiMemoryOn() bool {
 	return aiSnap().MemoryEnabled
 }
 
+// aiUtilityModel 「杂活」调用该用哪个模型：配了 utility_model 就用它，否则回落主模型。
+//
+// 只给**用户看不见的内部调用**用（目前只有滚动摘要）。判据很实在：
+// 这类调用失败了用户不会知道，成功了也只是一段备忘 —— 用旗舰模型付全价没有收益。
+// 凡是会出现在对话里的输出（结论、补答、诊断解读）都不许走这里。
+func aiUtilityModel() string {
+	if m := strings.TrimSpace(aiSnap().UtilityModel); m != "" {
+		return m
+	}
+	return aiSnap().Model
+}
+
 // AIQuirk 某个模型的上游参数怪癖（全部可自动学习并持久化）
 type AIQuirk struct {
 	TempMode       string `json:"temp_mode,omitempty"`        // "" 用配置值 | "one" 固定 1 | "none" 不发送
@@ -45,17 +66,36 @@ type AIQuirk struct {
 
 // quirkRead 只读版本（值接收者，供快照使用，不会并发写 map）
 func (a AIConfig) quirkRead() AIQuirk {
+	return a.quirkReadFor(a.Model)
+}
+
+// quirkReadFor 读指定模型的怪癖。**怪癖必须按模型名分账**：
+// 主模型与"杂活模型"（utility_model）是两个不同的模型，
+// 若共用一套，杂活模型报"不接受 temperature"会把主模型的怪癖改成"不发 temperature"——
+// 于是主对话也跟着变差，而用户完全看不出是自己填了个便宜模型导致的。
+func (a AIConfig) quirkReadFor(model string) AIQuirk {
 	if a.Quirks == nil {
 		return AIQuirk{}
 	}
-	return a.Quirks[a.Model]
+	if strings.TrimSpace(model) == "" {
+		model = a.Model
+	}
+	return a.Quirks[model]
 }
 
 func (a *AIConfig) setQuirk(q AIQuirk) {
+	a.setQuirkFor(a.Model, q)
+}
+
+// setQuirkFor 把怪癖记到指定模型名下（与 quirkReadFor 成对）。
+func (a *AIConfig) setQuirkFor(model string, q AIQuirk) {
+	if strings.TrimSpace(model) == "" {
+		model = a.Model
+	}
 	if a.Quirks == nil {
 		a.Quirks = map[string]AIQuirk{}
 	}
-	a.Quirks[a.Model] = q
+	a.Quirks[model] = q
 }
 
 // aiPayload 统一构造请求体：按模型怪癖决定是否携带 temperature / 用哪个 token 字段 / 是否带 tools
@@ -102,8 +142,14 @@ func isDeepSeekBase(base string) bool {
 // aiFixParamError 依据上游报错自适应参数（通用规则，不绑定厂商）。
 // 返回新的怪癖、是否已调整（可重试）、给用户看的提示。
 func aiFixParamError(msg string) (AIQuirk, bool, string) {
+	return aiFixParamErrorFor(aiSnap().Model, msg)
+}
+
+// aiFixParamErrorFor 同 aiFixParamError，但怪癖记在指定模型名下。
+// 杂活模型（utility_model）必须走这个入口，否则会把怪癖写到主模型头上。
+func aiFixParamErrorFor(model, msg string) (AIQuirk, bool, string) {
 	low := strings.ToLower(msg)
-	q := aiSnap().quirkRead()
+	q := aiSnap().quirkReadFor(model)
 	switch {
 	case strings.Contains(low, "temperature"):
 		if q.TempMode == "" {
@@ -135,6 +181,57 @@ func aiFixParamError(msg string) (AIQuirk, bool, string) {
 		return q, false, ""
 	}
 	return q, false, ""
+}
+
+// 参数自适应的名额上限：**按"修的是哪一类"分别记账**，不是共用一个计数器。
+//
+// ## 为什么必须分类（真实缺陷，不是洁癖）
+//
+// temperature 这一个槽位自己就要走两跳："" → "one" → "none"（见 aiFixParamError）。
+// 老实现是一个共享计数器 `paramFix < 2`，于是它会把这个槽位的两跳全吃光，
+// 后面的 max_tokens / tools 一次机会都没有。
+//
+// 后果不是"少一次重试"，而是**这类模型永远配不通**：
+// 模型若「拒绝 temperature」且「要求 max_completion_tokens」（推理型模型的常见组合），
+// 第三跳被拦下 → 每次都把上游 400 原样甩给用户，quirk 也永远学不进去，
+// 用户看到的是"这个模型怎么填都用不了"，重试多少次都一样。
+//
+// 而老代码的注释写的恰恰是「各最多一次」——注释与实现从一开始就不一致。
+const aiParamFixMaxPerKind = 2
+
+// aiQuirkFixKind 这一次自适应动的是哪个参数槽位。
+//
+// 判据取**快照差异**而不是错误文案：文案是各家厂商自己写的、措辞千变万化，
+// 而 AIQuirk 只有三个字段，改了哪个一目了然（aiFixParamError 每次只改一个）。
+func aiQuirkFixKind(before, after AIQuirk) string {
+	switch {
+	case before.TempMode != after.TempMode:
+		return "temp"
+	case before.MaxTokensField != after.MaxTokensField:
+		return "tokens"
+	case before.NoTools != after.NoTools:
+		return "tools"
+	}
+	return ""
+}
+
+// aiParamFixer 一次对话里各类参数修正已用掉的名额。零值可用。
+type aiParamFixer struct{ used map[string]int }
+
+// allow 还能不能再修这一类（kind 为空说明这次没改动任何槽位，不该继续）。
+func (f *aiParamFixer) allow(kind string) bool {
+	if kind == "" {
+		return false
+	}
+	return f.used[kind] < aiParamFixMaxPerKind
+}
+
+// take 记一次账（调用前须先 allow）。
+func (f *aiParamFixer) take(kind string) {
+	if f.used == nil {
+		f.used = map[string]int{}
+	}
+	f.used[kind]++
 }
 
 // aiProviderPreset 服务商预置：新增服务商/模型只需更新此列表；任意服务商都可用「自定义」手填。
@@ -441,6 +538,10 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		// MemoryEnabled 同样用指针：记忆层开关被误关掉和 Enabled 是同一类事故
 		// （局部保存把总开关抹成 false），必须显式传才改。
 		MemoryEnabled *bool `json:"memory_enabled"`
+		// UtilityModel 用指针是为了区分「没传」和「要清空」：
+		// 这是个可选的文本框，用户把填过的值删掉就是要回到"跟主模型一样"，
+		// 若按其它字符串字段的"空值不覆盖"处理，这一项一旦填过就再也改不回头。
+		UtilityModel *string `json:"utility_model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", 400)
@@ -448,7 +549,7 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Provider == "" && body.BaseURL == "" && body.APIKey == "" &&
 		body.Model == "" && body.Temperature == nil && body.Enabled == nil &&
-		body.MemoryEnabled == nil {
+		body.MemoryEnabled == nil && body.UtilityModel == nil {
 		// 空提交直接当读操作处理：绝不允许"什么都没传"覆盖掉已存配置。
 		writeAIConfig(w)
 		return
@@ -459,6 +560,10 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.MemoryEnabled != nil {
 			a.MemoryEnabled = *body.MemoryEnabled
+		}
+		if body.UtilityModel != nil {
+			// 传了就以传入值为准（空串 = 清空，回到"跟主模型一样"）
+			a.UtilityModel = strings.TrimSpace(*body.UtilityModel)
 		}
 		if strings.TrimSpace(body.Provider) != "" {
 			a.Provider = strings.TrimSpace(body.Provider)
@@ -498,7 +603,10 @@ func writeAIConfig(w http.ResponseWriter) {
 		"model": ac.Model, "key_set": ac.APIKey != "", "key_masked": masked,
 		"temperature": ac.Temperature, "max_tokens": ac.MaxTokens,
 		"memory_enabled": ac.MemoryEnabled,
-		"quirk":          ac.quirkRead(),
+		// utility_model 是"配置值"而不是"生效值"：空串在界面上表示
+		// "留空 = 用主模型"，让前端自己按同一条规则展示，别在两处各算一遍。
+		"utility_model": ac.UtilityModel,
+		"quirk":         ac.quirkRead(),
 	})
 }
 

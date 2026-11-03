@@ -881,9 +881,24 @@ func aiExecTool(name string, args map[string]any) (string, error) {
 		auditNow(actAI, "lan_write_blocked", name, policyTargetOf(name, args), resDenied,
 			"手机端只读上下文里拒绝了写工具："+name)
 		warn(scSys, "AI", "手机端只读上下文拒绝了写工具「%s」", name)
+		// 被拒也要进轨迹：指标里"denied 后仍重试"正是靠这里算的，
+		// 只在成功执行时记步，这条永远是 0。
+		traceStep(phAction, actAI, name, policyTargetOf(name, args), "fail", 0, "denied", "")
 		return "", fmt.Errorf("手机端是只读的，不支持执行「%s」；请到电脑上操作", aiToolCnName(name, args))
 	}
-	return t.Execute(args)
+	// ---- 轨迹记录放在执行层，不放调用点 ----
+	//
+	// 写工具（启停/备份/写文件）**全部**经"确认续跑"执行，而调用点在
+	// aiRunLoop 里只有一个 —— 记录写在调用点，就意味着
+	// 预检命中、意图兜底、确认后执行这**三条路一条都不进轨迹**。
+	//
+	// 实测（2026-11-03）：一条 goal=「停止后端」的成功轨迹 steps 为**空**，
+	// 详情页什么也画不出来。不是渲染坏了，是真没记。
+	// 与 policy gate 同一个理由：**新增执行路径时不该还要记得加记录**。
+	t0 := time.Now()
+	out, err := t.Execute(args)
+	traceToolStep(name, args, out, err, time.Since(t0).Milliseconds())
+	return out, err
 }
 
 // aiToolDefsReadOnly 只读工具清单：写工具**不发给模型**。
@@ -914,17 +929,31 @@ func aiToolDefsForTurn() []aiUpstreamTool {
 // "断流后用已有结果补结论"这条路径（aiAbortRescue）。
 var aiCallLLMFunc = aiCallLLM
 
-// aiCallLLM 非流式调用（连通性测试用）
-// aiCallLLM 非流式调用（测试连接 / 工具轮）：参数被上游拒绝时自动降级重试并记忆
+// aiCallLLM 非流式调用（连通性测试 / 补答）：走主模型。
 func aiCallLLM(msgs []aiMsg, tools []aiUpstreamTool) (string, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		content, detail := aiCallLLMOnce(msgs, tools)
+	return aiCallLLMWith(msgs, tools, "")
+}
+
+// aiCallLLMWith 非流式调用，可指定模型。model 为空 = 主模型。
+//
+// 参数被上游拒绝时自动降级重试并记忆；**怪癖按实际用的模型分账**
+// （aiFixParamErrorFor），否则杂活模型的参数修正会污染主模型。
+//
+// 尝试次数是 4 而不是 3：最坏情况需要**三跳修正 + 一次成功**的请求
+// （temperature ""→"one"、"one"→"none"、max_tokens→max_completion_tokens）。
+// 老实现给 3 次，正好卡在最后一跳之前退出，于是那类模型一次都调不通。
+func aiCallLLMWith(msgs []aiMsg, tools []aiUpstreamTool, model string) (string, error) {
+	if strings.TrimSpace(model) == "" {
+		model = aiSnap().Model
+	}
+	for attempt := 0; attempt < 4; attempt++ {
+		content, detail := aiCallLLMOnce(msgs, tools, model)
 		if detail == "" {
 			return content, nil
 		}
-		if newQ, changed, hint := aiFixParamError(detail); changed {
-			aiMutate(func(a *AIConfig) { a.setQuirk(newQ); saveExternalConfig(cfg) })
-			warn(scSys, "AI", "%s（模型 %s）：%s", hint, aiSnap().Model, firstLines(detail, 120))
+		if newQ, changed, hint := aiFixParamErrorFor(model, detail); changed {
+			aiMutate(func(a *AIConfig) { a.setQuirkFor(model, newQ); saveExternalConfig(cfg) })
+			warn(scSys, "AI", "%s（模型 %s）：%s", hint, model, firstLines(detail, 120))
 			continue
 		}
 		return "", fmt.Errorf("%s", detail)
@@ -933,9 +962,14 @@ func aiCallLLM(msgs []aiMsg, tools []aiUpstreamTool) (string, error) {
 }
 
 // aiCallLLMOnce 返回 (内容, 错误详情)；详情为空表示成功
-func aiCallLLMOnce(msgs []aiMsg, tools []aiUpstreamTool) (string, string) {
+func aiCallLLMOnce(msgs []aiMsg, tools []aiUpstreamTool, model string) (string, string) {
 	ac := aiSnap()
-	payload := aiPayload(msgs, tools, ac.quirkRead(), -1, false)
+	if strings.TrimSpace(model) == "" {
+		model = ac.Model
+	}
+	// 怪癖按本次实际模型取；model 覆盖写在 payload 上（aiPayload 统一按主模型填）
+	payload := aiPayload(msgs, tools, ac.quirkReadFor(model), -1, false)
+	payload["model"] = model
 	b, _ := json.Marshal(payload)
 	req, err := http.NewRequest("POST", ac.endpoint(), strings.NewReader(string(b)))
 	if err != nil {
@@ -943,7 +977,9 @@ func aiCallLLMOnce(msgs []aiMsg, tools []aiUpstreamTool) (string, string) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ac.keyPlain())
-	resp, err := httpAPI.Do(req)
+	// 与主循环共用同一个出口：录像时非流式调用也会被一起录下来（
+	// 否则 fixture 里缺了工具轮之外的调用，回放会错位）
+	resp, err := aiUpstreamDo(httpAPI, req)
 	if err != nil {
 		return "", err.Error()
 	}

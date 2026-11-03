@@ -1577,6 +1577,9 @@
         <div class="frow" id="ai_model_row" style="display:none"><label>模型名</label><input id="ai_model" placeholder="输入模型名，如 deepseek-flash"></div>
         <div class="frow"><label>API Key</label><input id="ai_key" type="password" placeholder="sk-...（留空保留已存值）"></div>
         <div class="frow"><label>温度</label><input id="ai_temp" type="number" step="0.1" min="0" max="2" placeholder="留空 = 0.3（部分模型只接受 1，会自动适配）"></div>
+        <!-- 内部调用模型（utility_model）：只影响「压缩历史」这类用户看不见的后台调用。
+             文案必须说清"不影响你看到的回答"，否则用户会以为换了它就换了助手水平。 -->
+        <div class="frow"><label>内部调用模型</label><input id="ai_utility_model" placeholder="留空 = 与主模型相同；可填更便宜的模型，如 deepseek-flash"></div>
         <div class="frow" id="ai_quirk_row" style="display:none"><label>已自动适配</label><span class="muted" id="ai_quirk"></span></div>
         <div class="ckrow">
           <label class="switch"><input type="checkbox" id="ai_enabled"><span class="sl"></span></label>
@@ -1764,7 +1767,8 @@
              （「安装与分发」100px 挨着「手机访问」340px → 空 240px），
              末行「界面」独占左列、右列整块空着。
              改成显式两列 + flex 纵向堆之后，同一列里不会再出现"洞"；
-             两列总量按 1100px 上下配平（实测左侧 1335 / 右侧 1295）。 -->
+             配平靠"矮卡往矮的那列挪"：两列高差压在 120px 内才算配平
+             （v3.7.3 把 91px 的「网络代理」从右列挪到左列，实测 1323 / 1252）。 -->
         <div class="set-cols">
           <div class="set-col">
 
@@ -1817,6 +1821,16 @@
               <div><label for="s_gosumdb">GOSUMDB</label><input id="s_gosumdb" placeholder="off" /></div>
               <div><label for="s_go_cgo">CGO_ENABLED</label><input id="s_go_cgo" placeholder="0" /></div>
               <div><label for="s_npm_registry">npm 源</label><input id="s_npm_registry" placeholder="https://registry.npmmirror.com" /></div>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
+            <!-- 跟着「镜像与校验」走：两件事都是"包从哪来"，放同一列读起来是一条线。
+                 v3.7.2 前它在右列，右列比左列高出 127px，整页也就压不下去。 -->
+            <div class="grid">
+              <div><label for="s_proxy_http">HTTP 代理</label><input id="s_proxy_http" placeholder="http://127.0.0.1:7890" /></div>
+              <div><label for="s_proxy_https">HTTPS 代理</label><input id="s_proxy_https" placeholder="http://127.0.0.1:7890" /></div>
             </div>
           </div>
 
@@ -1890,14 +1904,6 @@
             </div>
             <div class="ro-list" id="s_upd_state" style="margin-top:6px"></div>
             <div class="row" style="margin-top:6px"><button class="ghost" id="btn-s-upd-check">立即检查</button></div>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">网络代理</span><span class="tag">可选</span></div>
-            <div class="grid">
-              <div><label for="s_proxy_http">HTTP 代理</label><input id="s_proxy_http" placeholder="http://127.0.0.1:7890" /></div>
-              <div><label for="s_proxy_https">HTTPS 代理</label><input id="s_proxy_https" placeholder="http://127.0.0.1:7890" /></div>
-            </div>
           </div>
 
           <div class="set-card">
@@ -2613,6 +2619,7 @@ const I18N_EN = {
   "个人中心": "Profile",
   "中": "Med",
   "中午好": "Good noon",
+  "中断 {0}": "{0} aborted",
   "主体": "Actor",
   "主机": "Host",
   "二次验证已开启：用口令器扫右边的二维码": "Two-factor is on — scan the QR code on the right with your authenticator",
@@ -2622,6 +2629,8 @@ const I18N_EN = {
   "交易数量": "Transactions",
   "产品名": "Product name",
   "亮色": "Light",
+  "人工 {0}": "manual {0}",
+  "人工介入 {0} 次": "{0} manual interventions",
   "人工确认": "human confirm",
   "仅 DeepSeek 支持": "DeepSeek only",
   "仅执行 SQL": "Apply SQL only",
@@ -2719,6 +2728,7 @@ const I18N_EN = {
   "内置默认（300 秒）": "Built-in default (300s)",
   "内置默认（3）": "Built-in default (3)",
   "内置默认（600 秒）": "Built-in default (600s)",
+  "内部调用模型": "Utility model",
   "再晃要吐了🫠": "Keep shaking and I'll be sick🫠",
   "写一条长期规矩，例如：备份前先停掉后端服务（Ctrl+Enter 添加）": "Write a standing rule, e.g. stop the backend before backing up (Ctrl+Enter to add)",
   "冷却（秒）": "Cooldown (s)",
@@ -2873,6 +2883,7 @@ const I18N_EN = {
   "图片载入失败：{0}": "Image failed to load: {0}",
   "图片都没载入成功，先别发；点缩略图上的 × 移除后再试": "No image loaded — don't send yet; remove them with × and try again",
   "在呢~": "Here~",
+  "在审计里看这段时间": "View this window in Audit",
   "在打雷，能不出门就别出去。": "Thunder out there — stay in if you can.",
   "在电脑上执行任意命令，等同于你本人坐在电脑前打字。": "Runs any command on the PC — the same as you typing at the keyboard.",
   "在跑": "Running",
@@ -2918,6 +2929,8 @@ const I18N_EN = {
   "天气没查到：连不上服务": "Couldn't get the weather: service unreachable",
   "失效不删除": "Expiry does not delete",
   "失败": "Failed",
+  "失败 {0}": "{0} failed",
+  "失败 {0} 次": "{0} failures",
   "失败：": "Failed: ",
   "好吃！": "Yum!",
   "好舒服~": "So comfy~",
@@ -3018,6 +3031,7 @@ const I18N_EN = {
   "已启用": "Enabled",
   "已填入 {0}，记得保存配置": "Filled in {0} — remember to save the config",
   "已复制": "Copied",
+  "已复验": "Verified",
   "已复验通过": "Verified OK",
   "已失效": "Stale",
   "已存为预案：{0}": "Saved as playbook: {0}",
@@ -3094,6 +3108,7 @@ const I18N_EN = {
   "常": "Always",
   "常用：8080 前端 · 8888 后端": "Common: 8080 frontend · 8888 backend",
   "干活中…": "Working…",
+  "平均 {0} 步": "{0} steps on average",
   "平均步数": "Avg. steps",
   "平均每轮": "Avg / turn",
   "应用": "Apply",
@@ -3141,6 +3156,7 @@ const I18N_EN = {
   "慢机器把窗口调大，避免把「还在编译」判成「启动失败」": "On slow machines, widen the window so \"still compiling\" is not judged as \"failed to start\"",
   "慢路径": "Slow path",
   "成功": "OK",
+  "成功 {0}": "{0} succeeded",
   "成功 {0} · 部分 {1} · 失败 {2}": "{0} ok · {1} partial · {2} failed",
   "成败": "Pass/Fail",
   "成长": "Growth",
@@ -3216,6 +3232,7 @@ const I18N_EN = {
   "描述要让助手做什么…": "Describe what you want the assistant to do…",
   "描述里提到：{0}": "Mentions: {0}",
   "提供方 / 模型": "Provider / Model",
+  "搜索目标或动作": "Search target or action",
   "搜索项目文件": "Search project files",
   "摘要后保留量": "Keep after summary",
   "摘要后至少原样留几条消息": "Messages kept verbatim at minimum after summarizing",
@@ -3304,6 +3321,7 @@ const I18N_EN = {
   "更新检查地址": "Update check URL",
   "最常见原因与修法": "Most likely cause and fix",
   "最新版本": "Latest version",
+  "最近 {0} 条": "Last {0}",
   "最近动作": "Recent actions",
   "最近回合": "Recent turns",
   "最近有任务失败": "A recent task failed",
@@ -3457,6 +3475,7 @@ const I18N_EN = {
   "没有可导出的数据": "Nothing to export",
   "没有可打开的目录": "No folder to open",
   "没有命中": "No matches",
+  "没有符合条件的轨迹": "No traces match the filter",
   "没检测到手机能连上的地址（这台电脑没连 WiFi/网线？）": "No address your phone could reach (is this PC offline?)",
   "注意": "Note",
   "浅色": "Light",
@@ -3520,6 +3539,7 @@ const I18N_EN = {
   "留空 = exe 同级的 backups": "Empty = backups/ next to the exe",
   "留空 = 不检查（可填 Releases API 或 version.json）": "Empty = no check (Releases API or version.json)",
   "留空 = 不检查（返回 version/notes 的 JSON）": "Empty = no check (JSON returning version/notes)",
+  "留空 = 与主模型相同；可填更便宜的模型，如 deepseek-flash": "Empty = same as the main model; you can use a cheaper one, e.g. deepseek-flash",
   "留空 = 只弹桌面气泡，不外发": "Empty = desktop bubble only, nothing sent out",
   "留空 = 只弹气泡，不外发": "Empty = in-app bubble only, nothing is sent out",
   "留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。": "Empty = system default. After changing a mirror, re-run the install from Configure → Dependencies.",
@@ -3711,6 +3731,7 @@ const I18N_EN = {
   "读取环境状态": "read environment status",
   "读取统计失败：{0}": "Failed to load stats: {0}",
   "读取行动…": "Loading missions…",
+  "读取轨迹…": "Reading traces…",
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
@@ -3740,10 +3761,12 @@ const I18N_EN = {
   "近 7 天": "Last 7 days",
   "近 {0} 天": "Last {0} days",
   "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}",
+  "返回列表": "Back to list",
   "还原": "Restore",
   "还原数据库": "Restore database",
   "还原文件": "Restore file",
   "还有记忆条目": "No memory entries yet",
+  "还没有历史轨迹（发一句话就会有了）": "No history yet (send a message to create one)",
   "还没有手机配对过": "No phone has paired yet",
   "还没有数据。发一条消息后这里会显示 token、步数与耗时。": "No data yet. Send a message and tokens, steps and elapsed time will show up here.",
   "还没有记忆条目": "No memory entries yet",
@@ -3751,6 +3774,7 @@ const I18N_EN = {
   "还没有预案。行动收口后在卡片上点「存为预案」即可沉淀。": "No playbooks yet. Once a mission finishes, click \"Save as playbook\" on its card.",
   "还没读到配置，请先点「重新读取」": "Config not loaded yet — click Reload first",
   "还缺：{0}": "Still missing: {0}",
+  "这一回合没有调用任何工具（纯问答，没有动手）": "This turn called no tools (answer only, nothing executed)",
   "这一档当前不可用，先看卡片里的原因": "This tier is unavailable — see the reason on its card",
   "这个目录是空的": "Empty folder",
   "这也太虐了吧？！我心里堵得慌！！": "So brutal... my chest feels tight!!",
@@ -3794,6 +3818,7 @@ const I18N_EN = {
   "通知已恢复": "Notifications restored",
   "通过": "Passed",
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
+  "部分 {0}": "{0} partial",
   "部分不可用": "Partly unavailable",
   "部分完成": "Partial",
   "部分日志读取失败": "Some log entries could not be read",
@@ -3883,6 +3908,7 @@ const I18N_EN = {
   "（无输出）": "(no output)",
   "（没找到可连的地址）": "(no reachable address found)",
   "（没找到手机能连的地址）": "(no address your phone can reach)",
+  "（没有记录目标）": "(no goal recorded)",
   "（空结果）": "(empty result)",
   "（该事件没有可读描述）": "(this event has no readable description)",
   "（还没有密钥，打开开关会自动生成）": "(no key yet — one is generated when you turn this on)",
@@ -7409,7 +7435,9 @@ function aiToolbar(d, reask){
      「审计」按本轮轨迹的时间窗过滤——没有 trace_id 时这是最诚实的做法，
      比"猜哪几条属于这轮"可靠，也不会把别的回合算进来。 */
   const tr = document.createElement('button'); tr.className = 'ai-tb-btn'; tr.textContent = t('轨迹');
-  tr.onclick = ()=>{ aiTraceView = d; aiSide('trace'); };
+  // 点这条消息的「轨迹」= 看本回合，所以要显式切回来：
+  // 否则用户上次停在历史列表，点这里会打开历史列表（看起来像没反应）。
+  tr.onclick = ()=>{ if(typeof aiTrMode !== 'undefined'){ aiTrMode = 'turn'; aiTrDetail = null; } aiTraceView = d; aiSide('trace'); };
   tb.appendChild(tr);
   const au = document.createElement('button'); au.className = 'ai-tb-btn'; au.textContent = t('审计');
   au.onclick = ()=>{ aiAuditFocus(d.__trace); aiSide('audit'); };
@@ -7664,8 +7692,13 @@ function aiTraceEvent(ev){
 }
 function aiTraceRender(){
   const box = $ai('ai-pane-trace'); if(!box) return;
-  const nodes = (aiTraceView && Array.isArray(aiTraceView.__trace)) ? aiTraceView.__trace : aiTurnNodes;
   box.textContent = '';
+  /* 历史视图整块由 61-ai-trace.js 负责（它自己会画切换条与筛选栏），
+     所以这里直接交出去，不重复画头部。
+     aiTrMode 用 var 声明：本文件在拼接后先执行，用 let 会落进 TDZ。 */
+  if(typeof aiTrMode !== 'undefined' && aiTrMode === 'hist'){ aiTrHistRender(box); return; }
+  box.appendChild(aiTrSwitchRow());
+  const nodes = (aiTraceView && Array.isArray(aiTraceView.__trace)) ? aiTraceView.__trace : aiTurnNodes;
   // 头部先给结论：几步、多久、花多少、命中多少。明细在下面，别让人先读一堆时间戳。
   const head = document.createElement('div'); head.className = 'muted';
   head.style.cssText = 'margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;line-height:1.5';
@@ -7980,6 +8013,380 @@ function aiUsageRender(){
   box.appendChild(note);
 }
 
+/* ============ 轨迹：历史视图（v3.7.3） ============
+   这个文件补的是「轨迹」页此前缺的另一半。
+
+   现状（v3.7.x）：轨迹页只渲染**浏览器内存里的本回合节点**——刷新即失。
+   而轨迹其实一直在落盘（trace-YYYYMMDD.jsonl），后端的 traceQuery /
+   traceSummary 早就写好了却没有任何调用点。于是这份数据只能喂给内部统计，
+   人看不到"上周那次反复重启到底怎么走的"。
+
+   现在两种视图并存：
+     · 本回合  —— 默认，就是原来那块（SSE 实时节点）
+     · 历史    —— 读盘上的轨迹：统计条 + 筛选 + 列表 + 单条时间轴
+
+   ## 为什么用 var 而不是 let/const
+   前端是「多个片段按文件名拼成一个 <script>」（见 tools/web_build.py），
+   而本文件的 `aiTrMode` 会被 60-ai.js 里的 aiTraceRender 读到。
+   60-ai.js 在拼接后**先执行**，若这里用 let 就会落进 TDZ：
+   `node --check` 查不出，运行时是 ReferenceError。var 会被提升成 undefined，
+   60-ai.js 侧按 `aiTrMode === 'hist'` 判断，undefined 自然走本回合分支。
+   —— 这条坑项目里踩过，别再改回 let。
+
+   ## 口径
+   成败与结局**一律取自服务端字段**（outcome / verified / result），
+   前端只做"把已有事实排成时间轴"这件事，不重新判定。
+   与"徽章说验了就是真验了"是同一条原则。
+*/
+
+var aiTrMode = 'turn';       // 'turn' | 'hist'
+var aiTrHist = null;         // {rows, stats, retention, err, loading}
+var aiTrDetail = null;       // 单条轨迹的完整数据（null = 显示列表）
+var aiTrBusy = false;
+
+/* 阶段 → 中文名。与后端 trace.go / trace_phase.go 的常量一一对应，
+   后端加了新阶段这里要跟着加，否则会掉回原始英文常量（不致命但难看）。 */
+var AI_TR_PHASE = {
+  plan: '规划', action: '动作', evidence: '证据', verify: '复验',
+  failure: '失败', success: '达成', policy: '策略', human: '人工', truncated: '已截断'
+};
+
+function aiTrSwitchRow() {
+  var wrap = document.createElement('div');
+  wrap.className = 'pbar';
+  wrap.style.marginBottom = '8px';
+  var mk = function (mode, label) {
+    var b = document.createElement('button');
+    b.textContent = t(label);
+    if (aiTrMode === mode) {
+      b.style.color = 'var(--brand)';
+      b.style.borderColor = 'var(--brand)';
+    }
+    b.onclick = function () {
+      aiTrMode = mode;
+      if (mode === 'turn') aiTrDetail = null;
+      aiTraceRender();
+      if (mode === 'hist') aiTrLoad(false);
+    };
+    return b;
+  };
+  wrap.appendChild(mk('turn', '本回合'));
+  wrap.appendChild(mk('hist', '历史'));
+  if (aiTrMode === 'hist') {
+    var sp = document.createElement('span');
+    sp.style.flex = '1';
+    wrap.appendChild(sp);
+    var re = document.createElement('button');
+    re.textContent = t('刷新');
+    re.onclick = function () { aiTrLoad(true); };
+    wrap.appendChild(re);
+  }
+  return wrap;
+}
+
+/* 结局标签：颜色只表达"好/中/坏"三态，与页面既有图例同源。 */
+function aiTrOutcomeTag(outcome) {
+  var map = { success: ['ok', '成功'], failed: ['bad', '失败'],
+              partial: ['warn', '部分'], aborted: ['mute', '中断'] };
+  var m = map[outcome] || ['mute', outcome || '未判定'];
+  var s = document.createElement('span');
+  s.className = 'tr-tag ' + m[0];
+  s.textContent = t(m[1]);
+  return s;
+}
+
+function aiTrFmtWhen(s) {
+  // "2026-11-01 10:00:00.000" → "11-01 10:00:00"（列表里年份是冗余的）
+  if (!s || s.length < 19) return s || '—';
+  return s.slice(5, 19);
+}
+
+function aiTrFmtDur(ms) {
+  if (!ms) return '—';
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(1) + 's';
+}
+
+function aiTrLoad(force) {
+  if (aiTrBusy) return;
+  if (aiTrHist && !force && !aiTrHist.err) { aiTrHistRender($ai('ai-pane-trace')); return; }
+  aiTrBusy = true;
+  aiTrHist = { rows: [], stats: null, loading: true };
+  aiTrHistRender($ai('ai-pane-trace'));
+  var q = [];
+  if (aiTrHistFilter.outcome) q.push('outcome=' + encodeURIComponent(aiTrHistFilter.outcome));
+  if (aiTrHistFilter.q) q.push('q=' + encodeURIComponent(aiTrHistFilter.q));
+  if (aiTrHistFilter.onlybad) q.push('onlybad=1');
+  q.push('n=' + (aiTrHistFilter.n || 30));
+  fetch('/api/traces?' + q.join('&')).then(function (r) { return r.json(); }).then(function (d) {
+    aiTrBusy = false;
+    if (!d || !d.ok) throw new Error((d && d.error) || 'bad response');
+    aiTrHist = { rows: d.traces || [], stats: d.stats || null, retention: d.retention_days };
+    aiTrHistRender($ai('ai-pane-trace'));
+  }).catch(function (e) {
+    aiTrBusy = false;
+    aiTrHist = { rows: [], err: String(e && e.message || e) };
+    aiTrHistRender($ai('ai-pane-trace'));
+  });
+}
+
+/* 筛选条件放在模块级：重绘不该把用户刚输入的词清掉。 */
+var aiTrHistFilter = { outcome: '', q: '', onlybad: false, n: 30 };
+
+function aiTrHistRender(box) {
+  if (!box) return;
+  box.textContent = '';
+  box.appendChild(aiTrSwitchRow());
+
+  if (aiTrDetail) { aiTrRenderDetail(box, aiTrDetail); return; }
+
+  // ---- 筛选条 ----
+  var bar = document.createElement('div');
+  bar.className = 'pbar';
+  var sel = document.createElement('select');
+  sel.style.cssText = 'font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--soft);color:var(--text);flex:none';
+  [['', '全部结局'], ['success', '成功'], ['failed', '失败'], ['partial', '部分'], ['aborted', '中断']].forEach(function (o) {
+    var op = document.createElement('option');
+    op.value = o[0]; op.textContent = t(o[1]);
+    if (aiTrHistFilter.outcome === o[0]) op.selected = true;
+    sel.appendChild(op);
+  });
+  sel.onchange = function () { aiTrHistFilter.outcome = sel.value; aiTrLoad(true); };
+  var inp = document.createElement('input');
+  inp.placeholder = t('搜索目标或动作');
+  inp.value = aiTrHistFilter.q;
+  var timer = null;
+  inp.oninput = function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { aiTrHistFilter.q = inp.value.trim(); aiTrLoad(true); }, 350);
+  };
+  var only = document.createElement('label');
+  only.className = 'muted';
+  only.style.cssText = 'display:flex;gap:4px;align-items:center;white-space:nowrap';
+  var cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = !!aiTrHistFilter.onlybad;
+  cb.onchange = function () { aiTrHistFilter.onlybad = cb.checked; aiTrLoad(true); };
+  only.appendChild(cb);
+  only.appendChild(document.createTextNode(t('只看异常')));
+  bar.appendChild(sel); bar.appendChild(inp); bar.appendChild(only);
+  box.appendChild(bar);
+
+  if (!aiTrHist || aiTrHist.loading) {
+    var l = document.createElement('div'); l.className = 'muted';
+    l.textContent = t('读取轨迹…');
+    box.appendChild(l); return;
+  }
+  if (aiTrHist.err) {
+    var e = document.createElement('div'); e.className = 'muted';
+    e.textContent = t('读取失败') + '：' + aiTrHist.err;
+    box.appendChild(e); return;
+  }
+  var rows = aiTrHist.rows || [];
+
+  // ---- 统计条 ----
+  if (aiTrHist.stats && aiTrHist.stats.total) {
+    var st = aiTrHist.stats;
+    var sum = document.createElement('div');
+    sum.className = 'muted';
+    sum.style.cssText = 'margin-bottom:8px;line-height:1.6;display:flex;flex-wrap:wrap;gap:2px 8px';
+    var bits = [
+      t('最近 {0} 条', st.total),
+      t('成功 {0}', st.success),
+      t('失败 {0}', st.failed)
+    ];
+    if (st.partial) bits.push(t('部分 {0}', st.partial));
+    if (st.aborted) bits.push(t('中断 {0}', st.aborted));
+    bits.push(t('平均 {0} 步', st.avg_steps));
+    if (st.avg_prompt_tokens) bits.push('↑' + aiFmtTok(st.avg_prompt_tokens) + ' ↓' + aiFmtTok(st.avg_completion_tokens));
+    if (st.cache_hit_pct) bits.push(t('缓存 {0}%', Math.round(st.cache_hit_pct)));
+    if (st.humans) bits.push(t('人工介入 {0} 次', st.humans));
+    sum.textContent = bits.join(' · ');
+    box.appendChild(sum);
+  }
+
+  if (!rows.length) {
+    var p = document.createElement('div'); p.className = 'muted';
+    p.textContent = aiTrHistFilter.q || aiTrHistFilter.outcome || aiTrHistFilter.onlybad
+      ? t('没有符合条件的轨迹')
+      : t('还没有历史轨迹（发一句话就会有了）');
+    box.appendChild(p);
+    if (aiTrHist.retention) {
+      var rt = document.createElement('div'); rt.className = 'muted';
+      rt.style.cssText = 'margin-top:6px;font-size:10px';
+      rt.textContent = t('仅覆盖最近 {0} 天（轨迹保留期）', aiTrHist.retention);
+      box.appendChild(rt);
+    }
+    return;
+  }
+
+  // ---- 列表 ----
+  rows.forEach(function (r) {
+    var root = document.createElement('div');
+    root.className = 'tr-root ' + (r.outcome === 'failed' || r.outcome === 'aborted' ? 'bad'
+      : (r.outcome === 'partial' ? 'warn' : 'ok'));
+    // 行上带 id 与步数：E2E 测试要能挑"有步骤的那条"再点进去。
+    // 只靠"点第一行"，本机第一条恰好是空步骤的回答型轨迹时就会误判成渲染坏了。
+    root.dataset.traceId = r.trace_id || '';
+    root.dataset.steps = String(r.steps || 0);
+    var head = document.createElement('div');
+    head.className = 'tr-head';
+    head.style.cursor = 'pointer';
+    var when = document.createElement('span');
+    when.className = 'tr-id';
+    when.textContent = aiTrFmtWhen(r.started);
+    var goal = document.createElement('span');
+    goal.className = 'tr-sum';
+    goal.textContent = r.goal || r.trace_id;
+    head.appendChild(when); head.appendChild(goal); head.appendChild(aiTrOutcomeTag(r.outcome));
+    root.appendChild(head);
+
+    var meta = document.createElement('div');
+    meta.className = 'muted';
+    meta.style.cssText = 'font-size:11px;margin:2px 0 0 2px;display:flex;flex-wrap:wrap;gap:6px';
+    var mbits = [t('{0} 步', r.steps), aiTrFmtDur(r.dur_ms)];
+    if (r.usage) mbits.push('↑' + aiFmtTok(r.usage.prompt_tokens) + ' ↓' + aiFmtTok(r.usage.completion_tokens));
+    if (r.ai_fails) mbits.push(t('失败 {0} 次', r.ai_fails));
+    if (r.verified) mbits.push(t('已复验'));
+    if (r.humans) mbits.push(t('人工 {0}', r.humans));
+    meta.textContent = mbits.join(' · ');
+    root.appendChild(meta);
+
+    head.onclick = function () { aiTrOpen(r.trace_id); };
+    box.appendChild(root);
+  });
+
+  if (aiTrHist.retention) {
+    var rt2 = document.createElement('div'); rt2.className = 'muted';
+    rt2.style.cssText = 'margin-top:10px;font-size:10px';
+    rt2.textContent = t('仅覆盖最近 {0} 天（轨迹保留期）', aiTrHist.retention);
+    box.appendChild(rt2);
+  }
+}
+
+function aiTrOpen(id) {
+  fetch('/api/trace?id=' + encodeURIComponent(id)).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { toast((d && d.error) || t('读取失败')); return; }
+    aiTrDetail = d;
+    aiTrHistRender($ai('ai-pane-trace'));
+  }).catch(function () { toast(t('读取失败')); });
+}
+
+/* 一步的成色：**只用后端字段**推导，不重判成败。
+   failure 步就是失败；verify 步看证据里有没有"未通过"；人工步单独一色。 */
+function aiTrStepCls(s) {
+  if (s.phase === 'failure') return 'bad';
+  if (s.phase === 'human') return 'human';
+  if (s.phase === 'verify') return /未通过|未复验/.test(s.evidence || '') ? 'warn' : 'ok';
+  if (s.phase === 'success') return 'ok';
+  if (s.result === 'fail') return 'bad';
+  if (s.phase === 'policy') return 'warn';
+  return '';
+}
+
+function aiTrRenderDetail(box, d) {
+  var tr = d.trace || {};
+  var row = d.row || {};
+
+  var back = document.createElement('button');
+  back.textContent = '← ' + t('返回列表');
+  back.style.cssText = 'background:none;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:11px;padding:2px 8px;cursor:pointer;margin-bottom:8px';
+  back.onclick = function () { aiTrDetail = null; aiTrHistRender($ai('ai-pane-trace')); };
+  box.appendChild(back);
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;margin-bottom:4px;word-break:break-word';
+  title.textContent = tr.goal || t('（没有记录目标）');
+  box.appendChild(title);
+
+  var meta = document.createElement('div');
+  meta.className = 'muted';
+  meta.style.cssText = 'font-size:11px;margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center';
+  meta.appendChild(aiTrOutcomeTag(tr.outcome));
+  var mb = [tr.trace_id, aiTrFmtWhen(tr.started), aiTrFmtDur(row.dur_ms)];
+  if (row.usage) mb.push('↑' + aiFmtTok(row.usage.prompt_tokens) + ' ↓' + aiFmtTok(row.usage.completion_tokens));
+  if (row.verified) mb.push(t('已复验'));
+  var mt = document.createElement('span');
+  mt.textContent = mb.join(' · ');
+  meta.appendChild(mt);
+  box.appendChild(meta);
+
+  // 一句话摘要：与日志/报告里那句同源（后端 traceSummary 生成），避免两处口径分叉
+  if (row.summary) {
+    var sm = document.createElement('div');
+    sm.className = 'muted';
+    sm.style.cssText = 'font-size:11px;background:var(--off);border-radius:6px;padding:6px 8px;margin-bottom:8px;line-height:1.6';
+    sm.textContent = row.summary;
+    box.appendChild(sm);
+  }
+
+  var steps = tr.steps || [];
+  if (!steps.length) {
+    // 记步在执行层（aiExecTool），所以"没有步骤"只有一种含义：
+    // **这一回合没调用任何工具**（纯问答）。不是记录缺失，别让人以为是坏的。
+    var p = document.createElement('div'); p.className = 'muted';
+    p.textContent = t('这一回合没有调用任何工具（纯问答，没有动手）');
+    box.appendChild(p);
+  } else {
+    var ul = document.createElement('ul');
+    ul.className = 'tl';
+    steps.forEach(function (s) {
+      var li = document.createElement('li');
+      li.className = 'tl-row ' + aiTrStepCls(s);
+      var dot = document.createElement('i'); dot.className = 'tl-dot';
+      var sq = document.createElement('span'); sq.className = 'tl-k';
+      sq.textContent = String(s.seq || '') + '.';
+      var ph = document.createElement('span'); ph.className = 'tl-k';
+      ph.textContent = t(AI_TR_PHASE[s.phase] || s.phase);
+      var tt = document.createElement('span'); tt.className = 'tl-t';
+      tt.textContent = s.action + (s.target ? ' @ ' + s.target : '');
+      li.appendChild(dot); li.appendChild(sq); li.appendChild(ph); li.appendChild(tt);
+      if (s.dur_ms) {
+        var du = document.createElement('span'); du.className = 'tl-dur';
+        du.textContent = (s.dur_ms / 1000).toFixed(1) + 's';
+        li.appendChild(du);
+      }
+      if (s.err_kind) {
+        var ek = document.createElement('span'); ek.className = 'tr-tag bad';
+        ek.style.marginLeft = '6px'; ek.textContent = s.err_kind;
+        li.appendChild(ek);
+      }
+      if (s.evidence) {
+        var lines = String(s.evidence).split('\n').length;
+        if (lines > 6 || String(s.evidence).length > 160) {
+          var det = document.createElement('details'); det.className = 'tl-det';
+          var sg = document.createElement('summary');
+          sg.textContent = t('展开明细（{0} 行）', lines);
+          var pre = document.createElement('div'); pre.className = 'tl-xbody';
+          pre.textContent = s.evidence;
+          det.appendChild(sg); det.appendChild(pre); li.appendChild(det);
+        } else {
+          var x = document.createElement('div'); x.className = 'tl-x';
+          x.textContent = s.evidence;
+          li.appendChild(x);
+        }
+      }
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  // 与审计联动：用这条轨迹的起止时间窗去筛审计（aiAuditFocus 只吃 {at} 毫秒）
+  var toMs = function (s) {
+    var v = Date.parse(String(s || '').replace(' ', 'T'));
+    return isFinite(v) ? v : null;
+  };
+  var a = toMs(tr.started), b = toMs(tr.ended);
+  if (a && b) {
+    var bt = document.createElement('button');
+    bt.textContent = t('在审计里看这段时间');
+    bt.style.cssText = 'margin-top:10px;background:none;border:1px solid var(--line);border-radius:6px;color:var(--brand);font-size:11px;padding:2px 8px;cursor:pointer';
+    bt.onclick = function () {
+      aiAuditFocus([{ at: a }, { at: b }]);
+      aiSide('audit');
+    };
+    box.appendChild(bt);
+  }
+}
 /* ---------- 行动（Mission）：Agent 闭环 Phase 1 ----------
    数据源 GET /api/missions；实时 /api/missions/events SSE（EventSource 自动重连，
    「刷新」兜底）。状态徽章**只显示服务端字段**——前端不重新判定成败（红线 1），
@@ -9025,6 +9432,9 @@ async function aiLoadConfig(){
     aiKeySet = !!c.key_set;   // 自动拉取要用：后端已存 Key 才值得发 /models 请求
     $ai('ai_key').placeholder = c.key_set ? t('已保存（{0}），留空保留', c.key_masked||'****') : 'sk-...';
     $ai('ai_temp').value = (c.temperature === undefined || c.temperature === null) ? '' : (Math.round(Number(c.temperature)*100)/100);
+    // 内部调用模型：显示"配置值"本身（空串即占位符提示的"与主模型相同"），
+    // 不在这里把它替换成主模型名——那会让用户分不清自己到底配没配。
+    $ai('ai_utility_model').value = c.utility_model || '';
     const q = c.quirk || {};
     const notes = [];
     if(q.temp_mode === 'one') notes.push(t('temperature 固定为 1'));
@@ -9123,6 +9533,10 @@ function aiCollectPayload(){
   return {enabled:$ai('ai_enabled').checked, memory_enabled:$ai('ai_memory_on').checked,
     provider:$ai('ai_provider').value, base_url:$ai('ai_base').value.trim(),
     api_key:$ai('ai_key').value.trim(), model,
+    // 内部调用模型：**总是带上**（含空串）。它是可清空的选项，
+    // 不传等于"保留旧值"，用户就再也删不掉了。后端按指针处理：
+    // 传空串 = 清空（回到跟主模型一样），不传 = 不动。
+    utility_model:$ai('ai_utility_model').value.trim(),
     temperature: ($ai('ai_temp').value.trim() === '' ? null : Number($ai('ai_temp').value))};
 }
 
@@ -9202,7 +9616,7 @@ function aiScheduleAutoSave(){
 
 // 绑定自动保存：下拉/开关用 change，文本输入用 input（防抖合并击键）
 // provider 的 change 在上面既有绑定里处理（清拉取缓存 + 应用预置），这里只挂保存调度
-['ai_base','ai_key','ai_temp'].forEach(id=>$ai(id).addEventListener('input', aiScheduleAutoSave));
+['ai_base','ai_key','ai_temp','ai_utility_model'].forEach(id=>$ai(id).addEventListener('input', aiScheduleAutoSave));
 ['ai_enabled','ai_memory_on'].forEach(id=>$ai(id).addEventListener('change', aiScheduleAutoSave));
 
 /* 对话消费：读取 SSE 流 */

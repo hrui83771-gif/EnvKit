@@ -1043,6 +1043,9 @@ async function aiLoadConfig(){
     aiKeySet = !!c.key_set;   // 自动拉取要用：后端已存 Key 才值得发 /models 请求
     $ai('ai_key').placeholder = c.key_set ? t('已保存（{0}），留空保留', c.key_masked||'****') : 'sk-...';
     $ai('ai_temp').value = (c.temperature === undefined || c.temperature === null) ? '' : (Math.round(Number(c.temperature)*100)/100);
+    // 内部调用模型：显示"配置值"本身（空串即占位符提示的"与主模型相同"），
+    // 不在这里把它替换成主模型名——那会让用户分不清自己到底配没配。
+    $ai('ai_utility_model').value = c.utility_model || '';
     const q = c.quirk || {};
     const notes = [];
     if(q.temp_mode === 'one') notes.push(t('temperature 固定为 1'));
