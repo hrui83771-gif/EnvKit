@@ -708,7 +708,13 @@
   .ai-confirm .no{background:var(--off);color:var(--text)}
   /* 批量授权勾选：只在服务启停类卡上出现，弱化处理——它是"少点几次"的便利，不是主角 */
   .ai-batch{display:flex;gap:6px;align-items:flex-start;margin-top:9px;font-size:11px;color:var(--muted);line-height:1.5;cursor:pointer}
-  .ai-batch input{margin-top:2px;flex:none}
+  /* **width:auto 不能少。** 全局 input,select{width:100%} 会命中这个勾选框：
+     flex:none 只挡住"伸缩"，挡不住本身就有 100% 宽度 —— 结果勾选框吃满一整行，
+     后面的说明被挤成"一行一个字"的窄条，整张卡被撑到三四百像素高。
+     用户原话："确认卡体积膨胀了"。 */
+  .ai-batch input{margin-top:2px;flex:none;width:auto}
+  /* 反过来把说明撑开：不写 min-width:0 的话，长中文不换行会顶破卡宽 */
+  .ai-batch span{flex:1;min-width:0}
   /* 紧凑抽屉里的确认卡别"撑满一整屏"：它只需要你点一下，不是一篇文章 */
   #ai-drawer:not(.big) .ai-confirm{padding:9px 11px;font-size:12px;max-width:100%}
   #ai-drawer:not(.big) .ai-confirm .btns{gap:6px;margin-top:7px}

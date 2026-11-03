@@ -173,7 +173,38 @@ function aiRenderVerify(ev){
     d.appendChild(det);
   }
   $ai('ai-msgs').appendChild(d);
+  aiKeepAnswerLast();   // 复验结论属于"过程"，结论文本要留在它下面
   $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
+}
+
+/* ---------- 确认卡的 DOM（纯构造，不碰任何状态）----------
+   单独抽出来是为了**能测排版**：这张卡曾经坏成"勾选框吃满一整行、说明被挤成
+   一行一个字、整张卡三四百像素高"（全局 input,select{width:100%} 命中勾选框），
+   而这种坏法只有量盒子才看得出来，靠 DOM 结构断言（元素在不在）永远是绿的。
+   用 DOM + textContent 构建：ev.text 含模型给的 args，直接 innerHTML 是注入面。 */
+function aiConfirmCard(ev){
+  const card = document.createElement('div');
+  card.className = 'ai-confirm';
+  const cb = document.createElement('b'); cb.textContent = t('AI 请求执行：'); card.appendChild(cb);
+  card.appendChild(document.createTextNode(ev.text || ev.tool));
+  card.appendChild(document.createElement('br'));
+  card.appendChild(document.createTextNode(t('确认后将真实执行该操作。')));
+  // 批量授权（v3.2）：只有服务启停族给这个勾选。
+  // 为什么只给这三个：它们在同一次任务里天然连着（停 → 起 → 复验），
+  // 逐次点头换来的是三次上下文重建而不是安全；数据/系统类动作不在此列。
+  let batchBox = null;
+  if(AI_BATCH_TOOLS[ev.tool]){
+    const lab = document.createElement('label'); lab.className = 'ai-batch';
+    batchBox = document.createElement('input'); batchBox.type = 'checkbox';
+    const sp = document.createElement('span');
+    sp.textContent = t('本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）');
+    lab.appendChild(batchBox); lab.appendChild(sp); card.appendChild(lab);
+  }
+  const btns = document.createElement('div'); btns.className = 'btns';
+  const by = document.createElement('button'); by.className = 'yes'; by.textContent = t('确认执行');
+  const bn = document.createElement('button'); bn.className = 'no'; bn.textContent = t('拒绝');
+  btns.appendChild(by); btns.appendChild(bn); card.appendChild(btns);
+  return {card: card, by: by, bn: bn, batchOf: ()=> !!(batchBox && batchBox.checked)};
 }
 
 let aiCtrl = null;      // AbortController：手动"停止生成"用
@@ -183,6 +214,21 @@ let aiCtrl = null;      // AbortController：手动"停止生成"用
 // 规则：finally 里先比对代际，不是当前代就整段跳过复位。
 let aiGen = 0;
 let aiPending = null;   // {asst, card}：待确认的写操作卡片。用户无视卡片直接发新消息时清理悬挂回合
+
+/* ---------- 「过程在上、结论在下」----------
+   气泡是在**第一个 delta** 时就落到容器末尾的；此后到达的过程卡（执行计划 / 工具结果 /
+   复验徽章 / 确认卡）只能追加到它后面，而后续 delta 又写回**那条**气泡。于是一轮里
+   只要有"先说话再动手"，屏幕上就是"结论在上、过程在下"——用户原话：
+   "结果可不可以在过程下面"。
+   做法：每插一张过程卡，就把气泡**再挪回末尾**。只动 DOM 顺序，
+   不动 aiMessages、不动流式渲染 —— 正文仍是同一条消息，历史里不会多出半截。 */
+let aiStreamCur = null;   // 本回合正在流式写入的气泡（#ai-msgs 的直接子节点是它的 .ai-wrap）
+function aiKeepAnswerLast(){
+  const host = $ai('ai-msgs');
+  const w = aiStreamCur && aiStreamCur.parentNode;
+  // 已经是最末就不用动：appendChild 同一节点也会触发重排
+  if(w && w.parentNode === host && host.lastElementChild !== w) host.appendChild(w);
+}
 
 async function aiConsume(path, body){
   const gen = ++aiGen;   // 本次流的代际：finally 里只有当代际匹配才允许复位全局态
@@ -229,6 +275,7 @@ async function aiConsume(path, body){
     planEl.appendChild(sm);
     planEl.appendChild(planList);
     $ai('ai-msgs').appendChild(planEl);
+    aiKeepAnswerLast();
   };
   const planStep = (seq, text)=>{
     if(!planList){ planBox(0, ''); }
@@ -351,7 +398,7 @@ async function aiConsume(path, body){
         aiTraceEvent(ev);   // 旁路采集：一个事件 → 轨迹里一个节点（不改动下面任何渲染逻辑）
         if(ev.type === 'delta'){
           dropThink();
-          if(!cur){ cur = aiAdd('ai', '', aiNow(), reaskText); curTs = cur.dataset.ts || ''; curText = ''; }
+          if(!cur){ cur = aiAdd('ai', '', aiNow(), reaskText); curTs = cur.dataset.ts || ''; curText = ''; aiStreamCur = cur; }
           curText += ev.text;
           if(!renderQueued){ renderQueued = true; requestAnimationFrame(flushRender); }
         } else if(ev.type === 'reasoning'){
@@ -401,6 +448,7 @@ async function aiConsume(path, body){
           const pre = document.createElement('pre'); pre.textContent = ev.result || '';
           d.appendChild(sm); d.appendChild(pre);
           $ai('ai-msgs').appendChild(d);
+          aiKeepAnswerLast();
           $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
         } else if(ev.type === 'verify_result'){
           // v2.9：客观复验结果直接上界面。
@@ -419,41 +467,22 @@ async function aiConsume(path, body){
           // v3.2：服务端在**同一个 SSE 流里**等我们的决定，这一轮还没结束。
           // 把当前气泡收尾：确认之后模型接着说的一段要另起一条，不能拼到旧气泡上
           // （拼上去会出现"结论 + 执行结果"粘在同一段里的错位）。
-          cur = null; curText = ''; rsnText = ''; curTs = '';
-          // 确认卡片用 DOM + textContent 构建：ev.text 含模型给的 args，直接 innerHTML 是注入面
-          const card = document.createElement('div');
-          card.className = 'ai-confirm';
-          const cb = document.createElement('b'); cb.textContent = t('AI 请求执行：'); card.appendChild(cb);
-          card.appendChild(document.createTextNode(ev.text || ev.tool));
-          card.appendChild(document.createElement('br'));
-          card.appendChild(document.createTextNode(t('确认后将真实执行该操作。')));
-          // 批量授权（v3.2）：只有服务启停族给这个勾选。
-          // 为什么只给这三个：它们在同一次任务里天然连着（停 → 起 → 复验），
-          // 逐次点头换来的是三次上下文重建而不是安全；数据/系统类动作不在此列。
-          let batchBox = null;
-          if(AI_BATCH_TOOLS[ev.tool]){
-            const lab = document.createElement('label'); lab.className = 'ai-batch';
-            batchBox = document.createElement('input'); batchBox.type = 'checkbox';
-            const sp = document.createElement('span');
-            sp.textContent = t('本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）');
-            lab.appendChild(batchBox); lab.appendChild(sp); card.appendChild(lab);
-          }
-          const btns = document.createElement('div'); btns.className = 'btns';
-          const by = document.createElement('button'); by.className = 'yes'; by.textContent = t('确认执行');
-          const bn = document.createElement('button'); bn.className = 'no'; bn.textContent = t('拒绝');
-          btns.appendChild(by); btns.appendChild(bn); card.appendChild(btns);
+          // aiStreamCur 也要清：确认卡必须停在最下面等用户点，不能被"结论挪末尾"顶到上面去。
+          cur = null; curText = ''; rsnText = ''; curTs = ''; aiStreamCur = null;
+          const cc = aiConfirmCard(ev);
+          const card = cc.card;
           $ai('ai-msgs').appendChild(card);
           $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
           // 键盘可达：卡弹出后把焦点放到"确认执行"，Tab 两次就能批/拒。
           // 不移焦点的话，键盘用户要从输入框 Tab 过十几步才能摸到这两个按钮。
-          try{ by.focus(); }catch(_){}
+          try{ cc.by.focus(); }catch(_){}
           aiPending = {asst, card, id: ev.tool_call_id, tool: ev.tool, args: ev.args || {},
-            batchOf: ()=> !!(batchBox && batchBox.checked)};
+            batchOf: cc.batchOf};
           aiHstat(t('等你确认'));
           // 桌宠联动：等确认状态 + 蓝色徽标，点徽标/点宠物直接在迷你卡里批，不必开抽屉
           petAskConfirm(t('AI 请求执行'), ev.text || ev.tool, ()=>aiDecide(true), ()=>aiDecide(false));
-          by.onclick = ()=>aiDecide(true);
-          bn.onclick = ()=>aiDecide(false);
+          cc.by.onclick = ()=>aiDecide(true);
+          cc.bn.onclick = ()=>aiDecide(false);
         } else if(ev.type === 'usage'){
           // 本轮消耗：尾部一行摘要（点开是 DSH 式明细卡），并累计到桌宠"今日统计"
           if(ev.usage){
@@ -525,6 +554,7 @@ async function aiConsume(path, body){
     if(gen === aiGen){
       if(think && think.parentNode) think.remove();
       aiBusy = false; aiCtrl = null;
+      aiStreamCur = null;   // 回合结束：别让下一轮的卡片再把这条旧气泡挪到底部
     // 轨迹与用量**挂到消息元素上**：工具栏的「轨迹/导出」按元素取，
     // 不依赖"当前指向哪一轮"的全局指针——用户回头看历史回合时才不会串。
     const _dur = aiTurnStartAt ? (Date.now() - aiTurnStartAt) : 0;
