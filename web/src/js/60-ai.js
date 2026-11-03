@@ -22,6 +22,11 @@ const $ai = id => document.getElementById(id);
    `aiImgs`（附件已落盘但消息没发出，重开后不该浮在输入区）。 */
 let aiImgs = [];
 
+/* 待发送的**文档**（拖进来的 docx/xlsx/pptx/pdf/文本，正文已由后端落盘）。
+   与 aiImgs 并列：这里只放引用（id/name/kind/chars），正文从不进浏览器 ——
+   否则又变成"几千字贴进输入框"，而用户要的是一个文件附件。 */
+let aiDocs = [];
+
 /* ---------- 放大态 / 检查器 / 轨迹 / 文件引用的**状态** ----------
    声明必须早于 aiAdd 与 aiHistRestore：aiAdd 会读 aiTurnAnchor，
    而 let 变量在声明前处于 TDZ，读到就抛 ReferenceError（恢复历史时会炸）。
@@ -70,6 +75,8 @@ $ai('ai-clear').onclick = ()=>{
   if(aiPending){ try{ aiPending.card.remove(); }catch(_){} aiPending = null; }
   aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
   aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
+  // 待发附件一并清掉：对话都清了，还挂着一张图/一份文件在输入区上方，下次发送会莫名其妙带上它
+  aiImgs = []; aiDocs = []; aiAttachRender();
   aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat(''); };
 
 /* ---------- 彻底隐藏桌面助手（AI 设置页勾选项，localStorage 记忆） ---------- */
@@ -258,13 +265,15 @@ function aiToolbar(d, reask){
 /* 发送一段用户文本：发送按钮与「重新提问」共用。
    抽成函数是因为重新提问要复刻发送的全套动作——剥悬挂确认卡、记时间戳、进历史、
    起流式回合；两处各写一遍，迟早只改一处（确认卡悬挂那次事故就是这么来的）。 */
-async function aiSendText(tx, missionId, imgs){
+async function aiSendText(tx, missionId, imgs, docs){
   if(aiBusy) return;
   tx = String(tx || '').trim();
   // imgs：已经落盘的图片引用（{id,name,mime}）。只有图片、没写字也要能发 ——
   // "你看看这个报错"在截图场景里本来就只是一张图。
   const pics = (imgs || []).filter(x=>x && x.id);
-  if(!tx && !pics.length) return;
+  // docs：已经抽取并落盘的文档引用（{id,name,kind,chars}）。同理，"就这个文件，你看下"也要能发。
+  const dlist = (docs || []).filter(x=>x && x.id);
+  if(!tx && !pics.length && !dlist.length) return;
   // 行动绑定（Phase 1）：带 missionId = 本回合是该行动的执行回合；
   // 不带 = 普通对话，清掉旧绑定（一次对话只属于一个行动，红线 5 同源）。
   aiCurMission = missionId || null;
@@ -278,6 +287,11 @@ async function aiSendText(tx, missionId, imgs){
   if(pics.length){
     um.images = pics;
     aiMsgImgsRender(el, pics);   // 气泡里回显：用户得能确认"我发的确实是这张"
+  }
+  if(dlist.length){
+    // 气泡里只回显**文件名卡片**，正文不进 DOM —— 这正是"附件"与"粘贴一大段"的区别
+    um.docs = dlist;
+    aiMsgDocsRender(el, dlist);
   }
   aiMessages.push(um);
   await aiConsume('/api/ai/chat', {messages: aiMessages});
@@ -376,6 +390,11 @@ function aiHistSave(){
       if(Array.isArray(m.images) && m.images.length){
         o.images = m.images.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', mime:x.mime || ''}));
       }
+      // 文档同理只存引用（几十字节）。正文永远只在服务端 aidoc/ 里，
+      // 存进 localStorage 一次就够写爆 5MB 配额。
+      if(Array.isArray(m.docs) && m.docs.length){
+        o.docs = m.docs.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', kind:x.kind || '', chars:x.chars || 0}));
+      }
       return o;
     });
     if(slim.length){ localStorage.setItem('ek-ai-hist', JSON.stringify(slim)); }
@@ -388,17 +407,25 @@ function aiHistRestore(){
   if(!Array.isArray(h)) return;
   aiMessages = h.filter(m => m && (m.role === 'user' || m.role === 'assistant') &&
     typeof m.content === 'string' &&
-    // 只有图片没有文字的消息必须留下：否则"发张截图问一句"的那一轮，图回来了、问题没了
-    (m.content.trim() || (Array.isArray(m.images) && m.images.length)));
+    // 只有图片（或只有文档）没有文字的消息必须留下：否则"发个文件问一句"的那一轮，
+    // 附件回来了、问题没了
+    (m.content.trim() || (Array.isArray(m.images) && m.images.length) ||
+      (Array.isArray(m.docs) && m.docs.length)));
   aiMessages.forEach(m=>{
-    if(!Array.isArray(m.images)) return;
-    m.images = m.images.filter(x=>x && x.id);
-    if(!m.images.length) delete m.images;
+    if(Array.isArray(m.images)){
+      m.images = m.images.filter(x=>x && x.id);
+      if(!m.images.length) delete m.images;
+    }
+    if(Array.isArray(m.docs)){
+      m.docs = m.docs.filter(x=>x && x.id);
+      if(!m.docs.length) delete m.docs;
+    }
   });
   if(!aiMessages.length) return;
   aiMessages.forEach(m => {
     const el = aiAdd(m.role === 'user' ? 'user' : 'ai', m.content, aiTsOk(m.ts) ? m.ts : undefined);
     if(m.role === 'user' && m.images) aiMsgImgsRender(el, m.images);
+    if(m.role === 'user' && m.docs) aiMsgDocsRender(el, m.docs);
   });
   aiAdd('sys', t('已恢复上次的对话（{0} 条）', aiMessages.length));
 }

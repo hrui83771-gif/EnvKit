@@ -118,6 +118,8 @@ func main() {
 	// 图片附件目录（<exeDir>/aiattach）24 小时自动清理。
 	// 启动先扫一遍：用户关掉 EnvKit 的那些天里没人扫，重启时该清的当场清掉。
 	aiAttachStartGC()
+	// 文档附件目录（<exeDir>/aidoc）同一套规则：拖进来的 docx/pdf 抽出的正文存这里。
+	aiDocStartGC()
 
 	// 进程资源后台采样（2s 一轮）+ 配置文件热重载（监听 exe 同目录）。
 	// 两者都只读、都不改变启动流程；监听必须在 loadConfig 之后接线，
@@ -197,7 +199,7 @@ func main() {
 	http.HandleFunc("/api/ai/test", handleAITest)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 	http.HandleFunc("/api/ai/attach", handleAIAttach)   // 图片附件：拖入/粘贴的图片落盘，消息里只留引用
-	http.HandleFunc("/api/ai/extract", handleAIExtract) // 文档抽文本：docx/xlsx/pptx/pdf 转成可读文本，不落盘
+	http.HandleFunc("/api/ai/extract", handleAIExtract) // 文档抽文本：docx/xlsx/pptx/pdf → 正文落 aidoc/，消息里只留引用
 	http.HandleFunc("/api/ai/confirm", handleAIConfirm) // v3.2：确认卡就地等待的投递口
 	http.HandleFunc("/api/ai/echo", handleAIEcho)       // v3.2：传输自检（请求体有没有被吃）
 	http.HandleFunc("/api/ai/explain", handleAIExplain)

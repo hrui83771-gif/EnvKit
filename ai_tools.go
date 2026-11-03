@@ -28,6 +28,9 @@ type aiMsg struct {
 	// **绝不出现在发往上游的请求里**：上游认的是 content 块数组，
 	// 多一个自定义键会让部分 OpenAI 兼容实现直接 400。MarshalJSON 里统一清空。
 	Images []aiImage `json:"images,omitempty"`
+	// Docs 同理：拖进对话区的文档只留引用（正文在 aidoc/，由 aiDocHydrate 读盘拼进
+	// Content）。序列化与 Images 一样要清空 —— 上游从没见过这个键。
+	Docs []aiDocRef `json:"docs,omitempty"`
 }
 
 // MarshalJSON：思考型模型要求"助手消息必须带 reasoning_content"，缺失会报 HTTP 400。
@@ -43,6 +46,7 @@ func (m aiMsg) MarshalJSON() ([]byte, error) {
 	type plain aiMsg
 	p := plain(m)
 	p.Images = nil // 上游从未见过这个键，别让严格实现的兼容层因此报错
+	p.Docs = nil   // 同上；文档正文此时已经由 aiDocHydrate 拼进 Content 了
 	if m.Role == "assistant" {
 		return json.Marshal(struct {
 			plain

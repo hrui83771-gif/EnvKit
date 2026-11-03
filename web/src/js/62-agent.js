@@ -565,7 +565,35 @@ const AI_IMG_RAW_KEEP = 2 * 1024 * 1024; // 已够小且不超这个体积就原
 
 function aiAttachToggle(){
   const box = $ai('ai-attach');
-  if(box) box.hidden = aiImgs.length === 0;
+  // 图片与文档共用一个待发送区：只有两类都空时才收起
+  if(box) box.hidden = (aiImgs.length === 0 && aiDocs.length === 0);
+}
+
+/* 文档卡片的外壳（待发送区与消息气泡共用一套）。
+   kind 只当角标显示（PDF/DOCX/…），不做任何解析 —— 真正的类型判定在后端按魔数做，
+   这里显示的只是"后端认为这是什么"。 */
+function aiDocChip(it, onRemove){
+  const d = document.createElement('div');
+  d.className = 'ai-doc' + (it.busy ? ' busy' : '') + (it.err ? ' err' : '');
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  const kind = String(it.kind || '').toLowerCase();
+  badge.textContent = it.err ? '!' : (it.busy ? '…' : (kind ? kind.toUpperCase() : 'DOC'));
+  const nm = document.createElement('span'); nm.className = 'nm';
+  nm.textContent = it.name || t('文件');
+  const mt = document.createElement('span'); mt.className = 'mt';
+  mt.textContent = it.busy ? t('读取中') : (it.chars ? t('{0} 字', it.chars) : '');
+  d.appendChild(badge); d.appendChild(nm); d.appendChild(mt);
+  // 悬浮给"人话"：名字可能被省略号截断，字数是"读进来多少"的唯一凭据
+  d.title = it.err ? (it.name + ' — ' + it.err)
+    : [it.name, it.busy ? t('正在读取…') : t('{0} 字', it.chars || 0), it.note || ''].filter(Boolean).join(' · ');
+  if(onRemove){
+    const rm = document.createElement('button');
+    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.onclick = onRemove;
+    d.appendChild(rm);
+  }
+  return d;
 }
 
 function aiAttachRender(){
@@ -586,6 +614,10 @@ function aiAttachRender(){
     rm.onclick = ()=>{ aiImgs.splice(i, 1); aiAttachRender(); };
     d.appendChild(rm);
     box.appendChild(d);
+  });
+  // 文档排在图片后面：两类混拖时，先图后文的顺序与消息体里"文字在前、内容在后"一致
+  aiDocs.forEach((it, i)=>{
+    box.appendChild(aiDocChip(it, ()=>{ aiDocs.splice(i, 1); aiAttachRender(); }));
   });
   aiAttachToggle();
 }
@@ -735,6 +767,27 @@ function aiMsgImgsRender(host, imgs){
   if(box.childNodes.length) host.appendChild(box);
 }
 
+/* 已发出的文档在消息气泡里回显 —— 只回显**文件名卡片**，正文一个字节都不进 DOM。
+   这就是"文件附件"与"粘贴一大段"的区别所在：用户能确认发了哪个文件，
+   但对话框仍然是对话框。 */
+function aiMsgDocsRender(host, docs){
+  if(!host || !docs || !docs.length) return;
+  const box = document.createElement('div');
+  box.className = 'ai-msg-docs';
+  docs.forEach(d=>{ if(d && d.id) box.appendChild(aiDocChip(d, null)); });
+  if(box.childNodes.length) host.appendChild(box);
+}
+
+/* 调试探针（tools/cdp_ai_drop_test.js 用）：只暴露元数据，不暴露正文 ——
+   正文本来就不在浏览器里，这里也拿不到，这正是本次改造的目的。 */
+window.__ekDocProbe = {
+  pending: ()=>aiDocs.map(d=>({name:d.name, kind:d.kind||'', chars:d.chars||0, id:d.id||'', err:d.err||'', busy:!!d.busy})),
+  sent: ()=>{
+    const m = aiMessages.filter(x=>x && Array.isArray(x.docs)).pop();
+    return m ? m.docs.map(d=>({name:d.name, kind:d.kind||'', chars:d.chars||0, id:d.id||''})) : [];
+  },
+};
+
 /* 粘贴处理。抽成独立函数是为了能被测试直接调用：
    ClipboardEvent 的 clipboardData 在浏览器里是只读的，
    用 `new ClipboardEvent('paste', {clipboardData})` 造不出来 —— 所以
@@ -761,7 +814,11 @@ function aiPasteHandle(e){
    为什么文档必须走后端（/api/ai/extract 而不是前端读）：
    File.text() 只会按 UTF-8 硬解，改不了编码（GBK 的老日志全是乱码），
    也判断不了二进制；类型判定、解码、docx/xlsx/pptx/pdf 抽文本
-   全放在后端一处做。前端只负责搬运 —— 和图片走 /api/ai/attach 同一个分工。 */
+   全放在后端一处做。前端只负责搬运 —— 和图片走 /api/ai/attach 同一个分工。
+
+   **抽出来的正文不进输入框**（v3.7.5）：后端落盘成 aidoc/<id>，这里只留一个引用，
+   显示成一张文件卡片。理由见 ai_doc.go 文件头：把几千字塞进 textarea 等于
+   把"附件"变成"粘贴"，输入框被撑满、气泡变日志、localStorage 还会被写爆。 */
 const AI_DOC_MAX = 16 * 1024 * 1024;   // 与后端 aiExtractMaxBytes 同一口径
 
 /* 把 File 读成 data:URL（后端统一按 base64 解，省一套 multipart 解析） */
@@ -775,7 +832,8 @@ function aiFileDataURL(f){
 }
 
 /* 请求后端抽文本。失败时抛出的 message 已是一句人话（"旧版 Office 请另存为…"
-   这类），直接显示即可，不要再包一层"操作失败"把原因盖掉。 */
+   这类），直接显示即可，不要再包一层"操作失败"把原因盖掉。
+   成功返回 {id, kind, chars, pages, truncated, note} —— **不含正文**。 */
 async function aiExtractFile(f){
   const content = await aiFileDataURL(f);
   const r = await fetch('/api/ai/extract', {
@@ -786,38 +844,69 @@ async function aiExtractFile(f){
   return r.json();
 }
 
+/* 单个文档：先挂一张"读取中"的卡片，读完补上字数，失败标红并把原因写进 toast。
+   为什么先挂卡片：读一份 300 页 PDF 要几秒，什么都不显示的话用户会以为拖丢了。 */
+function aiDocAdd(f){
+  const item = {name: f.name || t('文件'), busy: true};
+  aiDocs.push(item);
+  aiAttachRender();
+  // 正在生成回答时不动状态行 —— 那行归主循环用，覆盖掉会显得"卡在读取"
+  if(!aiBusy) aiHstat(t('正在读取：{0}', item.name));
+  const task = (async ()=>{
+    try{
+      const j = await aiExtractFile(f);
+      if(!j || !j.id) throw new Error(t('后端没有返回文件引用'));
+      item.id = j.id;
+      item.kind = j.kind || '';
+      item.chars = Number(j.chars) || 0;
+      item.note = j.note || '';
+      // 提示跟在卡片外（toast）：它是给用户看的，不进上下文
+      const head = t('已附加：{0}（{1} 字）', item.name, item.chars);
+      if(j.note) toast(head + ' · ' + j.note); else toast(head);
+    }catch(e){
+      item.err = String((e && e.message) || e);
+      toast(t('读取失败：{0}', item.name) + ' —— ' + item.err, 'err');
+    }finally{
+      item.busy = false;
+      aiAttachRender();
+      if(!aiBusy && !aiDocs.some(x=>x.busy)) aiHstat('');
+    }
+  })();
+  item.p = task;
+  return task;
+}
+
 async function aiDropFiles(files){
   const arr = Array.prototype.slice.call(files || []);
   const imgs = arr.filter(f=>f && AI_IMG_IN.test(f.type || ''));
   const docs = arr.filter(f=>f && !AI_IMG_IN.test(f.type || ''));
   // 图片走附件通道（模型真的能看到像素）
   if(imgs.length) await aiAttachAdd(imgs);
-  const ta = $ai('ai-in'); if(!ta) return;
+  const jobs = [];
   for(const f of docs){
     if(f.size > AI_DOC_MAX){
       toast(t('文件超过 {0} MB，已跳过：{1}', AI_DOC_MAX >> 20, f.name), 'err');
       continue;
     }
-    // 大文档抽取要几秒（PDF 尤其）：给了状态行，用户才知道是在读、不是没反应。
-    // 正在生成回答时不动状态行 —— 那行归主循环用，覆盖掉会显得"卡在读取"。
-    if(!aiBusy) aiHstat(t('正在读取：{0}', f.name));
-    try{
-      const j = await aiExtractFile(f);
-      // 文件名里的 < > " 会把包裹标签提前闭合，等于让文件内容自己决定边界。
-      // 换成下划线：名字只用于人看和溯源，不需要保留这些字符。
-      const safe = String(f.name || 'file').replace(/[<>&"]/g, '_');
-      // 外部文件内容一律当**不可信数据**包裹，不让其中的指令生效
-      ta.value += '\n<untrusted_data source="file:' + safe + '">\n' + j.text + '\n</untrusted_data>\n';
-      // 后端给的提示（截断了、跳过几页扫描件）跟在包裹外，是给用户看的，不是给模型看的
-      if(j.note) toast(t('已读入：{0}（{1} 字）', f.name, j.chars) + ' · ' + j.note);
-      else toast(t('已读入：{0}（{1} 字）', f.name, j.chars));
-    }catch(e){
-      toast(t('读取失败：{0}', f.name) + ' —— ' + String((e && e.message) || e), 'err');
-    }finally{
-      if(!aiBusy) aiHstat('');
-    }
+    jobs.push(aiDocAdd(f));   // 各自异步读，互不阻塞：一份大 PDF 不该让后面的文件排队
   }
-  ta.focus();
+  if(jobs.length){
+    await Promise.all(jobs);
+    try{ $ai('ai-in').focus(); }catch(_){}
+  }
+}
+
+/* 取出待发送的文档并清空待发区。返回 [{id,name,kind,chars}]。
+   失败的项直接丢弃（每条失败都单独 toast 过，留着也发不出去）。
+   与 aiAttachTake 不同，这里**不返回 null**：文档读失败不该连累用户已经写好的那句话。 */
+async function aiDocTake(){
+  const running = aiDocs.filter(x=>x.p).map(x=>x.p);
+  if(running.length) await Promise.all(running);
+  const ok = aiDocs.filter(x=>x.id && !x.err)
+    .map(x=>({id:x.id, name:x.name || '', kind:x.kind || '', chars:x.chars || 0}));
+  aiDocs = [];
+  aiAttachRender();
+  return ok;
 }
 /* 导出本轮：给答辩/工单留一份可读证据，轨迹一起带走 */
 function aiExportTurn(d){

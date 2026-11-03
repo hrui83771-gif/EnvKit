@@ -217,9 +217,25 @@ func aiAttachGC() {
 	aiAttachGCMu.Lock()
 	defer aiAttachGCMu.Unlock()
 
-	ents, err := os.ReadDir(aiAttachDir())
+	removed, freed := attachSweep(aiAttachDir(), aiAttachMaxCount, aiAttachTTL)
+	if removed > 0 {
+		info(scSys, "AI", "图片附件清理：删除 %d 个（%.1f MB），保留最近 %d 张 / %s",
+			removed, float64(freed)/(1<<20), aiAttachMaxCount, aiAttachTTL)
+	}
+}
+
+// attachSweep 是"按年龄 + 条数上限清理一个附件目录"的唯一实现。
+//
+// 图片附件与文档附件（ai_doc.go）规则完全一致：只认 32 位 hex 文件名（那就是 id），
+// 越界的一律不动（目录里可能有人手动放的东西），保留最近 maxCount 份、
+// 其余只在早于 ttl 时才删 —— 顺序按修改时间倒序，所以"最近"是确定语义。
+//
+// 抽出来是因为两份完全一样的清理代码迟早会改一处漏一处；而它又是**删文件**的代码，
+// 漏改的后果不是显示错，是删错东西。
+func attachSweep(dir string, maxCount int, ttl time.Duration) (removed int, freed int64) {
+	ents, err := os.ReadDir(dir)
 	if err != nil || len(ents) == 0 {
-		return
+		return 0, 0
 	}
 	type fi struct {
 		name string
@@ -227,7 +243,7 @@ func aiAttachGC() {
 		size int64
 	}
 	list := make([]fi, 0, len(ents))
-	deadline := time.Now().Add(-aiAttachTTL)
+	deadline := time.Now().Add(-ttl)
 	for _, e := range ents {
 		if e.IsDir() || !aiAttachIDOK(e.Name()) {
 			continue
@@ -239,21 +255,17 @@ func aiAttachGC() {
 		list = append(list, fi{name: e.Name(), mod: st.ModTime(), size: st.Size()})
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].mod.After(list[j].mod) })
-	removed, freed := 0, int64(0)
 	for i, f := range list {
-		if i < aiAttachMaxCount && f.mod.After(deadline) {
+		if i < maxCount && f.mod.After(deadline) {
 			continue
 		}
 		// 删除失败不阻断（可能正被另一个读到），下次再清
-		if err := os.Remove(aiAttachPath(f.name)); err == nil {
+		if err := os.Remove(filepath.Join(dir, f.name)); err == nil {
 			removed++
 			freed += f.size
 		}
 	}
-	if removed > 0 {
-		info(scSys, "AI", "图片附件清理：删除 %d 个（%.1f MB），保留最近 %d 张 / %s",
-			removed, float64(freed)/(1<<20), aiAttachMaxCount, aiAttachTTL)
-	}
+	return removed, freed
 }
 
 var (

@@ -586,16 +586,21 @@ $ai('ai-stop').onclick = ()=>{ if(aiCtrl){ try{ aiCtrl.abort(); }catch(e){} } };
 $ai('ai-send').onclick = async ()=>{
   if(aiBusy) return;
   const raw = $ai('ai-in').value.trim();
-  if(!raw && !aiImgs.length) return;   // 文字和图片都没有：什么都不发
+  // 文字、图片、文档三样全空才什么都不发
+  if(!raw && !aiImgs.length && !aiDocs.length) return;
   // 图片先落地（等所有上传完成），再组消息。失败项交给用户处理，不静默丢弃。
   const pics = await aiAttachTake();
   if(pics === null){ toast(t('图片都没载入成功，先别发；点缩略图上的 × 移除后再试'), 'err'); return; }
+  // 文档同理：等抽取落地再发，否则服务端拿到的是一条没有附件的消息
+  const docs = await aiDocTake();
+  // 附件全失败、又没写字：别发一条空消息（模型只能回一句"你想问什么"）
+  if(!raw && !(pics || []).length && !docs.length) return;
   // 已选文件只以"路径引用"的形式并入这条消息（读取由 read_file 在沙箱内完成）
   const tx = aiFileRef() + raw;
   $ai('ai-in').value = '';
   // 复用 aiSendText（剥悬挂卡、记时间戳、进历史、起流式回合都在里面）——
   // 这里原先把那套动作又抄了一遍，改一处漏一处的事故已经发生过一次。
-  await aiSendText(tx, null, pics || []);
+  await aiSendText(tx, null, pics || [], docs);
 };
 $ai('ai-in').addEventListener('keydown', e=>{
   // isComposing：中文输入法里按 Enter 是确认候选词，不是发送（否则拼音还没上屏消息就飞出去了）

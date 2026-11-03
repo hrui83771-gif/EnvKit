@@ -211,6 +211,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// 图片附件：把引用（id）读盘成 data URL。放在裁剪之后，只给真正还要发出去的消息读盘；
 	// 只让最近几条带图消息携带图片，更早的换成文字占位（历史每轮重发，一张图 1024 token）。
 	msgs = aiAttachHydrate(msgs)
+	// 文档附件：把引用（id）读盘拼回正文。同理放在裁剪之后 —— 被裁掉的消息不必读盘。
+	// 正文拼进 Content 而不是换消息形状：换形状会让所有请求的字节前缀都变，
+	// 上游的上下文缓存（按前缀命中）会整体失效。
+	msgs = aiDocHydrate(msgs)
 	// 确认回执：执行（或拒绝）写工具，然后继续对话
 	result := ""
 	confirmed := false

@@ -71,14 +71,17 @@ type aiExtractResult struct {
 	Note  string
 }
 
-// handleAIExtract 只做一件事：
+// handleAIExtract 做两件事：
 //
 //	POST /api/ai/extract  {name, mime, content(base64 可带 data: 前缀)}
-//	 → {ok, kind, enc, text, chars, pages, truncated, note}
+//	 → {ok, id, kind, enc, chars, pages, truncated, note}
 //
-// 和 /api/ai/attach 的区别：**不落盘**。图片要反复引用（历史缩略图、多轮重发），
-// 所以有 ID、有 TTL；文档抽完就是一段文本，后续都活在这轮对话的 messages 里，
-// 落盘只是多一份没人再读的副本。
+// 抽出来的正文**不回传前端**（只给 id）：前端拿到几千字只能往输入框里塞，
+// 而用户要的是"一个文件附件"，不是"把文档贴进聊天"。正文落盘为 aidoc/<id>，
+// 每轮发给上游前由 aiDocHydrate 读盘拼进 content（见 ai_doc.go）。
+//
+// 和 /api/ai/attach 的分工：图片是像素，必须按 content 块发送，所以要 GET 回来做缩略图；
+// 文档是文字，只需要一个引用 + 服务端读盘，没有"回显"需求。
 func handleAIExtract(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -136,12 +139,18 @@ func handleAIExtract(w http.ResponseWriter, r *http.Request) {
 			" 内容超过上限 %d KB，已截断到前 %d 字符；需要后半段请分段拖入。", limit>>10, len([]rune(res.Text))))
 	}
 	res.Chars = len([]rune(res.Text))
+	id, err := aiDocStore(res.Text)
+	if err != nil {
+		warn(scSys, "AI", "文档正文暂存失败（%s）：%v", name, err)
+		http.Error(w, "文档已读出，但暂存失败："+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	info(scSys, "AI", "已抽取文档 %s（%s/%s，%d 字符%s）",
 		name, res.Kind, res.Enc, res.Chars, map[bool]string{true: "，已截断"}[res.Trunc])
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok": true, "kind": res.Kind, "enc": res.Enc, "text": res.Text,
+		"ok": true, "id": id, "kind": res.Kind, "enc": res.Enc,
 		"chars": res.Chars, "pages": res.Pages, "truncated": res.Trunc, "note": res.Note,
 	})
 }
