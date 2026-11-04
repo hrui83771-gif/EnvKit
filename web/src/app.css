@@ -870,6 +870,12 @@
   .ai-pick-item{display:flex;gap:7px;align-items:center;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px}
   .ai-pick-item:hover{background:var(--soft2)}
   .ai-pick-item .ic{width:14px;flex:none;text-align:center;color:var(--muted)}
+  /* 选择器里先给"能不能读"的信号：实心块 = 文档（选中后走后端抽取），
+     小点 = 纯文本（走路径引用让 AI 自己读）。颜色与下面卡片角标同一套。 */
+  .ai-pick-item[class*="f-pdf"] .ic{color:#b03a2e}
+  .ai-pick-item[class*="f-doc"] .ic{color:#2b579a}
+  .ai-pick-item[class*="f-xls"] .ic{color:#1f7145}
+  .ai-pick-item[class*="f-ppt"] .ic{color:#c4471f}
   .ai-pick-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-pick-hint{padding:6px 9px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);line-height:1.5}
   /* 「选择文件引用」小按钮：原来继承 .ai-input button 的 padding:0 12px 被拉成一个大方块，
@@ -918,6 +924,22 @@
   .ai-doc .badge{flex:none;font-size:9px;font-weight:700;letter-spacing:.4px;color:#fff;background:var(--brand);border-radius:4px;padding:2px 4px;line-height:1.2}
   .ai-doc .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-doc .mt{flex:none;color:var(--muted);font-size:11px}
+  /* 文档卡片的格式色：PDF 红 / Word 蓝 / Excel 绿 / PPT 橙 / 纯文本灰。
+     **只染角标和左侧 3px 窄条，不染整卡** —— 整卡上色会把 .busy/.err 的状态语义盖掉，
+     而"这张卡读失败了"比"它是 PDF"重要。左边条负责远距离辨认：
+     一叠附件里先认出哪张是 PDF，比逐个读后缀快。
+     这几条必须排在 .busy/.err 之前：同权重，后写的赢。 */
+  .ai-doc[data-k]{border-left-width:3px}
+  .ai-doc[data-k=pdf]{border-left-color:#b03a2e}
+  .ai-doc[data-k=pdf] .badge{background:#b03a2e}
+  .ai-doc[data-k=docx],.ai-doc[data-k=doc]{border-left-color:#2b579a}
+  .ai-doc[data-k=docx] .badge,.ai-doc[data-k=doc] .badge{background:#2b579a}
+  .ai-doc[data-k=xlsx],.ai-doc[data-k=xls]{border-left-color:#1f7145}
+  .ai-doc[data-k=xlsx] .badge,.ai-doc[data-k=xls] .badge{background:#1f7145}
+  .ai-doc[data-k=pptx],.ai-doc[data-k=ppt]{border-left-color:#c4471f}
+  .ai-doc[data-k=pptx] .badge,.ai-doc[data-k=ppt] .badge{background:#c4471f}
+  .ai-doc[data-k=text]{border-left-color:#6b7a8f}
+  .ai-doc[data-k=text] .badge{background:#6b7a8f}
   .ai-doc.busy{opacity:.65}
   .ai-doc.busy .badge{background:var(--muted)}
   .ai-doc.err{border-color:#c0392b}

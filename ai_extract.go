@@ -41,6 +41,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -93,29 +94,46 @@ func handleAIExtract(w http.ResponseWriter, r *http.Request) {
 		Name    string `json:"name"`
 		MIME    string `json:"mime"`
 		Content string `json:"content"`
+		// Path：「+号」文件选择器点中的磁盘路径。
+		// 与 Content 二选一 —— 拖拽时字节由浏览器送来，而选择器手里只有一个路径，
+		// 内容只能由服务端自己读。两条路在 aiExtractBytes 汇合，之后完全一致。
+		Path string `json:"path"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, fmt.Sprintf("请求体过大或格式错误（文件上限 %d MB）", aiExtractMaxBytes>>20), http.StatusBadRequest)
 		return
 	}
-	b64 := body.Content
-	if strings.HasPrefix(b64, "data:") {
-		if i := strings.Index(b64, ","); i >= 0 {
-			b64 = b64[i+1:]
+	var (
+		raw  []byte
+		name string
+		err  error
+	)
+	if p := strings.TrimSpace(body.Path); p != "" {
+		raw, name, err = aiExtractReadPath(p)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
+	} else {
+		b64 := body.Content
+		if strings.HasPrefix(b64, "data:") {
+			if i := strings.Index(b64, ","); i >= 0 {
+				b64 = b64[i+1:]
+			}
+		}
+		raw, err = base64.StdEncoding.DecodeString(b64)
+		if err != nil || len(raw) == 0 {
+			http.Error(w, "文件内容解码失败或为空", http.StatusBadRequest)
+			return
+		}
+		if len(raw) > aiExtractMaxBytes {
+			http.Error(w, fmt.Sprintf("文件过大（%.1f MB，上限 %d MB）",
+				float64(len(raw))/(1<<20), aiExtractMaxBytes>>20), http.StatusRequestEntityTooLarge)
+			return
+		}
+		// 文件名只作展示与日志用：剥掉路径分隔符，避免它被当成"路径"读
+		name = filepath.Base(strings.TrimSpace(body.Name))
 	}
-	raw, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil || len(raw) == 0 {
-		http.Error(w, "文件内容解码失败或为空", http.StatusBadRequest)
-		return
-	}
-	if len(raw) > aiExtractMaxBytes {
-		http.Error(w, fmt.Sprintf("文件过大（%.1f MB，上限 %d MB）",
-			float64(len(raw))/(1<<20), aiExtractMaxBytes>>20), http.StatusRequestEntityTooLarge)
-		return
-	}
-	// 文件名只作展示与日志用：剥掉路径分隔符，避免它被当成"路径"读
-	name := filepath.Base(strings.TrimSpace(body.Name))
 	if name == "" || name == "." {
 		name = "文件"
 	}
@@ -153,6 +171,52 @@ func handleAIExtract(w http.ResponseWriter, r *http.Request) {
 		"ok": true, "id": id, "kind": res.Kind, "enc": res.Enc,
 		"chars": res.Chars, "pages": res.Pages, "truncated": res.Trunc, "note": res.Note,
 	})
+}
+
+// aiExtractReadPath 读「+号 文件选择器」点中的那个文件。
+//
+// 和拖拽的唯一差别是**字节从哪来**：拖拽由浏览器读成 base64 送上来，
+// 选择器手里只有一个路径、拿不到 File 对象，内容只能由服务端自己读。
+// 读出来之后完全同一条流水线（判魔数 → 抽文本 → 落盘 → 只回引用）。
+//
+// 为什么仍然要过沙箱（aiSafePath）：
+//   - `read_file` 是**模型自己决定**读哪条路径，所以必须圈在项目目录内；
+//   - 这里是**用户在 UI 上点选**，看上去有授权，但这个端点一旦不校验，
+//     就等于多了一个"后端可读全盘任意文件"的接口 —— 边界一破，以后没人说得清
+//     "到底能不能读 .ssh"。所以两条路的边界必须一致。
+//
+// 区别在**失败时的说法**：拖拽没有路径限制，所以直接告诉用户"拖进来就行"。
+func aiExtractReadPath(p string) ([]byte, string, error) {
+	abs, ok := aiSafePath(p)
+	if !ok {
+		if len(projectRoots()) == 0 {
+			return nil, "", fmt.Errorf("还没有配置项目目录，按路径读文件用不了。直接把这个文件拖进对话区就行。")
+		}
+		return nil, "", fmt.Errorf("这个文件不在项目目录内，我不能按路径读。" +
+			"想让我看它，直接把它拖进对话区 —— 拖拽不受路径限制。")
+	}
+	if exploreSecretPath(abs) {
+		return nil, "", fmt.Errorf("这是凭据/密钥类文件（%s），按安全策略不读取。", filepath.Base(abs))
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return nil, "", fmt.Errorf("文件不存在或不可读：%s", abs)
+	}
+	if fi.IsDir() {
+		return nil, "", fmt.Errorf("这是一个目录，不是文件：%s", abs)
+	}
+	if fi.Size() > aiExtractMaxBytes {
+		return nil, "", fmt.Errorf("文件过大（%.1f MB，上限 %d MB），先拆分或压缩再选。",
+			float64(fi.Size())/(1<<20), aiExtractMaxBytes>>20)
+	}
+	raw, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, "", fmt.Errorf("读取失败：%v", err)
+	}
+	if len(raw) == 0 {
+		return nil, "", fmt.Errorf("文件是空的：%s", filepath.Base(abs))
+	}
+	return raw, filepath.Base(abs), nil
 }
 
 // ---------- 类型判定 ----------

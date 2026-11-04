@@ -522,8 +522,9 @@ async function aiPickLs(p){
   try{ j = await (await fetch('/api/ls?mode=file&path=' + encodeURIComponent(aiPickPath))).json(); }
   catch(e){ list.textContent = t('读取失败'); return; }
   list.textContent = '';
-  const add = (ic, name, fn, title)=>{
+  const add = (ic, name, fn, title, cls)=>{
     const d = document.createElement('div'); d.className = 'ai-pick-item';
+    if(cls) d.classList.add(cls);
     const i = document.createElement('i'); i.className = 'ic'; i.textContent = ic;
     const s = document.createElement('span'); s.textContent = name; if(title) s.title = title;
     d.appendChild(i); d.appendChild(s); d.onclick = fn;
@@ -536,16 +537,32 @@ async function aiPickLs(p){
   }
   if(j.parent) add('↑', t('上级目录'), ()=>aiPickLs(j.parent));
   (j.dirs || []).forEach(n=>add('▸', n, ()=>aiPickLs(aiJoin(aiPickPath, n))));
-  (j.files || []).forEach(n=>add('·', n, ()=>aiPickAdd(aiJoin(aiPickPath, n), n)));
+  // 文件图标先告诉用户"这个能不能读"：文档类给实心块并按格式上色，
+  // 文本类给一个小点。选中后的差别也在这儿 —— 文档走后端抽取，文本走路径引用。
+  (j.files || []).forEach(n=>{
+    const k = aiDocExt(n);
+    add(k ? '▤' : '·', n, ()=>aiPickAdd(aiJoin(aiPickPath, n), n), null, k ? ('f-' + k) : 'f-txt');
+  });
   if(!(j.dirs || []).length && !(j.files || []).length){
     const e = document.createElement('div'); e.className = 'muted'; e.style.padding = '6px'; e.textContent = t('这个目录是空的'); list.appendChild(e);
   }
 }
 function aiPickAdd(p, name){
-  if(aiFiles.some(f=>f.path === p)){ toast(t('已经加过了')); return; }
-  aiFiles.push({path: p, name: name || p.split(/[\\\/]/).pop()});
-  aiChipsRender(); aiPickClose();
-  toast(t('已附加引用：{0}', name || p));
+  const nm = name || p.split(/[\\\/]/).pop();
+  if(aiFiles.some(f=>f.path === p) || aiDocs.some(f=>f.path === p)){ toast(t('已经加过了')); return; }
+  aiPickClose();
+  // 文档类走后端抽取，产出的卡片跟拖进来的一模一样。
+  // 为什么必须分流：read_file 是按文本读的，头 512 字节判出二进制就直接
+  // 「该文件疑似二进制，已跳过」—— 对着 docx 点了一路，模型什么都看不到。
+  // 其余文本文件仍走"路径引用"：让 AI 自己按需分页读，
+  // 一份 10MB 的日志不会被一次性截断到只有开头。
+  if(aiDocExt(nm)){
+    aiDocRun({name: nm, path: p}, ()=>aiExtractPost({path: p, name: nm}));
+    return;
+  }
+  aiFiles.push({path: p, name: nm});
+  aiChipsRender();
+  toast(t('已附加引用：{0}', nm));
 }
 /* ==================== 图片附件：拖入 / 粘贴 → 载入 ====================
    DeepSeek 官方 deepseek-flash 已原生支持视觉，这里把那条件打通：
@@ -574,10 +591,13 @@ function aiAttachToggle(){
    这里显示的只是"后端认为这是什么"。 */
 function aiDocChip(it, onRemove){
   const d = document.createElement('div');
+  const kind = String(it.kind || '').toLowerCase();
+  // 格式色挂在 data-k 上：CSS 给 pdf/docx/xlsx/pptx 各一种品牌色，纯文本给灰。
+  // 只是视觉区分 —— 类型判定仍然只在后端按魔数做，这里显示的是"后端认为这是什么"。
+  d.dataset.k = kind || 'doc';
   d.className = 'ai-doc' + (it.busy ? ' busy' : '') + (it.err ? ' err' : '');
   const badge = document.createElement('span');
   badge.className = 'badge';
-  const kind = String(it.kind || '').toLowerCase();
   badge.textContent = it.err ? '!' : (it.busy ? '…' : (kind ? kind.toUpperCase() : 'DOC'));
   const nm = document.createElement('span'); nm.className = 'nm';
   nm.textContent = it.name || t('文件');
@@ -834,27 +854,44 @@ function aiFileDataURL(f){
 /* 请求后端抽文本。失败时抛出的 message 已是一句人话（"旧版 Office 请另存为…"
    这类），直接显示即可，不要再包一层"操作失败"把原因盖掉。
    成功返回 {id, kind, chars, pages, truncated, note} —— **不含正文**。 */
-async function aiExtractFile(f){
-  const content = await aiFileDataURL(f);
+async function aiExtractPost(payload){
   const r = await fetch('/api/ai/extract', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: f.name || '', mime: f.type || '', content}),
+    body: JSON.stringify(payload),
   });
   if(!r.ok) throw new Error((await r.text()).slice(0, 300).trim() || ('HTTP ' + r.status));
   return r.json();
 }
+/* 拖拽来的 File：字节在浏览器手里，读成 data URL 送上去 */
+async function aiExtractFile(f){
+  return aiExtractPost({name: f.name || '', mime: f.type || '', content: await aiFileDataURL(f)});
+}
 
-/* 单个文档：先挂一张"读取中"的卡片，读完补上字数，失败标红并把原因写进 toast。
-   为什么先挂卡片：读一份 300 页 PDF 要几秒，什么都不显示的话用户会以为拖丢了。 */
-function aiDocAdd(f){
-  const item = {name: f.name || t('文件'), busy: true};
+/* 二进制文档的扩展名 —— 只用来**分流**，不是类型判定。
+   判据很实在：这几类 read_file 读不了（它按文本读，头 512 字节一判二进制就退出），
+   所以必须交后端解；其余文本文件让 AI 自己按需读更好。
+   猜错也不致命：改名成 .txt 的 docx 会走引用那条路，read_file 会明确回
+   "该文件疑似二进制"，用户照着做就行。 */
+function aiDocExt(n){
+  // 内联正而不是提到模块顶部：aiPickLs（在文件更靠前）也调它，
+  // 顶层 const 在 IIFE 里跨调用点会有 TDZ 风险，这种坑踩过一次就够了。
+  const m = /\.(pdf|docx?|xlsx?|pptx?)$/i.exec(String(n || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+/* 文档卡片的公共流程：先挂一张"读取中"的卡片，读完补字数，失败标红并说明原因。
+   为什么先挂卡片：读一份 300 页 PDF 要几秒，什么都不显示的话用户会以为拖丢了。
+
+   `run` 是个返回 Promise<json> 的函数 —— 拖拽与"+号选文件"的差别只在
+   **字节从哪来**（浏览器读 vs 服务端按路径读），卡片和后续处理一模一样。 */
+function aiDocRun(item, run){
+  item.busy = true;
   aiDocs.push(item);
   aiAttachRender();
   // 正在生成回答时不动状态行 —— 那行归主循环用，覆盖掉会显得"卡在读取"
   if(!aiBusy) aiHstat(t('正在读取：{0}', item.name));
   const task = (async ()=>{
     try{
-      const j = await aiExtractFile(f);
+      const j = await run();
       if(!j || !j.id) throw new Error(t('后端没有返回文件引用'));
       item.id = j.id;
       item.kind = j.kind || '';
@@ -874,6 +911,9 @@ function aiDocAdd(f){
   })();
   item.p = task;
   return task;
+}
+function aiDocAdd(f){
+  return aiDocRun({name: f.name || t('文件')}, ()=>aiExtractFile(f));
 }
 
 async function aiDropFiles(files){
