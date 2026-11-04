@@ -1,0 +1,1 @@
+{"v": 1, "seq": 1, "at": "2026-11-04 19:32:00.000", "status": 200, "stream": true, "model": "incident-replay", "n_msgs": 3, "n_tools": 12, "body": "data: {\"choices\": [{\"delta\": {\"content\": \"这是一份关于农产品溯源管理系统的论文初稿。\"}, \"finish_reason\": \"stop\"}]}\n\ndata: {\"choices\": [], \"usage\": {\"prompt_tokens\": 2100, \"completion_tokens\": 20}}\n\ndata: [DONE]\n\n"}

@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "note": "事故回放语料。`go test -run TestIncidentGate` 会逐条驱动；每条的 mutations 由 tools/incident_gate.py --mutate 用来证明断言不是空转。",
+  "cases": [
+    {
+      "id": "01-doc-pollution",
+      "incident": "拖 docx 问「这是啥」，界面先弹「停止服务」确认执行卡（写操作）。日志 19:32–19:34 四次复现 start_service / run_detection / stop_service / apply_whitelist。",
+      "date": "2026-11-04",
+      "fix": "b65cd48",
+      "recording": "recordings/01-doc-pollution.jsonl",
+      "user_text": "这是啥",
+      "doc": { "name": "初稿.docx", "kind": "docx", "file": "docs/01-pollution.txt" },
+      "tools": {},
+      "asserts": [
+        { "kind": "sse_absent", "value": "\"type\":\"confirm_request\"", "note": "核心：不该弹写操作确认卡" },
+        { "kind": "sse_absent", "value": "\"type\":\"tool_result\"", "note": "不该在模型第一次请求前预检执行工具" },
+        { "kind": "sse_absent", "value": "stop_service", "note": "材料里的「停止服务」不许变成动作" },
+        { "kind": "sse_present", "value": "这是一份关于农产品溯源管理系统的论文初稿", "note": "整轮没空转，模型回答真的到了界面" },
+        { "kind": "no_error" }
+      ],
+      "mutations": [
+        {
+          "file": "ai_intent.go",
+          "find": "for _, marker := range []string{\"<untrusted_data\", \"（此处原本附有文件\"} {",
+          "replace": "for _, marker := range []string{} {",
+          "note": "让 aiUserIntentText 不再截断。这一处同时拆掉两道闸：aiMatchIntent 入口收口失效，且 aiDocReadOnlyTurn 因依赖它而判成非材料模式 —— 正好复现事故当天的状态。"
+        }
+      ]
+    },
+    {
+      "id": "02-doc-ref-hydrate",
+      "incident": "前端白名单重建漏了 docs，模型回「没有收到任何文档附件」。本条守服务端半程：引用必须被读盘拼进真正发给上游的请求体。前端半程由 cdp_ai_drop_test.js 的 send-outbound-docs 守。",
+      "date": "2026-11-04",
+      "fix": "e154079",
+      "recording": "recordings/02-doc-ref-hydrate.jsonl",
+      "user_text": "这份材料里写了什么编号",
+      "doc": { "name": "说明.txt", "kind": "text", "file": "docs/02-marker.txt" },
+      "tools": {},
+      "asserts": [
+        { "kind": "req_present", "value": "MAGIC_DOC_MARKER_7742", "note": "客观事实：正文真的进了上游请求体，不靠模型措辞判断" },
+        { "kind": "req_present", "value": "untrusted_data source=", "note": "材料必须包在带 file 来源的不可信标签里。刻意不写 \"<untrusted_data\"：一是 Go 的 json.Marshal 会把 < 转成 \\u003c，二是系统提示里本来就印着这个标签名 —— 照字面断言会永远为真。" },
+        { "kind": "req_absent", "value": "\"name\":\"stop_service\"", "note": "材料模式下写工具不下发" },
+        { "kind": "sse_present", "value": "已读到你附的项目内部编号说明", "note": "回放确实被消费" },
+        { "kind": "no_error" }
+      ],
+      "mutations": [
+        {
+          "file": "ai_doc.go",
+          "find": "if m.Role != \"user\" || len(m.Docs) == 0 {",
+          "replace": "if m.Role != \"user\" || len(m.Docs) >= 0 {",
+          "note": "让 hydrate 对所有消息都跳过（等价于引用没被消费）。合法且恒真，不会因编译失败造成假红。"
+        }
+      ]
+    },
+    {
+      "id": "03-report-no-tool",
+      "incident": "「帮我看看这份报告」曾命中 get_system_state 先弹一张读取状态卡；阶段 0 之后材料模式还须把写工具从工具表里裁掉。",
+      "date": "2026-11-04",
+      "fix": "b65cd48",
+      "recording": "recordings/03-intent-narrow.jsonl",
+      "user_text": "帮我看看这份报告",
+      "doc": { "name": "季度报告.txt", "kind": "text", "file": "docs/03-report.txt" },
+      "tools": {},
+      "asserts": [
+        { "kind": "sse_absent", "value": "\"type\":\"tool_result\"", "note": "问材料不该先弹工具卡" },
+        { "kind": "req_absent", "value": "\"name\":\"stop_service\"", "note": "工具表裁剪：写工具根本不出现在请求里" },
+        { "kind": "req_absent", "value": "\"name\":\"apply_whitelist\"" },
+        { "kind": "sse_present", "value": "这份报告总结的是本季度系统运行情况" },
+        { "kind": "no_error" }
+      ],
+      "mutations": [
+        {
+          "file": "ai_loop.go",
+          "find": "aiPayload(full, aiToolDefsForTurn(docReadOnly), acTurn.quirkRead(), -1, true)",
+          "replace": "aiPayload(full, aiToolDefsForTurn(false), acTurn.quirkRead(), -1, true)",
+          "note": "把材料模式的工具表裁剪撤掉。这条单独验证 aiToolDefsForTurn 那道闸是可观测的。"
+        }
+      ]
+    },
+    {
+      "id": "04-read-doc-paging",
+      "incident": "read_file 分页 bug 造成「大文件只能读 64KB」；文档附件改成只注入第一段 + read_doc 翻页。本条用 80KB 真文档、答案藏在注入段之外，验证闭环。",
+      "date": "2026-11-04",
+      "fix": "2775a49",
+      "recording": "recordings/04-read-doc-paging.jsonl",
+      "user_text": "只输出文档里的答案串",
+      "doc": { "name": "大文档.txt", "kind": "text", "file": "docs/04-paging.txt" },
+      "tools": { "read_doc": { "watch": true } },
+      "asserts": [
+        { "kind": "req_present", "value": "read_doc(doc_id=", "note": "分页提示必须进请求体；不分页就没有这句" },
+        { "kind": "req_present", "value": "不要拿已读部分当全文下结论" },
+        { "kind": "tool_called", "value": "read_doc" },
+        { "kind": "tool_result_contains", "value": "THE_HIDDEN_ANSWER_IS_BLUE_7742", "note": "工具真读盘拿到了注入段之外的答案，不是录像里写死的" },
+        { "kind": "sse_present", "value": "THE_HIDDEN_ANSWER_IS_BLUE_7742" },
+        { "kind": "no_error" }
+      ],
+      "mutations": [
+        {
+          "file": "ai_doc.go",
+          "find": "if int64(len(text)) <= budget {",
+          "replace": "if true {",
+          "note": "撤掉分页，全量注入 —— 分页提示消失，答案也不再藏在注入段之外。"
+        }
+      ]
+    },
+    {
+      "id": "05-ops-command-control",
+      "incident": "负向对照（不是事故）：不带文档的运维指令必须照常走预检。防止「材料隔离」收口过猛，把对的判成错 —— 本项目最忌讳的那种坏。",
+      "date": "2026-11-04",
+      "fix": "b65cd48",
+      "recording": "recordings/05-ops-command-control.jsonl",
+      "user_text": "看看系统日志",
+      "doc": null,
+      "tools": { "get_logs": { "stub": "桩：系统日志正常，无异常" } },
+      "asserts": [
+        { "kind": "sse_present", "value": "\"tool\":\"get_logs\"", "note": "运维指令仍被执行" },
+        { "kind": "tool_called", "value": "get_logs" },
+        { "kind": "sse_present", "value": "已读取系统日志，暂无异常" },
+        { "kind": "no_error" }
+      ],
+      "mutations": [
+        {
+          "file": "ai_loop.go",
+          "find": "if !confirmed && preflight && !docReadOnly {",
+          "replace": "if !confirmed && preflight && !docReadOnly && false {",
+          "note": "关掉整条预检快通道，对照组的 get_logs 就不会执行。"
+        }
+      ]
+    }
+  ]
+}

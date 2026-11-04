@@ -109,3 +109,9 @@ aidoc/
 # 里面只有编译中间产物与临时日志，不入库。
 /.gotmp/
 
+# ---------- AI 影子判定的运行产物 ----------
+# 语料、录像、脚本都要入库；只有 ENVKIT_AI_SHADOW 写出的**事实流**和
+# --shadow 生成的报告是本机运行数据。默认都落在 .gotmp/，这两条是防御性的。
+eval/incidents/ai-shadow-*.jsonl
+eval/incidents/shadow-report.md
+
