@@ -536,6 +536,10 @@ func aiIsAbortErr(s string) bool {
 func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs []aiMsg, confirmed bool, preflight bool, lang string) {
 	// 批量授权只在本请求内有效：进来先清空，绝不让上一个任务的授权漏到这一个
 	aiGrantReset()
+	// 材料模式：本回合注入了文档/报告正文时，跳过确定性预检、只下发只读工具。
+	// 不动 preflight 本身 —— 它还兼着 aiPreconfirmExplain 的开关（模型主动发写工具时
+	// 要先给结论再弹卡），改它会白烧一次补答请求。
+	docReadOnly := aiDocReadOnlyTurn(msgs)
 	usage := aiUsage{} // 本回合 token 用量累计（跨多轮工具调用）
 	// 预检快通道：不依赖模型，确定性识别明确指令并直接执行（写操作仍走确认卡片）。
 	// 这样即使模型"只会念菜单"，用户的明确需求也一定会被执行。
@@ -544,7 +548,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 	optInBlocked := 0     // opt-in 工具拦截计数：同一轮 ≥3 次判定模型死循环，终止并给可见提示
 	var pfix aiParamFixer // 参数自适应名额（按 temperature / token 字段 / tools 分类记账）
 	netRetry := 0         // 瞬时故障重试次数（网络错误 / 429 限流 / 5xx，指数退避 1s→3s）
-	if !confirmed && preflight {
+	if !confirmed && preflight && !docReadOnly {
 		lastUser := ""
 		for i := len(msgs) - 1; i >= 0; i-- {
 			if msgs[i].Role == "user" {
@@ -561,7 +565,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 		// 用户在手机上打"帮我重启后端"，照样会弹确认卡。
 		if tool, args, isWrite := aiBacktrackIntent(cand, msgs); tool != "" && !(isWrite && aiReadOnlyCur()) {
 			preChecked = true
-			info(scSys, "AI", "预检命中：%q \u2192 %s（写操作=%v）", firstLines(lastUser, 30), tool, isWrite)
+			info(scSys, "AI", "预检命中：%q \u2192 %s（写操作=%v）", firstLines(aiUserIntentText(lastUser), 30), tool, isWrite)
 			callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())
 			var res string
 			var exErr error
@@ -658,7 +662,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 			full = append(full, aiMsg{Role: "user", Content: "（系统提示）本回合首轮已提供环境快照，此处不再重复。上面是你刚执行得到的最新结果；" +
 				"若需要重新确认环境，请调用 get_system_state / verify_environment，不要凭印象回答。"})
 		}
-		payload := aiPayload(full, aiToolDefsForTurn(), acTurn.quirkRead(), -1, true)
+		payload := aiPayload(full, aiToolDefsForTurn(docReadOnly), acTurn.quirkRead(), -1, true)
 		b, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, "POST", acTurn.endpoint(), strings.NewReader(string(b)))
 		if err != nil {
@@ -1043,7 +1047,7 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				}
 			}
 			// 确认续接轮（最后一条是 tool 结果）不做兜底，避免重复触发
-			if lastUser != "" && !confirmed && !preChecked && preflight {
+			if lastUser != "" && !confirmed && !preChecked && preflight && !docReadOnly {
 				tool, args, isWrite := aiBacktrackIntent(lastUser, msgs)
 				if tool != "" {
 					callID := fmt.Sprintf("intent_%d", time.Now().UnixNano())

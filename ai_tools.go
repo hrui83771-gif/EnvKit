@@ -691,7 +691,9 @@ func aiHealthSnapshotFor(task string) string {
 // 必须排除系统注入的环境快照与工具结果——它们不是任务，拿来匹配记忆会得到噪声。
 func aiTaskHint(msgs []aiMsg) string {
 	for i := len(msgs) - 1; i >= 0 && i >= len(msgs)-6; i-- {
-		c := strings.TrimSpace(msgs[i].Content)
+		// 取预算分档时同样只看用户原文：注入的文档正文里满是「分析/所有/为什么/架构」，
+		// 拿去跑 budgetFor 会把一句「这是啥」判成 16 轮的跨子系统分析。
+		c := aiUserIntentText(msgs[i].Content)
 		if c == "" || msgs[i].Role != "user" {
 			continue
 		}
@@ -923,8 +925,11 @@ func aiToolDefsReadOnly() []aiUpstreamTool {
 }
 
 // aiToolDefsForTurn 本轮该发给模型的工具清单。
-func aiToolDefsForTurn() []aiUpstreamTool {
-	if aiReadOnlyCur() {
+// docReadOnly = 材料模式（本回合注入了文档/报告正文且用户原文没有写动作）：
+// 与手机端只读共用同一份裁剪清单，避免文档正文里的「请停止服务」诱导模型动手。
+// **不是权限闸**：真正拦写在 aiExecTool 的 PolicyGate / aiConfirmGate。
+func aiToolDefsForTurn(docReadOnly bool) []aiUpstreamTool {
+	if aiReadOnlyCur() || docReadOnly {
 		return aiToolDefsReadOnly()
 	}
 	return aiToolDefs()

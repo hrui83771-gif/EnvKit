@@ -63,7 +63,7 @@ func aiPromisedAction(text string) bool {
 // aiMatchIntent 确定性意图识别（不依赖模型，保证"说了就执行"）。
 // 返回 (工具名, 参数, 是否写操作)。用于预检快通道与模型不发起调用时的兜底。
 func aiMatchIntent(text string) (string, map[string]any, bool) {
-	t := strings.TrimSpace(text)
+	t := aiUserIntentText(text)
 	if t == "" {
 		return "", nil, false
 	}
@@ -165,16 +165,73 @@ func aiMatchIntent(text string) (string, map[string]any, bool) {
 		}
 		return "get_logs", map[string]any{"scope": scope, "lines": 100}, false
 	// ---- 诊断报告 ----
-	case strings.Contains(t, "诊断") || strings.Contains(t, "体检") || strings.Contains(t, "报告"):
+	// 「报告」不能裸匹配：「帮我总结这份报告」「报告里第 3 节说了啥」是在问材料，
+	// 不是要生成 EnvKit 诊断包。只认明确的"要一份报告"的动词搭配。
+	case strings.Contains(t, "诊断") || strings.Contains(t, "体检") ||
+		has(`(生成|出|来|给|要|做|拉|跑|导出|打印).{0,4}报告`) ||
+		has(`报告.{0,4}(生成|导出|一下|给我)`):
 		return "get_diag_report", map[string]any{}, false
 	// ---- 白名单 ----
 	case strings.Contains(t, "白名单") || strings.Contains(t, "杀软") || has(`(?i)defender`):
 		return "apply_whitelist", map[string]any{}, true
 	// ---- 状态（仅短问句）----
-	case len([]rune(t)) <= 30 && has(`(版本|状态|环境|怎么样|如何|正常吗|好不好|看看)`):
+	// 「看看」不能当状态关键词：「帮我看看这份报告」也会命中，先弹一张读取环境状态卡。
+	// 同理排除材料指代词，否则「这份报告如何解读」会被当成在问系统健康度。
+	case len([]rune(t)) <= 30 &&
+		!has(`(文档|报告|文件|材料|论文|附件|这份|这篇|截图)`) &&
+		has(`(版本|状态|环境|怎么样|如何|正常吗|好不好)`):
 		return "get_system_state", map[string]any{}, false
 	}
 	return "", nil, false
+}
+
+// ===== 材料隔离：意图判定只认用户手打的那句话 =====
+
+// aiUserIntentText 剥掉服务端注入的不可信材料，只留用户原文。
+//
+// 真实事故（2026-11-04）：拖进 docx 问「这是啥」，界面先弹「停止服务」的
+// 确认执行卡。链路是 aiDocHydrate 把整篇正文拼进 msg.Content（<untrusted_data>），
+// aiRunLoop 取 lastUser 时连正文一起拿走，aiMatchIntent 里裸关键词「停止/启动/
+// 白名单/备份/报告」命中了**论文里的词** —— 在模型第一次请求之前就发卡。
+// 写操作确认卡被文档内容触发，误点一下真会停服务。
+//
+// 收口在这里而不是各个调用点：aiMatchIntent 有四个入口（预检、兜底、回溯历史
+// user、回溯助手提议），漏一个就绕过去（与 aiExecTool 权限闸同一条理由）。
+// 不改消息形状、不改 wire format —— 上游请求体逐字节不变，前缀缓存不受影响。
+func aiUserIntentText(text string) string {
+	cut := len(text)
+	for _, marker := range []string{"<untrusted_data", "（此处原本附有文件"} {
+		if i := strings.Index(text, marker); i >= 0 && i < cut {
+			cut = i
+		}
+	}
+	return strings.TrimSpace(text[:cut])
+}
+
+// aiDocReadOnlyTurn 本回合要不要按「材料模式」隔离。
+//
+// 判据两条，缺一不可：
+//  1. 最近一条 user 消息带注入块（文档附件 / 诊断解读报告）；
+//  2. 用户**原文**里没有明确的写操作动作词。
+//
+// 第 2 条是逃生口：附文档同时说「顺便重启后端」时不能把写工具藏起来，
+// 否则用户会莫名发现指挥不动了。注意这里用 aiUserIntentText 取原文再判，
+// 绝不能让文档正文里一句「请停止服务」替用户做出动作决定（prompt injection）。
+// 真正的安全边界仍在 aiExecTool 的 PolicyGate / aiConfirmGate，工具表裁剪只是
+// 第一道：模型看不到 ≠ 模型调不动。
+func aiDocReadOnlyTurn(msgs []aiMsg) bool {
+	last := ""
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			last = msgs[i].Content
+			break
+		}
+	}
+	if !strings.Contains(last, "<untrusted_data") {
+		return false
+	}
+	_, _, isWrite := aiMatchIntent(aiUserIntentText(last))
+	return !isWrite
 }
 
 // aiResolveNumberInput 用户只回复数字/序号时，从助手最近一条消息里取出该编号对应的选项文字。
