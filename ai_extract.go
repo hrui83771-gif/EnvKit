@@ -42,6 +42,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -469,6 +470,13 @@ func aiDOCXText(f *zip.File) (string, error) {
 
 // aiXLSXText 抽所有工作表。共享字符串表在 xl/sharedStrings.xml，
 // 单元格里 t="s" 的 <v> 是**索引**，不是值 —— 直接当数字读会得到一串下标。
+//
+// 表名和顺序取自 xl/workbook.xml + rels，而不是 sheetN.xml 这类文件名：
+//   - 用户起的名字（"加工运输"/"质量报告"）才是模型能对上号的语义，
+//     输出 "### sheet1" 等于把这一层信息白扔了；
+//   - 删表/挪表后 sheet 文件编号不会重排，按文件名排序会把顺序读反。
+//
+// 两处都读不到时回退到"按文件名尾号排序"，残缺文件仍要能读。
 func aiXLSXText(zr *zip.Reader) (string, error) {
 	var shared []string
 	for _, f := range zr.File {
@@ -481,19 +489,11 @@ func aiXLSXText(zr *zip.Reader) (string, error) {
 			break
 		}
 	}
-	// 工作表按文件名里的数字排序：sheet1, sheet2, ... sheet10
-	// 字典序会把 sheet10 排到 sheet2 前面，表格顺序一乱，模型对"第几列是什么"就判断错了
-	var sheets []*zip.File
-	for _, f := range zr.File {
-		if strings.HasPrefix(f.Name, "xl/worksheets/sheet") && strings.HasSuffix(f.Name, ".xml") {
-			sheets = append(sheets, f)
-		}
-	}
-	sort.Slice(sheets, func(i, j int) bool { return aiTrailingNum(sheets[i].Name) < aiTrailingNum(sheets[j].Name) })
+	sheets := aiXLSXSheets(zr)
 
 	var out strings.Builder
 	for _, sh := range sheets {
-		body, err := aiXLSXSheet(sh, shared)
+		body, err := aiXLSXSheet(sh.file, shared)
 		if err != nil {
 			continue // 单个工作表坏了不该毁掉整本簿
 		}
@@ -501,12 +501,58 @@ func aiXLSXText(zr *zip.Reader) (string, error) {
 			continue
 		}
 		if len(sheets) > 1 {
-			out.WriteString("### " + strings.TrimSuffix(filepath.Base(sh.Name), ".xml") + "\n")
+			out.WriteString("### " + sh.title + "\n")
 		}
 		out.WriteString(body)
 		out.WriteString("\n")
 	}
 	return out.String(), nil
+}
+
+type aiXLSXSheetRef struct {
+	file  *zip.File
+	title string
+}
+
+func aiXLSXSheets(zr *zip.Reader) []aiXLSXSheetRef {
+	files := make(map[string]*zip.File, len(zr.File))
+	for _, f := range zr.File {
+		files[f.Name] = f
+	}
+	paths, titles := aiOOXMLPartOrder(zr, "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "xl/", "sheet")
+	if len(paths) == 0 {
+		// 回退：sheet10 不能按字典序排到 sheet2 前面
+		var fallback []*zip.File
+		for _, f := range zr.File {
+			if strings.HasPrefix(f.Name, "xl/worksheets/sheet") && strings.HasSuffix(f.Name, ".xml") {
+				fallback = append(fallback, f)
+			}
+		}
+		sort.Slice(fallback, func(i, j int) bool {
+			return aiTrailingNum(fallback[i].Name) < aiTrailingNum(fallback[j].Name)
+		})
+		paths = paths[:0]
+		for _, f := range fallback {
+			paths = append(paths, f.Name)
+		}
+		titles = make([]string, len(paths))
+	}
+	var out []aiXLSXSheetRef
+	for i, p := range paths {
+		f := files[p]
+		if f == nil {
+			continue
+		}
+		title := ""
+		if i < len(titles) {
+			title = strings.TrimSpace(titles[i])
+		}
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(p), ".xml")
+		}
+		out = append(out, aiXLSXSheetRef{file: f, title: aiOneLine(title)})
+	}
+	return out
 }
 
 func aiXLSXSharedStrings(f *zip.File) ([]string, error) {
@@ -565,6 +611,11 @@ func aiXLSXSheet(f *zip.File, shared []string) (string, error) {
 	var cell strings.Builder
 	cellType := ""
 	inV, inT := false, false
+	// nextCol 是"下一个单元格该落在第几列"（1 基）。xlsx 里**空单元格不写进 XML**，
+	// 只靠 <c r="D3"> 里的列引用标明位置。按顺序 append 的话，一行 A/B/D 有值
+	// 会被读成"A 列是 A、B 列是 B、C 列是 D 的内容" —— 表头写着 5 列，
+	// 数据却整体左移一列，模型据此下的结论全是错的。
+	nextCol, colRef := 1, 0
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -578,10 +629,15 @@ func aiXLSXSheet(f *zip.File, shared []string) (string, error) {
 			switch t.Name.Local {
 			case "c":
 				cellType = ""
+				colRef = 0
 				cell.Reset()
+				inV, inT = false, false
 				for _, a := range t.Attr {
-					if a.Name.Local == "t" {
+					switch a.Name.Local {
+					case "t":
 						cellType = a.Value
+					case "r":
+						colRef = aiXLSXColNum(a.Value)
 					}
 				}
 			case "v":
@@ -607,8 +663,14 @@ func aiXLSXSheet(f *zip.File, shared []string) (string, error) {
 						val = shared[i]
 					}
 				}
+				// 只往后补空列：遇到乱序/畸形引用时不倒退，免得把已经写出的值挤掉
+				for colRef > nextCol && nextCol < aiXLSXMaxCols {
+					row.WriteString("\t")
+					nextCol++
+				}
 				row.WriteString(aiOneLine(val))
 				row.WriteString("\t")
+				nextCol++
 			case "row":
 				s := strings.TrimRight(row.String(), "\t")
 				if strings.TrimSpace(s) != "" {
@@ -616,6 +678,7 @@ func aiXLSXSheet(f *zip.File, shared []string) (string, error) {
 					out.WriteString("\n")
 				}
 				row.Reset()
+				nextCol = 1
 			}
 		case xml.CharData:
 			if inV || inT {
@@ -626,19 +689,41 @@ func aiXLSXSheet(f *zip.File, shared []string) (string, error) {
 	return out.String(), nil
 }
 
-// aiPPTXText 抽每页的文字。按 slide 序号排序，页与页之间留分隔，
+// aiPPTXText 抽每页的文字。按**放映顺序**排列，页与页之间留分隔，
 // 让模型能把"某页的标题"和"某页的要点"对上号。
+//
+// 放映顺序只在 presentation.xml 的 <p:sldIdLst> 里，slideN.xml 的 N 是
+// "创建时的编号"：删页/拖动重排后两者会分叉，按文件名排就会把整份 PPT 读反。
 func aiPPTXText(zr *zip.Reader) (string, error) {
-	var slides []*zip.File
+	files := make(map[string]*zip.File, len(zr.File))
 	for _, f := range zr.File {
-		if strings.HasPrefix(f.Name, "ppt/slides/slide") && strings.HasSuffix(f.Name, ".xml") {
+		files[f.Name] = f
+	}
+	paths, _ := aiOOXMLPartOrder(zr, "ppt/presentation.xml", "ppt/_rels/presentation.xml.rels", "ppt/", "sldId")
+	if len(paths) == 0 {
+		var fallback []*zip.File
+		for _, f := range zr.File {
+			if strings.HasPrefix(f.Name, "ppt/slides/slide") && strings.HasSuffix(f.Name, ".xml") {
+				fallback = append(fallback, f)
+			}
+		}
+		sort.Slice(fallback, func(i, j int) bool {
+			return aiTrailingNum(fallback[i].Name) < aiTrailingNum(fallback[j].Name)
+		})
+		paths = paths[:0]
+		for _, f := range fallback {
+			paths = append(paths, f.Name)
+		}
+	}
+	var slides []*zip.File
+	for _, p := range paths {
+		if f := files[p]; f != nil {
 			slides = append(slides, f)
 		}
 	}
-	sort.Slice(slides, func(i, j int) bool { return aiTrailingNum(slides[i].Name) < aiTrailingNum(slides[j].Name) })
 
 	var out strings.Builder
-	for _, sl := range slides {
+	for i, sl := range slides {
 		rc, err := sl.Open()
 		if err != nil {
 			continue
@@ -683,7 +768,7 @@ func aiPPTXText(zr *zip.Reader) (string, error) {
 		if body == "" {
 			continue
 		}
-		out.WriteString(fmt.Sprintf("### 第 %d 页\n%s\n\n", aiTrailingNum(sl.Name), body))
+		out.WriteString(fmt.Sprintf("### 第 %d 页\n%s\n\n", i+1, body))
 	}
 	return out.String(), nil
 }
@@ -728,6 +813,9 @@ func aiExtractPDF(raw []byte) (aiExtractResult, error) {
 			empty++
 			continue
 		}
+		// Word/WPS 导出的 PDF 会把一行字切成一堆 Tj 片段，库给每个片段加 \n，
+		// 不重排的话"学号：2021304900"会变成四行单字碎片（见 aiPDFReflow）。
+		s = aiPDFReflow(aiPDFNormalizeSpace(s))
 		out.WriteString(fmt.Sprintf("### 第 %d 页\n", i))
 		out.WriteString(strings.TrimRight(s, "\n"))
 		out.WriteString("\n\n")
@@ -752,6 +840,211 @@ func aiExtractPDF(raw []byte) (aiExtractResult, error) {
 }
 
 // ---------- 小工具 ----------
+
+// aiXLSXMaxCols 是补空列的硬上限：畸形文件里一个 r="ZZZ999" 不该让输出
+// 凭空长出上万个 tab。真实表格远到不了这里。
+const aiXLSXMaxCols = 1024
+
+// aiXLSXColNum 把 "C3" / "AA12" 转成 1 基列号；没有列字母就返回 0（= 未知，
+// 退化为"按出现顺序 append"，与没有 r 属性的老文件兼容）。
+func aiXLSXColNum(ref string) int {
+	n := 0
+	for i := 0; i < len(ref); i++ {
+		c := ref[i]
+		switch {
+		case c >= 'A' && c <= 'Z':
+			n = n*26 + int(c-'A'+1)
+		case c >= 'a' && c <= 'z':
+			n = n*26 + int(c-'a'+1)
+		default:
+			if n == 0 || n > aiXLSXMaxCols {
+				return 0
+			}
+			return n
+		}
+		if n > aiXLSXMaxCols {
+			return 0
+		}
+	}
+	return n
+}
+
+// aiOOXMLPartOrder 按 OOXML 主 part 里的 r:id 顺序给出实际文件路径。
+//
+// workbook.xml 的 <sheet> / presentation.xml 的 <p:sldId> 才是"用户看到的顺序"，
+// r:id 通过同目录的 .rels 映射到具体 xml。文件名里的数字只是创建时的编号，
+// 删表、挪页之后不会重排 —— 按文件名排序就会读反。
+// 返回 (paths, titles)；titles 只有 xlsx 的 <sheet name> 有，pptx 为空串。
+// 任何一步缺失都返回空切片，由调用方回退到文件名排序。
+func aiOOXMLPartOrder(zr *zip.Reader, mainPart, relsPart, base, tag string) ([]string, []string) {
+	files := make(map[string]*zip.File, len(zr.File))
+	for _, f := range zr.File {
+		files[f.Name] = f
+	}
+	var rids, titles []string
+	aiOOXMLScan(files[mainPart], func(st xml.StartElement) {
+		if st.Name.Local != tag {
+			return
+		}
+		rid, title := "", ""
+		for _, a := range st.Attr {
+			switch a.Name.Local {
+			case "id": // r:id；sheetId 的 Local 是 "sheetId"，不会撞上
+				rid = a.Value
+			case "name":
+				title = a.Value
+			}
+		}
+		rids = append(rids, rid)
+		titles = append(titles, title)
+	})
+	targets := make(map[string]string)
+	aiOOXMLScan(files[relsPart], func(st xml.StartElement) {
+		if st.Name.Local != "Relationship" {
+			return
+		}
+		id, target := "", ""
+		for _, a := range st.Attr {
+			switch a.Name.Local {
+			case "Id":
+				id = a.Value
+			case "Target":
+				target = a.Value
+			}
+		}
+		if id != "" && target != "" {
+			targets[id] = aiOOXMLResolvePart(base, target)
+		}
+	})
+	var paths, names []string
+	for i, rid := range rids {
+		p, ok := targets[rid]
+		if !ok || p == "" || files[p] == nil {
+			continue
+		}
+		paths = append(paths, p)
+		names = append(names, titles[i])
+	}
+	return paths, names
+}
+
+// aiOOXMLResolvePart 把 rels 的 Target 变成 zip 内的完整路径。
+// 常见两种写法："worksheets/sheet1.xml"（相对 base）与 "/xl/worksheets/sheet1.xml"。
+func aiOOXMLResolvePart(base, target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return ""
+	}
+	if strings.HasPrefix(target, "/") {
+		return strings.TrimPrefix(target, "/")
+	}
+	p := path.Clean(base + target)
+	if strings.HasPrefix(p, "..") {
+		return ""
+	}
+	return p
+}
+
+// aiOOXMLScan 只遍历 StartElement。rels / workbook 都极小，用不上流式状态机；
+// Strict=false 是因为真实文件里常有未声明的命名空间前缀。
+func aiOOXMLScan(f *zip.File, fn func(xml.StartElement)) {
+	if f == nil {
+		return
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return
+	}
+	defer rc.Close()
+	dec := xml.NewDecoder(rc)
+	dec.Strict = false
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return
+		}
+		if st, ok := tok.(xml.StartElement); ok {
+			fn(st)
+		}
+	}
+}
+
+// aiPDFNormalizeSpace 把 PDF 里的排版空格归一。
+// 期刊 PDF 常用 U+00A0（不换行空格）做对齐，一段里连着四五个；
+// 中文里还有 U+3000（全角空格）。它们不是内容，留着只会让模型把
+// "摘　要:" 当成跟 "摘要:" 不同的词。
+func aiPDFNormalizeSpace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	space := false
+	for _, r := range s {
+		switch r {
+		case '\u00a0', '\u3000':
+			r = ' '
+		case '\u200b', '\ufeff':
+			continue
+		}
+		if r == ' ' {
+			if space {
+				continue
+			}
+			space = true
+		} else {
+			space = false
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// aiPDFReflow 把"每个字一行"的 PDF 文本重排成能读的段落。
+//
+// Word/WPS 导出的 PDF 常把一行文字切成许多 Tj 片段（中文按字、数字按位），
+// ledongthuc/pdf 的 GetPlainText 给**每个片段**后面加 \n，于是
+// "学号：2021304900" 会变成 "学号：\n2\n021304900"。这类输出里，真正的
+// 段落边界是一个空白行（库输出 " \n"），片段与片段之间没有。
+//
+// 但排版系统生成的 PDF（期刊 / LaTeX）每行就是一个完整 Tj，行与行之间只有
+// 一个 \n —— 对它们做合并会把整页粘成一行。所以先判"碎片化"：非空行里
+// ≤3 字符的短行至少 5 行且占 1/4 以上，才启用重排；其余原样返回。
+//
+// 拼接片段时不额外插空格：库在需要分词的地方已经留了尾空格
+// （"ETH Beijing "），而中文片段之间加空格反而会把 "2023年4月" 拆散。
+func aiPDFReflow(s string) string {
+	lines := strings.Split(s, "\n")
+	nonEmpty, short := 0, 0
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
+		}
+		nonEmpty++
+		if len([]rune(trimmed)) <= 3 {
+			short++
+		}
+	}
+	if nonEmpty == 0 || short < 5 || short*4 < nonEmpty {
+		return s
+	}
+	var out, buf strings.Builder
+	flush := func() {
+		v := strings.TrimSpace(buf.String())
+		if v != "" {
+			out.WriteString(v)
+			out.WriteString("\n")
+		}
+		buf.Reset()
+	}
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			flush()
+			continue
+		}
+		buf.WriteString(l)
+	}
+	flush()
+	return out.String()
+}
 
 // aiStripCtrl 去掉 C0 控制符，只保留换行与制表。
 //
