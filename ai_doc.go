@@ -33,12 +33,16 @@ import (
 )
 
 const (
-	// 目录保留份数：兜底防"一天之内狂拖"。正文单份已由 explore_max_kb 截断。
+	// 目录保留份数：兜底防"一天之内狂拖"。
 	aiDocMaxCount = 200
 	// 与图片附件同一个 TTL 口径：文档也只是"这一轮对话的输入"。
 	aiDocTTL = 24 * time.Hour
 	// 扫描间隔远小于 TTL：TTL 是"文件年龄"判据，扫描频率只决定滞后多久才删。
 	aiDocSweepEvery = time.Hour
+	// aiDocMaxTextBytes 单份正文的硬上限（8MB）。**这不是"能读多少"的口径** ——
+	// 注入时只拼第一段（explore_max_kb），剩下的由 read_doc 分页取。
+	// 它只兜底"一份被误标成文本的巨型文件把磁盘写满"。
+	aiDocMaxTextBytes = 8 << 20
 )
 
 // aiDocRef 是 messages 里对一份文档的引用。
@@ -110,6 +114,50 @@ func aiDocBlock(name, text string) string {
 	return "<untrusted_data source=\"file:" + aiDocSafeName(name) + "\">\n" + text + "\n</untrusted_data>"
 }
 
+// aiDocInjectBlock 把一份落盘文档变成要拼进 prompt 的那一段。
+//
+// **只注入第一段**，剩下的交给 read_doc 分页取。理由与 read_file 同一条：
+// 一份 300 页 PDF 抽出 300KB 正文，全塞进去会直接吃掉上下文窗口；而截断后
+// 只留一句"已截断"等于告诉模型"后面读不到"，它就按不完整的材料下结论。
+//
+// 差别在于取舍：小文件（≤ 预算）**原样全给**，不额外提示 ——
+// 多一句"这是全部内容"只会让每轮请求都多几十字节，而它并没有新信息。
+func aiDocInjectBlock(d aiDocRef, text string) string {
+	budget := exploreMaxBytes()
+	if int64(len(text)) <= budget {
+		return aiDocBlock(d.Name, text)
+	}
+	// lines 传一个远大于实际的值：这里的截断只该由**字节预算**决定。
+	// 若再叠一层行数上限，提示里的行号与预算口径就对不上，模型没法自己算下一段。
+	head, st := aiReadLines(strings.NewReader(text), 1, 1<<30, budget)
+	if st.First == 0 {
+		return aiDocBlock(d.Name, text) // 兜底：读不出分页信息时宁可按原样给
+	}
+	totalLines := aiCountLines(text)
+	name := aiDocSafeName(d.Name)
+	var hint string
+	if st.Next > 0 {
+		hint = fmt.Sprintf("\n（以上是《%s》第 %d-%d 行，全文共 %d 行 / %d 字符。需要后面的内容请调用 read_doc(doc_id=%q, offset=%d)；不要拿已读部分当全文下结论。）",
+			name, st.First, st.Last, totalLines, len([]rune(text)), d.ID, st.Next)
+	} else {
+		hint = fmt.Sprintf("\n（以上是《%s》的全部内容，共 %d 行 / %d 字符。）", name, totalLines, len([]rune(text)))
+	}
+	return aiDocBlock(d.Name, head) + hint
+}
+
+// aiCountLines 数总行数，只用于提示里的"共 N 行"。
+// 口径与 aiReadLines 一致：末尾换行不算多一行（strings.Split 会多数出一个空行）。
+func aiCountLines(text string) int {
+	if text == "" {
+		return 0
+	}
+	n := strings.Count(text, "\n")
+	if !strings.HasSuffix(text, "\n") {
+		n++
+	}
+	return n
+}
+
 // aiDocHydrate 把 messages 里的文档引用读盘、拼回正文。
 //
 // 拼在用户那句话**后面**：先说要问什么、再给材料，对模型更自然（与图片块的顺序同一个理由）。
@@ -129,7 +177,7 @@ func aiDocHydrate(msgs []aiMsg) []aiMsg {
 				gone = append(gone, aiDocLabel(d))
 				continue
 			}
-			blocks = append(blocks, aiDocBlock(d.Name, text))
+			blocks = append(blocks, aiDocInjectBlock(d, text))
 		}
 		body := strings.TrimRight(m.Content, " \t\r\n")
 		extra := strings.Join(blocks, "\n")
@@ -191,3 +239,44 @@ func aiDocStartGC() {
 }
 
 // 排序只为了让 GC 的"保留最近 N 份"有确定语义（见 attachSweep）。
+
+// ---------- read_doc：附件正文的后续分页 ----------
+
+// aiDocRead 读附件的一段，是"文档版 read_file"。
+//
+// 为什么不让模型用 read_file 读 aidoc/<id>：
+//   - read_file 的沙箱是**项目目录**，附件在 exe 旁边，够不着；
+//   - 它按路径读，而模型手里只有一个 id。把 id 拼成路径这件事不该交给模型 ——
+//     拼错就是白跑一轮，拼对也无从校验。
+//
+// 安全性：id 先过 aiAttachIDOK（32 位 hex 白名单），路径由 aiDocPath 拼在
+// aidoc/ 目录内，不存在穿越。它是"读用户刚刚亲手拖进来的东西"，与 read_file
+// 同一级别，所以也是 PolicyAuto。
+func aiDocRead(args map[string]any) string {
+	id := strings.TrimSpace(fmt.Sprint(args["doc_id"]))
+	text, err := aiDocLoad(id)
+	if err != nil {
+		return "读取失败：找不到这份附件（id=" + id + "）。附件只保留 24 小时，过期或 id 记错都会读不到；请让用户重新拖入。"
+	}
+	offset := aiArgInt(args, "offset", 1, 1, 0)
+	nLines := aiArgInt(args, "lines", 400, 1, 800)
+	budget := exploreMaxBytes()
+	body, st := aiReadLines(strings.NewReader(text), offset, nLines, budget)
+	if st.Err != "" {
+		return "读取失败：" + st.Err
+	}
+	auditNow(actAI, "doc_read", id, fmt.Sprintf("offset=%d lines=%d", offset, nLines), resOK, "")
+	return untrusted(aiReadNote("附件 "+id[:6], int64(len(text)), offset, st, budget) + body)
+}
+
+func init() {
+	aiToolRegistry["read_doc"] = aiTool{
+		Desc: "分页读取用户本轮拖入的文档附件（pdf/docx/xlsx/pptx/文本，只读）。附件注入时只带第一段，返回内容里会给 doc_id 与下一段 offset，按它继续读就能拿到后续内容。找不到通常意味着附件已过期（只保留 24 小时），此时请让用户重新拖入",
+		Schema: map[string]any{"type": "object", "properties": map[string]any{
+			"doc_id": map[string]any{"type": "string", "description": "附件 id（注入内容里 read_doc(doc_id=...) 给出的那串）"},
+			"offset": map[string]any{"type": "integer", "description": "起始行号（从 1 开始），默认 1；读下一段时用上次返回里给的 offset"},
+			"lines":  map[string]any{"type": "integer", "description": "读取行数，默认 400，上限 800"},
+		}, "required": []string{"doc_id"}},
+		Execute: func(args map[string]any) (string, error) { return aiDocRead(args), nil },
+	}
+}

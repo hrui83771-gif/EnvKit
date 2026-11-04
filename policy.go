@@ -103,6 +103,7 @@ var policyRules = map[string]policyRule{
 	"list_project":       {PolicyAuto, false, "列目录，沙箱内只读"},
 	"search_files":       {PolicyAuto, false, "搜文件，沙箱内只读"},
 	"read_file":          {PolicyAuto, false, "读文件，沙箱内只读"},
+	"read_doc":           {PolicyAuto, false, "读用户刚拖入的附件，只读且限定在附件目录"},
 	"verify_environment": {PolicyAuto, false, "复验只读取客观状态"},
 	"recall_lessons":     {PolicyAuto, false, "读取经验，不改变任何状态"},
 	// v2.3 N6：只读查询。判据是"能否修改数据"——答案是否定的：

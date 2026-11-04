@@ -144,7 +144,7 @@ type budgetGovernor struct {
 // 状态快照不算（一轮就问完了）。
 func budgetToolProductive(tool string) bool {
 	switch tool {
-	case "list_project", "search_files", "read_file",
+	case "list_project", "search_files", "read_file", "read_doc",
 		"get_project_brief", "db_query", "db_list":
 		return true
 	}
@@ -264,6 +264,8 @@ func planLine(tool, target string) string {
 		return "正在搜索项目文件"
 	case "read_file":
 		return "正在读取 " + target
+	case "read_doc":
+		return "正在读取附件 " + target
 	case "db_query":
 		return "正在查询数据库：" + firstLines(target, 60)
 	case "db_list":

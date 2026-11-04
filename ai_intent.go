@@ -354,6 +354,8 @@ func aiToolCnName(tool string, args map[string]any) string {
 		return "在项目内搜索文件"
 	case "read_file":
 		return "读取项目文件"
+	case "read_doc":
+		return "读取附件内容"
 	}
 	return tool
 }

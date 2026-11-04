@@ -285,8 +285,9 @@ type DevConfig struct {
 	SubprocBackoffSecs int `json:"subproc_backoff_secs,omitempty"` // 每次重试前等待（默认 2）
 
 	// —— AI 读取 ——
-	// ExploreMaxKB 单文件读取上限（KB，默认 64）。调大可让 AI 读全大文件，
-	// 但内容会整段进上下文，长文件更容易触发摘要。
+	// ExploreMaxKB 单次读取字节预算（KB，默认 64）。它是"一次能看多少"而不是
+	// "文件最多能看多少"：超出部分用 offset 分页继续读。调大能少几轮工具调用，
+	// 但单轮进上下文的内容也变多，长文件更容易触发摘要。
 	ExploreMaxKB int `json:"explore_max_kb,omitempty"`
 }
 

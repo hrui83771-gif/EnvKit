@@ -2027,7 +2027,7 @@
             <div class="set-field"><div class="set-flabel"><b>单轮超时</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_turn_timeout" min="30" max="1800" step="30" />
               <input type="number" class="set-num" id="sd_turn_timeout_n" min="0" max="7200" /></div>
-            <div class="set-field"><div class="set-flabel"><b>单文件读取上限</b><span class="unit">KB</span></div>
+            <div class="set-field"><div class="set-flabel"><b>单次读取上限</b><span class="unit">KB</span></div>
               <input type="range" class="set-slider" id="sd_explore_kb" min="16" max="512" step="16" />
               <input type="number" class="set-num" id="sd_explore_kb_n" min="0" max="1024" /></div>
           </div>
@@ -2773,6 +2773,7 @@ const I18N_EN = {
   "其它": "Other",
   "内存 {0} MB": "Memory {0} MB",
   "内容 | 标签": "text | tags",
+  "内容较多：AI 先读开头，需要后续会自动翻页读取": "Long document: the AI reads the beginning first and pages through the rest on demand",
   "内嵌终端（页面内直接操作远程 shell）": "Built-in terminal (operate a remote shell in the page)",
   "内置默认（12）": "Built-in default (12)",
   "内置默认（300 秒）": "Built-in default (300s)",
@@ -2833,6 +2834,7 @@ const I18N_EN = {
   "单位：天；到期自动清理": "In days; expired files are cleaned up automatically",
   "单文件写满即轮转，超出份数的最老一份删除": "A file rotates when full; the oldest beyond the count is deleted",
   "单文件读取上限": "Per-file read limit",
+  "单次读取上限": "Per-call read budget",
   "单目标重试上限": "Retries per target",
   "单轮超时": "Turn timeout",
   "占比 {0}%": "{0}%",
@@ -9073,9 +9075,15 @@ function aiDocChip(it, onRemove){
   const mt = document.createElement('span'); mt.className = 'mt';
   mt.textContent = it.busy ? t('读取中') : (it.chars ? t('{0} 字', it.chars) : '');
   d.appendChild(badge); d.appendChild(nm); d.appendChild(mt);
-  // 悬浮给"人话"：名字可能被省略号截断，字数是"读进来多少"的唯一凭据
+  // 悬浮给"人话"：名字可能被省略号截断，字数是"读进来多少"的唯一凭据。
+  // 字数较大时补一句"会翻页读" —— 否则用户看到"30 万字"会以为 AI 已经全看过了，
+  // 回答不全时又归咎于模型能力。阈值只是粗略换算（中文约 3 字节/字），
+  // 文案用"先读开头"，不承诺精确口径。
+  const big = !it.busy && !it.err && (it.chars || 0) > 20000;
   d.title = it.err ? (it.name + ' — ' + it.err)
-    : [it.name, it.busy ? t('正在读取…') : t('{0} 字', it.chars || 0), it.note || ''].filter(Boolean).join(' · ');
+    : [it.name, it.busy ? t('正在读取…') : t('{0} 字', it.chars || 0),
+       big ? t('内容较多：AI 先读开头，需要后续会自动翻页读取') : '',
+       it.note || ''].filter(Boolean).join(' · ');
   if(onRemove){
     const rm = document.createElement('button');
     rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');

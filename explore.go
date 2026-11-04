@@ -11,6 +11,7 @@ package main
 //      并做轻量密钥脱敏，防止把真实密码喂给模型。
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -33,9 +34,16 @@ const (
 	exploreMaxBriefFiles = 2000       // 生成项目画像时最大扫描文件数
 )
 
-// exploreMaxBytes 单文件读取上限（默认 64KB，设置页「AI 记忆与摘要」可调）。
-// 这个值同时决定"截断提示"里的数字 —— 提示与实现必须用同一个变量，
-// 否则会出现"说载入了 64KB、其实按 128KB 读的"这种自相矛盾。
+// exploreMaxBytes 单次返回的字节预算（默认 64KB，设置页「AI 记忆与摘要」可调）。
+//
+// **它是"一次能看多少"，不是"这个文件最多能看多少"**。差别很要紧：
+// 早先的实现把它当成文件读取上限（io.LimitReader 从头截断再切行），于是 offset
+// 永远越不过前 64KB —— 一份 5MB 的日志第 10000 行根本读不到，而提示里还写着
+// "用 offset 继续读"，等于指了一条不存在的路。现在改成流式按行扫，
+// 这个值只决定"本次返回多少字节"，配合返回里的 offset 提示可以一路翻到文件末尾。
+//
+// 它同时也决定"截断提示"里的数字 —— 提示与实现必须用同一个变量，
+// 否则会出现"说载入了 64KB、其实按 128KB 读"这种自相矛盾。
 func exploreMaxBytes() int64 {
 	return int64(devOr(devSnap().ExploreMaxKB, devDefaultExploreMaxKB)) << 10
 }
@@ -260,10 +268,10 @@ func init() {
 	}
 
 	aiToolRegistry["read_file"] = aiTool{
-		Desc: "读取项目内指定文件的部分内容（只读）。建议先用 list_project / search_files 定位，再带 offset 精读。key/凭据类文件按安全策略拒绝读取",
+		Desc: "分页读取项目内指定文件的文本内容（只读）。建议先用 list_project / search_files 定位，再带 offset 精读；单次返回有字节上限，返回末尾会告诉你还有没有、以及下一段该传什么 offset，按它继续读就能一路读到文件末尾。key/凭据类文件按安全策略拒绝读取",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{
 			"path":   map[string]any{"type": "string", "description": "文件路径（相对项目根或绝对路径，必须在项目目录内）"},
-			"offset": map[string]any{"type": "integer", "description": "起始行号（从 1 开始），默认 1"},
+			"offset": map[string]any{"type": "integer", "description": "起始行号（从 1 开始），默认 1；读下一段时用上次返回里给的 offset"},
 			"lines":  map[string]any{"type": "integer", "description": "读取行数，默认 200，上限 400"},
 		}, "required": []string{"path"}},
 		Execute: func(args map[string]any) (string, error) { return exploreRead(args), nil },
@@ -518,29 +526,171 @@ func exploreRead(args map[string]any) string {
 		return "打开失败：" + err.Error()
 	}
 	defer f.Close()
-	maxBytes := exploreMaxBytes()
-	data, err := io.ReadAll(io.LimitReader(f, maxBytes))
-	if err != nil {
-		return "读取失败：" + err.Error()
+
+	// 流式按行扫，**不**先 LimitReader 再从这段文本里切行：
+	// 那样 offset 只能在前 N KB 内生效，等于"大文件永远只看得见开头"。
+	budget := exploreMaxBytes()
+	rel := relOrAbs(abs)
+	body, st := aiReadLines(f, offset, nLines, budget)
+	if st.Err != "" {
+		return "读取失败：" + st.Err
 	}
-	text := string(data)
-	lines := strings.Split(text, "\n")
-	note := fmt.Sprintf("文件：%s（共 %d 行", relOrAbs(abs), len(lines))
-	if fi.Size() > maxBytes {
-		note += fmt.Sprintf("，源文件 %.1f KB，本次仅载入前 %d KB", float64(fi.Size())/1024, maxBytes/1024)
+	auditNow(actAI, "explore_read", rel, fmt.Sprintf("offset=%d lines=%d", offset, nLines), resOK, "")
+	return untrusted(aiReadNote(rel, fi.Size(), offset, st, budget) + redactSecrets(body))
+}
+
+// aiReadStats 是一次分页读取的结果。
+//
+// 三个字段合起来才够回答"读到哪、还有没有、下一步传什么"——
+// 少了 Next，模型就只能猜"是不是读完了"。
+type aiReadStats struct {
+	First, Last int    // 本次返回的行号（1-based 闭区间）；没有内容时都是 0
+	Next        int    // 下一段该从哪行开始；0 = 已到文件末尾
+	Total       int    // 只有读到末尾时才知道的总行数；提前收手时为 0
+	LongLine    int    // 因单行超预算被截断的行号；0 = 没有
+	Err         string // Scanner 的硬错误（超长行、IO 失败）
+}
+
+// aiReadLines 从 r 里取 [offset, offset+nLines) 行，累计字节不超过 budget。
+//
+// **这是一个纯函数**：不碰文件系统、不查配置。翻页逻辑（跳过多少行、哪里收手、
+// 下一段从哪开始）最容易出错，而它恰恰是"用真实文件测"时最难构造的
+// （得先造一个超过 budget 的文件才看得出 offset 能不能翻过去）。
+// 抽出 r io.Reader 之后，构造一个 strings.Reader 就能覆盖全部边角。
+func aiReadLines(r io.Reader, offset, nLines int, budget int64) (string, aiReadStats) {
+	var st aiReadStats
+	if offset < 1 {
+		offset = 1
 	}
-	start := offset - 1
-	if start > len(lines) {
-		start = len(lines)
+	if nLines < 1 {
+		nLines = 1
 	}
-	end := start + nLines
-	if end > len(lines) {
-		end = len(lines)
+	if budget < 1 {
+		budget = 1
 	}
-	body := strings.Join(lines[start:end], "\n")
-	note += fmt.Sprintf("，当前显示第 %d-%d 行）\n\n", start+1, end)
-	auditNow(actAI, "explore_read", relOrAbs(abs), fmt.Sprintf("offset=%d lines=%d", offset, nLines), resOK, "")
-	return untrusted(note + redactSecrets(body))
+
+	rd := bufio.NewReaderSize(r, 32*1024)
+	var out []string
+	used := int64(0)
+	cur := 0  // 已消费的行数
+	next := 0 // 非 0 = 还有内容没返回，下一段从这一行开始
+	for {
+		line, truncated, err := aiReadOneLine(rd, budget)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			st.Err = err.Error()
+			return "", st
+		}
+		cur++
+		if cur < offset {
+			continue // 只要计数，不占预算：否则 offset 越大、可读的内容越少
+		}
+		// 行数用完：cur 这一行**没有**返回，所以它就是下一段的起点
+		if len(out) >= nLines {
+			next = cur
+			break
+		}
+		add := int64(len(line))
+		if len(out) > 0 {
+			add++ // 行间的换行符
+		}
+		// 预算用完了。能走到这里时 out 一定非空：aiReadOneLine 已经把单行截进预算，
+		// 第一行不可能"自己就超预算"，所以没有"单行吃掉整个预算"这种分支要处理。
+		if used+add > budget {
+			next = cur
+			break
+		}
+		if truncated {
+			st.LongLine = cur
+		}
+		out = append(out, line)
+		used += add
+		if st.First == 0 {
+			st.First = cur
+		}
+		st.Last = cur
+	}
+	if next > 0 {
+		st.Next = next
+	} else {
+		st.Total = cur
+	}
+	return strings.Join(out, "\n"), st
+}
+
+// aiReadOneLine 读一整行，但只保留前 budget 字节。
+//
+// 返回的 truncated 表示"这一行还有没保留的内容"。
+// **必须一路读到行尾**（哪怕已经把预算用光）：只读前 N 字节就返回的话，
+// 下一次调用会从这一行的中间开始 —— 行号从此全错，而 offset 的全部意义就是行号。
+func aiReadOneLine(rd *bufio.Reader, budget int64) (string, bool, error) {
+	buf := make([]byte, 0, 256)
+	truncated := false
+	for {
+		frag, isPrefix, err := rd.ReadLine()
+		if err != nil {
+			return "", false, err // 含 io.EOF
+		}
+		if room := budget - int64(len(buf)); room > 0 {
+			if int64(len(frag)) > room {
+				buf = append(buf, frag[:int(room)]...)
+				truncated = true
+			} else {
+				buf = append(buf, frag...)
+			}
+		} else if len(frag) > 0 {
+			truncated = true
+		}
+		if !isPrefix {
+			return string(buf), truncated, nil
+		}
+	}
+}
+
+// budgetKB 只用于人话提示：预算不足 1KB 时也不要说"上限 0 KB"。
+func budgetKB(budget int64) int64 {
+	if k := budget >> 10; k > 0 {
+		return k
+	}
+	return 1
+}
+
+// aiReadNote 是回给模型的那段"说明书"。
+//
+// 它必须回答三个问题，否则模型只能凭想象补：读到哪了、还有没有、怎么继续。
+// 旧版本只写"本次仅载入前 64KB"，等于告诉模型"后面读不到"——它就按不完整的
+// 证据下结论，那比多花几轮工具调用贵得多。
+func aiReadNote(rel string, size int64, offset int, st aiReadStats, budget int64) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "文件：%s（%.1f KB", rel, float64(size)/1024)
+	if st.Total > 0 {
+		fmt.Fprintf(&b, "，共 %d 行", st.Total)
+	}
+	b.WriteString("）\n")
+
+	if st.First == 0 {
+		if st.Total > 0 {
+			fmt.Fprintf(&b, "offset=%d 超出了文件行数（共 %d 行），本次没有返回内容。\n\n", offset, st.Total)
+		} else {
+			fmt.Fprintf(&b, "offset=%d 超出了文件行数，本次没有返回内容。\n\n", offset)
+		}
+		return b.String()
+	}
+
+	fmt.Fprintf(&b, "本次返回第 %d-%d 行（单次上限 %d KB）", st.First, st.Last, budgetKB(budget))
+	if st.LongLine > 0 {
+		fmt.Fprintf(&b, "；第 %d 行单行超过该上限，已按 %d KB 截断（该行剩余部分无法按行续读）", st.LongLine, budgetKB(budget))
+	}
+	b.WriteString("。\n")
+	if st.Next > 0 {
+		fmt.Fprintf(&b, "后面还有内容：用 offset=%d 继续读，不要拿已读部分当全文下结论。\n", st.Next)
+	} else {
+		b.WriteString("已到文件末尾。\n")
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // isBinaryLikeHeader 读前 512 字节判断是否为二进制。

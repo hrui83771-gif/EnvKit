@@ -604,9 +604,15 @@ function aiDocChip(it, onRemove){
   const mt = document.createElement('span'); mt.className = 'mt';
   mt.textContent = it.busy ? t('读取中') : (it.chars ? t('{0} 字', it.chars) : '');
   d.appendChild(badge); d.appendChild(nm); d.appendChild(mt);
-  // 悬浮给"人话"：名字可能被省略号截断，字数是"读进来多少"的唯一凭据
+  // 悬浮给"人话"：名字可能被省略号截断，字数是"读进来多少"的唯一凭据。
+  // 字数较大时补一句"会翻页读" —— 否则用户看到"30 万字"会以为 AI 已经全看过了，
+  // 回答不全时又归咎于模型能力。阈值只是粗略换算（中文约 3 字节/字），
+  // 文案用"先读开头"，不承诺精确口径。
+  const big = !it.busy && !it.err && (it.chars || 0) > 20000;
   d.title = it.err ? (it.name + ' — ' + it.err)
-    : [it.name, it.busy ? t('正在读取…') : t('{0} 字', it.chars || 0), it.note || ''].filter(Boolean).join(' · ');
+    : [it.name, it.busy ? t('正在读取…') : t('{0} 字', it.chars || 0),
+       big ? t('内容较多：AI 先读开头，需要后续会自动翻页读取') : '',
+       it.note || ''].filter(Boolean).join(' · ');
   if(onRemove){
     const rm = document.createElement('button');
     rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');

@@ -148,13 +148,15 @@ func handleAIExtract(w http.ResponseWriter, r *http.Request) {
 	// 终端日志里还有 ANSI 色码（\x1b[32m）—— 它们不是内容，
 	// 混进 prompt 只会让模型把十六进制转义当成正文的一部分。
 	res.Text = aiStripCtrl(res.Text)
-	// 截断按 read_file 的同一口径（explore_max_kb），一处可调、两处生效
-	limit := int(exploreMaxBytes())
-	if len(res.Text) > limit {
-		res.Text = aiExtractCut(res.Text, limit)
+	// **不再按 64KB 截断**：全文落盘，注入时只拼第一段，剩下的由模型调用
+	// read_doc 分页取（见 ai_doc.go）。早先在这里砍掉，就等于把"300 页 PDF 的第
+	// 200 页"永久丢弃 —— 而 note 还写着"请分段拖入"，用户根本没法把一份 PDF 分段。
+	// 这里只保留一个"荒谬大小"的兜底：一份被误标成文本的巨型文件不该写满磁盘。
+	if len(res.Text) > aiDocMaxTextBytes {
+		res.Text = aiExtractCut(res.Text, aiDocMaxTextBytes)
 		res.Trunc = true
 		res.Note = strings.TrimSpace(res.Note + fmt.Sprintf(
-			" 内容超过上限 %d KB，已截断到前 %d 字符；需要后半段请分段拖入。", limit>>10, len([]rune(res.Text))))
+			" 正文超过 %d MB，只保留了前 %d 字符。", aiDocMaxTextBytes>>20, len([]rune(res.Text))))
 	}
 	res.Chars = len([]rune(res.Text))
 	id, err := aiDocStore(res.Text)

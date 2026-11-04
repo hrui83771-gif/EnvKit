@@ -316,6 +316,8 @@
   "升级组件": "Upgrade components",
   "单位：天；到期自动清理": "In days; expired files are cleaned up automatically",
   "单文件写满即轮转，超出份数的最老一份删除": "A file rotates when full; the oldest beyond the count is deleted",
+  "单次读取上限": "Per-call read budget",
+  "内容较多：AI 先读开头，需要后续会自动翻页读取": "Long document: the AI reads the beginning first and pages through the rest on demand",
   "单文件读取上限": "Per-file read limit",
   "单目标重试上限": "Retries per target",
   "单轮超时": "Turn timeout",
