@@ -821,6 +821,9 @@
   .ai-ms-acts button{background:none;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:11px;padding:2px 9px;cursor:pointer;white-space:nowrap}
   .ai-ms-acts button:hover{color:var(--brand)}
   .ai-ms-acts button.danger:hover{color:var(--err);border-color:var(--err)}
+  /* 折叠开关：占满一行、居中，与卡片视觉上分开（它不是一张行动卡） */
+  .ai-ms-more{display:block;width:100%;margin:2px 0 8px;padding:4px;background:none;border:1px dashed var(--line);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;text-align:center}
+  .ai-ms-more:hover{color:var(--brand);border-color:var(--brand)}
   /* Phase 2：预案徽标 / 起草步骤 / 预案库列表。
      起草步骤用等宽 + 缩进，和"已完成步骤"在视觉上分开 —— 用户最容易误会
      的就是"这些是不是已经做了"。 */

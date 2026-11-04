@@ -325,3 +325,92 @@ func TestMissionTrim(t *testing.T) {
 		t.Fatalf("无可淘汰的终态时应报错")
 	}
 }
+
+// TestMissionDeleteGuard 删除的守门规则：
+// 未收口不许删（列表是「继续/取消」唯一入口，删了就是幽灵行动）、
+// 不存在的 ID 要报错、已收口的删掉后不再出现。
+func TestMissionDeleteGuard(t *testing.T) {
+	defer withMissionEnv(t)()
+
+	now := time.Now()
+	mk := func(id, state string) Mission {
+		return Mission{ID: id, Goal: "g", State: state,
+			CreatedAt: now, UpdatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	}
+	if err := saveMissions([]Mission{
+		mk("m-live", msPending), mk("m-pause", msPaused), mk("m-dead", msCanceled),
+	}); err != nil {
+		t.Fatalf("saveMissions: %v", err)
+	}
+
+	// 未收口的每种状态都拒：转移表以后加新状态时，这里逼着实现者想清楚
+	// "新状态能不能删"，而不是默认放行
+	for _, id := range []string{"m-live", "m-pause"} {
+		if err := missionDelete(id); err == nil {
+			t.Fatalf("未收口的 %s 不许删，应报错", id)
+		}
+		if list := missionList(); len(list) != 3 {
+			t.Fatalf("拒绝删除后列表不该变：%d", len(list))
+		}
+	}
+	// 不存在
+	if err := missionDelete("m-nope"); err == nil {
+		t.Fatalf("不存在的 ID 应报错")
+	}
+	// 终态可删，且删的是那一条
+	if err := missionDelete("m-dead"); err != nil {
+		t.Fatalf("已收口的应可删：%v", err)
+	}
+	list := missionList()
+	if len(list) != 2 {
+		t.Fatalf("删除后应剩 2 条，实为 %d", len(list))
+	}
+	for _, m := range list {
+		if m.ID == "m-dead" {
+			t.Fatalf("被删的行动还在列表里")
+		}
+	}
+}
+
+// TestMissionPurgeKeepsLive purge 只清终态，未收口的原样保留。
+// 顺带验证 0 条时不写盘（saveMissions 会换 .bak，没必要空转）。
+func TestMissionPurgeKeepsLive(t *testing.T) {
+	defer withMissionEnv(t)()
+
+	now := time.Now()
+	mk := func(id, state string) Mission {
+		return Mission{ID: id, Goal: "g", State: state,
+			CreatedAt: now, UpdatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	}
+	if err := saveMissions([]Mission{
+		mk("m-run", msRunning), mk("m-await", msAwaitingConfirm),
+		mk("m-done", msDone), mk("m-fail", msFailed),
+		mk("m-cancel", msCanceled), mk("m-expired", msExpired),
+	}); err != nil {
+		t.Fatalf("saveMissions: %v", err)
+	}
+
+	n, err := missionPurge()
+	if err != nil {
+		t.Fatalf("missionPurge: %v", err)
+	}
+	if n != 4 {
+		t.Fatalf("应清掉 4 条终态，实为 %d", n)
+	}
+	list := missionList()
+	if len(list) != 2 {
+		t.Fatalf("未收口的应保留 2 条，实为 %d", len(list))
+	}
+	states := map[string]bool{}
+	for _, m := range list {
+		states[m.State] = true
+	}
+	if !states[msRunning] || !states[msAwaitingConfirm] {
+		t.Fatalf("未收口行动丢失：%v", list)
+	}
+
+	// 再 purge：没有可清的了，返回 0 而不是报错（前端要靠这个区分"清完"与"失败"）
+	if n, err := missionPurge(); err != nil || n != 0 {
+		t.Fatalf("第二次 purge 应返回 (0, nil)，实为 (%d, %v)", n, err)
+	}
+}

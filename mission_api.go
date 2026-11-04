@@ -8,7 +8,8 @@ package main
 //
 // 端点：
 //   GET  /api/missions          列表（含 paused 的「待你继续」）
-//   POST /api/missions          {op: create|pause|resume|cancel, ...}
+//   POST /api/missions          {op: create|pause|resume|cancel|delete|purge, ...}
+//                                 delete 只删已收口的；purge 清空全部已收口
 //   POST /api/trigger           入站触发（inbound_hook 默认关，只服务本机）
 //   GET  /api/missions/events   SSE：行动列表实时状态（前端可降级为轮询）
 //
@@ -53,10 +54,17 @@ func handleMissions(w http.ResponseWriter, r *http.Request) {
 		var (
 			m   Mission
 			err error
+			// hasM：这次 op 有没有产出行动对象。delete / purge 没有，
+			// 不能回一个零值 Mission —— 前端看到 d.mission 就去改列表行，
+			// 会凭空插进一条 id 为空的行。
+			hasM bool
+			// removed：purge 删掉的条数（0 也要回，前端据此说"没有可清理的"）
+			removed int
 		)
 		switch body.Op {
 		case "create":
 			m, err = missionNew(body.Goal, Trigger{Kind: "manual"})
+			hasM = err == nil
 			if err == nil {
 				auditNow(actUser, "mission_create", m.ID, "", resOK, firstLines(m.Goal, 80))
 			}
@@ -68,6 +76,7 @@ func handleMissions(w http.ResponseWriter, r *http.Request) {
 				x.PauseWhy = "用户暂停"
 				return nil
 			})
+			hasM = err == nil
 			if err == nil {
 				auditNow(actUser, "mission_pause", body.ID, "", resOK, "")
 			}
@@ -77,6 +86,7 @@ func handleMissions(w http.ResponseWriter, r *http.Request) {
 			// 这样执行永远只有一条入口，不会出现「API 说在跑、其实没人跑」。
 			var found bool
 			m, found = missionGet(body.ID)
+			hasM = found
 			if !found {
 				err = fmt.Errorf("行动不存在：%s", body.ID)
 			} else {
@@ -93,11 +103,23 @@ func handleMissions(w http.ResponseWriter, r *http.Request) {
 			m, err = missionUpdate(body.ID, func(x *Mission) error {
 				return missionGo(x, msCanceled)
 			})
+			hasM = err == nil
 			if err == nil {
 				auditNow(actUser, "mission_cancel", body.ID, "", resOK, "")
 			}
+		case "delete":
+			// 只删已收口的（判据在 missionDelete，不在这里再写一遍）
+			err = missionDelete(body.ID)
+			if err == nil {
+				auditNow(actUser, "mission_delete", body.ID, "", resOK, "")
+			}
+		case "purge":
+			removed, err = missionPurge()
+			if err == nil {
+				auditNow(actUser, "mission_purge", "", "", resOK, fmt.Sprintf("删除 %d 条已收口行动", removed))
+			}
 		default:
-			writeJSON(w, map[string]any{"ok": false, "error": "op 必须是 create / pause / resume / cancel"})
+			writeJSON(w, map[string]any{"ok": false, "error": "op 必须是 create / pause / resume / cancel / delete / purge"})
 			return
 		}
 		if err != nil {
@@ -105,7 +127,14 @@ func handleMissions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		notifyMissions()
-		writeJSON(w, map[string]any{"ok": true, "mission": m})
+		resp := map[string]any{"ok": true}
+		if hasM {
+			resp["mission"] = m
+		}
+		if body.Op == "purge" {
+			resp["removed"] = removed
+		}
+		writeJSON(w, resp)
 	default:
 		http.Error(w, "method not allowed", 405)
 	}

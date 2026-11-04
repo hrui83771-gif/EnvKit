@@ -48,6 +48,11 @@ let aiCurMission = null;   // 当前绑定的行动 ID（Phase 1）：随 /api/a
                            // 由 aiSendText 第二参设置，普通对话会清掉它
 let aiMissionRows = null;  // 行动列表缓存（SSE 推送直接更新它）
 let aiMissionES = null;    // 行动 SSE 句柄（只订阅一次，EventSource 自动重连）
+// 行动列表默认只铺最近若干条（面板很窄，200 条旧账会把「预案库」顶到屏幕外）。
+// 折叠只是**显示**上的，数据全在内存里，不动 missions.json。
+// 状态必须放在这里：SSE 每 2 秒可能触发重渲染，放渲染函数里会被重置成"收起"。
+let aiMsShowAll = false;
+const AI_MS_SHOW = 8;
 let aiPbkRows = null;      // 预案库缓存（Phase 2）：行动卡片的预案标题也读它。
                            // 必须声明在文件顶部这一批里 —— 放到使用处（aiPbkLoad 附近）
                            // 会踩 TDZ：渲染函数在声明语句执行前被调用就会 ReferenceError，

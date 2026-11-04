@@ -24,6 +24,7 @@ function aiMissionsShell(){
         '<input id="ai-ms-goal" placeholder="' + esc(t('描述要让助手做什么…')) + '">' +
         '<button id="ai-ms-new">' + esc(t('新建行动')) + '</button>' +
         '<button id="ai-ms-re">' + esc(t('刷新')) + '</button>' +
+        '<button id="ai-ms-purge" title="' + esc(t('删除所有已收口（完成/失败/取消/过期）的行动；未收口的会保留')) + '">' + esc(t('清理')) + '</button>' +
       '</div>' +
       '<div id="ai-ms-list"></div>' +
       '<div class="ai-ms-sec"><span>' + esc(t('预案库')) + '</span>' +
@@ -34,6 +35,7 @@ function aiMissionsShell(){
       '<div id="ai-growth"></div>';
     $ai('ai-ms-new').onclick = aiMissionsCreate;
     $ai('ai-ms-re').onclick = ()=>aiMissionsLoad(true);
+    $ai('ai-ms-purge').onclick = aiMsPurge;
     $ai('ai-pbk-re').onclick = ()=>aiPbkLoad(true);
     $ai('ai-gr-re').onclick = ()=>aiGrowthLoad(true);
     $ai('ai-ms-goal').addEventListener('keydown', e=>{ if(e.key === 'Enter') aiMissionsCreate(); });
@@ -82,7 +84,10 @@ function aiMissionsRender(){
     list.appendChild(p);
     return;
   }
-  rows.forEach(m=>{
+  // 折叠：服务端已按 updated_at 倒序，这里只切片，不重排。
+  // 展开状态在 aiMsShowAll（文件顶部），SSE 触发重渲染时不会被重置。
+  const view = aiMsShowAll ? rows : rows.slice(0, AI_MS_SHOW);
+  view.forEach(m=>{
     const row = document.createElement('div');
     row.className = 'ai-ms-row' + (AI_MS_CLS[m.state] ? ' ' + AI_MS_CLS[m.state] : '');
     const main = document.createElement('div'); main.className = 'ai-ms-main';
@@ -179,9 +184,71 @@ function aiMissionsRender(){
       b.onclick = ()=>aiMsSavePbk(m);
       acts.appendChild(b);
     }
+    // 删除（只对终态）：未收口的行不出现这个按钮 —— 后端也会拒，
+    // 但让人看见一个点下去必然失败的按钮，比不给它更糟。
+    if(AI_MS_FINAL.indexOf(m.state) >= 0){
+      const d = document.createElement('button');
+      d.textContent = t('删除'); d.className = 'danger';
+      d.title = t('从列表里删掉这条已收口的行动');
+      d.onclick = ()=>aiMsDelete(m);
+      acts.appendChild(d);
+    }
     row.appendChild(acts);
     list.appendChild(row);
   });
+  if(rows.length > AI_MS_SHOW){
+    const more = document.createElement('button');
+    more.className = 'ai-ms-more';
+    more.textContent = aiMsShowAll
+      ? t('收起，只看最近 {0} 条', AI_MS_SHOW)
+      : t('显示全部（还有 {0} 条）', rows.length - AI_MS_SHOW);
+    more.onclick = ()=>{ aiMsShowAll = !aiMsShowAll; aiMissionsRender(); };
+    list.appendChild(more);
+  }
+}
+
+/* ---------- 删除 / 清理 ----------
+   只删已收口的行动。未收口的既没有按钮、后端也会拒：列表是「继续/取消」
+   唯一的入口，删掉就变成无法操作的幽灵行动，还继续占着定时产出的去重名额。
+   两条路分开是因为它们回答不同的问题：
+     delete ——「这一条我不想要了」
+     purge  ——「这些旧账我都不想看了」（按保留期自动清理管的是第三种：
+                「够旧了就自己走」，那个不需要人来点）。 */
+async function aiMsDelete(m){
+  let msg = t('删掉后不可恢复：{0}', m.goal || m.id);
+  // 报告文件不在这次删除范围内（briefings/ 有独立的份数上限），
+  // 提前说清楚，免得用户以为报告也一起没了、或者以为还在却点不到。
+  if(m.report) msg += '\n' + t('报告文件不会被删除，仍按报告的份数上限自动清理。');
+  const ok = await askConfirm(t('删除行动'), msg, t('删除'), true);
+  if(!ok) return;
+  try{
+    const r = await fetch('/api/missions', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({op:'delete', id: m.id})});
+    const d = await r.json();
+    if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    // 本地先摘掉，不等 SSE（下一帧推送会再校准一次）
+    aiMissionRows = (aiMissionRows || []).filter(x=>x.id !== m.id);
+    aiMissionsRender();
+    toast(t('已删除'));
+  }catch(_){ toast(t('操作失败'), 'err'); }
+}
+
+async function aiMsPurge(){
+  const done = (aiMissionRows || []).filter(x=>AI_MS_FINAL.indexOf(x.state) >= 0).length;
+  if(!done){ toast(t('没有已收口的行动可清理')); return; }
+  const ok = await askConfirm(t('清理已收口的行动'),
+    t('将删除 {0} 条已收口（完成/失败/取消/过期）的行动，未收口的会原样保留。不可恢复。', done),
+    t('清理'), true);
+  if(!ok) return;
+  try{
+    const r = await fetch('/api/missions', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({op:'purge'})});
+    const d = await r.json();
+    if(!d || !d.ok){ toast((d && d.error) || t('操作失败'), 'err'); return; }
+    aiMissionRows = (aiMissionRows || []).filter(x=>AI_MS_FINAL.indexOf(x.state) < 0);
+    aiMissionsRender();
+    toast(t('已清理 {0} 条', (d && d.removed) || 0));
+  }catch(_){ toast(t('操作失败'), 'err'); }
 }
 
 /* ---------- 报告（晨报）查看与下载 ----------

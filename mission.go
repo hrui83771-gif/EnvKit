@@ -373,6 +373,64 @@ func missionUpdateLocked(id string, fn func(*Mission) error) (Mission, bool, err
 	return Mission{}, false, fmt.Errorf("行动不存在：%s", id)
 }
 
+// missionDelete 删掉一条**已收口**的行动。
+//
+// 为什么未收口的不许删：行动列表是这个库唯一能点「继续 / 取消」的地方，
+// 删掉就等于把一条还在等人批、或者还在跑的行动变成"后台幽灵"——
+// 它仍然占着去重名额（msProduce 按非终态判重），却再也点不到。
+// 要收拾就先取消，让它落终态，再删。这条限制不是保守，是防丢单。
+//
+// 报告文件不在这里删：briefings/ 有自己的份数上限（brfKeepFiles）在管，
+// 两份数据各按各的口径清理；在这里顺手删文件会让"删了行动、报告也没了"
+// 变成一件不可预期的事。
+func missionDelete(id string) error {
+	msMu.Lock()
+	defer msMu.Unlock()
+	all := missionLoadSweep(false)
+	out := make([]Mission, 0, len(all))
+	var gone *Mission
+	for i := range all {
+		if all[i].ID == id {
+			if !missionTerminal(all[i].State) {
+				return fmt.Errorf("行动还没收口（%s），先取消再删", all[i].State)
+			}
+			m := all[i]
+			gone = &m
+			continue
+		}
+		out = append(out, all[i])
+	}
+	if gone == nil {
+		return fmt.Errorf("行动不存在：%s", id)
+	}
+	return saveMissions(out)
+}
+
+// missionPurge 清空所有已收口的行动，返回删掉的条数。
+//
+// 与 missionSweep 的保留期清理是两条路：那条按"够不够旧"删，这条按
+// "用户现在就想清空"删。都需要——保留期解决自动增长，purge 解决
+// "列表里全是我不想再看的旧账"。
+func missionPurge() (int, error) {
+	msMu.Lock()
+	defer msMu.Unlock()
+	all := missionLoadSweep(false)
+	out := make([]Mission, 0, len(all))
+	for _, m := range all {
+		if !missionTerminal(m.State) {
+			out = append(out, m)
+		}
+	}
+	n := len(all) - len(out)
+	if n == 0 {
+		return 0, nil
+	}
+	if err := saveMissions(out); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // missionTrim 控制总量：终态优先淘汰（最老的终态先走），不淘汰未收口的。
 func missionTrim(all *[]Mission) error {
 	for len(*all) > msMaxCount {

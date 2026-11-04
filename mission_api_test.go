@@ -132,6 +132,57 @@ func TestHandleMissionsOps(t *testing.T) {
 	}
 }
 
+// TestHandleMissionsDeletePurge delete / purge 两个 op 的 API 层行为。
+//
+// 重点钉**响应形状**：delete/purge 没有行动对象，回包里不许出现
+// 零值 mission（id 为空）—— 前端 aiMissionsRender 看见就会渲染一张空卡。
+func TestHandleMissionsDeletePurge(t *testing.T) {
+	defer withMissionAPIEnv(t)()
+
+	op := func(body string) map[string]any {
+		return decodeOK(t, doReq(handleMissions, http.MethodPost, body))
+	}
+	rec := doReq(handleMissions, http.MethodPost, `{"op":"create","goal":"g1"}`)
+	id := decodeOK(t, rec)["mission"].(map[string]any)["id"].(string)
+	doReq(handleMissions, http.MethodPost, `{"op":"create","goal":"g2"}`)
+
+	// 未收口拒绝删除，错误信息要说明怎么办（先取消）
+	if out := op(`{"op":"delete","id":"` + id + `"}`); out["ok"] != false ||
+		!strings.Contains(out["error"].(string), "收口") {
+		t.Fatalf("未收口删除应拒绝并提示先收口：%v", out)
+	}
+	doReq(handleMissions, http.MethodPost, `{"op":"cancel","id":"`+id+`"}`)
+
+	// 已收口：ok 且**不带** mission 键
+	out := op(`{"op":"delete","id":"` + id + `"}`)
+	if out["ok"] != true {
+		t.Fatalf("已收口删除应成功：%v", out)
+	}
+	if _, present := out["mission"]; present {
+		t.Fatalf("delete 的回包不该带 mission（零值对象会让前端渲染空卡）：%v", out)
+	}
+	if _, ok := missionGet(id); ok {
+		t.Fatalf("删除后 missionGet 还能读到")
+	}
+
+	// 再造一条终态供 purge 清（此刻列表里只剩 g2 一条未收口）
+	rec = doReq(handleMissions, http.MethodPost, `{"op":"create","goal":"g3"}`)
+	id3 := decodeOK(t, rec)["mission"].(map[string]any)["id"].(string)
+	doReq(handleMissions, http.MethodPost, `{"op":"cancel","id":"`+id3+`"}`)
+
+	// purge：只清终态；removed 数字要回
+	if out := op(`{"op":"purge"}`); out["ok"] != true || out["removed"].(float64) != 1 {
+		t.Fatalf("purge 应 ok 且 removed=1：%v", out)
+	}
+	if list := missionList(); len(list) != 1 {
+		t.Fatalf("purge 后应剩未收口的 1 条，实为 %d", len(list))
+	}
+	// 再 purge：removed=0 也要 ok
+	if out := op(`{"op":"purge"}`); out["ok"] != true || out["removed"].(float64) != 0 {
+		t.Fatalf("空 purge 应 ok 且 removed=0：%v", out)
+	}
+}
+
 func TestHandleMissionTrigger(t *testing.T) {
 	defer withMissionAPIEnv(t)()
 
