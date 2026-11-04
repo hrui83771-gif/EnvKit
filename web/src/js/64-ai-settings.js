@@ -230,6 +230,38 @@ function aiKeepAnswerLast(){
   if(w && w.parentNode === host && host.lastElementChild !== w) host.appendChild(w);
 }
 
+/* 发往 /api/ai/chat 的消息白名单重建（v3.7.3）。
+   aiMessages 只在**落盘**时截 60 条，内存里长会话无限增长；这里先裁到 60 条再发，
+   并剥掉 ts 等前端专用字段。tool_calls / reasoning_content 必须原样保留。
+
+   **images 与 docs 一个都不能漏**：这是白名单式重建，漏一个字段就是静默丢附件 ——
+   10/31 实测「气泡里图好好的，模型答『我没收到图片』」；11/4 文档附件加进来时
+   这里只补了 images、没补 docs，于是又出现「气泡里 docx 卡片好好的，
+   模型答『没有收到任何文档附件（没有 doc_id 注入）』」。两回事，同一个坑。
+
+   抽成纯函数还为了**测试能真的跑到这段代码**：cdp_ai_drop_test.js 原先桩掉整个
+   aiConsume 去验传进来的参数，那段重建根本不执行，断言空转、一直假绿。
+   现在 CDP 直接断言真正 fetch 发出去的 _bodyStr，并可用 aiOutboundMsgs 单测。 */
+function aiOutboundMsgs(msgs){
+  return (Array.isArray(msgs) ? msgs : []).slice(-60).map(m => {
+    const o = {role: m.role, content: String(m.content == null ? '' : m.content)};
+    if(m.reasoning_content) o.reasoning_content = m.reasoning_content;
+    if(m.tool_calls) o.tool_calls = m.tool_calls;
+    if(m.tool_call_id) o.tool_call_id = m.tool_call_id;
+    if(m.name) o.name = m.name;
+    if(Array.isArray(m.images) && m.images.length){
+      o.images = m.images.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', mime:x.mime || ''}));
+      if(!o.images.length) delete o.images;
+    }
+    // 文档只传引用（正文本来就不在浏览器里，由服务端 aiDocHydrate 读盘补）。
+    if(Array.isArray(m.docs) && m.docs.length){
+      o.docs = m.docs.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', kind:x.kind || '', chars:x.chars || 0}));
+      if(!o.docs.length) delete o.docs;
+    }
+    return o;
+  });
+}
+
 async function aiConsume(path, body){
   const gen = ++aiGen;   // 本次流的代际：finally 里只有当代际匹配才允许复位全局态
   aiOpen(); aiBusy = true; $ai('ai-send').disabled = true; $ai('ai-stop').style.display = '';
@@ -338,21 +370,7 @@ async function aiConsume(path, body){
     // 省的是传输与两侧序列化的钱。ts 是前端本地渲染时间戳用的，后端 aiMsg
     // 没有该字段，纯浪费字节。tool_calls / reasoning_content 必须保留——
     // 思考型模型要求原样回传，确认续接路径靠 tool_calls 对齐。
-    const _msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-60).map(m => {
-      const o = {role: m.role, content: String(m.content == null ? '' : m.content)};
-      if(m.reasoning_content) o.reasoning_content = m.reasoning_content;
-      if(m.tool_calls) o.tool_calls = m.tool_calls;
-      if(m.tool_call_id) o.tool_call_id = m.tool_call_id;
-      if(m.name) o.name = m.name;
-      // 图片引用必须跟着走：这里是白名单式重建，漏一个字段就是**静默丢图**
-      // （2026-10-31 实测：气泡里图好好的，模型答"我没收到图片"）。
-      // 只传 id/name/mime —— 本地预览用的 url（data URL）绝不能进请求体。
-      if(Array.isArray(m.images) && m.images.length){
-        o.images = m.images.filter(x=>x && x.id).map(x=>({id:x.id, name:x.name || '', mime:x.mime || ''}));
-        if(!o.images.length) delete o.images;
-      }
-      return o;
-    });
+    const _msgs = aiOutboundMsgs(body.messages);
     const _bodyStr = JSON.stringify(Object.assign({}, body, {messages: _msgs}));
     const _bodyLen = new TextEncoder().encode(_bodyStr).length;
     /* 整体超时兜底：后端的 aiTurnTimeout 是**每轮** 6 分钟，多轮任务叠加可以

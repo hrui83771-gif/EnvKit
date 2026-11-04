@@ -248,7 +248,13 @@ function aiToolbar(d, reask){
   tb.appendChild(c);
   if(reask){
     const r = document.createElement('button'); r.className = 'ai-tb-btn'; r.textContent = t('重新提问');
-    r.onclick = ()=>{ if(aiBusy){ toast(t('助手正在忙，稍后再试')); return; } aiSendText(reask); };
+    r.onclick = ()=>{
+      if(aiBusy){ toast(t('助手正在忙，稍后再试')); return; }
+      // 重新提问 = 拿**同一份材料**再问一次。只带问题文本会把图片/文档引用丢掉，
+      // 模型会回「我没收到附件」——和 aiConsume 白名单漏字段是同一类静默丢附件。
+      const src = aiMessages.slice().reverse().find(m=>m && m.role === 'user') || {};
+      aiSendText(reask, null, src.images || [], src.docs || []);
+    };
     tb.appendChild(r);
   }
   /* 轨迹 / 审计 / 导出：三个按钮都对应真实数据，不做装饰。

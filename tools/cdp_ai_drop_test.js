@@ -228,11 +228,22 @@ function seed() {
     await reset();
     await dropped(utf8Bytes, 'app.log', 'text/plain');
     await sleep(900);
-    // 桩掉流式回合：这一步验的是"消息怎么组装"，不该依赖上游是否可达
+    // **桩网络出口，不桩 aiConsume**：白名单重建（aiOutboundMsgs）在 aiConsume 内部，
+    // 桩掉整个函数那段代码根本不执行 —— 11/4 实测正是这样让断言空转假绿，
+    // 漏掉了「docs 被白名单剥掉、模型答『没有收到任何文档附件』」这个真 bug。
+    // 这里捕获真正 fetch 发出去的 _bodyStr，才是上游实际收到的东西。
     await evalJS(`(function(){
-      window.__ekOrigConsume = aiConsume;
-      window.__ekConsumeCalls = [];
-      aiConsume = async function(u, body){ window.__ekConsumeCalls.push({u:u, body:body}); return 'stubbed'; };
+      window.__ekOrigFetch2 = window.fetch;
+      window.__ekChatBodies = [];
+      window.fetch = function(u, o){
+        if(String(u).indexOf('/api/ai/chat') >= 0){
+          window.__ekChatBodies.push((o && o.body) || '');
+          return Promise.resolve(new Response(
+            'data: {"type":"delta","text":"ok"}\\n\\ndata: {"type":"done","reason":"completed"}\\n\\n',
+            {status:200, headers:{'Content-Type':'text/event-stream'}}));
+        }
+        return window.__ekOrigFetch2.apply(this, arguments);
+      };
       return 'ok';
     })()`);
     await evalJS(`(function(){ document.getElementById('ai-in').value = '这份日志说明了什么？'; return 'ok'; })()`);
@@ -243,9 +254,18 @@ function seed() {
     check('send-msg-docs', sentDocs.length === 1 && /^[0-9a-f]{32}$/.test(sentDocs[0].id || ''), sent);
     check('send-bubble-card', await evalJS(`document.querySelectorAll('#ai-msgs .ai-msg.user .ai-msg-docs .ai-doc').length`) === 1,
       'bubble cards');
-    // 发出去的请求体里 docs 只带引用（正文由服务端读盘补），这里断言"引用而非正文"
-    const bodyStr = await evalJS(`JSON.stringify((window.__ekConsumeCalls[0]||{}).body || {})`);
+    // 核心断言：**真正发出去的请求体**里必须带 docs 引用，且不带正文。
+    // 这一条在修复前必红（docs 被 aiOutboundMsgs 白名单剥掉）。
+    const bodyStr = await evalJS(`(window.__ekChatBodies[0] || '')`);
+    let lastUser = null;
+    try { const b = JSON.parse(bodyStr); lastUser = (b.messages || []).slice().reverse().find(m => m && m.role === 'user'); } catch (e) {}
+    check('send-outbound-docs', !!(lastUser && Array.isArray(lastUser.docs) && lastUser.docs.length === 1 &&
+      /^[0-9a-f]{32}$/.test(lastUser.docs[0].id || '') && lastUser.docs[0].kind === 'text'), bodyStr.slice(0, 400));
     check('send-payload-refs-only', /"docs":\[\{/.test(bodyStr) && !bodyStr.includes('第一行'), bodyStr.slice(0, 300));
+    check('send-outbound-fn-keeps-docs', await evalJS(`(function(){
+      var m = aiOutboundMsgs(aiMessages).slice().reverse().find(x => x && x.role === 'user');
+      return !!(m && m.docs && m.docs.length);
+    })()`) === true);
     check('send-input-cleared', (await taVal() || '') === '', '发送后输入框必须清空');
     check('send-attach-cleared', (await cardCount()) === 0, 'cards=' + (await cardCount()));
     // 历史落盘：正文进 localStorage 会写爆 5MB 配额（QuotaExceededError 被 try/catch 吞掉，
@@ -253,7 +273,23 @@ function seed() {
     await evalJS(`(function(){ aiHistSave(); return 'ok'; })()`);
     const hist = await evalJS(`localStorage.getItem('ek-ai-hist') || ''`);
     check('hist-refs-only', hist.includes('"docs"') && !hist.includes('第一行'), hist.slice(0, 300));
-    await evalJS(`(function(){ aiConsume = window.__ekOrigConsume; return 'ok'; })()`);
+
+    // 「重新提问」也必须带着同一份附件再问一次（原来 aiSendText(reask) 只带文本）
+    const reaskBtn = await evalJS(`(function(){
+      var b = Array.from(document.querySelectorAll('.ai-tb-btn')).find(x => x.textContent.indexOf('重新提问') >= 0);
+      if(b){ b.click(); return true; }
+      return false;
+    })()`);
+    await sleep(700);
+    if (reaskBtn) {
+      const reaskBody = await evalJS(`(window.__ekChatBodies[1] || '')`);
+      let ru = null;
+      try { const b = JSON.parse(reaskBody); ru = (b.messages || []).slice().reverse().find(m => m && m.role === 'user'); } catch (e) {}
+      check('reask-keeps-docs', !!(ru && Array.isArray(ru.docs) && ru.docs.length === 1), reaskBody.slice(0, 400));
+    } else {
+      results.push('SKIP reask-keeps-docs :: 本次桩流没生成「重新提问」按钮');
+    }
+    await evalJS(`(function(){ if(window.__ekOrigFetch2) window.fetch = window.__ekOrigFetch2; return 'ok'; })()`);
 
     // ===== 8) 页面没有未捕获异常 =====
     check('no-js-exception', errs.length === 0, errs.slice(0, 2).join(' | '));
