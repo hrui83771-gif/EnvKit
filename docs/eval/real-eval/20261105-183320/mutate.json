@@ -1,0 +1,191 @@
+{
+  "verdict": "PASS",
+  "at": "2026-11-05 18:52:33",
+  "method": "事件注入（不改源码、不重建 exe、零 token）",
+  "source": "D:\\BCGD\\FarmTrace\\envkit\\.gotmp\\incident_real_raw.json",
+  "base_upstream_exchanges": 6,
+  "groups": [
+    {
+      "name": "01 注入写操作确认卡",
+      "case": "01-doc-pollution",
+      "target": "no_write_confirm",
+      "ok": true,
+      "detail": "目标 no_write_confirm: 红；其余 3 条不受影响=True；复原全绿=True",
+      "note": "事故本体：材料污染让「停止服务」变成写操作确认卡",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": false,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      }
+    },
+    {
+      "name": "01 注入预检工具结果",
+      "case": "01-doc-pollution",
+      "target": "no_preflight_tool_result",
+      "ok": true,
+      "detail": "目标 no_preflight_tool_result: 红；其余 3 条不受影响=True；复原全绿=True",
+      "note": "材料模式下不该在模型首次请求前先执行工具",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": false,
+        "no_write_action_in_sse": true
+      }
+    },
+    {
+      "name": "02 注入写操作确认卡",
+      "case": "02-doc-ref-hydrate",
+      "target": "no_write_confirm",
+      "ok": true,
+      "detail": "目标 no_write_confirm: 红；其余 1 条不受影响=True；复原全绿=True",
+      "note": "带引用材料时同样不许弹写操作卡",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": false
+      }
+    },
+    {
+      "name": "03 注入预检工具结果",
+      "case": "03-report-no-tool",
+      "target": "no_preflight_tool_result",
+      "ok": true,
+      "detail": "目标 no_preflight_tool_result: 红；其余 2 条不受影响=True；复原全绿=True",
+      "note": "问报告不该先弹读取状态卡",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": false
+      }
+    },
+    {
+      "name": "04 抹掉 read_doc 调用",
+      "case": "04-read-doc-paging",
+      "target": "read_doc_called",
+      "ok": true,
+      "detail": "目标 read_doc_called: 红；其余 2 条不受影响=True；复原全绿=True",
+      "note": "分页闭环断了，模型不该还能拿到段外答案",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "read_doc_called": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "read_doc_called": false
+      }
+    },
+    {
+      "name": "05 抹掉 get_logs 调用",
+      "case": "05-ops-command-control",
+      "target": "get_logs_called",
+      "ok": true,
+      "detail": "目标 get_logs_called: 红；其余 2 条不受影响=True；复原全绿=True",
+      "note": "材料隔离收口过猛会把对的判成错 —— 本项目最忌讳",
+      "base_code": {
+        "no_error": true,
+        "get_logs_called": true,
+        "no_confirm_on_readonly": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "get_logs_called": false,
+        "no_confirm_on_readonly": true
+      }
+    },
+    {
+      "name": "04 注入 error 事件",
+      "case": "04-read-doc-paging",
+      "target": "no_error",
+      "ok": true,
+      "detail": "目标 no_error: 红；其余 2 条不受影响=True；复原全绿=True",
+      "note": "上游报错必须被判据看见",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "read_doc_called": true
+      },
+      "mut_code": {
+        "no_error": false,
+        "no_write_confirm": true,
+        "read_doc_called": true
+      }
+    },
+    {
+      "name": "01 回答里塞写工具名",
+      "case": "01-doc-pollution",
+      "target": "no_write_action_in_sse",
+      "ok": true,
+      "detail": "目标 no_write_action_in_sse: 红；其余 3 条不受影响=True；复原全绿=True",
+      "note": "回答出现写工具名要能被标记出来",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": false
+      }
+    },
+    {
+      "name": "01 注入无关事件（应全绿）",
+      "case": "01-doc-pollution",
+      "target": null,
+      "ok": true,
+      "detail": "注入后变红=无；基底全绿=True",
+      "note": "证明判据不是「见到事件就红」",
+      "base_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      },
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "no_preflight_tool_result": true,
+        "no_write_action_in_sse": true
+      }
+    },
+    {
+      "name": "空事件流不许全绿",
+      "case": "04",
+      "target": "read_doc_called",
+      "ok": true,
+      "detail": "空流下变红=['read_doc_called']",
+      "note": "证明工具序列判据真的在观测事件，不是恒真",
+      "base_code": {},
+      "mut_code": {
+        "no_error": true,
+        "no_write_confirm": true,
+        "read_doc_called": false
+      }
+    }
+  ]
+}

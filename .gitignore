@@ -115,3 +115,9 @@ aidoc/
 eval/incidents/ai-shadow-*.jsonl
 eval/incidents/shadow-report.md
 
+# ---------- 真实评测（--run）的上游原始录像 ----------
+# report.md / raw.json / mutate.json / README.txt 必须入库（结论要能二次核对）；
+# 只有 ENVKIT_AI_RECORD 录下的上游原始 SSE 字节是本机运行数据，约 800KB/轮，
+# 重跑一次 --run 即可重得，不入库也不影响结论复核。
+docs/eval/real-eval/*/upstream.jsonl
+

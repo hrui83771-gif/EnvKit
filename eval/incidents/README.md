@@ -107,6 +107,44 @@ python tools/incident_gate.py --mutate
 入口显式加一行并设置 `ENVKIT_AI_SHADOW` —— 属于「要不要让影子接触真实输入」的独立决策，
 本轮没做。
 
+## 真实评测（会花钱，默认不跑）
+
+上面三个入口全是**零 token、零网络**的离线门禁。它们证明不了「换成活的模型之后
+修复还成不成立」，所以 11/5 补了一次性真实评测：
+
+```bash
+# 1) 先用当前源码重建评测专用 exe（别复用 10/27 的 EnvKit_ab.exe）
+GOROOT='C:/EnvKit/tools/go' GOTOOLCHAIN=local GOPROXY=off \
+  /c/EnvKit/tools/go/bin/go.exe build -o EnvKit_realeval.exe .
+
+# 2) 真调上游、真花钱；不加 --run 只打印用法，不产生费用
+python tools/incident_real_eval.py --run
+python tools/incident_real_mutate.py        # 判据变异验证（零 token）
+```
+
+runner 一条命令内起实例 → `/api/ai/extract` 落盘 → `/api/ai/chat` 真发问 →
+收 SSE → 停实例。显式清空 `ENVKIT_AI_REPLAY`、打开 `ENVKIT_AI_RECORD`，
+用录像里的 `status/model/n_msgs` 证明**真的出了网**，而不是还在回放。
+
+**离线断言不能照搬**：`sse_present <录像写死的回答>` 真实模型不会说同一句话，
+`req_present/req_absent` 在真实 exe 里没有进程内 hook 抓请求体。这里换成更硬的
+客观证据 —— 文档里埋的唯一标记串，模型能说出来，只可能是正文真进了上游请求。
+
+判据分两层，`code`（确认卡 / error / 工具序列）算真事故，`observe`（模型有没有
+说出标记串、有没有自己翻页）只记「本轮没配合」，**不混进通过率**。
+
+`tools/incident_real_mutate.py` 用本轮真实录下的事件流做**事件注入式变异**，
+逐条验证 code 判据「改坏必红 / 复原必绿」，外加「注入无关事件仍全绿」和
+「空事件流不许全绿」两组空转防护。它**不改源码、不重建 exe** —— 源码级变异
+由 `--mutate` 负责，两者分工。试过真实改源码那条路：拆掉防线后真的弹了写操作
+确认卡，`aiAwaitConfirm` 原地等 10 分钟且每 20s 发心跳，客户端会挂住，
+而且源码在等待期间一直处于改坏状态，风险不划算。
+
+产物按 `run_id` 归档到 `docs/eval/real-eval/<run_id>/`（**不覆盖**，报告里的
+数字都能二次核对）。`report.md` / `raw.json` / `mutate.json` / `README.txt` 入库；
+约 800KB 的 `upstream.jsonl` 是本机上游原始字节，被 `.gitignore` 排除，
+重跑一次 `--run` 即可重得。
+
 ## 与多 Agent 方案的关系
 
 见 `docs/DESIGN-multi-agent.md`。11/4 的结论是：**当前不需要多 agent，程序内部
