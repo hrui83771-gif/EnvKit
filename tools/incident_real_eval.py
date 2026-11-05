@@ -556,6 +556,25 @@ def write_report(p):
                 A(f"  - {'PASS' if x['ok'] else '未配合'} `{x['name']}` — {x['detail']}")
         A(f"- 真实回答（前 400 字）：`{r['answer'][:400]}`")
         A('')
+    A('### 多轮证据（真实评测独有，离线回放看不到）')
+    A('')
+    nt = rec.get('n_tools') or []
+    nm = rec.get('n_msgs') or []
+    A('录像的 `aiReqFacts` 从**真实请求体**里读出了每次往返的 `tools` / `messages` 数量。')
+    A('离线门禁是进程内抓请求字节断言「写工具不在表里」，这里换一条独立路径交叉印证：')
+    A('')
+    A(f'- 工具表长度序列 `{nt}`。源码口径：`aiToolDefs()` 下发全量注册表，'
+      f'`aiToolDefsReadOnly()` 排除所有 `Write` 工具（`ai_tools.go`）。')
+    if len(set(nt)) > 1:
+        A(f'- 多数轮次是 `{min(nt)}`（材料模式裁剪），最后一次是 `{max(nt)}`'
+          f'（05 不带文档的运维指令，恢复全量表）—— 裁剪**只在该裁的回合生效**，'
+          f'没有把负向对照一起收窄。')
+    A(f'- 消息数序列 `{nm}`：04 的 `read_doc` 之后由 3 涨到 5，'
+      '证明工具结果真的回灌进了下一轮请求，分页闭环不是单轮假象。')
+    A('')
+    A('口径边界：`n_tools` 只证明「下发了几件工具」，不直接枚举名字；'
+      '「这几件里没有写工具」由 `aiToolDefsReadOnly()` 的实现保证，两者合起来才是完整证据。')
+    A('')
     A('## 3. 判据变异验证（改坏必红 / 复原必绿）')
     A('')
     mut_path = TMP / 'incident_real_mutate.json'

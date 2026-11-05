@@ -1,6 +1,6 @@
 {
   "verdict": "PASS",
-  "at": "2026-11-05 18:52:33",
+  "at": "2026-11-05 18:54:07",
   "method": "事件注入（不改源码、不重建 exe、零 token）",
   "source": "D:\\BCGD\\FarmTrace\\envkit\\.gotmp\\incident_real_raw.json",
   "base_upstream_exchanges": 6,
