@@ -1221,6 +1221,10 @@
   .ob-split{display:grid!important;grid-template-columns:minmax(280px,.82fr) minmax(400px,1.18fr);
     gap:clamp(26px,4.4vw,64px);align-items:center;max-width:1120px}
   .ob-split-wide{grid-template-columns:minmax(280px,.78fr) minmax(430px,1.22fr)}
+  /* 02 / 04 的演示是"多块拼一个整体"，需要的横向空间比别的屏大得多。
+     文案列收窄、演示列放开，右侧才不会挤成一堆小方块。 */
+  .ob-split-grow{grid-template-columns:minmax(248px,.56fr) minmax(0,1.44fr);
+    max-width:1160px;gap:clamp(24px,3.4vw,46px)}
   .ob-copy{min-width:0;text-align:left}
   .ob-head{text-align:center;max-width:760px;margin:0 auto}
   .ob-head-tight{margin-bottom:4px}
@@ -1306,64 +1310,102 @@
   @keyframes obSheen{0%,64%{left:-46%}86%,100%{left:118%}}
   .ob-art-note{font-size:11.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
 
-  /* ---------- 02 散落 → 汇聚 ---------- */
-  .ob-merge{display:grid;grid-template-columns:minmax(210px,1fr) 104px minmax(170px,1.05fr);
-    gap:10px;align-items:center;min-width:0}
-  .ob-old{display:flex;flex-direction:column;gap:8px;align-items:stretch;
-    justify-content:center;padding-right:2px}
-  .ob-old-card{position:relative;display:flex;align-items:baseline;justify-content:space-between;
-    gap:10px;font-size:12.5px;color:var(--muted);
+  /* ---------- 02 五个窗口 → 一条状态线 ---------- */
+  /* 这一屏的演示体量比别的屏大，所以单独放宽右列（.ob-split-grow 见场景骨架段） */
+  /* 三列紧密相接（gap 0）：最右一条 path 的终点必须正好落在状态线的竖线上，
+     中间留 gap 会让连线在视觉上"断在空气里"。列宽 292 / 90 / 1fr 是算出来的：
+     窗口区 240 + 4×13 = 292，卡片右边缘正好是 SVG 的 x=0。 */
+  .ob-merge{display:grid;grid-template-columns:290px 140px minmax(0,1fr);
+    column-gap:0;row-gap:14px;align-items:center;min-width:0}
+
+  /* 五个旧窗口：左边缘错位、右边缘统一对齐到 290。
+     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边 */
+  .ob-win{position:relative;width:290px;height:314px;flex:none}
+  .ob-win-card{position:absolute;left:calc(var(--i) * 10px);top:calc(var(--i) * 64px);
+    width:calc(290px - var(--i) * 10px);height:58px;overflow:hidden;text-align:left;
     background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:9px 14px 9px 16px;cursor:help;
-    box-shadow:0 4px 12px -9px rgba(40,48,64,.34);
-    transform:rotate(var(--r,0deg)) translateX(var(--x,0px));
-    transition:transform .55s cubic-bezier(.22,1,.36,1),opacity .4s,color .2s,border-color .2s}
-  .ob-old-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
-    border-radius:10px 0 0 10px;background:var(--dotoff);transition:background .2s}
-  .ob-old-card:hover::before{background:var(--brand2)}
-  .ob-old-card:nth-child(1){--r:-1.6deg;--x:-4px}
-  .ob-old-card:nth-child(2){--r:1.2deg;--x:6px}
-  .ob-old-card:nth-child(3){--r:-.9deg;--x:0px}
-  .ob-old-card:nth-child(4){--r:1.6deg;--x:9px}
-  .ob-old-card:nth-child(5){--r:-1.2deg;--x:3px}
-  .ob-old-card::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;
-    transform:translateY(-50%);white-space:nowrap;font-size:11px;color:var(--text);
-    background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
-    opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:3;
-    box-shadow:0 8px 20px -12px rgba(20,25,35,.4)}
-  .ob-old-card:hover{--r:0deg;--x:0px;color:var(--text);border-color:var(--brand2)}
-  /* 每张旧卡片补一句"代价"：光写工具名说明不了为什么要收拢 */
-  .ob-old-card em{flex:none;font-style:normal;font-size:10px;line-height:1.5;
-    color:var(--muted);opacity:.82;text-align:right;max-width:56%;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ob-old-card:hover em{opacity:.95}
-  .ob-old-card:hover::after{opacity:1;transform:translateY(-50%) translateX(2px)}
-  .ob-merge.flow .ob-old-card{--r:0deg;--x:0px;opacity:.62}
-  .ob-beam{position:relative;display:flex;align-items:center;justify-content:center;height:40px;overflow:hidden}
-  .ob-beam i{display:block;width:100%;height:3px;border-radius:3px;
-    background:linear-gradient(90deg,transparent,var(--ob-accent),var(--brand2),transparent);
-    opacity:.85}
-  .ob-beam::after{content:'';position:absolute;left:0;top:50%;width:5px;height:5px;margin-top:-2.5px;
-    border-radius:50%;background:var(--brand2);opacity:0}
-  .ob-merge.flow .ob-beam::after{animation:obParticle 1.25s cubic-bezier(.4,0,.6,1) 2}
-  @keyframes obParticle{0%{left:2%;opacity:0}18%{opacity:1}100%{left:96%;opacity:0}}
-  .ob-beam b{position:absolute;font-size:10px;color:var(--muted);letter-spacing:.12em;
-    background:var(--bg);padding:0 6px;opacity:.9}
-  .ob-beam.flow i{animation:obBeam 1.15s cubic-bezier(.22,1,.36,1)}
-  @keyframes obBeam{0%{transform:translateX(-78%);opacity:.15}100%{transform:translateX(0);opacity:.7}}
-  .ob-new-card{position:relative;display:flex;flex-direction:column;gap:7px;
-    align-items:flex-start;justify-content:center;overflow:hidden;
-    background:linear-gradient(150deg,color-mix(in srgb,var(--brand-weak) 92%,#fff),var(--ob-glass));
-    border:1px solid color-mix(in srgb,var(--brand2) 48%,var(--ob-edge));
-    border-radius:16px;padding:26px 22px;text-align:left;box-shadow:var(--ob-lift);
-    transition:box-shadow .45s,transform .45s}
-  .ob-new-badge{font:500 9.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em;
-    color:var(--brand);background:var(--card);border:1px solid var(--line);
-    border-radius:999px;padding:4px 8px}
-  .ob-new-card b{font-size:25px;font-weight:600;letter-spacing:-.025em;color:var(--brand)}
-  .ob-new-card small{font-size:11.5px;color:var(--info);line-height:1.6}
-  .ob-new-card.lit{transform:translateY(-3px);
-    box-shadow:0 0 0 5px color-mix(in srgb,var(--brand-weak) 70%,transparent),var(--ob-lift)}
+    box-shadow:0 10px 22px -16px rgba(30,38,54,.62);
+    transform:rotate(var(--r,0deg));
+    transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s,
+      border-color .25s,opacity .3s}
+  .ob-win-card:hover{transform:rotate(0deg) translateX(8px) scale(1.035);z-index:4;
+    border-color:var(--brand2);box-shadow:0 18px 30px -18px rgba(30,38,54,.78)}
+  .ob-win-bar{display:flex;align-items:center;gap:4px;height:20px;padding:0 9px;
+    background:var(--ob-glass-2);border-bottom:1px solid var(--ob-hair)}
+  .ob-win-bar i{width:4.5px;height:4.5px;border-radius:50%;background:var(--dotoff);flex:none}
+  .ob-win-bar span{margin-left:4px;font-size:10px;color:var(--text);opacity:.78;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-win-bar em{margin-left:auto;font-style:normal;font-size:9px;color:var(--muted);
+    opacity:.72;white-space:nowrap;flex:none}
+  .ob-win-body{padding:4px 9px 5px;font:10px/1.6 ui-monospace,Consolas,monospace}
+  .ob-win-body code{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font:inherit;color:var(--muted)}
+  .ob-win-body .pr{color:color-mix(in srgb,var(--brand) 82%,var(--muted))}
+  .ob-win-body .bad{color:color-mix(in srgb,var(--err) 72%,var(--muted))}
+  /* 终端那扇窗保持深色：五个窗口里有一个"就是终端"，比五张同款纸片容易认 */
+  .ob-win-card.dark{background:linear-gradient(180deg,#2A2F39,#1E222A);
+    border-color:rgba(255,255,255,.12);box-shadow:0 12px 24px -14px rgba(12,16,24,.7)}
+  .ob-win-card.dark .ob-win-bar{background:rgba(255,255,255,.05);
+    border-bottom-color:rgba(255,255,255,.08)}
+  .ob-win-card.dark .ob-win-bar span{color:rgba(199,206,218,.88);opacity:1}
+  .ob-win-card.dark .ob-win-bar em{color:rgba(199,206,218,.48)}
+  .ob-win-card.dark .ob-win-body code{color:rgba(199,206,218,.7)}
+  .ob-win-card.dark .ob-win-body .pr{color:#9FC0E0}
+  .ob-win-card.dark .ob-win-body .bad{color:#E4A09A}
+  /* 只压一点透明度：压太多会把"五个窗口"这个主体也一起淡掉 */
+  .ob-merge.flow .ob-win-card{opacity:.82}
+
+  /* 五条线：起点跟着窗口走（间距 64），终点被压到 48（整）。
+     这就是"收拢"的几何证据，不靠一个写着"收拢"的箭头 */
+  .ob-wires{width:140px;height:314px;flex:none}
+  .ob-wires svg{display:block;width:100%;height:100%;overflow:visible}
+  .ob-wires path{fill:none;stroke:color-mix(in srgb,var(--brand2) 58%,var(--line));
+    stroke-width:1.5;vector-effect:non-scaling-stroke;
+    stroke-dasharray:260;stroke-dashoffset:0;opacity:.9;
+    transition:stroke .25s,stroke-width .25s,opacity .25s}
+  .ob-merge.flow .ob-wires path{animation:obWire .62s cubic-bezier(.22,1,.36,1) both}
+  .ob-merge.flow .ob-wires path:nth-child(1){animation-delay:0s}
+  .ob-merge.flow .ob-wires path:nth-child(2){animation-delay:.08s}
+  .ob-merge.flow .ob-wires path:nth-child(3){animation-delay:.16s}
+  .ob-merge.flow .ob-wires path:nth-child(4){animation-delay:.24s}
+  .ob-merge.flow .ob-wires path:nth-child(5){animation-delay:.32s}
+  @keyframes obWire{from{stroke-dashoffset:260;opacity:.15}
+    to{stroke-dashoffset:0;opacity:.9}}
+  .ob-wires path.on{stroke:var(--brand2);stroke-width:2.2;opacity:1}
+
+  /* 右边：一条真的状态线。竖线贯穿全高，所以五条线的终点落在哪儿都接得住。
+     撑满整行高（align-self:stretch + space-between），五条线才不会挤在左侧一小段里 */
+  .ob-line{min-width:0;width:100%;text-align:left;align-self:stretch;
+    display:flex;flex-direction:column}
+  .ob-line-tag{display:flex;align-items:center;gap:7px;margin-bottom:10px;
+    font:500 10px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em;color:var(--muted)}
+  .ob-line-tag i{width:16px;height:1px;background:var(--brand2);flex:none}
+  .ob-line-list{position:relative;flex:1;padding-left:19px;
+    display:flex;flex-direction:column;justify-content:space-between}
+  .ob-line-list::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:1px;
+    background:var(--line)}
+  /* 名称与值之间用一条淡引导线连起来。少了它，两端对齐会把一行拉成
+     "名字 ……… 一大片空白 ……… 值"，看着像两列不相干的东西 */
+  .ob-line-node{position:relative;display:flex;align-items:baseline;
+    justify-content:flex-start;gap:10px;padding:6px 0}
+  .ob-line-node>i{position:absolute;left:-18.5px;top:11px;width:9px;height:9px;border-radius:50%;
+    background:var(--bg);border:1.5px solid var(--brand2);box-sizing:border-box;
+    transition:transform .3s,box-shadow .3s,background .3s,border-color .3s}
+  .ob-line-node b{order:1;flex:none;font-size:13px;font-weight:500;color:var(--text);line-height:1.45}
+  .ob-line-node::after{content:'';order:2;flex:1;min-width:14px;height:1px;align-self:center;
+    background:repeating-linear-gradient(90deg,
+      color-mix(in srgb,var(--muted) 50%,transparent) 0 2px,transparent 2px 7px);
+    transform:translateY(3px);transition:background .25s}
+  .ob-line-node em{order:3;flex:none;font-style:normal;font-size:11px;line-height:1.55;
+    text-align:right;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78%}
+  /* 悬停旧窗口 → 对应节点亮起＋连线加粗。"被谁接管"用联动回答，比 tooltip 直接得多 */
+  .ob-line-node.own>i{background:var(--brand);border-color:var(--brand);transform:scale(1.3);
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 16%,transparent)}
+  .ob-line-node.own b{color:var(--brand)}
+  .ob-line-node.own::after{background:repeating-linear-gradient(90deg,
+    color-mix(in srgb,var(--brand2) 55%,transparent) 0 2px,transparent 2px 7px)}
+  .ob-line-node.own em{color:var(--text);opacity:.86}
 
   /* ---------- 03 时间轴 ---------- */
   .ob-flow{text-align:center}
@@ -1397,8 +1439,10 @@
   .ob-detail p{font-size:12.5px;line-height:1.85;color:var(--muted);margin:0}
   .ob-flow .ob-actions{justify-content:center;margin-top:18px}
 
-  /* ---------- 04 终端 + 报告 ---------- */
-  .ob-detect{display:flex;flex-direction:column;gap:12px;min-width:0}
+  /* ---------- 04 扫描 → 结论 → 分组明细 ---------- */
+  /* 顺序是刻意的：过程（扫描）、结论（记分）、依据（分组）。
+     标题说"给结论不给猜测"，结论就应该是这一屏最重的东西，而不是表格下的一行小字。 */
+  .ob-detect{display:flex;flex-direction:column;gap:11px;min-width:0}
   .ob-term,.ob-console{background:linear-gradient(180deg,var(--ob-term-hi),var(--ob-term));
     border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.06);
     box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 30px 60px -34px rgba(10,14,22,.75)}
@@ -1420,34 +1464,105 @@
   .ob-caret{display:inline-block;width:7px;height:13px;background:var(--ob-term-tx);
     vertical-align:-2px;animation:obCaret 1.05s steps(1) infinite}
   @keyframes obCaret{0%,49%{opacity:1}50%,100%{opacity:0}}
-  .ob-report{background:var(--ob-glass);border:1px solid var(--ob-edge);border-radius:14px;
-    overflow:hidden;box-shadow:var(--ob-lift-sm);
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-  .ob-report-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:11px 16px;border-bottom:1px solid var(--ob-hair);font-size:11.5px;color:var(--muted)}
-  .ob-report-head b{font-size:11px;font-weight:500;border-radius:999px;padding:3px 10px;
-    background:var(--brand-weak);color:var(--brand);opacity:0;transform:translateY(-3px);
-    transition:opacity .35s,transform .35s}
-  .ob-report-head b.on{opacity:1;transform:none}
-  .ob-detect-rows{padding:4px 16px 12px}
-  .ob-row{display:grid;grid-template-columns:10px minmax(72px,1fr) 86px minmax(0,1.2fr) 52px;
-    align-items:center;gap:10px;padding:8px 0;font-size:12px;
-    border-bottom:1px solid var(--ob-hair);opacity:.32;
-    transform:translateY(4px);transition:opacity .3s,transform .3s}
-  .ob-row:last-child{border-bottom:0}
+
+  /* 扫描条：把"过程"压成一条窄带，位置让给结论 */
+  .ob-scan{background:linear-gradient(180deg,var(--ob-term-hi),var(--ob-term));
+    border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06);
+    box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 24px 46px -30px rgba(10,14,22,.7)}
+  .ob-scan .ob-term-bar{padding:8px 13px}
+  .ob-scan .ob-term-body{min-height:0;padding:10px 14px 12px;
+    font:11px/1.8 ui-monospace,Consolas,"Courier New",monospace}
+  .ob-term-bar em{margin-left:auto;font-style:normal;
+    font:10.5px/1 ui-monospace,Consolas,monospace;color:rgba(199,206,218,.5);
+    letter-spacing:.02em;transition:color .3s}
+  .ob-term-prog{height:2px;background:rgba(255,255,255,.07);overflow:hidden}
+  .ob-term-prog i{display:block;height:100%;width:0;
+    background:linear-gradient(90deg,var(--brand2),var(--ob-accent));
+    transition:width 1.1s cubic-bezier(.22,1,.36,1)}
+
+  /* 结论：大数字 + 六段条 + 一句判断 + 右侧"下一步"。整屏的视觉锚点。
+     三列而不是两列——"下一步"是一块独立的建议，不该混在判断句里 */
+  .ob-verdict{display:grid;grid-template-columns:auto minmax(0,1fr) 214px;gap:0 18px;
+    align-items:center;padding:16px 18px;border-radius:13px;text-align:left;
+    /* 混 var(--card) 而不是 #fff：暗色主题下 #fff 会把这条横幅照得发灰白 */
+    background:linear-gradient(118deg,
+      color-mix(in srgb,var(--brand-weak) 92%,var(--card)),var(--ob-glass) 72%);
+    border:1px solid color-mix(in srgb,var(--brand2) 40%,var(--ob-edge));
+    box-shadow:var(--ob-lift-sm);transition:border-color .4s}
+  .ob-verdict.hot{border-color:color-mix(in srgb,var(--warn) 46%,var(--ob-edge))}
+  .ob-vd-num{display:flex;align-items:baseline;gap:4px;padding-right:16px;
+    border-right:1px solid var(--ob-hair)}
+  .ob-vd-num b{font-size:46px;font-weight:600;letter-spacing:-.05em;line-height:1;
+    color:var(--brand);font-variant-numeric:tabular-nums;min-width:1.15em;text-align:right}
+  .ob-verdict.hot .ob-vd-num b{color:var(--warn)}
+  .ob-vd-num s{text-decoration:none;font-size:12.5px;color:var(--muted);
+    font-family:ui-monospace,Consolas,monospace}
+  .ob-vd-body{min-width:0}
+  /* 六段条：直接把 6 项检测画成 6 格。未扫时是虚线状的短条，扫完各自填色。
+     限宽是故意的——铺满整行就变成进度条，不再是"6 个格子" */
+  .ob-segs{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;
+    max-width:228px;margin-bottom:9px}
+  .ob-segs i{height:5px;border-radius:2.5px;background:var(--line);
+    transform:scaleX(.34);transform-origin:left;
+    transition:background .35s,transform .35s}
+  .ob-segs i.ok{background:var(--brand2);transform:none}
+  .ob-segs i.warn{background:var(--warn);transform:none}
+  .ob-vd-msg{font-size:13px;line-height:1.5;color:var(--text);margin:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-report-foot{display:flex;flex-direction:column;gap:3px;align-self:stretch;
+    justify-content:center;padding-left:16px;border-left:1px solid var(--ob-hair);
+    opacity:0;transform:translateY(3px);transition:opacity .35s,transform .35s}
+  .ob-report-foot.on{opacity:1;transform:none}
+  .ob-report-foot b{align-self:flex-start;font-weight:500;font-size:9.5px;letter-spacing:.11em;
+    color:var(--brand);padding:2px 6px;border-radius:5px;background:var(--brand-weak)}
+  .ob-report-foot span{font-size:10.5px;color:var(--muted);line-height:1.55}
+
+  /* 明细：按"运行时 / 数据与磁盘 / 网络与链端"分三组。
+     六个平铺成一张表只是清单，分组才说明每一项属于哪一类 */
+  .ob-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:left}
+  .ob-grp{min-width:0;background:var(--ob-glass-2);border:1px solid var(--ob-hair);
+    border-radius:11px;padding:11px 13px 8px}
+  .ob-grp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;
+    padding-bottom:7px;margin-bottom:2px;border-bottom:1px solid var(--ob-hair)}
+  .ob-grp-h b{font-size:10px;font-weight:500;letter-spacing:.09em;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-grp-h span{flex:none;font:9.5px/1 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.6}
+  .ob-row{display:grid;grid-template-columns:7px minmax(0,1fr) auto;
+    grid-template-rows:auto auto;column-gap:6px;padding:6px 0;
+    opacity:.26;transform:translateY(3px);transition:opacity .3s,transform .3s}
   .ob-row.lit{opacity:1;transform:none}
-  .ob-row .dot{width:7px;height:7px;border-radius:50%;background:var(--dotoff);
-    justify-self:center}
-  .ob-row .nm{color:var(--text)}
-  .ob-row .vl{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text);opacity:.78}
-  .ob-row .path{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color:var(--muted);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ob-row .st{font-size:10.5px;color:var(--muted);text-align:right}
-  .ob-row.ok .dot{background:var(--brand2);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand2) 18%,transparent)}
-  .ob-row.ok .st{color:var(--brand)}
-  .ob-row.warn .dot{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 16%,transparent)}
-  .ob-row.warn .st{color:var(--warn)}
+  .ob-row .dot{grid-area:1/1;width:6px;height:6px;border-radius:50%;align-self:center;
+    justify-self:center;background:var(--dotoff);flex:none}
+  .ob-row .nm{grid-area:1/2;font-size:12px;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-row .vl{grid-area:1/3;font:10.5px/1.6 ui-monospace,Consolas,monospace;
+    color:var(--muted);text-align:right;white-space:nowrap}
+  .ob-row .path{grid-area:2/2/3/4;font:10px/1.5 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* 正常项不写"正常"：六个都写是噪音。只有异常项才占一个词的宽度说话 */
+  .ob-row .st{display:none}
+  .ob-row.ok .dot{background:var(--brand2);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--brand2) 20%,transparent)}
+  .ob-row.warn .dot{background:var(--warn);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 20%,transparent)}
+  .ob-row.warn .vl{display:none}
+  .ob-row.warn .st{display:block;grid-area:1/3;
+    font:10.5px/1.6 ui-monospace,Consolas,monospace;color:var(--warn);
+    text-align:right;white-space:nowrap}
   .ob-split-wide .ob-actions{margin-bottom:8px}
+
+  /* 暗色下 --brand 是深蓝，做前景字几乎看不见。凡是"用品牌色当文字"的地方
+     在暗色里换成 --brand2（浅蓝），这是这两屏唯一需要按主题分开写的部分 */
+  body[data-theme="dark"] .ob-vd-num b,
+  body[data-theme="dark"] .ob-verdict.hot .ob-vd-num b,
+  body[data-theme="dark"] .ob-report-foot b,
+  body[data-theme="dark"] .ob-merge-foot em,
+  body[data-theme="dark"] .ob-line-node.own b{color:var(--brand2)}
+  body[data-theme="dark"] .ob-report-foot b{
+    background:color-mix(in srgb,var(--brand2) 18%,transparent)}
+  body[data-theme="dark"] .ob-win-body .pr{
+    color:color-mix(in srgb,var(--brand2) 78%,var(--muted))}
 
   /* ---------- 05 控制台 ---------- */
   .ob-console-scene{max-width:1000px;text-align:center}
@@ -1677,7 +1792,7 @@
 
   /* ---------- 响应式 ---------- */
   @media (max-width:1000px){
-    .ob-split,.ob-split-wide{grid-template-columns:1fr;gap:22px}
+    .ob-split,.ob-split-wide,.ob-split-grow{grid-template-columns:1fr;gap:22px}
     .ob-hero{grid-template-columns:1fr;gap:26px;text-align:center}
     .ob-hero-copy .ob-actions{justify-content:center}
     .ob-hero-copy .ob-meta{justify-content:center}
@@ -1688,7 +1803,6 @@
     .ob-ai-stage{order:2;padding-top:6px}
     .ob-pet-slot{width:132px;height:142px}
     .ob-chapter-grid{grid-template-columns:repeat(4,1fr)}
-    .ob-merge{grid-template-columns:1fr 56px 1fr}
   }
   @media (max-width:760px){
     .ob-h{font-size:24px}
@@ -1697,16 +1811,22 @@
     .ob-top{padding:11px 16px;gap:12px}
     .ob-demo-tag{display:none}
     .ob-keys{display:none}
-    .ob-row{grid-template-columns:10px minmax(64px,1fr) 74px 46px;gap:8px}
-    .ob-row .path{display:none}
+    .ob-row{grid-template-columns:7px minmax(0,1fr) auto}
     .ob-console-body{grid-template-columns:1fr}
     .ob-recent{border-left:0;border-top:1px solid rgba(255,255,255,.07)}
     .ob-chapter-grid{grid-template-columns:repeat(2,1fr)}
-    .ob-merge{grid-template-columns:1fr;gap:10px}
-    .ob-beam{height:26px}
-    .ob-merge{grid-template-columns:1fr 1fr}
-    .ob-old{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
-    .ob-old-card{white-space:normal;transform:none}
+    /* 窄屏放不下三列阶梯：窗口改成两列平铺，连线没有意义了直接拿掉 */
+    .ob-merge{grid-template-columns:1fr;row-gap:14px}
+    .ob-wires{display:none}
+    .ob-win{width:100%;height:auto;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .ob-win-card{position:static;width:auto;height:auto;transform:none}
+    .ob-win-card:hover{transform:none}
+    .ob-groups{grid-template-columns:1fr}
+    .ob-verdict{grid-template-columns:1fr;gap:9px}
+    .ob-vd-num{border-right:0;border-bottom:1px solid var(--ob-hair);
+      padding:0 0 8px;justify-content:flex-start}
+    .ob-report-foot{padding-left:0;border-left:0;padding-top:8px;
+      border-top:1px solid var(--ob-hair)}
     .ob-confirm{left:12px;right:12px;bottom:12px;width:auto}
     .ob-perms button:nth-child(n){margin-right:0}
   }
@@ -1742,22 +1862,6 @@
   .ob-merge-foot s{text-decoration-color:color-mix(in srgb,var(--err) 38%,transparent)}
   .ob-merge-foot em{font-style:normal;color:var(--brand)}
   .ob-merge-foot em::before{content:'\2192';margin-right:7px;color:var(--muted);opacity:.7}
-
-  /* 04 检测：终端跑动的进度 + 报告结论行 */
-  .ob-term-bar em{margin-left:auto;font-style:normal;
-    font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.06em;
-    color:rgba(199,206,218,.46)}
-  .ob-term-prog{height:2px;background:rgba(255,255,255,.07);overflow:hidden}
-  .ob-term-prog i{display:block;height:100%;width:0;
-    background:linear-gradient(90deg,var(--brand2),var(--ob-accent));
-    transition:width 1.05s cubic-bezier(.3,.9,.3,1)}
-  .ob-report-foot{display:flex;align-items:baseline;gap:8px;padding:9px 16px;
-    border-top:1px solid var(--ob-hair);background:var(--ob-glass-2);
-    font-size:11.5px;line-height:1.6;color:var(--muted);
-    opacity:0;transform:translateY(3px);transition:opacity .35s,transform .35s}
-  .ob-report-foot.on{opacity:1;transform:none}
-  .ob-report-foot b{flex:none;font-weight:500;font-size:9.5px;letter-spacing:.12em;
-    text-transform:uppercase;color:var(--brand)}
 
   /* 05 日志侧栏：分区计数 + 轮转，让 186px 不空着 */
   .ob-stats{display:flex;flex-direction:column;gap:4px;margin-top:auto;padding-top:12px;
@@ -3270,31 +3374,58 @@
 
       <!-- 02 为什么存在：散落 → 汇聚 -->
       <div class="swiper-slide ob-slide" data-idx="1">
-        <div class="ob-scene ob-split">
+        <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
             <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
-            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——<br />出错时你得挨个翻，还不知道哪个才是最新的。</p>
+            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。</p>
             <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
             <div class="ob-actions">
               <button class="ob-ghost" id="ob-merge-replay">重播汇聚</button>
-              <span class="ob-hint">悬停旧卡片，看它被谁接管</span>
+              <span class="ob-hint">悬停任一窗口，看它被哪个节点接管</span>
             </div>
           </div>
           <div class="ob-merge" id="ob-merge">
-            <div class="ob-old" id="ob-old-list">
-              <span class="ob-old-card" data-tip="被「环境安装」接管">终端<em>记 5 条启动命令</em></span>
-              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端<em>另开一个 GUI</em></span>
-              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具<em>手动连链端主机</em></span>
-              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签<em>5 个页面来回切</em></span>
-              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口<em>只能靠 scrollback</em></span>
+            <div class="ob-win" id="ob-old-list">
+              <div class="ob-win-card dark" style="--i:0;--r:-1.2deg" data-own="0">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>终端</span><em>2 分钟前</em></div>
+                <div class="ob-win-body"><code class="pr">$ go run ./server</code><code class="bad">panic: dial tcp :3306</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:1;--r:.9deg" data-own="1">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>数据库客户端</span><em>未刷新</em></div>
+                <div class="ob-win-body"><code class="pr">SELECT * FROM batch</code><code class="bad">ERROR 2003 (HY000)</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:2;--r:-.7deg" data-own="2">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>SSH 工具</span><em>断线</em></div>
+                <div class="ob-win-body"><code class="pr">ssh root@10.0.0.21</code><code class="bad">Connection timed out</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:3;--r:1.1deg" data-own="3">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>浏览器标签</span><em>3 个标签</em></div>
+                <div class="ob-win-body"><code>:5173　:8888　:5002</code><code class="bad">看不出哪个是新的</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:4;--r:-.9deg" data-own="4">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>日志窗口</span><em>滚屏中</em></div>
+                <div class="ob-win-body"><code class="bad">[WARN] 区块高度为 0</code><code class="bad">[ERROR] read timeout</code></div>
+              </div>
             </div>
-            <div class="ob-beam" id="ob-beam"><i></i><b>收拢</b></div>
-            <div class="ob-new-card">
-              <span class="ob-new-badge">ONE</span>
-              <b>EnvKit</b>
-              <small>检测 · 配置 · 链端 · 启动</small>
-              <i class="ob-sheen"></i>
+            <div class="ob-wires" aria-hidden="true">
+              <svg viewBox="0 0 140 314" preserveAspectRatio="none">
+                <path data-wire="0" d="M0 29C40 29 94 38 148 38" />
+                <path data-wire="1" d="M0 93C40 93 94 103 148 103" />
+                <path data-wire="2" d="M0 157C40 157 94 168 148 168" />
+                <path data-wire="3" d="M0 221C40 221 94 233 148 233" />
+                <path data-wire="4" d="M0 285C40 285 94 298 148 298" />
+              </svg>
+            </div>
+            <div class="ob-line" id="ob-state">
+              <div class="ob-line-tag"><i></i>ONE STATE</div>
+              <div class="ob-line-list">
+                <div class="ob-line-node" data-node="0"><i></i><b>运行状态</b><em>后端 :8888 · 前端 :5173</em></div>
+                <div class="ob-line-node" data-node="1"><i></i><b>数据库</b><em>localhost:3306 · farm</em></div>
+                <div class="ob-line-node" data-node="2"><i></i><b>链端</b><em>2.11.0 · 区块高度 182</em></div>
+                <div class="ob-line-node" data-node="3"><i></i><b>页面入口</b><em>127.0.0.1:5173 · 可打开</em></div>
+                <div class="ob-line-node" data-node="4"><i></i><b>日志</b><em>5 分区 · 最近错误 0</em></div>
+              </div>
             </div>
             <div class="ob-merge-foot" id="ob-merge-foot">
               <s>5 个窗口 · 3 套工具链</s><em>收拢成 1 条状态线</em>
@@ -3342,7 +3473,7 @@
 
       <!-- 04 检测：终端 + 报告双栏 -->
       <div class="swiper-slide ob-slide" data-idx="3">
-        <div class="ob-scene ob-split ob-split-wide">
+        <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>状态看得见</div>
             <h2 class="ob-h">检测给结论，<br />不给猜测</h2>
@@ -3351,16 +3482,20 @@
             <p class="ob-hint">纯静态数据，不会真的检测你的电脑</p>
           </div>
           <div class="ob-detect">
-            <div class="ob-term">
+            <div class="ob-scan">
               <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span><em id="ob-term-pct">就绪</em></div>
               <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
-            <div class="ob-report">
-              <div class="ob-report-head"><span>环境检测报告</span><b id="ob-detect-badge"></b></div>
-              <div class="ob-detect-rows" id="ob-detect-rows"></div>
-              <div class="ob-report-foot" id="ob-report-foot"><b>结论</b><span></span></div>
+            <div class="ob-verdict" id="ob-verdict">
+              <div class="ob-vd-num"><b id="ob-vd-score">–</b><s>/ 6</s></div>
+              <div class="ob-vd-body">
+                <div class="ob-segs" id="ob-segs"></div>
+                <p class="ob-vd-msg" id="ob-vd-msg">还没跑检测</p>
+              </div>
+              <div class="ob-report-foot" id="ob-report-foot"><b>下一步</b><span>点上面的按钮，结论直接写在这里</span></div>
             </div>
+            <div class="ob-groups" id="ob-detect-rows"></div>
           </div>
         </div>
       </div>
@@ -3556,11 +3691,17 @@ const I18N_EN = {
   "07 / 08 · 安全边界": "07 / 08 · Permission gates",
   "08 / 08 · 收尾": "08 / 08 · Ready to go",
   "08:30；填 off 关闭晨报": "08:30; \"off\" disables the briefing",
+  "1 项待校验：链端 FISCO 节点 127.0.0.1:20200 未响应": "1 pending: FISCO node 127.0.0.1:20200 did not respond",
   "1) 本机代理（Clash / V2Ray 等，常见 127.0.0.1:7890）没有绕过 localhost：\n   在代理的「绕过 / 例外 / Bypass」里加入 127.0.0.1;localhost;::1\n2) 或换一个不走系统代理的浏览器打开本控制台\n\n验证：到「AI 助手」页点「检测请求传输」，显示\"发送 N / 收到 N\"即已修好。": "1) A local proxy (Clash / V2Ray, often 127.0.0.1:7890) is not bypassing localhost:\n   add 127.0.0.1;localhost;::1 to its bypass / exception list\n2) Or open this console in a browser that does not use the system proxy\n\nVerify: open the AI panel and click \"Test request transport\" — \"sent N / received N\" means fixed.",
+  "127.0.0.1:5173 · 可打开": "127.0.0.1:5173 · reachable",
+  "2 分钟前": "2 min ago",
   "2 分钟涨 {0} MB": "+{0} MB in 2 min",
+  "2.11.0 · 区块高度 182": "2.11.0 · block height 182",
+  "3 个标签": "3 tabs",
   "428 + 红框": "428 + red dialog",
   "5 个窗口 · 3 套工具链": "5 windows · 3 toolchains",
   "5 个页面来回切": "five tabs to switch between",
+  "5 分区 · 最近错误 0": "5 partitions · 0 recent errors",
   "5 项正常 · 1 项待校验": "5 OK · 1 pending",
   "5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。": "Five checks OK, one pending (chain unreachable). Next: app config.",
   "72（0 = 仅启动时）": "72 (0 = startup only)",
@@ -3610,6 +3751,7 @@ const I18N_EN = {
   "Windows 10 / 11 · 有管理员权限": "Windows 10 / 11 · admin rights",
   "Windows 防火墙没放行这个端口，手机的请求到不了 EnvKit": "Windows Firewall is not allowing this port, so the phone's requests never reach EnvKit",
   "[ERROR] 演示异常：端口 8888 被占用（这条是演示数据）": "[ERROR] Demo issue: port 8888 is in use (demo data only)",
+  "[WARN] 区块高度为 0": "[WARN] block height is 0",
   "docs/eval 下最近 60 份": "Latest 60 files under docs/eval",
   "docs/eval 下还没有 .json 产物": "No .json artifacts under docs/eval yet",
   "http://127.0.0.1:7890（留空 = 直连）": "http://127.0.0.1:7890 (empty = direct)",
@@ -3671,6 +3813,7 @@ const I18N_EN = {
   "⚠ 请求内容被中间层丢弃": "⚠ Request payload dropped in transit",
   "。企业微信 / 钉钉 / 飞书群机器人的自定义地址可以直接填；只发通用 JSON，不认它们的私有格式。": ". WeCom / DingTalk / Feishu group-bot custom webhooks can be pasted directly; only generic JSON is sent — their private formats are not supported.",
   "「拉取模型列表」会调用服务商的 /models 接口获取在售模型；拉取失败时仍可用预置列表或自定义模型名。Key 经 DPAPI 加密存储，仅本机可解密。": "\"Fetch model list\" calls the provider's /models endpoint to list available models; if it fails you can still use the built-in list or type a model name. The API key is DPAPI-encrypted and only decryptable on this machine.",
+  "「程序配置」先就位，链端连通放到第 3 步复核": "Set up program config first; chain connectivity is rechecked in step 3",
   "「重启后端」属于写操作，会先弹一张确认卡。": "Restarting the backend is a write action, so a confirmation card appears first.",
   "「重启后端」属于写操作，会先弹一张确认卡问过你才动 —— 这就是演示的那张卡。": "Restarting the backend is a write action, so it asks first. That is exactly the card shown here.",
   "「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。": "“Restart backend” is a write action, so this card comes first. Nothing runs until you confirm.",
@@ -3827,10 +3970,13 @@ const I18N_EN = {
   "允许写操作": "Allow writes",
   "允许外部 HTTP 触发": "Allow external HTTP trigger",
   "允许查询天气": "Allow weather lookups",
+  "先做「程序配置」，链端连通第 3 步再复核": "Set up program config first; chain connectivity is rechecked in step 3",
   "先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。": "Start backend then frontend with one click; logs split by source and the process tree is cleaned up by EnvKit.",
   "先备份，再生效…": "Backup first, then apply…",
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "先看检测": "Start with detection",
+  "先跑「程序配置」，再复核链端": "Run program config first, then recheck the chain",
+  "先跑配置，再复核链端": "Run config first, then recheck the chain",
   "免确认": "no confirm",
   "免责声明": "Disclaimer",
   "入站": "Inbound",
@@ -3989,6 +4135,7 @@ const I18N_EN = {
   "后台守护": "Background guard",
   "后台守护：定时检测并自动拉起（挂机用）": "Background guardian: periodically checks and restarts automatically (for unattended runs)",
   "后端": "Backend",
+  "后端 :8888 · 前端 :5173": "backend :8888 · frontend :5173",
   "后端 go mod tidy": "Backend go mod tidy",
   "后端 {0}": "Backend {0}",
   "后端依赖整理": "Backend deps tidy",
@@ -4349,6 +4496,7 @@ const I18N_EN = {
   "恢复演练": "Restore drill",
   "恢复预算与断路器": "Recovery budget & breaker",
   "恢复默认": "Reset",
+  "悬停任一窗口，看它被哪个节点接管": "Hover any window to see which node took it over",
   "悬停旧卡片，看它被谁接管": "Hover an old card to see what replaced it",
   "慢机器把窗口调大，避免把「还在编译」判成「启动失败」": "On slow machines, widen the window so \"still compiling\" is not judged as \"failed to start\"",
   "慢路径": "Slow path",
@@ -4491,6 +4639,7 @@ const I18N_EN = {
   "文件": "File",
   "文件超过 {0} MB，已跳过：{1}": "Over {0} MB, skipped: {1}",
   "断开": "Disconnect",
+  "断线": "disconnected",
   "断路器已复位，恢复接受自动重启": "Breaker reset — auto-restart will resume",
   "断路器已重置": "Breaker reset",
   "断路器阈值": "Breaker threshold",
@@ -4569,6 +4718,7 @@ const I18N_EN = {
   "未产出": "Not produced",
   "未使用": "Never used",
   "未保存…": "Unsaved…",
+  "未刷新": "not refreshed",
   "未发生": "Not yet",
   "未启动": "Not started",
   "未启用": "Not enabled",
@@ -4631,6 +4781,7 @@ const I18N_EN = {
   "权限": "Privilege",
   "权限与外连边界在完整导览第 7 屏 · 引导里的演示不会改动任何配置": "Permissions and outbound-network limits are on slide 7 of the full tour · these demos never change your config",
   "权限与外连边界在完整导览第 7 屏 · 所有演示都不会改动你的配置": "Permissions and egress are covered on slide 7 · no demo changes your config",
+  "权限与外连边界在第 7 屏 · 所有演示都不会改动你的配置": "Permissions and outbound rules are on slide 7 · no demo touches your config",
   "权限闸门": "permission gate",
   "权限闸门是特性，不是限制": "Permission gates are a feature, not a limitation",
   "条": "msgs",
@@ -4751,6 +4902,7 @@ const I18N_EN = {
   "溜达": "Wander",
   "溜达溜达～": "Wander wander~",
   "滚动摘要什么时候触发、保留多少": "When rolling summarization kicks in, and how much it keeps",
+  "滚屏中": "scrolling",
   "演示 · 不会改动你的配置": "Demo · your config is never changed",
   "演示 · 不会真的执行": "demo · nothing really runs",
   "演示模式": "demo mode",
@@ -4759,6 +4911,7 @@ const I18N_EN = {
   "点「放行防火墙」按钮，在弹出的 UAC 窗口点「是」": "Click “Allow through firewall” and choose Yes in the UAC prompt",
   "点「检查防火墙」看 Windows 是否放行这个端口": "Click “Check firewall” to see whether Windows allows this port",
   "点一下或按任意键跳过片头": "Click or press any key to skip the intro",
+  "点上面的按钮，结论直接写在这里": "Hit the button above and the verdict lands right here",
   "点任一档位看「能做什么 / 需要什么确认」": "Pick a tier to see what it can do and what needs confirmation",
   "点任一段可切换说明": "Click any step to switch the description",
   "点击 × 移除": "Click × to remove",
@@ -4826,6 +4979,7 @@ const I18N_EN = {
   "直接做": "No confirm",
   "直接进配对页": "Go straight to the pairing page",
   "相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
+  "看不出哪个是新的": "no idea which one is current",
   "看屏幕": "View screen",
   "看看它能做什么": "See what it does",
   "看运行状态": "read status",
@@ -4901,6 +5055,7 @@ const I18N_EN = {
   "终态保留天数": "Days kept in a final state",
   "终端": "Terminal",
   "终端、数据库客户端、SSH、浏览器标签、日志窗口——": "Terminal, DB client, SSH, browser tabs, log windows —",
+  "终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。": "Terminal, DB client, SSH, browser tabs, log window — when something breaks you dig through all of them and still do not know which one is current.",
   "经验增益（A/B）": "Experience gain (A/B)",
   "结束": "Kill",
   "结束失败：{0}": "Kill failed: {0}",
@@ -5084,6 +5239,7 @@ const I18N_EN = {
   "还没有轨迹。发一句话就会有了。": "No trace yet. Send a message.",
   "还没有预案。行动收口后在卡片上点「存为预案」即可沉淀。": "No playbooks yet. Once a mission finishes, click \"Save as playbook\" on its card.",
   "还没读到配置，请先点「重新读取」": "Config not loaded yet — click Reload first",
+  "还没跑检测": "not run yet",
   "还缺：{0}": "Still missing: {0}",
   "这一回合没有调用任何工具（纯问答，没有动手）": "This turn called no tools (answer only, nothing executed)",
   "这一档当前不可用，先看卡片里的原因": "This tier is unavailable — see the reason on its card",
@@ -5200,6 +5356,7 @@ const I18N_EN = {
   "需先填 WeBASE 目录与启动脚本": "Fill in the WeBASE directory and start script first",
   "需先填链端目录与启动脚本": "Fill in the chain directory and start script first",
   "需要你确认": "Your confirmation is needed",
+  "页面入口": "Page entry",
   "顶栏那条导航不是装饰：每一步都有输入、有结果、有下一步。": "The top navigation is not decoration: every step has input, output and a next step.",
   "顶栏那条导航不是装饰：走到哪一步、上一步给了什么，都写在界面上。": "The top nav is not decoration: where you are and what the last step produced are both on screen.",
   "项检测": " checks",
@@ -13579,14 +13736,17 @@ async function ekSetSaveUpdate(recheck){
      pre:'配置与链端都已就绪', cost:'约 15 秒'}
   ];
 
+  /* 检测项按"属于哪一类"分组，而不是平铺成一张表。
+     g 就是组名，渲染时按 GROUPS 的顺序建三张卡。 */
   var DETECT = [
-    {n:'Go',         v:'1.27.3',    p:'C:\\EnvKit\\tools\\go',        k:'ok',   s:'正常'},
-    {n:'Node.js',    v:'22.22.2',   p:'C:\\Program Files\\nodejs',    k:'ok',   s:'正常'},
-    {n:'MySQL 8',    v:'8.0.36',    p:'localhost:3306',               k:'ok',   s:'正常'},
-    {n:'GOPROXY',    v:'goproxy.cn',p:'环境变量已生效',                k:'ok',   s:'正常'},
-    {n:'FISCO 节点', v:':20200',    p:'127.0.0.1 · 待连通',           k:'warn', s:'待校验'},
-    {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常'}
+    {n:'Go',         v:'1.27.3',    p:'C:\\EnvKit\\tools\\go',        k:'ok',   s:'正常', g:'运行时'},
+    {n:'Node.js',    v:'22.22.2',   p:'C:\\Program Files\\nodejs',    k:'ok',   s:'正常', g:'运行时'},
+    {n:'MySQL 8',    v:'8.0.36',    p:'localhost:3306',               k:'ok',   s:'正常', g:'数据与磁盘'},
+    {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常', g:'数据与磁盘'},
+    {n:'GOPROXY',    v:'goproxy.cn',p:'环境变量已生效',                k:'ok',   s:'正常', g:'网络与链端'},
+    {n:'FISCO 节点', v:':20200',    p:'127.0.0.1 · 未响应',           k:'warn', s:'待校验', g:'网络与链端'}
   ];
+  var GROUPS = ['运行时', '数据与磁盘', '网络与链端'];
 
   /* 每个分区给到 6–7 行：只放 5 行时控制台下半截是空的，像没加载完 */
   var SCOPES = {
@@ -13887,30 +14047,67 @@ async function ekSetSaveUpdate(recheck){
     later(rotateSlab, 2600);
   }
 
-  /* 04 检测：终端先跑命令，报告再逐行落定 */
+  /* 04 检测：先按组建设置，再逐条点亮。
+     结论条是整屏的锚点，所以状态全部挂在它身上（数字 / 六段条 / 判断 / 下一步）。 */
   function renderDetect(blank){
     var box = q('#ob-detect-rows');
     if(!box) return;
     box.innerHTML = '';
-    DETECT.forEach(function(r){
-      var d = document.createElement('div');
-      d.className = 'ob-row' + (blank ? '' : ' lit ' + r.k);
-      d.innerHTML = '<i class="dot"></i><span class="nm">' + t(r.n) + '</span>' +
-                    '<span class="vl">' + r.v + '</span>' +
-                    '<span class="path">' + r.p + '</span>' +
-                    '<span class="st">' + t(r.s) + '</span>';
-      box.appendChild(d);
+    GROUPS.forEach(function(g){
+      var rows = DETECT.filter(function(r){ return r.g === g; });
+      if(!rows.length) return;
+      var card = document.createElement('div');
+      card.className = 'ob-grp';
+      var head = document.createElement('div');
+      head.className = 'ob-grp-h';
+      head.innerHTML = '<b>' + t(g) + '</b><span>' + rows.length + '</span>';
+      card.appendChild(head);
+      rows.forEach(function(r){
+        var d = document.createElement('div');
+        d.className = 'ob-row' + (blank ? '' : ' lit ' + r.k);
+        d.innerHTML = '<i class="dot"></i><span class="nm">' + t(r.n) + '</span>' +
+                      '<span class="vl">' + r.v + '</span>' +
+                      '<span class="st">' + t(r.s) + '</span>' +
+                      '<span class="path">' + r.p + '</span>';
+        card.appendChild(d);
+      });
+      box.appendChild(card);
     });
-    var badge = q('#ob-detect-badge');
-    if(badge){ badge.classList.remove('on'); badge.textContent = ''; }
+
+    /* 六段条先摆成全灰的短刻度：一进来就能看出"要检 6 项"，而不是空着 */
+    var segs = q('#ob-segs');
+    if(segs){
+      segs.innerHTML = '';
+      DETECT.forEach(function(){ segs.appendChild(document.createElement('i')); });
+    }
     var term = q('#ob-detect-cmd');
     if(term) term.innerHTML = '';
     var foot = q('#ob-report-foot');
     if(foot) foot.classList.remove('on');
+    var vd = q('#ob-verdict');
+    if(vd) vd.classList.remove('hot');
+    var score = q('#ob-vd-score');
+    if(score) score.textContent = '\u2013';
+    var msg = q('#ob-vd-msg');
+    if(msg) msg.textContent = t('还没跑检测');
     var prog = q('#ob-term-prog i');
     if(prog) prog.style.width = '0%';
     var pct = q('#ob-term-pct');
     if(pct) pct.textContent = t('就绪');
+  }
+
+  /* 数字从 0 滚到 5：比直接贴一个 5 更像"刚算出来的" */
+  function countUp(el, to, ms){
+    if(!el) return;
+    if(REDUCED){ el.textContent = String(to); return; }
+    var start = null;
+    function tick(now){
+      if(start === null) start = now;
+      var p = Math.min(1, (now - start) / ms);
+      el.textContent = String(Math.round(to * (1 - Math.pow(1 - p, 3))));
+      if(p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
   }
 
   function runDetect(){
@@ -13938,20 +14135,29 @@ async function ekSetSaveUpdate(recheck){
     var pct = q('#ob-term-pct');
     if(pct) pct.textContent = t('扫描中…');
     if(prog){ prog.style.width = '0%'; void prog.offsetWidth; prog.style.width = '100%'; }
+
+    /* 行和段块同拍点亮：第 N 段就是第 N 行，两边对得上才说得通 */
     qa('#ob-detect-rows .ob-row').forEach(function(row, i){
-      later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 170);
+      later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 150);
     });
-    var badge = q('#ob-detect-badge');
-    var foot = q('#ob-report-foot');
+    qa('#ob-segs i').forEach(function(s, i){
+      later(function(){ s.className = DETECT[i].k; }, 420 + i * 150);
+    });
+
     later(function(){
-      if(badge){ badge.textContent = t('5 项正常 · 1 项待校验'); badge.classList.add('on'); }
       if(pct) pct.textContent = '1.8s · 6 项';
+      var vd = q('#ob-verdict');
+      if(vd) vd.classList.add('hot');
+      countUp(q('#ob-vd-score'), 5, 300);
+      var msg = q('#ob-vd-msg');
+      if(msg) msg.textContent = t('1 项待校验：链端 FISCO 节点 127.0.0.1:20200 未响应');
+      var foot = q('#ob-report-foot');
       if(foot){
         var sp = foot.querySelector('span');
-        if(sp) sp.textContent = t('5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。');
+        if(sp) sp.textContent = t('先跑配置，再复核链端');
         foot.classList.add('on');
       }
-    }, 420 + DETECT.length * 170);
+    }, 420 + DETECT.length * 150);
   }
 
   /* 05 日志：分区切换 + 行号由 CSS counter 生成（不影响 textContent） */
@@ -14126,22 +14332,33 @@ async function ekSetSaveUpdate(recheck){
     setProgress();
   }
 
-  /* 02 汇聚 */
+  /* 02 汇聚：五条线依次"被拉直"接上状态线，再出现 5 → 1 的计数 */
   function mergeFlow(){
     var m = q('#ob-merge');
-    var beam = q('#ob-beam');
-    var card = q('.ob-new-card');
     var foot = q('#ob-merge-foot');
-    if(m) m.classList.remove('flow');
-    if(beam){ beam.classList.remove('flow'); void beam.offsetWidth; beam.classList.add('flow'); }
+    if(!m) return;
+    m.classList.remove('flow');
     if(foot) foot.classList.remove('on');
-    later(function(){ if(m) m.classList.add('flow'); }, 120);
-    if(card){
-      card.classList.remove('lit');
-      later(function(){ card.classList.add('lit'); }, 620);
-    }
-    later(function(){ if(foot) foot.classList.add('on'); }, 900);
+    void m.offsetWidth;                    /* 强制回流，否则 class 重加不会重播动画 */
+    later(function(){ m.classList.add('flow'); }, 60);
+    later(function(){ if(foot) foot.classList.add('on'); }, 760);
   }
+
+  /* 悬停某个旧窗口：它自己被抬起、对应的状态节点亮、那条连线变粗。
+     "被谁接管"用联动回答，比一个 tooltip 直接得多。 */
+  function ownFocus(k){
+    qa('#ob-state .ob-line-node').forEach(function(n){
+      n.classList.toggle('own', k !== null && n.getAttribute('data-node') === k);
+    });
+    qa('.ob-wires path').forEach(function(p){
+      p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);
+    });
+  }
+  qa('.ob-win-card').forEach(function(c){
+    var k = c.getAttribute('data-own');
+    c.addEventListener('mouseenter', function(){ ownFocus(k); });
+    c.addEventListener('mouseleave', function(){ ownFocus(null); });
+  });
 
   /* ---------- Swiper ---------- */
   function buildSwiper(){

@@ -1215,6 +1215,10 @@
   .ob-split{display:grid!important;grid-template-columns:minmax(280px,.82fr) minmax(400px,1.18fr);
     gap:clamp(26px,4.4vw,64px);align-items:center;max-width:1120px}
   .ob-split-wide{grid-template-columns:minmax(280px,.78fr) minmax(430px,1.22fr)}
+  /* 02 / 04 的演示是"多块拼一个整体"，需要的横向空间比别的屏大得多。
+     文案列收窄、演示列放开，右侧才不会挤成一堆小方块。 */
+  .ob-split-grow{grid-template-columns:minmax(248px,.56fr) minmax(0,1.44fr);
+    max-width:1160px;gap:clamp(24px,3.4vw,46px)}
   .ob-copy{min-width:0;text-align:left}
   .ob-head{text-align:center;max-width:760px;margin:0 auto}
   .ob-head-tight{margin-bottom:4px}
@@ -1300,64 +1304,102 @@
   @keyframes obSheen{0%,64%{left:-46%}86%,100%{left:118%}}
   .ob-art-note{font-size:11.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
 
-  /* ---------- 02 散落 → 汇聚 ---------- */
-  .ob-merge{display:grid;grid-template-columns:minmax(210px,1fr) 104px minmax(170px,1.05fr);
-    gap:10px;align-items:center;min-width:0}
-  .ob-old{display:flex;flex-direction:column;gap:8px;align-items:stretch;
-    justify-content:center;padding-right:2px}
-  .ob-old-card{position:relative;display:flex;align-items:baseline;justify-content:space-between;
-    gap:10px;font-size:12.5px;color:var(--muted);
+  /* ---------- 02 五个窗口 → 一条状态线 ---------- */
+  /* 这一屏的演示体量比别的屏大，所以单独放宽右列（.ob-split-grow 见场景骨架段） */
+  /* 三列紧密相接（gap 0）：最右一条 path 的终点必须正好落在状态线的竖线上，
+     中间留 gap 会让连线在视觉上"断在空气里"。列宽 292 / 90 / 1fr 是算出来的：
+     窗口区 240 + 4×13 = 292，卡片右边缘正好是 SVG 的 x=0。 */
+  .ob-merge{display:grid;grid-template-columns:290px 140px minmax(0,1fr);
+    column-gap:0;row-gap:14px;align-items:center;min-width:0}
+
+  /* 五个旧窗口：左边缘错位、右边缘统一对齐到 290。
+     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边 */
+  .ob-win{position:relative;width:290px;height:314px;flex:none}
+  .ob-win-card{position:absolute;left:calc(var(--i) * 10px);top:calc(var(--i) * 64px);
+    width:calc(290px - var(--i) * 10px);height:58px;overflow:hidden;text-align:left;
     background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:9px 14px 9px 16px;cursor:help;
-    box-shadow:0 4px 12px -9px rgba(40,48,64,.34);
-    transform:rotate(var(--r,0deg)) translateX(var(--x,0px));
-    transition:transform .55s cubic-bezier(.22,1,.36,1),opacity .4s,color .2s,border-color .2s}
-  .ob-old-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
-    border-radius:10px 0 0 10px;background:var(--dotoff);transition:background .2s}
-  .ob-old-card:hover::before{background:var(--brand2)}
-  .ob-old-card:nth-child(1){--r:-1.6deg;--x:-4px}
-  .ob-old-card:nth-child(2){--r:1.2deg;--x:6px}
-  .ob-old-card:nth-child(3){--r:-.9deg;--x:0px}
-  .ob-old-card:nth-child(4){--r:1.6deg;--x:9px}
-  .ob-old-card:nth-child(5){--r:-1.2deg;--x:3px}
-  .ob-old-card::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;
-    transform:translateY(-50%);white-space:nowrap;font-size:11px;color:var(--text);
-    background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
-    opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:3;
-    box-shadow:0 8px 20px -12px rgba(20,25,35,.4)}
-  .ob-old-card:hover{--r:0deg;--x:0px;color:var(--text);border-color:var(--brand2)}
-  /* 每张旧卡片补一句"代价"：光写工具名说明不了为什么要收拢 */
-  .ob-old-card em{flex:none;font-style:normal;font-size:10px;line-height:1.5;
-    color:var(--muted);opacity:.82;text-align:right;max-width:56%;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ob-old-card:hover em{opacity:.95}
-  .ob-old-card:hover::after{opacity:1;transform:translateY(-50%) translateX(2px)}
-  .ob-merge.flow .ob-old-card{--r:0deg;--x:0px;opacity:.62}
-  .ob-beam{position:relative;display:flex;align-items:center;justify-content:center;height:40px;overflow:hidden}
-  .ob-beam i{display:block;width:100%;height:3px;border-radius:3px;
-    background:linear-gradient(90deg,transparent,var(--ob-accent),var(--brand2),transparent);
-    opacity:.85}
-  .ob-beam::after{content:'';position:absolute;left:0;top:50%;width:5px;height:5px;margin-top:-2.5px;
-    border-radius:50%;background:var(--brand2);opacity:0}
-  .ob-merge.flow .ob-beam::after{animation:obParticle 1.25s cubic-bezier(.4,0,.6,1) 2}
-  @keyframes obParticle{0%{left:2%;opacity:0}18%{opacity:1}100%{left:96%;opacity:0}}
-  .ob-beam b{position:absolute;font-size:10px;color:var(--muted);letter-spacing:.12em;
-    background:var(--bg);padding:0 6px;opacity:.9}
-  .ob-beam.flow i{animation:obBeam 1.15s cubic-bezier(.22,1,.36,1)}
-  @keyframes obBeam{0%{transform:translateX(-78%);opacity:.15}100%{transform:translateX(0);opacity:.7}}
-  .ob-new-card{position:relative;display:flex;flex-direction:column;gap:7px;
-    align-items:flex-start;justify-content:center;overflow:hidden;
-    background:linear-gradient(150deg,color-mix(in srgb,var(--brand-weak) 92%,#fff),var(--ob-glass));
-    border:1px solid color-mix(in srgb,var(--brand2) 48%,var(--ob-edge));
-    border-radius:16px;padding:26px 22px;text-align:left;box-shadow:var(--ob-lift);
-    transition:box-shadow .45s,transform .45s}
-  .ob-new-badge{font:500 9.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em;
-    color:var(--brand);background:var(--card);border:1px solid var(--line);
-    border-radius:999px;padding:4px 8px}
-  .ob-new-card b{font-size:25px;font-weight:600;letter-spacing:-.025em;color:var(--brand)}
-  .ob-new-card small{font-size:11.5px;color:var(--info);line-height:1.6}
-  .ob-new-card.lit{transform:translateY(-3px);
-    box-shadow:0 0 0 5px color-mix(in srgb,var(--brand-weak) 70%,transparent),var(--ob-lift)}
+    box-shadow:0 10px 22px -16px rgba(30,38,54,.62);
+    transform:rotate(var(--r,0deg));
+    transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s,
+      border-color .25s,opacity .3s}
+  .ob-win-card:hover{transform:rotate(0deg) translateX(8px) scale(1.035);z-index:4;
+    border-color:var(--brand2);box-shadow:0 18px 30px -18px rgba(30,38,54,.78)}
+  .ob-win-bar{display:flex;align-items:center;gap:4px;height:20px;padding:0 9px;
+    background:var(--ob-glass-2);border-bottom:1px solid var(--ob-hair)}
+  .ob-win-bar i{width:4.5px;height:4.5px;border-radius:50%;background:var(--dotoff);flex:none}
+  .ob-win-bar span{margin-left:4px;font-size:10px;color:var(--text);opacity:.78;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-win-bar em{margin-left:auto;font-style:normal;font-size:9px;color:var(--muted);
+    opacity:.72;white-space:nowrap;flex:none}
+  .ob-win-body{padding:4px 9px 5px;font:10px/1.6 ui-monospace,Consolas,monospace}
+  .ob-win-body code{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font:inherit;color:var(--muted)}
+  .ob-win-body .pr{color:color-mix(in srgb,var(--brand) 82%,var(--muted))}
+  .ob-win-body .bad{color:color-mix(in srgb,var(--err) 72%,var(--muted))}
+  /* 终端那扇窗保持深色：五个窗口里有一个"就是终端"，比五张同款纸片容易认 */
+  .ob-win-card.dark{background:linear-gradient(180deg,#2A2F39,#1E222A);
+    border-color:rgba(255,255,255,.12);box-shadow:0 12px 24px -14px rgba(12,16,24,.7)}
+  .ob-win-card.dark .ob-win-bar{background:rgba(255,255,255,.05);
+    border-bottom-color:rgba(255,255,255,.08)}
+  .ob-win-card.dark .ob-win-bar span{color:rgba(199,206,218,.88);opacity:1}
+  .ob-win-card.dark .ob-win-bar em{color:rgba(199,206,218,.48)}
+  .ob-win-card.dark .ob-win-body code{color:rgba(199,206,218,.7)}
+  .ob-win-card.dark .ob-win-body .pr{color:#9FC0E0}
+  .ob-win-card.dark .ob-win-body .bad{color:#E4A09A}
+  /* 只压一点透明度：压太多会把"五个窗口"这个主体也一起淡掉 */
+  .ob-merge.flow .ob-win-card{opacity:.82}
+
+  /* 五条线：起点跟着窗口走（间距 64），终点被压到 48（整）。
+     这就是"收拢"的几何证据，不靠一个写着"收拢"的箭头 */
+  .ob-wires{width:140px;height:314px;flex:none}
+  .ob-wires svg{display:block;width:100%;height:100%;overflow:visible}
+  .ob-wires path{fill:none;stroke:color-mix(in srgb,var(--brand2) 58%,var(--line));
+    stroke-width:1.5;vector-effect:non-scaling-stroke;
+    stroke-dasharray:260;stroke-dashoffset:0;opacity:.9;
+    transition:stroke .25s,stroke-width .25s,opacity .25s}
+  .ob-merge.flow .ob-wires path{animation:obWire .62s cubic-bezier(.22,1,.36,1) both}
+  .ob-merge.flow .ob-wires path:nth-child(1){animation-delay:0s}
+  .ob-merge.flow .ob-wires path:nth-child(2){animation-delay:.08s}
+  .ob-merge.flow .ob-wires path:nth-child(3){animation-delay:.16s}
+  .ob-merge.flow .ob-wires path:nth-child(4){animation-delay:.24s}
+  .ob-merge.flow .ob-wires path:nth-child(5){animation-delay:.32s}
+  @keyframes obWire{from{stroke-dashoffset:260;opacity:.15}
+    to{stroke-dashoffset:0;opacity:.9}}
+  .ob-wires path.on{stroke:var(--brand2);stroke-width:2.2;opacity:1}
+
+  /* 右边：一条真的状态线。竖线贯穿全高，所以五条线的终点落在哪儿都接得住。
+     撑满整行高（align-self:stretch + space-between），五条线才不会挤在左侧一小段里 */
+  .ob-line{min-width:0;width:100%;text-align:left;align-self:stretch;
+    display:flex;flex-direction:column}
+  .ob-line-tag{display:flex;align-items:center;gap:7px;margin-bottom:10px;
+    font:500 10px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em;color:var(--muted)}
+  .ob-line-tag i{width:16px;height:1px;background:var(--brand2);flex:none}
+  .ob-line-list{position:relative;flex:1;padding-left:19px;
+    display:flex;flex-direction:column;justify-content:space-between}
+  .ob-line-list::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:1px;
+    background:var(--line)}
+  /* 名称与值之间用一条淡引导线连起来。少了它，两端对齐会把一行拉成
+     "名字 ……… 一大片空白 ……… 值"，看着像两列不相干的东西 */
+  .ob-line-node{position:relative;display:flex;align-items:baseline;
+    justify-content:flex-start;gap:10px;padding:6px 0}
+  .ob-line-node>i{position:absolute;left:-18.5px;top:11px;width:9px;height:9px;border-radius:50%;
+    background:var(--bg);border:1.5px solid var(--brand2);box-sizing:border-box;
+    transition:transform .3s,box-shadow .3s,background .3s,border-color .3s}
+  .ob-line-node b{order:1;flex:none;font-size:13px;font-weight:500;color:var(--text);line-height:1.45}
+  .ob-line-node::after{content:'';order:2;flex:1;min-width:14px;height:1px;align-self:center;
+    background:repeating-linear-gradient(90deg,
+      color-mix(in srgb,var(--muted) 50%,transparent) 0 2px,transparent 2px 7px);
+    transform:translateY(3px);transition:background .25s}
+  .ob-line-node em{order:3;flex:none;font-style:normal;font-size:11px;line-height:1.55;
+    text-align:right;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78%}
+  /* 悬停旧窗口 → 对应节点亮起＋连线加粗。"被谁接管"用联动回答，比 tooltip 直接得多 */
+  .ob-line-node.own>i{background:var(--brand);border-color:var(--brand);transform:scale(1.3);
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 16%,transparent)}
+  .ob-line-node.own b{color:var(--brand)}
+  .ob-line-node.own::after{background:repeating-linear-gradient(90deg,
+    color-mix(in srgb,var(--brand2) 55%,transparent) 0 2px,transparent 2px 7px)}
+  .ob-line-node.own em{color:var(--text);opacity:.86}
 
   /* ---------- 03 时间轴 ---------- */
   .ob-flow{text-align:center}
@@ -1391,8 +1433,10 @@
   .ob-detail p{font-size:12.5px;line-height:1.85;color:var(--muted);margin:0}
   .ob-flow .ob-actions{justify-content:center;margin-top:18px}
 
-  /* ---------- 04 终端 + 报告 ---------- */
-  .ob-detect{display:flex;flex-direction:column;gap:12px;min-width:0}
+  /* ---------- 04 扫描 → 结论 → 分组明细 ---------- */
+  /* 顺序是刻意的：过程（扫描）、结论（记分）、依据（分组）。
+     标题说"给结论不给猜测"，结论就应该是这一屏最重的东西，而不是表格下的一行小字。 */
+  .ob-detect{display:flex;flex-direction:column;gap:11px;min-width:0}
   .ob-term,.ob-console{background:linear-gradient(180deg,var(--ob-term-hi),var(--ob-term));
     border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.06);
     box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 30px 60px -34px rgba(10,14,22,.75)}
@@ -1414,34 +1458,105 @@
   .ob-caret{display:inline-block;width:7px;height:13px;background:var(--ob-term-tx);
     vertical-align:-2px;animation:obCaret 1.05s steps(1) infinite}
   @keyframes obCaret{0%,49%{opacity:1}50%,100%{opacity:0}}
-  .ob-report{background:var(--ob-glass);border:1px solid var(--ob-edge);border-radius:14px;
-    overflow:hidden;box-shadow:var(--ob-lift-sm);
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-  .ob-report-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:11px 16px;border-bottom:1px solid var(--ob-hair);font-size:11.5px;color:var(--muted)}
-  .ob-report-head b{font-size:11px;font-weight:500;border-radius:999px;padding:3px 10px;
-    background:var(--brand-weak);color:var(--brand);opacity:0;transform:translateY(-3px);
-    transition:opacity .35s,transform .35s}
-  .ob-report-head b.on{opacity:1;transform:none}
-  .ob-detect-rows{padding:4px 16px 12px}
-  .ob-row{display:grid;grid-template-columns:10px minmax(72px,1fr) 86px minmax(0,1.2fr) 52px;
-    align-items:center;gap:10px;padding:8px 0;font-size:12px;
-    border-bottom:1px solid var(--ob-hair);opacity:.32;
-    transform:translateY(4px);transition:opacity .3s,transform .3s}
-  .ob-row:last-child{border-bottom:0}
+
+  /* 扫描条：把"过程"压成一条窄带，位置让给结论 */
+  .ob-scan{background:linear-gradient(180deg,var(--ob-term-hi),var(--ob-term));
+    border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06);
+    box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 24px 46px -30px rgba(10,14,22,.7)}
+  .ob-scan .ob-term-bar{padding:8px 13px}
+  .ob-scan .ob-term-body{min-height:0;padding:10px 14px 12px;
+    font:11px/1.8 ui-monospace,Consolas,"Courier New",monospace}
+  .ob-term-bar em{margin-left:auto;font-style:normal;
+    font:10.5px/1 ui-monospace,Consolas,monospace;color:rgba(199,206,218,.5);
+    letter-spacing:.02em;transition:color .3s}
+  .ob-term-prog{height:2px;background:rgba(255,255,255,.07);overflow:hidden}
+  .ob-term-prog i{display:block;height:100%;width:0;
+    background:linear-gradient(90deg,var(--brand2),var(--ob-accent));
+    transition:width 1.1s cubic-bezier(.22,1,.36,1)}
+
+  /* 结论：大数字 + 六段条 + 一句判断 + 右侧"下一步"。整屏的视觉锚点。
+     三列而不是两列——"下一步"是一块独立的建议，不该混在判断句里 */
+  .ob-verdict{display:grid;grid-template-columns:auto minmax(0,1fr) 214px;gap:0 18px;
+    align-items:center;padding:16px 18px;border-radius:13px;text-align:left;
+    /* 混 var(--card) 而不是 #fff：暗色主题下 #fff 会把这条横幅照得发灰白 */
+    background:linear-gradient(118deg,
+      color-mix(in srgb,var(--brand-weak) 92%,var(--card)),var(--ob-glass) 72%);
+    border:1px solid color-mix(in srgb,var(--brand2) 40%,var(--ob-edge));
+    box-shadow:var(--ob-lift-sm);transition:border-color .4s}
+  .ob-verdict.hot{border-color:color-mix(in srgb,var(--warn) 46%,var(--ob-edge))}
+  .ob-vd-num{display:flex;align-items:baseline;gap:4px;padding-right:16px;
+    border-right:1px solid var(--ob-hair)}
+  .ob-vd-num b{font-size:46px;font-weight:600;letter-spacing:-.05em;line-height:1;
+    color:var(--brand);font-variant-numeric:tabular-nums;min-width:1.15em;text-align:right}
+  .ob-verdict.hot .ob-vd-num b{color:var(--warn)}
+  .ob-vd-num s{text-decoration:none;font-size:12.5px;color:var(--muted);
+    font-family:ui-monospace,Consolas,monospace}
+  .ob-vd-body{min-width:0}
+  /* 六段条：直接把 6 项检测画成 6 格。未扫时是虚线状的短条，扫完各自填色。
+     限宽是故意的——铺满整行就变成进度条，不再是"6 个格子" */
+  .ob-segs{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;
+    max-width:228px;margin-bottom:9px}
+  .ob-segs i{height:5px;border-radius:2.5px;background:var(--line);
+    transform:scaleX(.34);transform-origin:left;
+    transition:background .35s,transform .35s}
+  .ob-segs i.ok{background:var(--brand2);transform:none}
+  .ob-segs i.warn{background:var(--warn);transform:none}
+  .ob-vd-msg{font-size:13px;line-height:1.5;color:var(--text);margin:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-report-foot{display:flex;flex-direction:column;gap:3px;align-self:stretch;
+    justify-content:center;padding-left:16px;border-left:1px solid var(--ob-hair);
+    opacity:0;transform:translateY(3px);transition:opacity .35s,transform .35s}
+  .ob-report-foot.on{opacity:1;transform:none}
+  .ob-report-foot b{align-self:flex-start;font-weight:500;font-size:9.5px;letter-spacing:.11em;
+    color:var(--brand);padding:2px 6px;border-radius:5px;background:var(--brand-weak)}
+  .ob-report-foot span{font-size:10.5px;color:var(--muted);line-height:1.55}
+
+  /* 明细：按"运行时 / 数据与磁盘 / 网络与链端"分三组。
+     六个平铺成一张表只是清单，分组才说明每一项属于哪一类 */
+  .ob-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:left}
+  .ob-grp{min-width:0;background:var(--ob-glass-2);border:1px solid var(--ob-hair);
+    border-radius:11px;padding:11px 13px 8px}
+  .ob-grp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;
+    padding-bottom:7px;margin-bottom:2px;border-bottom:1px solid var(--ob-hair)}
+  .ob-grp-h b{font-size:10px;font-weight:500;letter-spacing:.09em;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-grp-h span{flex:none;font:9.5px/1 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.6}
+  .ob-row{display:grid;grid-template-columns:7px minmax(0,1fr) auto;
+    grid-template-rows:auto auto;column-gap:6px;padding:6px 0;
+    opacity:.26;transform:translateY(3px);transition:opacity .3s,transform .3s}
   .ob-row.lit{opacity:1;transform:none}
-  .ob-row .dot{width:7px;height:7px;border-radius:50%;background:var(--dotoff);
-    justify-self:center}
-  .ob-row .nm{color:var(--text)}
-  .ob-row .vl{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text);opacity:.78}
-  .ob-row .path{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color:var(--muted);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ob-row .st{font-size:10.5px;color:var(--muted);text-align:right}
-  .ob-row.ok .dot{background:var(--brand2);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand2) 18%,transparent)}
-  .ob-row.ok .st{color:var(--brand)}
-  .ob-row.warn .dot{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 16%,transparent)}
-  .ob-row.warn .st{color:var(--warn)}
+  .ob-row .dot{grid-area:1/1;width:6px;height:6px;border-radius:50%;align-self:center;
+    justify-self:center;background:var(--dotoff);flex:none}
+  .ob-row .nm{grid-area:1/2;font-size:12px;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-row .vl{grid-area:1/3;font:10.5px/1.6 ui-monospace,Consolas,monospace;
+    color:var(--muted);text-align:right;white-space:nowrap}
+  .ob-row .path{grid-area:2/2/3/4;font:10px/1.5 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* 正常项不写"正常"：六个都写是噪音。只有异常项才占一个词的宽度说话 */
+  .ob-row .st{display:none}
+  .ob-row.ok .dot{background:var(--brand2);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--brand2) 20%,transparent)}
+  .ob-row.warn .dot{background:var(--warn);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 20%,transparent)}
+  .ob-row.warn .vl{display:none}
+  .ob-row.warn .st{display:block;grid-area:1/3;
+    font:10.5px/1.6 ui-monospace,Consolas,monospace;color:var(--warn);
+    text-align:right;white-space:nowrap}
   .ob-split-wide .ob-actions{margin-bottom:8px}
+
+  /* 暗色下 --brand 是深蓝，做前景字几乎看不见。凡是"用品牌色当文字"的地方
+     在暗色里换成 --brand2（浅蓝），这是这两屏唯一需要按主题分开写的部分 */
+  body[data-theme="dark"] .ob-vd-num b,
+  body[data-theme="dark"] .ob-verdict.hot .ob-vd-num b,
+  body[data-theme="dark"] .ob-report-foot b,
+  body[data-theme="dark"] .ob-merge-foot em,
+  body[data-theme="dark"] .ob-line-node.own b{color:var(--brand2)}
+  body[data-theme="dark"] .ob-report-foot b{
+    background:color-mix(in srgb,var(--brand2) 18%,transparent)}
+  body[data-theme="dark"] .ob-win-body .pr{
+    color:color-mix(in srgb,var(--brand2) 78%,var(--muted))}
 
   /* ---------- 05 控制台 ---------- */
   .ob-console-scene{max-width:1000px;text-align:center}
@@ -1671,7 +1786,7 @@
 
   /* ---------- 响应式 ---------- */
   @media (max-width:1000px){
-    .ob-split,.ob-split-wide{grid-template-columns:1fr;gap:22px}
+    .ob-split,.ob-split-wide,.ob-split-grow{grid-template-columns:1fr;gap:22px}
     .ob-hero{grid-template-columns:1fr;gap:26px;text-align:center}
     .ob-hero-copy .ob-actions{justify-content:center}
     .ob-hero-copy .ob-meta{justify-content:center}
@@ -1682,7 +1797,6 @@
     .ob-ai-stage{order:2;padding-top:6px}
     .ob-pet-slot{width:132px;height:142px}
     .ob-chapter-grid{grid-template-columns:repeat(4,1fr)}
-    .ob-merge{grid-template-columns:1fr 56px 1fr}
   }
   @media (max-width:760px){
     .ob-h{font-size:24px}
@@ -1691,16 +1805,22 @@
     .ob-top{padding:11px 16px;gap:12px}
     .ob-demo-tag{display:none}
     .ob-keys{display:none}
-    .ob-row{grid-template-columns:10px minmax(64px,1fr) 74px 46px;gap:8px}
-    .ob-row .path{display:none}
+    .ob-row{grid-template-columns:7px minmax(0,1fr) auto}
     .ob-console-body{grid-template-columns:1fr}
     .ob-recent{border-left:0;border-top:1px solid rgba(255,255,255,.07)}
     .ob-chapter-grid{grid-template-columns:repeat(2,1fr)}
-    .ob-merge{grid-template-columns:1fr;gap:10px}
-    .ob-beam{height:26px}
-    .ob-merge{grid-template-columns:1fr 1fr}
-    .ob-old{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
-    .ob-old-card{white-space:normal;transform:none}
+    /* 窄屏放不下三列阶梯：窗口改成两列平铺，连线没有意义了直接拿掉 */
+    .ob-merge{grid-template-columns:1fr;row-gap:14px}
+    .ob-wires{display:none}
+    .ob-win{width:100%;height:auto;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .ob-win-card{position:static;width:auto;height:auto;transform:none}
+    .ob-win-card:hover{transform:none}
+    .ob-groups{grid-template-columns:1fr}
+    .ob-verdict{grid-template-columns:1fr;gap:9px}
+    .ob-vd-num{border-right:0;border-bottom:1px solid var(--ob-hair);
+      padding:0 0 8px;justify-content:flex-start}
+    .ob-report-foot{padding-left:0;border-left:0;padding-top:8px;
+      border-top:1px solid var(--ob-hair)}
     .ob-confirm{left:12px;right:12px;bottom:12px;width:auto}
     .ob-perms button:nth-child(n){margin-right:0}
   }
@@ -1736,22 +1856,6 @@
   .ob-merge-foot s{text-decoration-color:color-mix(in srgb,var(--err) 38%,transparent)}
   .ob-merge-foot em{font-style:normal;color:var(--brand)}
   .ob-merge-foot em::before{content:'\2192';margin-right:7px;color:var(--muted);opacity:.7}
-
-  /* 04 检测：终端跑动的进度 + 报告结论行 */
-  .ob-term-bar em{margin-left:auto;font-style:normal;
-    font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.06em;
-    color:rgba(199,206,218,.46)}
-  .ob-term-prog{height:2px;background:rgba(255,255,255,.07);overflow:hidden}
-  .ob-term-prog i{display:block;height:100%;width:0;
-    background:linear-gradient(90deg,var(--brand2),var(--ob-accent));
-    transition:width 1.05s cubic-bezier(.3,.9,.3,1)}
-  .ob-report-foot{display:flex;align-items:baseline;gap:8px;padding:9px 16px;
-    border-top:1px solid var(--ob-hair);background:var(--ob-glass-2);
-    font-size:11.5px;line-height:1.6;color:var(--muted);
-    opacity:0;transform:translateY(3px);transition:opacity .35s,transform .35s}
-  .ob-report-foot.on{opacity:1;transform:none}
-  .ob-report-foot b{flex:none;font-weight:500;font-size:9.5px;letter-spacing:.12em;
-    text-transform:uppercase;color:var(--brand)}
 
   /* 05 日志侧栏：分区计数 + 轮转，让 186px 不空着 */
   .ob-stats{display:flex;flex-direction:column;gap:4px;margin-top:auto;padding-top:12px;

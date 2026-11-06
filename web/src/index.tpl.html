@@ -1475,31 +1475,58 @@
 
       <!-- 02 为什么存在：散落 → 汇聚 -->
       <div class="swiper-slide ob-slide" data-idx="1">
-        <div class="ob-scene ob-split">
+        <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
             <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
-            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——<br />出错时你得挨个翻，还不知道哪个才是最新的。</p>
+            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。</p>
             <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
             <div class="ob-actions">
               <button class="ob-ghost" id="ob-merge-replay">重播汇聚</button>
-              <span class="ob-hint">悬停旧卡片，看它被谁接管</span>
+              <span class="ob-hint">悬停任一窗口，看它被哪个节点接管</span>
             </div>
           </div>
           <div class="ob-merge" id="ob-merge">
-            <div class="ob-old" id="ob-old-list">
-              <span class="ob-old-card" data-tip="被「环境安装」接管">终端<em>记 5 条启动命令</em></span>
-              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端<em>另开一个 GUI</em></span>
-              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具<em>手动连链端主机</em></span>
-              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签<em>5 个页面来回切</em></span>
-              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口<em>只能靠 scrollback</em></span>
+            <div class="ob-win" id="ob-old-list">
+              <div class="ob-win-card dark" style="--i:0;--r:-1.2deg" data-own="0">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>终端</span><em>2 分钟前</em></div>
+                <div class="ob-win-body"><code class="pr">$ go run ./server</code><code class="bad">panic: dial tcp :3306</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:1;--r:.9deg" data-own="1">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>数据库客户端</span><em>未刷新</em></div>
+                <div class="ob-win-body"><code class="pr">SELECT * FROM batch</code><code class="bad">ERROR 2003 (HY000)</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:2;--r:-.7deg" data-own="2">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>SSH 工具</span><em>断线</em></div>
+                <div class="ob-win-body"><code class="pr">ssh root@10.0.0.21</code><code class="bad">Connection timed out</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:3;--r:1.1deg" data-own="3">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>浏览器标签</span><em>3 个标签</em></div>
+                <div class="ob-win-body"><code>:5173　:8888　:5002</code><code class="bad">看不出哪个是新的</code></div>
+              </div>
+              <div class="ob-win-card" style="--i:4;--r:-.9deg" data-own="4">
+                <div class="ob-win-bar"><i></i><i></i><i></i><span>日志窗口</span><em>滚屏中</em></div>
+                <div class="ob-win-body"><code class="bad">[WARN] 区块高度为 0</code><code class="bad">[ERROR] read timeout</code></div>
+              </div>
             </div>
-            <div class="ob-beam" id="ob-beam"><i></i><b>收拢</b></div>
-            <div class="ob-new-card">
-              <span class="ob-new-badge">ONE</span>
-              <b>EnvKit</b>
-              <small>检测 · 配置 · 链端 · 启动</small>
-              <i class="ob-sheen"></i>
+            <div class="ob-wires" aria-hidden="true">
+              <svg viewBox="0 0 140 314" preserveAspectRatio="none">
+                <path data-wire="0" d="M0 29C40 29 94 38 148 38" />
+                <path data-wire="1" d="M0 93C40 93 94 103 148 103" />
+                <path data-wire="2" d="M0 157C40 157 94 168 148 168" />
+                <path data-wire="3" d="M0 221C40 221 94 233 148 233" />
+                <path data-wire="4" d="M0 285C40 285 94 298 148 298" />
+              </svg>
+            </div>
+            <div class="ob-line" id="ob-state">
+              <div class="ob-line-tag"><i></i>ONE STATE</div>
+              <div class="ob-line-list">
+                <div class="ob-line-node" data-node="0"><i></i><b>运行状态</b><em>后端 :8888 · 前端 :5173</em></div>
+                <div class="ob-line-node" data-node="1"><i></i><b>数据库</b><em>localhost:3306 · farm</em></div>
+                <div class="ob-line-node" data-node="2"><i></i><b>链端</b><em>2.11.0 · 区块高度 182</em></div>
+                <div class="ob-line-node" data-node="3"><i></i><b>页面入口</b><em>127.0.0.1:5173 · 可打开</em></div>
+                <div class="ob-line-node" data-node="4"><i></i><b>日志</b><em>5 分区 · 最近错误 0</em></div>
+              </div>
             </div>
             <div class="ob-merge-foot" id="ob-merge-foot">
               <s>5 个窗口 · 3 套工具链</s><em>收拢成 1 条状态线</em>
@@ -1547,7 +1574,7 @@
 
       <!-- 04 检测：终端 + 报告双栏 -->
       <div class="swiper-slide ob-slide" data-idx="3">
-        <div class="ob-scene ob-split ob-split-wide">
+        <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>状态看得见</div>
             <h2 class="ob-h">检测给结论，<br />不给猜测</h2>
@@ -1556,16 +1583,20 @@
             <p class="ob-hint">纯静态数据，不会真的检测你的电脑</p>
           </div>
           <div class="ob-detect">
-            <div class="ob-term">
+            <div class="ob-scan">
               <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span><em id="ob-term-pct">就绪</em></div>
               <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
-            <div class="ob-report">
-              <div class="ob-report-head"><span>环境检测报告</span><b id="ob-detect-badge"></b></div>
-              <div class="ob-detect-rows" id="ob-detect-rows"></div>
-              <div class="ob-report-foot" id="ob-report-foot"><b>结论</b><span></span></div>
+            <div class="ob-verdict" id="ob-verdict">
+              <div class="ob-vd-num"><b id="ob-vd-score">–</b><s>/ 6</s></div>
+              <div class="ob-vd-body">
+                <div class="ob-segs" id="ob-segs"></div>
+                <p class="ob-vd-msg" id="ob-vd-msg">还没跑检测</p>
+              </div>
+              <div class="ob-report-foot" id="ob-report-foot"><b>下一步</b><span>点上面的按钮，结论直接写在这里</span></div>
             </div>
+            <div class="ob-groups" id="ob-detect-rows"></div>
           </div>
         </div>
       </div>

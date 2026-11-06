@@ -76,14 +76,17 @@
      pre:'配置与链端都已就绪', cost:'约 15 秒'}
   ];
 
+  /* 检测项按"属于哪一类"分组，而不是平铺成一张表。
+     g 就是组名，渲染时按 GROUPS 的顺序建三张卡。 */
   var DETECT = [
-    {n:'Go',         v:'1.27.3',    p:'C:\\EnvKit\\tools\\go',        k:'ok',   s:'正常'},
-    {n:'Node.js',    v:'22.22.2',   p:'C:\\Program Files\\nodejs',    k:'ok',   s:'正常'},
-    {n:'MySQL 8',    v:'8.0.36',    p:'localhost:3306',               k:'ok',   s:'正常'},
-    {n:'GOPROXY',    v:'goproxy.cn',p:'环境变量已生效',                k:'ok',   s:'正常'},
-    {n:'FISCO 节点', v:':20200',    p:'127.0.0.1 · 待连通',           k:'warn', s:'待校验'},
-    {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常'}
+    {n:'Go',         v:'1.27.3',    p:'C:\\EnvKit\\tools\\go',        k:'ok',   s:'正常', g:'运行时'},
+    {n:'Node.js',    v:'22.22.2',   p:'C:\\Program Files\\nodejs',    k:'ok',   s:'正常', g:'运行时'},
+    {n:'MySQL 8',    v:'8.0.36',    p:'localhost:3306',               k:'ok',   s:'正常', g:'数据与磁盘'},
+    {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常', g:'数据与磁盘'},
+    {n:'GOPROXY',    v:'goproxy.cn',p:'环境变量已生效',                k:'ok',   s:'正常', g:'网络与链端'},
+    {n:'FISCO 节点', v:':20200',    p:'127.0.0.1 · 未响应',           k:'warn', s:'待校验', g:'网络与链端'}
   ];
+  var GROUPS = ['运行时', '数据与磁盘', '网络与链端'];
 
   /* 每个分区给到 6–7 行：只放 5 行时控制台下半截是空的，像没加载完 */
   var SCOPES = {
@@ -384,30 +387,67 @@
     later(rotateSlab, 2600);
   }
 
-  /* 04 检测：终端先跑命令，报告再逐行落定 */
+  /* 04 检测：先按组建设置，再逐条点亮。
+     结论条是整屏的锚点，所以状态全部挂在它身上（数字 / 六段条 / 判断 / 下一步）。 */
   function renderDetect(blank){
     var box = q('#ob-detect-rows');
     if(!box) return;
     box.innerHTML = '';
-    DETECT.forEach(function(r){
-      var d = document.createElement('div');
-      d.className = 'ob-row' + (blank ? '' : ' lit ' + r.k);
-      d.innerHTML = '<i class="dot"></i><span class="nm">' + t(r.n) + '</span>' +
-                    '<span class="vl">' + r.v + '</span>' +
-                    '<span class="path">' + r.p + '</span>' +
-                    '<span class="st">' + t(r.s) + '</span>';
-      box.appendChild(d);
+    GROUPS.forEach(function(g){
+      var rows = DETECT.filter(function(r){ return r.g === g; });
+      if(!rows.length) return;
+      var card = document.createElement('div');
+      card.className = 'ob-grp';
+      var head = document.createElement('div');
+      head.className = 'ob-grp-h';
+      head.innerHTML = '<b>' + t(g) + '</b><span>' + rows.length + '</span>';
+      card.appendChild(head);
+      rows.forEach(function(r){
+        var d = document.createElement('div');
+        d.className = 'ob-row' + (blank ? '' : ' lit ' + r.k);
+        d.innerHTML = '<i class="dot"></i><span class="nm">' + t(r.n) + '</span>' +
+                      '<span class="vl">' + r.v + '</span>' +
+                      '<span class="st">' + t(r.s) + '</span>' +
+                      '<span class="path">' + r.p + '</span>';
+        card.appendChild(d);
+      });
+      box.appendChild(card);
     });
-    var badge = q('#ob-detect-badge');
-    if(badge){ badge.classList.remove('on'); badge.textContent = ''; }
+
+    /* 六段条先摆成全灰的短刻度：一进来就能看出"要检 6 项"，而不是空着 */
+    var segs = q('#ob-segs');
+    if(segs){
+      segs.innerHTML = '';
+      DETECT.forEach(function(){ segs.appendChild(document.createElement('i')); });
+    }
     var term = q('#ob-detect-cmd');
     if(term) term.innerHTML = '';
     var foot = q('#ob-report-foot');
     if(foot) foot.classList.remove('on');
+    var vd = q('#ob-verdict');
+    if(vd) vd.classList.remove('hot');
+    var score = q('#ob-vd-score');
+    if(score) score.textContent = '\u2013';
+    var msg = q('#ob-vd-msg');
+    if(msg) msg.textContent = t('还没跑检测');
     var prog = q('#ob-term-prog i');
     if(prog) prog.style.width = '0%';
     var pct = q('#ob-term-pct');
     if(pct) pct.textContent = t('就绪');
+  }
+
+  /* 数字从 0 滚到 5：比直接贴一个 5 更像"刚算出来的" */
+  function countUp(el, to, ms){
+    if(!el) return;
+    if(REDUCED){ el.textContent = String(to); return; }
+    var start = null;
+    function tick(now){
+      if(start === null) start = now;
+      var p = Math.min(1, (now - start) / ms);
+      el.textContent = String(Math.round(to * (1 - Math.pow(1 - p, 3))));
+      if(p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
   }
 
   function runDetect(){
@@ -435,20 +475,29 @@
     var pct = q('#ob-term-pct');
     if(pct) pct.textContent = t('扫描中…');
     if(prog){ prog.style.width = '0%'; void prog.offsetWidth; prog.style.width = '100%'; }
+
+    /* 行和段块同拍点亮：第 N 段就是第 N 行，两边对得上才说得通 */
     qa('#ob-detect-rows .ob-row').forEach(function(row, i){
-      later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 170);
+      later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 150);
     });
-    var badge = q('#ob-detect-badge');
-    var foot = q('#ob-report-foot');
+    qa('#ob-segs i').forEach(function(s, i){
+      later(function(){ s.className = DETECT[i].k; }, 420 + i * 150);
+    });
+
     later(function(){
-      if(badge){ badge.textContent = t('5 项正常 · 1 项待校验'); badge.classList.add('on'); }
       if(pct) pct.textContent = '1.8s · 6 项';
+      var vd = q('#ob-verdict');
+      if(vd) vd.classList.add('hot');
+      countUp(q('#ob-vd-score'), 5, 300);
+      var msg = q('#ob-vd-msg');
+      if(msg) msg.textContent = t('1 项待校验：链端 FISCO 节点 127.0.0.1:20200 未响应');
+      var foot = q('#ob-report-foot');
       if(foot){
         var sp = foot.querySelector('span');
-        if(sp) sp.textContent = t('5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。');
+        if(sp) sp.textContent = t('先跑配置，再复核链端');
         foot.classList.add('on');
       }
-    }, 420 + DETECT.length * 170);
+    }, 420 + DETECT.length * 150);
   }
 
   /* 05 日志：分区切换 + 行号由 CSS counter 生成（不影响 textContent） */
@@ -623,22 +672,33 @@
     setProgress();
   }
 
-  /* 02 汇聚 */
+  /* 02 汇聚：五条线依次"被拉直"接上状态线，再出现 5 → 1 的计数 */
   function mergeFlow(){
     var m = q('#ob-merge');
-    var beam = q('#ob-beam');
-    var card = q('.ob-new-card');
     var foot = q('#ob-merge-foot');
-    if(m) m.classList.remove('flow');
-    if(beam){ beam.classList.remove('flow'); void beam.offsetWidth; beam.classList.add('flow'); }
+    if(!m) return;
+    m.classList.remove('flow');
     if(foot) foot.classList.remove('on');
-    later(function(){ if(m) m.classList.add('flow'); }, 120);
-    if(card){
-      card.classList.remove('lit');
-      later(function(){ card.classList.add('lit'); }, 620);
-    }
-    later(function(){ if(foot) foot.classList.add('on'); }, 900);
+    void m.offsetWidth;                    /* 强制回流，否则 class 重加不会重播动画 */
+    later(function(){ m.classList.add('flow'); }, 60);
+    later(function(){ if(foot) foot.classList.add('on'); }, 760);
   }
+
+  /* 悬停某个旧窗口：它自己被抬起、对应的状态节点亮、那条连线变粗。
+     "被谁接管"用联动回答，比一个 tooltip 直接得多。 */
+  function ownFocus(k){
+    qa('#ob-state .ob-line-node').forEach(function(n){
+      n.classList.toggle('own', k !== null && n.getAttribute('data-node') === k);
+    });
+    qa('.ob-wires path').forEach(function(p){
+      p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);
+    });
+  }
+  qa('.ob-win-card').forEach(function(c){
+    var k = c.getAttribute('data-own');
+    c.addEventListener('mouseenter', function(){ ownFocus(k); });
+    c.addEventListener('mouseleave', function(){ ownFocus(null); });
+  });
 
   /* ---------- Swiper ---------- */
   function buildSwiper(){

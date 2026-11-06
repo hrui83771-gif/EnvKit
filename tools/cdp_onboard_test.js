@@ -132,6 +132,19 @@ function seed() {
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', clickCount: 1 });
       return true;
     };
+    // 纯移动鼠标（不点击）：用来验证 hover 联动真的接上了
+    const hoverSel = async (sel, label) => {
+      const box = await evalJS(`(function(){
+        var e=document.querySelector(${JSON.stringify(sel)});
+        if(!e) return null;
+        var r=e.getBoundingClientRect();
+        if(r.width<1||r.height<1) return {err:'zero-box'};
+        return {x:r.left+r.width/2, y:r.top+r.height/2};
+      })()`);
+      if (!box || box.err || !box.x) { check('hover-' + label, false, JSON.stringify(box)); return false; }
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y });
+      return true;
+    };
     const arrowRight = async () => {
       await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 });
@@ -309,6 +322,35 @@ function seed() {
     let MF = {}; try { MF = JSON.parse(mf || '{}'); } catch (e) {}
     check('detail-merge-foot', MF.on === true && MF.flow === true && /1 条状态线/.test(MF.txt || ''), mf);
 
+    // 02 屏结构：5 个窗口 / 5 条连线 / 5 个节点，且只有一条是深色终端窗口
+    const mw = await evalJS(`JSON.stringify({
+      win: document.querySelectorAll('#ob-old-list .ob-win-card').length,
+      dark: document.querySelectorAll('#ob-old-list .ob-win-card.dark').length,
+      wire: document.querySelectorAll('.ob-wires path').length,
+      node: document.querySelectorAll('#ob-state .ob-line-node').length,
+      lead: document.querySelectorAll('#ob-old-list .ob-win-body code').length
+    })`);
+    let MW = {}; try { MW = JSON.parse(mw || '{}'); } catch (e) {}
+    check('detail-merge-shape', MW.win === 5 && MW.wire === 5 && MW.node === 5 &&
+      MW.dark === 1 && MW.lead === 10, mw);
+
+    // 悬停第 3 个窗口 → 第 3 个节点和第 3 条线一起亮。这条断言防的是
+    // "只写了个 tooltip、联动其实没接上"——联动是这一屏唯一的交互承诺
+    await hoverSel('#ob-old-list .ob-win-card[data-own="2"]', 'win3');
+    await sleep(200);
+    const hov = await evalJS(`JSON.stringify({
+      own: document.querySelectorAll('#ob-state .ob-line-node.own').length,
+      ownIdx: (document.querySelector('#ob-state .ob-line-node.own')||{getAttribute:function(){return null}}).getAttribute('data-node'),
+      on: document.querySelectorAll('.ob-wires path.on').length,
+      onIdx: (document.querySelector('.ob-wires path.on')||{getAttribute:function(){return null}}).getAttribute('data-wire')
+    })`);
+    let HV = {}; try { HV = JSON.parse(hov || '{}'); } catch (e) {}
+    check('detail-merge-hover', HV.own === 1 && HV.ownIdx === '2' && HV.on === 1 && HV.onIdx === '2', hov);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4 });
+    await sleep(150);
+    const hov0 = await evalJS(`document.querySelectorAll('#ob-state .ob-line-node.own').length`);
+    check('detail-merge-hover-reset', hov0 === 0, 'own=' + hov0);
+
     // 屏 3（四步走）：点步骤看说明卡切换（自动前进已在此前 2.3s 内走了一格）
     await arrowRight();
     const stepBefore = await evalJS(`(document.getElementById('ob-step-desc')||{}).innerText||''`);
@@ -333,10 +375,19 @@ function seed() {
     const det = await evalJS(`JSON.stringify({
       lit: document.querySelectorAll('#ob-detect-rows .ob-row.lit').length,
       warn: document.querySelectorAll('#ob-detect-rows .ob-row.warn').length,
-      badge: (document.getElementById('ob-detect-badge')||{}).textContent||''
+      grp: document.querySelectorAll('#ob-detect-rows .ob-grp').length,
+      score: (document.getElementById('ob-vd-score')||{}).textContent||'',
+      msg: (document.getElementById('ob-vd-msg')||{}).textContent||'',
+      segOk: document.querySelectorAll('#ob-segs i.ok').length,
+      segWarn: document.querySelectorAll('#ob-segs i.warn').length
     })`);
     let D = {}; try { D = JSON.parse(det || '{}'); } catch (e) {}
-    check('demo-detect-scan', D.lit === 6 && D.warn === 1 && /5 项正常/.test(D.badge || ''), det);
+    check('demo-detect-scan', D.lit === 6 && D.warn === 1, det);
+    // 结论先行的三段结构：分组卡 / 记分 5 / 六段 5 绿 1 黄 / 判断句
+    check('detail-detect-groups', D.grp === 3, 'groups=' + D.grp);
+    check('detail-detect-score', D.score === '5', 'score=' + D.score);
+    check('detail-detect-segs', D.segOk === 5 && D.segWarn === 1, 'segs=' + D.segOk + 'ok/' + D.segWarn + 'warn');
+    check('detail-detect-msg', /待校验/.test(D.msg || '') && /链端/.test(D.msg || ''), 'msg=' + D.msg);
     const termLines = await evalJS(`document.querySelectorAll('#ob-detect-cmd div').length`);
     check('demo-detect-console', termLines === 4, 'console lines=' + termLines);
     // 细节层：终端进度条跑满 + 报告结论行出现
@@ -347,7 +398,7 @@ function seed() {
       progW: (document.getElementById('ob-term-prog').firstElementChild.getAttribute('style')||'')
     })`);
     let DF = {}; try { DF = JSON.parse(dfoot || '{}'); } catch (e) {}
-    check('detail-detect-conclusion', DF.on === true && /程序配置/.test(DF.txt || '') &&
+    check('detail-detect-conclusion', DF.on === true && /配置/.test(DF.txt || '') && /链端/.test(DF.txt || '') &&
       /1\.8s/.test(DF.pct || '') && /100%/.test(DF.progW || ''), dfoot);
 
     // 屏 5（日志分区）：切 scope + 插一条错误看联动

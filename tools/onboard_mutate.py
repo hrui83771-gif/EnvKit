@@ -34,6 +34,21 @@ MUTATIONS = [
      "if(id === 'ob-detect-run'){",
      "if(id === 'ob-detect-run'){ fetch('/api/check',{method:'POST'});",
      'demo-zero-write-api'),
+    # 02 屏的 hover 联动是这一屏唯一的交互承诺，"只亮节点不亮线"必须被抓到
+    ('M5 悬停只亮一半',      'web/src/js/90-onboard.js',
+     "      p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);",
+     "      p.classList.toggle('on', false);",
+     'detail-merge-hover'),
+    # 04 屏的分组是"结论先行"的骨架，少一组就该红
+    ('M6 检测少一组',        'web/src/js/90-onboard.js',
+     "var GROUPS = ['运行时', '数据与磁盘', '网络与链端'];",
+     "var GROUPS = ['运行时', '数据与磁盘'];",
+     'detail-detect-groups'),
+    # 记分牌是这个屏的视觉锚点，数字算错不能被放过
+    ('M7 记分算错',          'web/src/js/90-onboard.js',
+     "countUp(q('#ob-vd-score'), 5, 300);",
+     "countUp(q('#ob-vd-score'), 4, 300);",
+     'detail-detect-score'),
 ]
 
 TARGETS = sorted(set(m[1] for m in MUTATIONS))
