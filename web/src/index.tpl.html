@@ -1412,54 +1412,75 @@
      所有演示数据写死在 90-onboard.js，不 fetch 任何 /api/*、不写配置、
      不触发真实确认卡/权限逻辑。 -->
 <div id="onboard" class="ob" role="dialog" aria-modal="true" aria-labelledby="ob-title">
+  <div class="ob-atmos" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i><b class="grid"></b></div>
+
   <div id="ob-brand" aria-hidden="true">
     <div class="ob-brand-glow"></div>
     <div class="ob-brand-inner">
       <div class="ob-brand-ava"><img id="ob-brand-avatar" alt="" /><i class="ob-brand-ring"></i></div>
       <div class="ob-brand-word">EnvKit</div>
+      <div class="ob-brand-rule"></div>
       <div class="ob-brand-tag">统一开发环境助手</div>
-      <div class="ob-brand-ver">v__APP_VERSION__</div>
     </div>
     <div class="ob-brand-skip">点一下或按任意键跳过片头</div>
   </div>
 
-  <div class="ob-top">
-    <div class="ob-guide" title="导览进度">
-      <img id="ob-guide-avatar" alt="" />
-      <svg class="ob-guide-ring" viewBox="0 0 48 48" aria-hidden="true">
-        <circle class="ob-ring-bg" cx="24" cy="24" r="21"></circle>
-        <circle class="ob-ring-fg" id="ob-guide-arc" cx="24" cy="24" r="21"></circle>
-      </svg>
+  <header class="ob-top">
+    <div class="ob-crumb">
+      <span class="ob-crumb-no" id="ob-sec-no">01</span>
+      <i></i>
+      <span class="ob-crumb-name" id="ob-sec-name">开场</span>
     </div>
-    <span class="ob-demo-tag">演示 · 不会改动你的配置</span>
+    <div class="ob-progress" aria-hidden="true"><i id="ob-progress-bar"></i></div>
+    <span class="ob-demo-tag"><i></i>演示模式</span>
     <button class="ob-skip" id="ob-skip">跳过</button>
-  </div>
+  </header>
 
   <div class="swiper ob-swiper" id="ob-swiper">
     <div class="swiper-wrapper">
 
+      <!-- 01 开场：字标 + 叠层剖面，不用头像 -->
       <div class="swiper-slide ob-slide" data-idx="0">
-        <div class="ob-in">
-          <div class="ob-kicker">01 / 08 · 开场</div>
-          <h2 class="ob-h" id="ob-title">一个文件就够了</h2>
-          <p class="ob-lead">检测、配置、链端、启动、AI 助手，都装在这一个 exe 里。<br />不用装运行时，不用配环境，双击就能用。</p>
-          <div class="ob-stage ob-stage-hero">
-            <div class="ob-hero-ava"><img id="ob-hero-avatar" alt="" /><i class="ob-hero-halo"></i></div>
-            <div class="ob-hero-meta"><b>EnvKit</b><span>单文件 Go · 零依赖 · 内置 AI 运维助手</span><em>v__APP_VERSION__</em></div>
+        <div class="ob-scene ob-hero">
+          <div class="ob-hero-copy">
+            <div class="ob-kicker"><i></i>单文件环境助手</div>
+            <h1 class="ob-display" id="ob-title">EnvKit</h1>
+            <p class="ob-tagline">五件事，一个入口</p>
+            <p class="ob-lead">装 Go、配 MySQL、校验链端、拉起服务、排查故障——<br />不用配环境变量，也不用记五条启动命令。</p>
+            <div class="ob-actions">
+              <button class="ob-primary" id="ob-hero-next">开始导览<span class="ob-arrow">&#8594;</span></button>
+              <button class="ob-ghost" id="ob-hero-skip">跳过</button>
+            </div>
+            <div class="ob-meta">
+              <span>v__APP_VERSION__</span><i></i><span>单文件 · 零依赖</span><i></i><span>Windows</span>
+            </div>
           </div>
-          <div class="ob-actions">
-            <button class="ob-primary" id="ob-hero-next">看看它能做什么</button>
-            <button class="ob-ghost" id="ob-hero-skip">跳过</button>
+          <div class="ob-hero-art">
+            <div class="ob-stack" id="ob-stack">
+              <div class="ob-slab s1"><em>01</em><b>环境安装</b><span>Go · Node.js · MySQL</span></div>
+              <div class="ob-slab s2"><em>02</em><b>程序配置</b><span>连接 · 建库 · 导入导出</span></div>
+              <div class="ob-slab s3"><em>03</em><b>链端校验</b><span>FISCO 节点 · WeBASE</span></div>
+              <div class="ob-slab s4 main"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
+            </div>
+            <div class="ob-art-note">同一个入口，同一份状态</div>
           </div>
         </div>
       </div>
 
+      <!-- 02 为什么存在：散落 → 汇聚 -->
       <div class="swiper-slide ob-slide" data-idx="1">
-        <div class="ob-in">
-          <div class="ob-kicker">02 / 08 · 为什么存在</div>
-          <h2 class="ob-h">把散落的工具收成一个</h2>
-          <p class="ob-lead">以前开五个窗口来回切，出事了还不知道该看哪一个。<br />现在入口只有一个，状态也只有一个。</p>
-          <div class="ob-stage ob-stage-merge" id="ob-merge">
+        <div class="ob-scene ob-split">
+          <div class="ob-copy">
+            <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
+            <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
+            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——<br />出错时你得挨个翻，还不知道哪个才是最新的。</p>
+            <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
+            <div class="ob-actions">
+              <button class="ob-ghost" id="ob-merge-replay">重播汇聚</button>
+              <span class="ob-hint">悬停旧卡片，看它被谁接管</span>
+            </div>
+          </div>
+          <div class="ob-merge" id="ob-merge">
             <div class="ob-old" id="ob-old-list">
               <span class="ob-old-card" data-tip="被「环境安装」接管">终端</span>
               <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端</span>
@@ -1467,132 +1488,190 @@
               <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签</span>
               <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口</span>
             </div>
-            <div class="ob-beam"><i></i><span>收拢</span></div>
-            <div class="ob-new-card"><b>EnvKit</b><small>检测 · 配置 · 链端 · 启动</small></div>
+            <div class="ob-beam" id="ob-beam"><i></i><b>收拢</b></div>
+            <div class="ob-new-card">
+              <span class="ob-new-badge">ONE</span>
+              <b>EnvKit</b>
+              <small>检测 · 配置 · 链端 · 启动</small>
+              <i class="ob-sheen"></i>
+            </div>
           </div>
-          <div class="ob-actions"><button class="ob-ghost" id="ob-merge-replay">重播汇聚</button><span class="ob-hint">鼠标悬停旧卡片，看看被谁接管了</span></div>
         </div>
       </div>
 
+      <!-- 03 主流程：横向时间轴 + 详情 -->
       <div class="swiper-slide ob-slide" data-idx="2">
-        <div class="ob-in">
-          <div class="ob-kicker">03 / 08 · 主流程</div>
-          <h2 class="ob-h">四步走，是一条明确的线</h2>
-          <p class="ob-lead">顶栏那条导航不是装饰：每一步都有输入、有结果、有下一步。</p>
-          <div class="ob-stage ob-stage-track">
-            <div class="ob-track" id="ob-track">
-              <button class="ob-step on" data-step="0"><i>1</i><span>环境安装</span></button>
-              <button class="ob-step" data-step="1"><i>2</i><span>程序配置</span></button>
-              <button class="ob-step" data-step="2"><i>3</i><span>链端校验</span></button>
-              <button class="ob-step" data-step="3"><i>4</i><span>程序启动</span></button>
-            </div>
-            <div class="ob-step-desc" id="ob-step-desc"><b>环境安装</b><p>检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么。</p></div>
+        <div class="ob-scene ob-flow">
+          <div class="ob-head">
+            <div class="ob-kicker"><i></i>主流程</div>
+            <h2 class="ob-h">四步，每一步都有输入和产出</h2>
+            <p class="ob-lead">顶栏那条导航不是装饰：走到哪一步、上一步给了什么，都写在界面上。</p>
           </div>
+          <div class="ob-timeline" id="ob-track">
+            <i class="ob-tl-rail"></i>
+            <i class="ob-tl-fill" id="ob-tl-fill"></i>
+            <button class="ob-step on" data-step="0">
+              <span class="ob-step-dot"></span>
+              <span class="ob-step-no">01</span>
+              <span class="ob-step-name">环境安装</span>
+            </button>
+            <button class="ob-step" data-step="1">
+              <span class="ob-step-dot"></span>
+              <span class="ob-step-no">02</span>
+              <span class="ob-step-name">程序配置</span>
+            </button>
+            <button class="ob-step" data-step="2">
+              <span class="ob-step-dot"></span>
+              <span class="ob-step-no">03</span>
+              <span class="ob-step-name">链端校验</span>
+            </button>
+            <button class="ob-step" data-step="3">
+              <span class="ob-step-dot"></span>
+              <span class="ob-step-no">04</span>
+              <span class="ob-step-name">程序启动</span>
+            </button>
+          </div>
+          <div class="ob-detail" id="ob-step-desc"></div>
           <div class="ob-actions"><button class="ob-ghost" id="ob-track-run">依次打勾</button><span class="ob-hint">点任一段可切换说明</span></div>
         </div>
       </div>
 
+      <!-- 04 检测：终端 + 报告双栏 -->
       <div class="swiper-slide ob-slide" data-idx="3">
-        <div class="ob-in">
-          <div class="ob-kicker">04 / 08 · 状态看得见</div>
-          <h2 class="ob-h">检测不是黑盒</h2>
-          <p class="ob-lead">每一项都给出版本、位置和结论；异常会直接告诉你该怎么办。</p>
-          <div class="ob-stage ob-stage-detect">
-            <div class="ob-detect-head"><span>环境检测报告（演示数据）</span><b id="ob-detect-badge"></b></div>
-            <div class="ob-detect-rows" id="ob-detect-rows"></div>
+        <div class="ob-scene ob-split ob-split-wide">
+          <div class="ob-copy">
+            <div class="ob-kicker"><i></i>状态看得见</div>
+            <h2 class="ob-h">检测给结论，<br />不给猜测</h2>
+            <p class="ob-lead">版本、安装位置、可用性逐项核对；缺什么、去哪儿补，直接写在结论里。</p>
+            <div class="ob-actions"><button class="ob-primary ob-sm" id="ob-detect-run">跑一次演示检测</button></div>
+            <p class="ob-hint">纯静态数据，不会真的检测你的电脑</p>
           </div>
-          <div class="ob-actions"><button class="ob-ghost" id="ob-detect-run">跑一次演示检测</button><span class="ob-hint">纯静态数据，不会真的检测你的电脑</span></div>
+          <div class="ob-detect">
+            <div class="ob-term">
+              <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span></div>
+              <div class="ob-term-body" id="ob-detect-cmd"></div>
+            </div>
+            <div class="ob-report">
+              <div class="ob-report-head"><span>环境检测报告</span><b id="ob-detect-badge"></b></div>
+              <div class="ob-detect-rows" id="ob-detect-rows"></div>
+            </div>
+          </div>
         </div>
       </div>
 
+      <!-- 05 日志：全幅深色控制台 -->
       <div class="swiper-slide ob-slide" data-idx="4">
-        <div class="ob-in">
-          <div class="ob-kicker">05 / 08 · 日志分区</div>
-          <h2 class="ob-h">出问题，一眼定位</h2>
-          <p class="ob-lead">安装、配置、链端、启动、系统各走一条分区；最近错误单独收一栏。</p>
-          <div class="ob-stage ob-stage-log">
-            <div class="ob-scopes" id="ob-scopes">
-              <button class="on" data-scope="install">安装</button>
-              <button data-scope="config">配置</button>
-              <button data-scope="chain">链端</button>
-              <button data-scope="start">启动</button>
-              <button data-scope="sys">系统</button>
+        <div class="ob-scene ob-console-scene">
+          <div class="ob-head ob-head-tight">
+            <div class="ob-kicker"><i></i>日志分区</div>
+            <h2 class="ob-h">出问题，先看来源</h2>
+            <p class="ob-lead">安装、配置、链端、启动、系统各走一条分区；最近错误单独收一栏，不用在几千行里翻。</p>
+          </div>
+          <div class="ob-console">
+            <div class="ob-console-bar">
+              <div class="ob-lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+              <div class="ob-scopes" id="ob-scopes">
+                <button class="on" data-scope="install">安装</button>
+                <button data-scope="config">配置</button>
+                <button data-scope="chain">链端</button>
+                <button data-scope="start">启动</button>
+                <button data-scope="sys">系统</button>
+              </div>
+              <span class="ob-console-live"><i></i>LIVE</span>
             </div>
-            <div class="ob-log" id="ob-log-lines"></div>
-            <div class="ob-recent" id="ob-recent-err"><b>最近错误</b><span>暂无</span></div>
+            <div class="ob-console-body">
+              <div class="ob-log" id="ob-log-lines"></div>
+              <aside class="ob-recent" id="ob-recent-err"><b>最近错误</b><span>暂无</span></aside>
+            </div>
           </div>
           <div class="ob-actions"><button class="ob-ghost" id="ob-log-insert">插入一条异常</button><span class="ob-hint">切分区看看联动</span></div>
         </div>
       </div>
 
+      <!-- 06 AI：真实桌宠 + 对话打印 -->
       <div class="swiper-slide ob-slide" data-idx="5">
-        <div class="ob-in">
-          <div class="ob-kicker">06 / 08 · AI 助手与桌宠</div>
-          <h2 class="ob-h">说人话就能运维</h2>
-          <p class="ob-lead">问状态、读日志、解报告都可以直接说；真要动手时，会先问你一句。</p>
-          <div class="ob-stage ob-stage-ai">
-            <div class="ob-pet" id="ob-pet"><img id="ob-pet-avatar" alt="" /><i class="ob-pet-eye l"></i><i class="ob-pet-eye r"></i></div>
+        <div class="ob-scene ob-ai">
+          <div class="ob-ai-stage">
+            <div class="ob-pet-glow"></div>
+            <div class="ob-pet-slot" id="ob-pet-slot"></div>
+            <div class="ob-pet-shadow"></div>
+            <div class="ob-pet-state"><i></i><span>待机 · 已连接</span></div>
+            <div class="ob-pet-tag">桌宠也在主界面上</div>
+          </div>
+          <div class="ob-ai-chat">
+            <div class="ob-kicker"><i></i>AI 助手</div>
+            <h2 class="ob-h">说人话就能运维</h2>
+            <p class="ob-lead">问状态、读日志、解报告都可以直接说。真要动手，它会先停下来问你。</p>
             <div class="ob-chat">
-              <div class="ob-bubble" id="ob-bubble">今天想看点什么？</div>
+              <div class="ob-chat-head"><i></i><b>AI 助手</b><span>演示 · 不会真的执行</span></div>
+              <div class="ob-chat-log" id="ob-chat-log">
+                <div class="ob-bubble" id="ob-bubble">今天想看点什么？<em>读日志、看状态、重启服务——都会先问你。</em></div>
+              </div>
               <div class="ob-questions">
                 <button data-q="read">现在服务都起来了吗？</button>
                 <button data-q="write">帮我重启一下后端</button>
               </div>
-            </div>
-            <div class="ob-confirm" id="ob-demo-confirm" hidden>
-              <b>需要你确认</b><p>「重启后端」属于写操作，会先弹一张确认卡。</p>
-              <div><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
+              <div class="ob-chat-input"><span>问我任何环境问题…</span><b>发送</b></div>
+              <div class="ob-confirm" id="ob-demo-confirm" hidden>
+                <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
+                <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
+                <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
+              </div>
             </div>
           </div>
-          <div class="ob-actions"><span class="ob-hint">两个问句分别演示「只读回复」与「写操作确认」</span></div>
         </div>
       </div>
 
+      <!-- 07 安全：阶梯 + 说明 -->
       <div class="swiper-slide ob-slide" data-idx="6">
-        <div class="ob-in">
-          <div class="ob-kicker">07 / 08 · 安全边界</div>
-          <h2 class="ob-h">权限闸门是特性，不是限制</h2>
-          <p class="ob-lead">四档权限逐级放开；动作类默认关，破坏性操作一律先确认。</p>
-          <div class="ob-stage ob-stage-perm">
+        <div class="ob-scene ob-split">
+          <div class="ob-copy">
+            <div class="ob-kicker"><i></i>安全边界</div>
+            <h2 class="ob-h">权限闸门<br />是特性，不是限制</h2>
+            <p class="ob-lead">四档权限逐级放开：能看的改不了，能改的必须确认，破坏性操作走 428。</p>
+            <div class="ob-redline"><i></i><span>不执行任意命令 · 只有天气会出网，新增外连默认关</span></div>
+          </div>
+          <div class="ob-permwrap">
             <div class="ob-perms" id="ob-perms">
-              <button class="on" data-perm="0"><i>01</i><span>只读</span></button>
-              <button data-perm="1"><i>02</i><span>诊断</span></button>
-              <button data-perm="2"><i>03</i><span>受限写</span></button>
-              <button data-perm="3"><i>04</i><span>审批后动作</span></button>
+              <button class="on" data-perm="0"><span class="ob-perm-no">01</span><span class="ob-perm-nm">只读</span><span class="ob-perm-tag">免确认</span></button>
+              <button data-perm="1"><span class="ob-perm-no">02</span><span class="ob-perm-nm">诊断</span><span class="ob-perm-tag">免确认</span></button>
+              <button data-perm="2"><span class="ob-perm-no">03</span><span class="ob-perm-nm">受限写</span><span class="ob-perm-tag">一次确认</span></button>
+              <button data-perm="3"><span class="ob-perm-no">04</span><span class="ob-perm-nm">审批后动作</span><span class="ob-perm-tag hot">428 + 红框</span></button>
             </div>
             <div class="ob-perm-desc" id="ob-perm-desc"></div>
-            <div class="ob-perm-note">默认关闭 · 不执行任意命令 · 只有天气会出网，新增外连默认关</div>
           </div>
-          <div class="ob-actions"><span class="ob-hint">点任一档位看「能做什么 / 需要什么确认」</span></div>
         </div>
       </div>
 
+      <!-- 08 收尾：章节地图 -->
       <div class="swiper-slide ob-slide" data-idx="7">
-        <div class="ob-in">
-          <div class="ob-kicker">08 / 08 · 收尾</div>
-          <h2 class="ob-h">准备好了</h2>
-          <p class="ob-lead">从这里开始照着做一遍；以后想再看，「关于」里随时能打开。</p>
-          <div class="ob-stage ob-stage-end">
-            <div class="ob-end-ava"><img id="ob-end-avatar" alt="" /><i class="ob-end-halo"></i></div>
-            <div class="ob-chapter-grid" id="ob-chapter-grid"></div>
+        <div class="ob-scene ob-end">
+          <div class="ob-head">
+            <div class="ob-kicker"><i></i>准备好了</div>
+            <h2 class="ob-h">从安装页开始</h2>
+            <p class="ob-lead">照着做一遍最快。以后想再看完整八屏，「关于」里随时能打开。</p>
           </div>
+          <div class="ob-chapter-grid" id="ob-chapter-grid"></div>
           <div class="ob-actions ob-actions-end">
-            <button class="ob-primary" id="ob-cta-install">去看安装页</button>
+            <button class="ob-primary" id="ob-cta-install">去看安装页<span class="ob-arrow">&#8594;</span></button>
             <button class="ob-primary ob-soft" id="ob-cta-tour" hidden>跟着做一遍</button>
             <button class="ob-ghost" id="ob-cta-later">以后再说</button>
           </div>
-          <div class="ob-end-note">权限与外连边界在完整导览第 7 屏 · 引导里的演示不会改动任何配置</div>
+          <div class="ob-end-note">权限与外连边界在完整导览第 7 屏 · 所有演示都不会改动你的配置</div>
         </div>
       </div>
 
     </div>
   </div>
 
-  <div class="ob-foot">
-    <button class="ob-nav" id="ob-prev" aria-label="上一屏">&#8249;</button>
+  <footer class="ob-foot">
+    <div class="ob-keys"><kbd>&#8592;</kbd><kbd>&#8594;</kbd><span>翻页</span><kbd>Esc</kbd><span>跳过</span></div>
     <div class="swiper-pagination" id="ob-dots"></div>
-    <button class="ob-nav" id="ob-next" aria-label="下一屏">&#8250;</button>
-  </div>
+    <div class="ob-nav">
+      <button id="ob-prev" aria-label="上一屏">&#8592;</button>
+      <button id="ob-next" aria-label="下一屏">&#8594;</button>
+    </div>
+  </footer>
   <div class="ob-live" id="ob-live" aria-live="polite"></div>
 </div>
 

@@ -191,10 +191,14 @@ function seed() {
       brandPlaying: document.getElementById('ob-brand').classList.contains('play'),
       slides: Array.from(document.querySelectorAll('#ob-swiper .swiper-slide')).map(function(s){return s.getAttribute('data-idx');}),
       dots: document.querySelectorAll('#ob-dots > *').length,
-      live: (document.getElementById('ob-live')||{}).textContent||''
+      live: (document.getElementById('ob-live')||{}).textContent||'',
+      crumb: (document.getElementById('ob-sec-name')||{}).textContent||'',
+      barW: (document.getElementById('ob-progress-bar')||{}).style.width||''
     })`);
     let F = {}; try { F = JSON.parse(first || '{}'); } catch (e) {}
     check('first-autoshow', F.show === true, first);
+    check('layout-crumb', /开场/.test(F.crumb || ''), 'crumb=' + F.crumb);
+    check('layout-progress', /%$/.test(F.barW || '') && parseFloat(F.barW) > 0, 'bar=' + F.barW);
     check('first-5-slides', JSON.stringify(F.slides) === JSON.stringify(['0','1','2','5','7']), 'slides=' + JSON.stringify(F.slides));
     check('first-5-dots', F.dots === 5, 'dots=' + F.dots);
     check('brand-appeared', F.brandSeen === true, first);
@@ -296,6 +300,8 @@ function seed() {
     })`);
     let D = {}; try { D = JSON.parse(det || '{}'); } catch (e) {}
     check('demo-detect-scan', D.lit === 6 && D.warn === 1 && /5 项正常/.test(D.badge || ''), det);
+    const termLines = await evalJS(`document.querySelectorAll('#ob-detect-cmd div').length`);
+    check('demo-detect-console', termLines === 4, 'console lines=' + termLines);
 
     // 屏 5（日志分区）：切 scope + 插一条错误看联动
     await arrowRight();
@@ -313,8 +319,18 @@ function seed() {
     check('demo-scope-switch', /WeBASE-Front/.test(scopeTxt || ''), 'log=' + (scopeTxt || '').slice(0, 50));
     check('demo-log-error-link', E.hot === true && /端口 8888/.test(E.recent || '') && /演示异常/.test(E.last || ''), errState);
 
-    // 屏 6（AI 与桌宠）：写类问句弹演示确认卡，确认后收起
+    // 屏 6（AI 与桌宠）：真桌宠克隆 + 写类问句弹演示确认卡，确认后收起
     await arrowRight();
+    const pet = await evalJS(`JSON.stringify({
+      svg: !!document.querySelector('#ob-pet-slot svg'),
+      imgs: document.querySelectorAll('#ob-pet-slot .pet-view').length,
+      shown: (function(){ var v=document.querySelectorAll('#ob-pet-slot .pet-view');
+        if(!v.length) return false;
+        return getComputedStyle(v[v.length-1]).opacity === '1'; })()
+    })`);
+    let P = {}; try { P = JSON.parse(pet || '{}'); } catch (e) {}
+    check('demo-pet-cloned', P.svg === true && P.imgs === 3 && P.shown === true, pet);
+
     await clickSel('.ob-questions button[data-q="write"]', 'q-write');
     await sleep(250);
     const q = await evalJS(`JSON.stringify({
@@ -323,6 +339,10 @@ function seed() {
     })`);
     let Q = {}; try { Q = JSON.parse(q || '{}'); } catch (e) {}
     check('demo-confirm-card', Q.confirm === false && /确认卡/.test(Q.bubble || ''), q);
+    await sleep(1200);
+    const typed = await evalJS(`(document.getElementById('ob-bubble')||{}).textContent||''`);
+    check('demo-typing-complete', /确认卡在这里/.test(typed || '') && /权限闸门/.test(typed || ''),
+      'bubble=' + (typed || '').slice(0, 50));
     await clickSel('#ob-demo-ok', 'demo-ok');
     await sleep(250);
     const q2 = await evalJS(`JSON.stringify({
