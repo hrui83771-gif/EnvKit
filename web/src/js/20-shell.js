@@ -32,6 +32,27 @@ function toast(msg, cls){
   setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(), 350); }, 4200);
   while(box.children.length > 4) box.firstChild.remove();
 }
+
+/* 带动作按钮的 toast（目前只给「清空对话」的撤销用）。
+   两点必须显式写，不能靠继承：
+   1) #toasts 是 pointer-events:none（它盖在整页上，不能挡住下面的点击），
+      所以按钮自己要恢复 pointer-events:auto，否则"看得见点不到"；
+   2) 全局 button 宽度会被布局规则拉满，width:auto 必须逐项复位。
+   返回元素本身：调用方把撤销快照挂在它上面，连点两次清空时沿用第一次的快照
+   （否则第二次的快照里只剩"对话已清空"那句，撤销回来是空的）。 */
+function toastUndo(msg, label, fn, ms){
+  const box = document.getElementById('toasts'); if(!box) return null;
+  const d = document.createElement('div'); d.className = 'toast toast-undo';
+  const span = document.createElement('span'); span.textContent = msg; d.appendChild(span);
+  const b = document.createElement('button');
+  b.className = 'toast-act'; b.type = 'button'; b.textContent = label;
+  b.onclick = ()=>{ d.remove(); if(typeof fn === 'function') fn(); };
+  d.appendChild(b);
+  box.appendChild(d);
+  while(box.children.length > 4) box.firstChild.remove();
+  setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(), 350); }, ms || 10000);
+  return d;
+}
 /* esc：把服务端/外部数据插值进 innerHTML 前转义（日志内容会回流进模型参数，不可信任） */
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 

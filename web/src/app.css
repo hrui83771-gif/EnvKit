@@ -699,6 +699,11 @@
   #toasts{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--text);box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:min(560px,90vw);animation:toast-in .18s ease;word-break:break-all}
   .toast.err{border-left-color:var(--err)}
+  /* 撤销 toast：容器 pointer-events:none，按钮必须自己恢复可点；
+     全局按钮宽度会被布局规则拉满，这里逐项复位成 auto。 */
+  .toast-undo{display:flex;align-items:center;gap:12px;word-break:normal}
+  .toast-act{pointer-events:auto;width:auto;flex:none;font-size:12px;font-weight:600;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--brand);cursor:pointer}
+  .toast-act:hover{background:var(--soft)}
   .toast.out{opacity:0;transition:opacity .3s}
   @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .ai-confirm{align-self:flex-start;border:1px solid var(--warn);background:var(--warnbg);border-radius:10px;padding:10px 12px;font-size:12.5px;max-width:92%}

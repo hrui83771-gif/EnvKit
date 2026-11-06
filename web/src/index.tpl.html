@@ -920,8 +920,15 @@
       <!-- ==================== 开发者 ==================== -->
       <div class="cfg-pane" data-set-pane="dev">
 
+        <!-- 这一屏原来是一排裸参数：只有名字和单位，用户不敢动、也不知道改完会怎样。
+             每组补一条「调大/调小分别会怎样」的因果说明；不写数值预设，
+             因为默认值只在后端 state.go 有一份（见 70-settings.js 的 EK_DEV_MAP 注释），
+             前端再抄一份会和「恢复默认」的单一真源打架。 -->
+        <div class="hint" id="h-sd-intro" style="margin:2px 0 10px">这些参数由程序写回本机 config.json；运行期间请在这里改，直接编辑文件会被程序覆写。改完点最下面的「保存开发者配置」，端口类改动需重启。</div>
+
         <div class="action">
           <div class="head"><div class="title">AI 记忆与摘要</div></div>
+          <div class="hint" id="h-sd-summary">长对话会把较早内容压成一条要点备忘。触发阈值调大 → 更少压缩，但每次请求更胖；「摘要后保留量」是尾部预算，调大反而压得更少、更快再次触发；「至少保留条数」保证最近几条原文不被压掉。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>摘要触发阈值</b><span class="unit">token</span></div>
               <input type="range" class="set-slider" id="sd_summary_after" min="1000" max="32000" step="500" />
@@ -943,6 +950,7 @@
 
         <div class="action">
           <div class="head"><div class="title">数据保留</div></div>
+          <div class="hint" id="h-sd-retain">各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>审计</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_audit_days" min="1" max="365" step="1" />
@@ -969,6 +977,7 @@
 
         <div class="action">
           <div class="head"><div class="title">日志配额</div></div>
+          <div class="hint" id="h-sd-log">单个日志达到上限就归档，超过份数的旧档会被删除。调小省磁盘，但排障时可能查不到早期记录。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="unit">MB</span></div>
               <input type="range" class="set-slider" id="sd_log_mb" min="1" max="32" step="1" />
@@ -998,6 +1007,7 @@
 
         <div class="action">
           <div class="head"><div class="title">启动校验与重试</div></div>
+          <div class="hint" id="h-sd-retry">启动服务后等它真正可访问的最长时间，以及失败后的重试节奏。服务起得慢就调大窗口；重试次数调太高会让一次失败启动拖很久才报错。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_vwait_web" min="10" max="180" step="5" />
@@ -1350,7 +1360,7 @@
     <button class="ai-stop" id="ai-stop" style="display:none">停止生成</button>
     <button class="tbtn" id="ai-trace-open" title="轨迹 / 审计 / 用量">轨迹</button>
     <button class="tbtn" id="ai-expand" title="放大">⤢</button>
-    <button class="tbtn" id="ai-clear">清空</button>
+    <button class="tbtn" id="ai-clear" title="清空整段对话（10 秒内可撤销）">清空</button>
     <button class="tbtn" id="ai-close">×</button>
   </div>
   <div class="ai-body">

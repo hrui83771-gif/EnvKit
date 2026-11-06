@@ -705,6 +705,11 @@
   #toasts{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--text);box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:min(560px,90vw);animation:toast-in .18s ease;word-break:break-all}
   .toast.err{border-left-color:var(--err)}
+  /* 撤销 toast：容器 pointer-events:none，按钮必须自己恢复可点；
+     全局按钮宽度会被布局规则拉满，这里逐项复位成 auto。 */
+  .toast-undo{display:flex;align-items:center;gap:12px;word-break:normal}
+  .toast-act{pointer-events:auto;width:auto;flex:none;font-size:12px;font-weight:600;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--brand);cursor:pointer}
+  .toast-act:hover{background:var(--soft)}
   .toast.out{opacity:0;transition:opacity .3s}
   @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .ai-confirm{align-self:flex-start;border:1px solid var(--warn);background:var(--warnbg);border-radius:10px;padding:10px 12px;font-size:12.5px;max-width:92%}
@@ -2017,8 +2022,15 @@
       <!-- ==================== 开发者 ==================== -->
       <div class="cfg-pane" data-set-pane="dev">
 
+        <!-- 这一屏原来是一排裸参数：只有名字和单位，用户不敢动、也不知道改完会怎样。
+             每组补一条「调大/调小分别会怎样」的因果说明；不写数值预设，
+             因为默认值只在后端 state.go 有一份（见 70-settings.js 的 EK_DEV_MAP 注释），
+             前端再抄一份会和「恢复默认」的单一真源打架。 -->
+        <div class="hint" id="h-sd-intro" style="margin:2px 0 10px">这些参数由程序写回本机 config.json；运行期间请在这里改，直接编辑文件会被程序覆写。改完点最下面的「保存开发者配置」，端口类改动需重启。</div>
+
         <div class="action">
           <div class="head"><div class="title">AI 记忆与摘要</div></div>
+          <div class="hint" id="h-sd-summary">长对话会把较早内容压成一条要点备忘。触发阈值调大 → 更少压缩，但每次请求更胖；「摘要后保留量」是尾部预算，调大反而压得更少、更快再次触发；「至少保留条数」保证最近几条原文不被压掉。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>摘要触发阈值</b><span class="unit">token</span></div>
               <input type="range" class="set-slider" id="sd_summary_after" min="1000" max="32000" step="500" />
@@ -2040,6 +2052,7 @@
 
         <div class="action">
           <div class="head"><div class="title">数据保留</div></div>
+          <div class="hint" id="h-sd-retain">各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>审计</b><span class="unit">天</span></div>
               <input type="range" class="set-slider" id="sd_audit_days" min="1" max="365" step="1" />
@@ -2066,6 +2079,7 @@
 
         <div class="action">
           <div class="head"><div class="title">日志配额</div></div>
+          <div class="hint" id="h-sd-log">单个日志达到上限就归档，超过份数的旧档会被删除。调小省磁盘，但排障时可能查不到早期记录。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>自身单文件上限</b><span class="unit">MB</span></div>
               <input type="range" class="set-slider" id="sd_log_mb" min="1" max="32" step="1" />
@@ -2095,6 +2109,7 @@
 
         <div class="action">
           <div class="head"><div class="title">启动校验与重试</div></div>
+          <div class="hint" id="h-sd-retry">启动服务后等它真正可访问的最长时间，以及失败后的重试节奏。服务起得慢就调大窗口；重试次数调太高会让一次失败启动拖很久才报错。</div>
           <div class="set-fields">
             <div class="set-field"><div class="set-flabel"><b>前端校验窗口</b><span class="unit">秒</span></div>
               <input type="range" class="set-slider" id="sd_vwait_web" min="10" max="180" step="5" />
@@ -2447,7 +2462,7 @@
     <button class="ai-stop" id="ai-stop" style="display:none">停止生成</button>
     <button class="tbtn" id="ai-trace-open" title="轨迹 / 审计 / 用量">轨迹</button>
     <button class="tbtn" id="ai-expand" title="放大">⤢</button>
-    <button class="tbtn" id="ai-clear">清空</button>
+    <button class="tbtn" id="ai-clear" title="清空整段对话（10 秒内可撤销）">清空</button>
     <button class="tbtn" id="ai-close">×</button>
   </div>
   <div class="ai-body">
@@ -2840,6 +2855,7 @@ const I18N_EN = {
   "区间内没有带复验结论的记录": "No verification records in this range",
   "升级": "Upgrade",
   "升级组件": "Upgrade components",
+  "单个日志达到上限就归档，超过份数的旧档会被删除。调小省磁盘，但排障时可能查不到早期记录。": "A log file is archived once it hits the size cap, and the oldest archives beyond the count are deleted. Lower values save disk but early records may be gone when you need them.",
   "单位：天；到期自动清理": "In days; expired files are cleaned up automatically",
   "单文件写满即轮转，超出份数的最老一份删除": "A file rotates when full; the oldest beyond the count is deleted",
   "单文件读取上限": "Per-file read limit",
@@ -2884,6 +2900,7 @@ const I18N_EN = {
   "可达 · {0}ms": "Reachable · {0}ms",
   "可选": "Optional",
   "右键可以让我藏起来": "Right-click lets me hide",
+  "各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。": "How many days / copies of records and backups stay on this machine before automatic cleanup. Higher values use more disk (10 copies of a 1GB DB = 10GB); lower values discard troubleshooting history sooner.",
   "合法候选：": "Valid candidates:",
   "同一个 WiFi 下的其他设备也能看到这个地址，配对码就是唯一的门。": "Other devices on the same WiFi can also see this address — the pairing code is the only door.",
   "同一标题的冷却（秒）": "Cooldown per title (seconds)",
@@ -2914,6 +2931,7 @@ const I18N_EN = {
   "启动失败：": "Failed to start: ",
   "启动方式": "Launch method",
   "启动服务": "start services",
+  "启动服务后等它真正可访问的最长时间，以及失败后的重试节奏。服务起得慢就调大窗口；重试次数调太高会让一次失败启动拖很久才报错。": "How long to wait for a service to become reachable after launch, and how often to retry on failure. Raise the window for slow services; too many retries make a failed start take ages to report an error.",
   "启动校验与重试": "Startup verify & retry",
   "启动脚本": "Start script",
   "启用": "Enable",
@@ -3028,6 +3046,8 @@ const I18N_EN = {
   "对比「已安装 / 配置目标 / 官方最新」，可一键升级到最新版": "Compares installed / configured / latest upstream, and upgrades in one click",
   "对话": "Chats",
   "对话 {0} 次 · ↑{1} ↓{2}": "{0} chats · ↑{1} ↓{2}",
+  "对话已恢复": "Conversation restored",
+  "对话已清空": "Conversation cleared",
   "对话已清空。": "Conversation cleared.",
   "对话式助手": "Chat assistant",
   "对话式能力": "Chat capabilities",
@@ -3138,6 +3158,7 @@ const I18N_EN = {
   "已确认，继续执行…": "Confirmed — continuing…",
   "已移除该设备": "Device removed",
   "已经加过了": "Already attached",
+  "已经开始了新对话，无法撤销清空": "A new conversation has started, so clearing can no longer be undone",
   "已结束 PID {0}，可重新扫描确认": "Killed PID {0}; rescan to confirm",
   "已自动保存 ✓": "Auto-saved ✓",
   "已自动保存，已拉取 {0} 个模型并回填": "Auto-saved; fetched {0} models and filled the dropdown",
@@ -3302,6 +3323,7 @@ const I18N_EN = {
   "摘要后保留量": "Keep after summary",
   "摘要后至少原样留几条消息": "Messages kept verbatim at minimum after summarizing",
   "摘要触发阈值": "Summarize threshold",
+  "撤销": "Undo",
   "操作": "Actions",
   "操作主体": "By actor",
   "操作失败": "Operation failed",
@@ -3563,6 +3585,7 @@ const I18N_EN = {
   "清理已收口的行动": "Clean up settled missions",
   "清理进程": "Clean processes",
   "清空": "Clear",
+  "清空整段对话（10 秒内可撤销）": "Clear the whole conversation (undoable for 10s)",
   "清除": "Clear",
   "清除后手机只能用配对码进入，继续？": "After clearing, phones can only use the pairing code. Continue?",
   "清除密码": "Clear password",
@@ -3851,6 +3874,7 @@ const I18N_EN = {
   "这一档当前不可用，先看卡片里的原因": "This tier is unavailable — see the reason on its card",
   "这个目录是空的": "Empty folder",
   "这也太虐了吧？！我心里堵得慌！！": "So brutal... my chest feels tight!!",
+  "这些参数由程序写回本机 config.json；运行期间请在这里改，直接编辑文件会被程序覆写。改完点最下面的「保存开发者配置」，端口类改动需重启。": "These settings are written back to the local config.json by the app; change them here while it is running, since direct file edits get overwritten. Click \"Save developer settings\" at the bottom; port changes need a restart.",
   "这些家伙真粘人，赶都赶不走": "So clingy — can't even scare them off",
   "这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓": "Not backing down this time... though you led me astray a few times. 😓",
   "这张图我读不出来…": "I can't read this image…",
@@ -3931,6 +3955,7 @@ const I18N_EN = {
   "链节点": "Chain node",
   "错误": "Error",
   "镜像与校验": "Mirrors & checksums",
+  "长对话会把较早内容压成一条要点备忘。触发阈值调大 → 更少压缩，但每次请求更胖；「摘要后保留量」是尾部预算，调大反而压得更少、更快再次触发；「至少保留条数」保证最近几条原文不被压掉。": "Long chats compress older turns into one recap. Raising the trigger threshold means fewer compactions but heavier requests; \"Keep after summary\" is the tail budget, so raising it compresses less and re-triggers sooner; \"Min messages to keep\" protects the most recent verbatim turns.",
   "门禁问题": "Gate problems",
   "问我任何环境问题...（Enter 发送）": "Ask me anything about your environment... (Enter to send)",
   "问我任何环境问题...（Enter 发送，可拖入文件）": "Ask any environment question... (Enter to send, drag files in)",
@@ -4189,6 +4214,27 @@ function toast(msg, cls){
   box.appendChild(d);
   setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(), 350); }, 4200);
   while(box.children.length > 4) box.firstChild.remove();
+}
+
+/* 带动作按钮的 toast（目前只给「清空对话」的撤销用）。
+   两点必须显式写，不能靠继承：
+   1) #toasts 是 pointer-events:none（它盖在整页上，不能挡住下面的点击），
+      所以按钮自己要恢复 pointer-events:auto，否则"看得见点不到"；
+   2) 全局 button 宽度会被布局规则拉满，width:auto 必须逐项复位。
+   返回元素本身：调用方把撤销快照挂在它上面，连点两次清空时沿用第一次的快照
+   （否则第二次的快照里只剩"对话已清空"那句，撤销回来是空的）。 */
+function toastUndo(msg, label, fn, ms){
+  const box = document.getElementById('toasts'); if(!box) return null;
+  const d = document.createElement('div'); d.className = 'toast toast-undo';
+  const span = document.createElement('span'); span.textContent = msg; d.appendChild(span);
+  const b = document.createElement('button');
+  b.className = 'toast-act'; b.type = 'button'; b.textContent = label;
+  b.onclick = ()=>{ d.remove(); if(typeof fn === 'function') fn(); };
+  d.appendChild(b);
+  box.appendChild(d);
+  while(box.children.length > 4) box.firstChild.remove();
+  setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(), 350); }, ms || 10000);
+  return d;
 }
 /* esc：把服务端/外部数据插值进 innerHTML 前转义（日志内容会回流进模型参数，不可信任） */
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -7337,7 +7383,44 @@ function aiOpen(){ $ai('ai-drawer').classList.add('open'); $ai('ai-msgs').scroll
   try{ $ai('ai-in').focus(); }catch(_){}
 }
 $ai('ai-close').onclick = ()=>{ $ai('ai-drawer').classList.remove('open'); aiPickClose(); petShift(false); };
+/* ---------- 清空对话：10 秒内可撤销 ----------
+   以前点一下就抹掉整段排障过程、附件引用和行动绑定，零确认也捞不回来。
+   快照存的是 **DOM 节点**（整段搬进 DocumentFragment），不是重放 aiMessages：
+   工具卡、确认卡、时间戳都不在 aiMessages 里，重放会把它们弄丢。
+   清空本身仍立即生效、立即删 localStorage —— 既有 CDP 断言不受影响，
+   也不弹 confirm（那会把现有 4 个直接 .click() 清空的回归脚本挂住）。 */
+function aiClearSnapshot(){
+  const box = $ai('ai-msgs');
+  const frag = document.createDocumentFragment();
+  while(box.firstChild) frag.appendChild(box.firstChild);
+  let hist = null;
+  try{ hist = localStorage.getItem('ek-ai-hist'); }catch(_){}
+  return {frag:frag, hist:hist, msgs:aiMessages.slice(), mission:aiCurMission,
+          imgs:aiImgs.slice(), docs:aiDocs.slice(), files:aiFiles.slice()};
+}
+function aiClearUndo(snap){
+  if(!snap) return;
+  // 撤销窗口里用户已经发了新消息：绝不能把新对话覆盖掉
+  if(aiMessages.length){ toast(t('已经开始了新对话，无法撤销清空')); return; }
+  const box = $ai('ai-msgs');
+  box.innerHTML = ''; box.appendChild(snap.frag);
+  box.scrollTop = box.scrollHeight;
+  aiMessages = snap.msgs.slice();
+  try{
+    if(snap.hist === null) localStorage.removeItem('ek-ai-hist');
+    else localStorage.setItem('ek-ai-hist', snap.hist);
+  }catch(_){}
+  aiCurMission = snap.mission;
+  aiImgs = snap.imgs.slice(); aiDocs = snap.docs.slice(); aiFiles = snap.files.slice();
+  aiAttachRender(); aiChipsRender(); aiTurnReset();
+  toast(t('对话已恢复'));
+}
 $ai('ai-clear').onclick = ()=>{
+  // 连点两次清空：沿用第一次的快照，否则第二次存进去的只剩「对话已清空」那句，
+  // 撤销回来就是空的。快照挂在 toast 元素上，随 toast 过期一起回收，不用全局状态。
+  const old = document.querySelector('#toasts .toast-undo');
+  const snap = (old && old._ekUndoSnap) ? old._ekUndoSnap : aiClearSnapshot();
+  document.querySelectorAll('#toasts .toast-undo').forEach(e=>e.remove());
   // 正在流式输出时点清空：必须先掐断流。不清的话，后续 SSE 事件会继续往
   // 已脱离文档的孤儿节点上贴卡片（表现为"清空后凭空冒出确认卡"），
   // aiBusy 也仍然为 true 直到流自然结束。
@@ -7347,7 +7430,10 @@ $ai('ai-clear').onclick = ()=>{
   aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
   // 待发附件一并清掉：对话都清了，还挂着一张图/一份文件在输入区上方，下次发送会莫名其妙带上它
   aiImgs = []; aiDocs = []; aiAttachRender();
-  aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat(''); };
+  aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat('');
+  const el = toastUndo(t('对话已清空'), t('撤销'), ()=>aiClearUndo(snap), 10000);
+  if(el) el._ekUndoSnap = snap;
+};
 
 /* ---------- 彻底隐藏桌面助手（AI 设置页勾选项，localStorage 记忆） ---------- */
 function applyPetGone(){

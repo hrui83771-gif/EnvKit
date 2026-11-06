@@ -72,7 +72,44 @@ function aiOpen(){ $ai('ai-drawer').classList.add('open'); $ai('ai-msgs').scroll
   try{ $ai('ai-in').focus(); }catch(_){}
 }
 $ai('ai-close').onclick = ()=>{ $ai('ai-drawer').classList.remove('open'); aiPickClose(); petShift(false); };
+/* ---------- 清空对话：10 秒内可撤销 ----------
+   以前点一下就抹掉整段排障过程、附件引用和行动绑定，零确认也捞不回来。
+   快照存的是 **DOM 节点**（整段搬进 DocumentFragment），不是重放 aiMessages：
+   工具卡、确认卡、时间戳都不在 aiMessages 里，重放会把它们弄丢。
+   清空本身仍立即生效、立即删 localStorage —— 既有 CDP 断言不受影响，
+   也不弹 confirm（那会把现有 4 个直接 .click() 清空的回归脚本挂住）。 */
+function aiClearSnapshot(){
+  const box = $ai('ai-msgs');
+  const frag = document.createDocumentFragment();
+  while(box.firstChild) frag.appendChild(box.firstChild);
+  let hist = null;
+  try{ hist = localStorage.getItem('ek-ai-hist'); }catch(_){}
+  return {frag:frag, hist:hist, msgs:aiMessages.slice(), mission:aiCurMission,
+          imgs:aiImgs.slice(), docs:aiDocs.slice(), files:aiFiles.slice()};
+}
+function aiClearUndo(snap){
+  if(!snap) return;
+  // 撤销窗口里用户已经发了新消息：绝不能把新对话覆盖掉
+  if(aiMessages.length){ toast(t('已经开始了新对话，无法撤销清空')); return; }
+  const box = $ai('ai-msgs');
+  box.innerHTML = ''; box.appendChild(snap.frag);
+  box.scrollTop = box.scrollHeight;
+  aiMessages = snap.msgs.slice();
+  try{
+    if(snap.hist === null) localStorage.removeItem('ek-ai-hist');
+    else localStorage.setItem('ek-ai-hist', snap.hist);
+  }catch(_){}
+  aiCurMission = snap.mission;
+  aiImgs = snap.imgs.slice(); aiDocs = snap.docs.slice(); aiFiles = snap.files.slice();
+  aiAttachRender(); aiChipsRender(); aiTurnReset();
+  toast(t('对话已恢复'));
+}
 $ai('ai-clear').onclick = ()=>{
+  // 连点两次清空：沿用第一次的快照，否则第二次存进去的只剩「对话已清空」那句，
+  // 撤销回来就是空的。快照挂在 toast 元素上，随 toast 过期一起回收，不用全局状态。
+  const old = document.querySelector('#toasts .toast-undo');
+  const snap = (old && old._ekUndoSnap) ? old._ekUndoSnap : aiClearSnapshot();
+  document.querySelectorAll('#toasts .toast-undo').forEach(e=>e.remove());
   // 正在流式输出时点清空：必须先掐断流。不清的话，后续 SSE 事件会继续往
   // 已脱离文档的孤儿节点上贴卡片（表现为"清空后凭空冒出确认卡"），
   // aiBusy 也仍然为 true 直到流自然结束。
@@ -82,7 +119,10 @@ $ai('ai-clear').onclick = ()=>{
   aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
   // 待发附件一并清掉：对话都清了，还挂着一张图/一份文件在输入区上方，下次发送会莫名其妙带上它
   aiImgs = []; aiDocs = []; aiAttachRender();
-  aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat(''); };
+  aiFiles = []; aiChipsRender(); aiPickClose(); aiTurnReset(); aiHstat('');
+  const el = toastUndo(t('对话已清空'), t('撤销'), ()=>aiClearUndo(snap), 10000);
+  if(el) el._ekUndoSnap = snap;
+};
 
 /* ---------- 彻底隐藏桌面助手（AI 设置页勾选项，localStorage 记忆） ---------- */
 function applyPetGone(){
