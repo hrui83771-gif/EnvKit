@@ -1240,7 +1240,9 @@
     font-size:clamp(26px,3.3vw,38px);font-weight:600;letter-spacing:-.025em;line-height:1.22;
     margin:0 0 14px;color:var(--text);text-wrap:balance}
   .ob-lead{font-size:14.5px;line-height:1.95;color:var(--muted);margin:0 0 22px;max-width:52ch}
-  .ob-head .ob-lead{margin-left:auto;margin-right:auto}
+  /* 居中版式下 52ch 对中文来说太窄：一句 30 字的话会被压成「…都写在 / 界面上。」。
+     外层 .ob-head 已经限了 760px，这里直接放开，交给容器决定换行。 */
+  .ob-head .ob-lead{margin-left:auto;margin-right:auto;max-width:100%}
   .ob-quiet{font-size:13px;line-height:1.8;color:var(--text);opacity:.72;margin:-8px 0 22px}
   .ob-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .ob-head+.ob-actions,.ob-actions-center{justify-content:center}
@@ -1307,28 +1309,34 @@
   /* ---------- 02 散落 → 汇聚 ---------- */
   .ob-merge{display:grid;grid-template-columns:minmax(210px,1fr) 104px minmax(170px,1.05fr);
     gap:10px;align-items:center;min-width:0}
-  .ob-old{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;
-    justify-content:flex-end;align-content:center;padding-right:2px}
-  .ob-old-card{position:relative;font-size:12.5px;color:var(--muted);
+  .ob-old{display:flex;flex-direction:column;gap:8px;align-items:stretch;
+    justify-content:center;padding-right:2px}
+  .ob-old-card{position:relative;display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;font-size:12.5px;color:var(--muted);
     background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:10px 15px 10px 17px;cursor:help;white-space:nowrap;
+    padding:9px 14px 9px 16px;cursor:help;
     box-shadow:0 4px 12px -9px rgba(40,48,64,.34);
     transform:rotate(var(--r,0deg)) translateX(var(--x,0px));
     transition:transform .55s cubic-bezier(.22,1,.36,1),opacity .4s,color .2s,border-color .2s}
   .ob-old-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
     border-radius:10px 0 0 10px;background:var(--dotoff);transition:background .2s}
   .ob-old-card:hover::before{background:var(--brand2)}
-  .ob-old-card:nth-child(1){--r:-2.6deg;--x:-6px}
-  .ob-old-card:nth-child(2){--r:1.8deg;--x:14px}
-  .ob-old-card:nth-child(3){--r:-1.2deg;--x:2px}
-  .ob-old-card:nth-child(4){--r:2.4deg;--x:20px}
-  .ob-old-card:nth-child(5){--r:-1.8deg;--x:8px}
+  .ob-old-card:nth-child(1){--r:-1.6deg;--x:-4px}
+  .ob-old-card:nth-child(2){--r:1.2deg;--x:6px}
+  .ob-old-card:nth-child(3){--r:-.9deg;--x:0px}
+  .ob-old-card:nth-child(4){--r:1.6deg;--x:9px}
+  .ob-old-card:nth-child(5){--r:-1.2deg;--x:3px}
   .ob-old-card::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;
     transform:translateY(-50%);white-space:nowrap;font-size:11px;color:var(--text);
     background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
     opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:3;
     box-shadow:0 8px 20px -12px rgba(20,25,35,.4)}
   .ob-old-card:hover{--r:0deg;--x:0px;color:var(--text);border-color:var(--brand2)}
+  /* 每张旧卡片补一句"代价"：光写工具名说明不了为什么要收拢 */
+  .ob-old-card em{flex:none;font-style:normal;font-size:10px;line-height:1.5;
+    color:var(--muted);opacity:.82;text-align:right;max-width:56%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ob-old-card:hover em{opacity:.95}
   .ob-old-card:hover::after{opacity:1;transform:translateY(-50%) translateX(2px)}
   .ob-merge.flow .ob-old-card{--r:0deg;--x:0px;opacity:.62}
   .ob-beam{position:relative;display:flex;align-items:center;justify-content:center;height:40px;overflow:hidden}
@@ -1479,8 +1487,8 @@
     color:rgba(199,206,218,.42);text-transform:uppercase}
   .ob-recent span{font-size:11.5px;line-height:1.6;color:rgba(199,206,218,.55)}
   .ob-recent.hot{background:rgba(200,90,84,.10)}
-  .ob-recent.hot span{color:#E29B95}
-  .ob-recent.hot b{color:rgba(226,155,149,.66)}
+  .ob-recent.hot>span{color:#E29B95}
+  .ob-recent.hot>b{color:rgba(226,155,149,.66)}
   .ob-console-scene .ob-actions{justify-content:center;margin-top:16px}
 
   /* ---------- 06 AI：桌宠 + 对话打印 ---------- */
@@ -1617,9 +1625,6 @@
   .ob-ch-no{font:500 9.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.14em;color:var(--brand);
     opacity:.72}
   .ob-ch-nm{font-size:12px;color:var(--text);line-height:1.35}
-  .ob-ch-bar{display:flex;gap:3px;width:100%;margin-top:2px}
-  .ob-ch-bar i{height:3px;border-radius:2px;background:var(--brand2);opacity:.5;flex:1}
-  .ob-ch-bar i:nth-child(n+2){background:var(--line);opacity:1}
   .ob-actions-end{justify-content:center;flex-wrap:wrap}
   .ob-end-note{font-size:11px;color:var(--muted);margin-top:16px;opacity:.85}
 
@@ -1715,6 +1720,85 @@
   .ob-io span{font-size:11.5px;line-height:1.65;color:var(--text);opacity:.74}
   .ob-io em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.14em;
     color:var(--muted);margin-bottom:3px;opacity:.85}
+
+  /* ---------- v5 细节层：HUD / 收拢计数 / 进度 / 权限清单 / 章节摘要 ---------- */
+  /* 01 开场右下的四个硬数字：比一句口号更能说明"它到底做了多少事" */
+  .ob-hud{display:flex;align-items:center;gap:9px;margin-top:13px;flex-wrap:wrap;
+    justify-content:center;font-size:10.5px;color:var(--muted);letter-spacing:.02em}
+  .ob-hud span{display:flex;align-items:baseline;gap:4px;white-space:nowrap}
+  .ob-hud b{font:500 13px/1 ui-monospace,Consolas,monospace;color:var(--brand);letter-spacing:-.02em}
+  .ob-hud i{width:3px;height:3px;border-radius:50%;background:var(--dotoff);flex:none}
+  /* 叠层剖面轮转高亮：只改描边与投影，不碰 transform —— 免得和 hover 抢同一属性 */
+  .ob-slab.focus{opacity:1!important;
+    border-color:color-mix(in srgb,var(--brand2) 62%,var(--ob-edge))!important;
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-weak) 72%,transparent),var(--ob-lift)!important}
+  .ob-art-note{transition:opacity .3s,color .3s}
+
+  /* 02 收拢结果：一行"5 → 1"，把这一屏的论点数字化 */
+  .ob-merge-foot{grid-column:1 / -1;display:flex;align-items:center;justify-content:center;
+    gap:9px;margin-top:4px;font-size:11px;color:var(--muted);
+    opacity:0;transform:translateY(4px);transition:opacity .45s,transform .45s}
+  .ob-merge-foot.on{opacity:1;transform:none}
+  .ob-merge-foot s{text-decoration-color:color-mix(in srgb,var(--err) 38%,transparent)}
+  .ob-merge-foot em{font-style:normal;color:var(--brand)}
+  .ob-merge-foot em::before{content:'\2192';margin-right:7px;color:var(--muted);opacity:.7}
+
+  /* 04 检测：终端跑动的进度 + 报告结论行 */
+  .ob-term-bar em{margin-left:auto;font-style:normal;
+    font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.06em;
+    color:rgba(199,206,218,.46)}
+  .ob-term-prog{height:2px;background:rgba(255,255,255,.07);overflow:hidden}
+  .ob-term-prog i{display:block;height:100%;width:0;
+    background:linear-gradient(90deg,var(--brand2),var(--ob-accent));
+    transition:width 1.05s cubic-bezier(.3,.9,.3,1)}
+  .ob-report-foot{display:flex;align-items:baseline;gap:8px;padding:9px 16px;
+    border-top:1px solid var(--ob-hair);background:var(--ob-glass-2);
+    font-size:11.5px;line-height:1.6;color:var(--muted);
+    opacity:0;transform:translateY(3px);transition:opacity .35s,transform .35s}
+  .ob-report-foot.on{opacity:1;transform:none}
+  .ob-report-foot b{flex:none;font-weight:500;font-size:9.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--brand)}
+
+  /* 05 日志侧栏：分区计数 + 轮转，让 186px 不空着 */
+  .ob-stats{display:flex;flex-direction:column;gap:4px;margin-top:auto;padding-top:12px;
+    border-top:1px solid rgba(255,255,255,.07)}
+  .ob-stats i{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;
+    font-style:normal;font-size:10.5px;color:rgba(199,206,218,.54);padding:2px 0;
+    transition:color .2s}
+  .ob-stats i em{font-style:normal;min-width:0;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap}
+  .ob-stats i b{font:500 10px/1 ui-monospace,Consolas,monospace;color:rgba(199,206,218,.46);
+    transition:color .2s}
+  .ob-stats i.on{color:var(--ob-term-tx)}
+  .ob-stats i.on b{color:var(--brand2)}
+  .ob-rotate{display:flex;flex-direction:column;gap:4px;margin-top:11px;padding-top:10px;
+    border-top:1px solid rgba(255,255,255,.07)}
+  .ob-rotate span{font-size:10px;line-height:1.5;color:rgba(199,206,218,.48)}
+
+  /* 06 AI：trace 里的耗时 + 被冻结的历史气泡 */
+  .ob-trace em{margin-left:auto;font-style:normal;
+    font:9.5px/1 ui-monospace,Consolas,monospace;color:var(--muted);opacity:.62}
+  .ob-bubble.frozen{opacity:.84}
+
+  /* 07 权限：选中档位后列出"直接做 / 要确认 / 不做" */
+  .ob-perm-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:left}
+  .ob-perm-acts>div{min-width:0;background:var(--ob-glass-2);border:1px solid var(--line);
+    border-radius:10px;padding:9px 11px}
+  .ob-perm-acts em{display:block;font-style:normal;font-size:9px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .ob-perm-acts span{display:block;font-size:11px;line-height:1.75;color:var(--text);
+    opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ob-perm-acts>div.ok em{color:var(--brand)}
+  .ob-perm-acts>div.ask em{color:var(--warn)}
+  .ob-perm-acts>div.no em{color:var(--err)}
+
+  /* 08 收尾：每章一句摘要 + 一行总览 */
+  .ob-ch-sum{font-size:10.5px;line-height:1.5;color:var(--muted);max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ob-end-stats{display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:11px;color:var(--muted);margin:-6px 0 18px}
+  .ob-end-stats b{font:500 12px/1 ui-monospace,Consolas,monospace;color:var(--brand)}
+  .ob-end-stats i{width:3px;height:3px;border-radius:50%;background:var(--dotoff);flex:none}
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -3173,7 +3257,13 @@
               <div class="ob-slab s3"><em>03</em><b>链端校验</b><span>FISCO 节点 · WeBASE</span></div>
               <div class="ob-slab s4 main"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
             </div>
-            <div class="ob-art-note">同一个入口，同一份状态</div>
+            <div class="ob-art-note" id="ob-art-note">同一个入口，同一份状态</div>
+            <div class="ob-hud">
+              <span><b>4</b>步流程</span><i></i>
+              <span><b>6</b>项检测</span><i></i>
+              <span><b>5</b>日志分区</span><i></i>
+              <span><b>1</b>个入口</span>
+            </div>
           </div>
         </div>
       </div>
@@ -3193,11 +3283,11 @@
           </div>
           <div class="ob-merge" id="ob-merge">
             <div class="ob-old" id="ob-old-list">
-              <span class="ob-old-card" data-tip="被「环境安装」接管">终端</span>
-              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端</span>
-              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具</span>
-              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签</span>
-              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口</span>
+              <span class="ob-old-card" data-tip="被「环境安装」接管">终端<em>记 5 条启动命令</em></span>
+              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端<em>另开一个 GUI</em></span>
+              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具<em>手动连链端主机</em></span>
+              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签<em>5 个页面来回切</em></span>
+              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口<em>只能靠 scrollback</em></span>
             </div>
             <div class="ob-beam" id="ob-beam"><i></i><b>收拢</b></div>
             <div class="ob-new-card">
@@ -3205,6 +3295,9 @@
               <b>EnvKit</b>
               <small>检测 · 配置 · 链端 · 启动</small>
               <i class="ob-sheen"></i>
+            </div>
+            <div class="ob-merge-foot" id="ob-merge-foot">
+              <s>5 个窗口 · 3 套工具链</s><em>收拢成 1 条状态线</em>
             </div>
           </div>
         </div>
@@ -3259,12 +3352,14 @@
           </div>
           <div class="ob-detect">
             <div class="ob-term">
-              <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span></div>
+              <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span><em id="ob-term-pct">就绪</em></div>
+              <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
             <div class="ob-report">
               <div class="ob-report-head"><span>环境检测报告</span><b id="ob-detect-badge"></b></div>
               <div class="ob-detect-rows" id="ob-detect-rows"></div>
+              <div class="ob-report-foot" id="ob-report-foot"><b>结论</b><span></span></div>
             </div>
           </div>
         </div>
@@ -3292,7 +3387,11 @@
             </div>
             <div class="ob-console-body">
               <div class="ob-log" id="ob-log-lines"></div>
-              <aside class="ob-recent" id="ob-recent-err"><b>最近错误</b><span>暂无</span></aside>
+              <aside class="ob-recent" id="ob-recent-err">
+                <b>最近错误</b><span>暂无</span>
+                <div class="ob-stats" id="ob-scope-stats"></div>
+                <div class="ob-rotate"><b>轮转</b><span>今日 4 份 · 保留 30 天</span></div>
+              </aside>
             </div>
           </div>
           <div class="ob-actions"><button class="ob-ghost" id="ob-log-insert">插入一条异常</button><span class="ob-hint">切分区看看联动</span></div>
@@ -3306,7 +3405,7 @@
             <div class="ob-pet-glow"></div>
             <div class="ob-pet-slot" id="ob-pet-slot"></div>
             <div class="ob-pet-shadow"></div>
-            <div class="ob-pet-state"><i></i><span>待机 · 已连接</span></div>
+            <div class="ob-pet-state"><i></i><span id="ob-pet-msg">待机 · 已连接</span></div>
             <div class="ob-pet-tag">桌宠也在主界面上</div>
           </div>
           <div class="ob-ai-chat">
@@ -3321,6 +3420,7 @@
               <div class="ob-questions">
                 <button data-q="read">现在服务都起来了吗？</button>
                 <button data-q="write">帮我重启一下后端</button>
+                <button data-q="explain">这段报错是什么意思？</button>
               </div>
               <div class="ob-chat-input"><span>问我任何环境问题…</span><b>发送</b></div>
               <div class="ob-confirm" id="ob-demo-confirm" hidden>
@@ -3350,6 +3450,7 @@
               <button data-perm="3"><span class="ob-perm-no">04</span><span class="ob-perm-nm">审批后动作</span><span class="ob-perm-tag hot">428 + 红框</span></button>
             </div>
             <div class="ob-perm-desc" id="ob-perm-desc"></div>
+            <div class="ob-perm-acts" id="ob-perm-acts"></div>
           </div>
         </div>
       </div>
@@ -3363,12 +3464,15 @@
             <p class="ob-lead">照着做一遍最快。以后想再看完整八屏，「关于」里随时能打开。</p>
           </div>
           <div class="ob-chapter-grid" id="ob-chapter-grid"></div>
+          <div class="ob-end-stats">
+            <span><b>8</b> 屏</span><i></i><span><b>约 90</b> 秒</span><i></i><span>全部是演示数据</span>
+          </div>
           <div class="ob-actions ob-actions-end">
             <button class="ob-primary" id="ob-cta-install">去看安装页<span class="ob-arrow">&#8594;</span></button>
             <button class="ob-primary ob-soft" id="ob-cta-tour" hidden>跟着做一遍</button>
             <button class="ob-ghost" id="ob-cta-later">以后再说</button>
           </div>
-          <div class="ob-end-note">权限与外连边界在完整导览第 7 屏 · 所有演示都不会改动你的配置</div>
+          <div class="ob-end-note">权限与外连边界在第 7 屏 · 所有演示都不会改动你的配置</div>
         </div>
       </div>
 
@@ -3455,7 +3559,10 @@ const I18N_EN = {
   "1) 本机代理（Clash / V2Ray 等，常见 127.0.0.1:7890）没有绕过 localhost：\n   在代理的「绕过 / 例外 / Bypass」里加入 127.0.0.1;localhost;::1\n2) 或换一个不走系统代理的浏览器打开本控制台\n\n验证：到「AI 助手」页点「检测请求传输」，显示\"发送 N / 收到 N\"即已修好。": "1) A local proxy (Clash / V2Ray, often 127.0.0.1:7890) is not bypassing localhost:\n   add 127.0.0.1;localhost;::1 to its bypass / exception list\n2) Or open this console in a browser that does not use the system proxy\n\nVerify: open the AI panel and click \"Test request transport\" — \"sent N / received N\" means fixed.",
   "2 分钟涨 {0} MB": "+{0} MB in 2 min",
   "428 + 红框": "428 + red dialog",
+  "5 个窗口 · 3 套工具链": "5 windows · 3 toolchains",
+  "5 个页面来回切": "five tabs to switch between",
   "5 项正常 · 1 项待校验": "5 OK · 1 pending",
+  "5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。": "Five checks OK, one pending (chain unreachable). Next: app config.",
   "72（0 = 仅启动时）": "72 (0 = startup only)",
   "=仅供参考、": "= for reference only,",
   "=多数时候成立、": "= holds most of the time,",
@@ -3500,6 +3607,7 @@ const I18N_EN = {
   "W 脚本": "W script",
   "WeBASE-Front 地址": "WeBASE-Front URL",
   "Webhook 地址": "Webhook URL",
+  "Windows 10 / 11 · 有管理员权限": "Windows 10 / 11 · admin rights",
   "Windows 防火墙没放行这个端口，手机的请求到不了 EnvKit": "Windows Firewall is not allowing this port, so the phone's requests never reach EnvKit",
   "[ERROR] 演示异常：端口 8888 被占用（这条是演示数据）": "[ERROR] Demo issue: port 8888 is in use (demo data only)",
   "docs/eval 下最近 60 份": "Latest 60 files under docs/eval",
@@ -3603,6 +3711,7 @@ const I18N_EN = {
   "下载失败": "Download failed",
   "下雪了，路上滑，慢点走。": "It's snowing. Roads are slippery — take it slow.",
   "不主动提示。\n          标「已失效」的项目/环境变了，该条不会注入——": "not surfaced proactively.\n          Items marked \"expired\" changed project or environment and are no longer injected —",
+  "不做": "Never",
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
   "不发送温度": "Temperature is not sent",
   "不同模型对请求参数的接受度不一样（有的只认 temperature=1、有的要 max_completion_tokens、有的不支持工具调用）。这里显示的是调用中自动探测出来的结果，不是配置项。": "Models differ in which request parameters they accept (some only allow temperature=1, some require max_completion_tokens, some reject tool calls). These are what the calls detected on their own, not settings.",
@@ -3622,9 +3731,11 @@ const I18N_EN = {
   "两个问句分别演示「只读回复」与「写操作确认」": "The two questions demo a read-only reply and a write-action confirmation",
   "严重": "Critical",
   "个人中心": "Profile",
+  "个入口": " entry",
   "中": "Med",
   "中午好": "Good noon",
   "中断 {0}": "{0} aborted",
+  "为什么不再开五个窗口": "Why stop opening five windows",
   "为什么不继续用旧办法": "Why not keep the old way",
   "为什么存在": "Why it exists",
   "主体": "Actor",
@@ -3649,6 +3760,7 @@ const I18N_EN = {
   "仅覆盖最近 {0} 天（轨迹保留期）": "Covers last {0} days (trace retention)",
   "今天{0}，出门看一眼天。": "{0} today. Take a look outside before you head out.",
   "今天想看点什么？": "What would you like to see?",
+  "今日 4 份 · 保留 30 天": "4 files today · kept 30 days",
   "今日统计": "Today's usage",
   "今日（本机累计）": "Today (local)",
   "仍有 {0} 个组件未就绪": "{0} component(s) still not ready",
@@ -3663,6 +3775,7 @@ const I18N_EN = {
   "任何项目都生效": "applies to all projects",
   "任务成功率 / 首次成功率 / 需重试": "Task success / first-try success / retries",
   "任务数": "Tasks",
+  "任意 shell": "arbitrary shell",
   "份": "files",
   "会话统计只在本次页面打开期间累积；今日统计写在本机 localStorage。": "Session totals accumulate while this page stays open; today's totals are kept in localStorage.",
   "传输": "Transport",
@@ -3729,6 +3842,7 @@ const I18N_EN = {
   "全部启动": "Start all",
   "全部就绪，请重开终端使环境变量生效": "All ready — reopen your terminal so the environment variables take effect",
   "全部日期": "All dates",
+  "全部是演示数据": "all demo data",
   "全部空闲": "All free",
   "共 {0} 条": "{0} total",
   "共 {0} 条 · {1} 条每轮注入": "{0} total · {1} injected every turn",
@@ -3754,6 +3868,7 @@ const I18N_EN = {
   "内部调用模型": "Utility model",
   "再晃要吐了🫠": "Keep shaking and I'll be sick🫠",
   "写一条长期规矩，例如：备份前先停掉后端服务（Ctrl+Enter 添加）": "Write a standing rule, e.g. stop the backend before backing up (Ctrl+Enter to add)",
+  "写入任何配置": "write any config",
   "冷却（秒）": "Cooldown (s)",
   "冻结只能走命令行 --set-baseline，界面只读": "Freezing is command-line only (--set-baseline); the UI is read-only",
   "冻结时间": "Frozen at",
@@ -3792,6 +3907,7 @@ const I18N_EN = {
   "前端校验窗口": "Frontend verify window",
   "前端目录": "Frontend directory",
   "前端：{0}": "Frontend: {0}",
+  "前置": "Requires",
   "剪贴板": "Clipboard",
   "副标题": "Subtitle",
   "加入": "Add",
@@ -3847,11 +3963,13 @@ const I18N_EN = {
   "变大啦，看得清吗": "Bigger now — easier to see?",
   "变小一点": "Smaller",
   "口令器（Authenticator）里的 6 位数字，挡得住配对码被人瞥见。": "The 6-digit code from your authenticator app — survives a pair code being seen.",
+  "另开一个 GUI": "a separate GUI app",
   "只存在本机": "Stored on this device only",
   "只影响 EnvKit 自己发起的下载与依赖安装，不改进程级环境变量。": "Only affects downloads and dependency installs started by EnvKit; process-level env vars are untouched.",
   "只收 .sql 文件和图片哦，「{0}」先还给你": "Only .sql files and images here — returning \"{0}\" to you",
   "只收 .sql 文件哦，「{0}」先还给你": "I only take .sql files — \"{0}\" is returned to you",
   "只看异常": "Issues only",
+  "只能靠 scrollback": "scrollback only",
   "只说明取数来源，不在这里编数字": "Shows where each number comes from; nothing is invented here",
   "只读": "Read-only",
   "只读 · 需手改 config.json": "Read-only · edit config.json by hand",
@@ -3883,6 +4001,7 @@ const I18N_EN = {
   "后端：{0}": "Backend: {0}",
   "含密码，所以不在这里再放一份输入框": "Contains a password, so it is not duplicated as an input here",
   "听我说一句": "Say something",
+  "启停服务": "start/stop services",
   "启停服务、链端操作等；破坏性操作走 428 + 红色确认框，不会执行任意命令。": "Start/stop services and chain operations; destructive ones use a 428 + red confirmation, and no arbitrary command ever runs.",
   "启动": "Start",
   "启动 WeBASE-Front": "Start WeBASE-Front",
@@ -3915,9 +4034,11 @@ const I18N_EN = {
   "嗝～又圆了一圈……": "Burp~ rounder already...",
   "嗯？一直点我干嘛👀": "Hmm? Why keep poking me👀",
   "嘎嘣脆，好吃！": "Crunchy and tasty!",
+  "四档权限逐级放开": "Four permission tiers, opened gradually",
   "四档权限逐级放开：能看的改不了，能改的必须确认，破坏性操作走 428。": "Four tiers open up gradually: read-only cannot write, writes need a confirm, destructive actions go through 428.",
   "四档权限逐级放开；动作类默认关，破坏性操作一律先确认。": "Four permission tiers unlock progressively; actions are off by default and destructive ones always ask first.",
   "四档评测": "Four evaluation tiers",
+  "四步各有输入与产出": "Each step has inputs and outputs",
   "四步导航": "The four-step guide",
   "四步走": "Four steps",
   "四步走，是一条明确的线": "Four steps, one clear line",
@@ -3945,6 +4066,7 @@ const I18N_EN = {
   "基线": "Baseline",
   "填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。": "Fill in database settings, create the schema, import or export config; a failed connection names the exact item.",
   "备份保留": "Backups kept",
+  "备份复验": "backup re-verify",
   "备份数据库": "back up database",
   "备份文件写到：{0}": "Backups are written to: {0}",
   "备份目录": "Backup folder",
@@ -4035,6 +4157,7 @@ const I18N_EN = {
   "导出分发包": "Export Distributable",
   "导出失败：": "Export failed: ",
   "导出配置": "Export config",
+  "导出配置快照": "export config snapshot",
   "导出（脱敏）": "Export (sanitized)",
   "导览进度": "Tour progress",
   "将「{0}」生效到库 {1}？执行前会自动备份，高危语句需二次确认。": "Apply \"{0}\" to database {1}? A backup is taken first; risky statements need a second confirmation.",
@@ -4063,6 +4186,7 @@ const I18N_EN = {
   "就绪": "Ready",
   "尾部原样保留的估算上限": "Estimated cap on the verbatim tail kept after summarizing",
   "局域网": "LAN",
+  "屏": " screens",
   "展开": "Expand",
   "展开明细（{0} 行）": "Show details ({0} lines)",
   "巡检": "Patrol",
@@ -4099,6 +4223,7 @@ const I18N_EN = {
   "已导出 {0}": "Exported {0}",
   "已导出本轮": "Turn exported",
   "已就绪": "Ready",
+  "已就绪 · 可以继续问": "ready · ask anything",
   "已开启": "Enabled",
   "已开启 · {0}": "On · {0}",
   "已开启 · 手机访问 {0}": "Enabled · phone access at {0}",
@@ -4178,6 +4303,7 @@ const I18N_EN = {
   "应用": "Apply",
   "延迟 p50": "Latency p50",
   "建库并执行 SQL": "Create DB and apply SQL",
+  "建库建表": "create schema",
   "建议": "Suggestion",
   "建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Run EnvKit as administrator to skip the UAC prompt. Reboot once when done.",
   "建议：{0}": "Suggestion: {0}",
@@ -4207,6 +4333,7 @@ const I18N_EN = {
   "当前版本": "Current version",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
+  "待你确认 · 不会自己动手": "waiting for you · it will not act alone",
   "待处理": "Pending",
   "待复审": "Needs review",
   "待机 · 已连接": "idle · connected",
@@ -4217,6 +4344,7 @@ const I18N_EN = {
   "忽略这个版本": "Ignore this version",
   "怎么称呼你？（可留空）": "What should I call you? (optional)",
   "思考中": "Thinking",
+  "思考中 · 读取状态": "thinking · reading status",
   "恢复原本大小": "Back to normal size",
   "恢复演练": "Restore drill",
   "恢复预算与断路器": "Recovery budget & breaker",
@@ -4245,6 +4373,7 @@ const I18N_EN = {
   "我遇到了环境问题，以下是最近的日志（错误 {0} 条、警告 {1} 条）。请先判断里面是否真的有错误，再给解决步骤；如果只有警告，请直接说明要不要处理：\n": "I hit an environment problem. Below are recent log lines ({0} errors, {1} warnings). First decide whether any of them is a real error, then give fix steps; if they are warnings only, just say whether anything needs doing:\n",
   "或 JSON 数组；重复内容自动更新而非新增": "or a JSON array; duplicate content updates in place instead of adding a new entry",
   "手动复检": "Re-run the check",
+  "手动连链端主机": "SSH into the chain host",
   "手机上已关闭：{0}": "Disabled for the phone: {0}",
   "手机上已开启：{0}": "Enabled for the phone: {0}",
   "手机与电脑互相复制文本。手机上复制的会覆盖电脑剪贴板。": "Copy text between phone and PC. Text sent from the phone replaces the PC clipboard.",
@@ -4271,6 +4400,7 @@ const I18N_EN = {
   "执行": "Run",
   "执行 SQL": "Apply SQL",
   "执行中": "Running…",
+  "执行任意命令": "run arbitrary commands",
   "执行计划（{0}）": "Execution plan ({0})",
   "扫描中…": "Scanning…",
   "扫描失败": "Scan failed",
@@ -4287,6 +4417,7 @@ const I18N_EN = {
   "报告": "Report",
   "报告文件不会被删除，仍按报告的份数上限自动清理。": "The report file is not deleted; it still follows the report retention limit.",
   "报告：{0}": "Report: {0}",
+  "抽样只读": "sample rows (read-only)",
   "拉取失败：": "Fetch failed: ",
   "拉取模型列表": "Fetch model list",
   "拉取模型列表中...": "Fetching model list...",
@@ -4321,11 +4452,13 @@ const I18N_EN = {
   "支持": "Supported",
   "收尾": "Wrap-up",
   "收拢": "Converge",
+  "收拢成 1 条状态线": "collapsed into one status line",
   "收藏": "Save",
   "收起": "Collapse",
   "收起一会儿": "Tuck away for a while",
   "收起数据浏览": "Collapse data browser",
   "收起，只看最近 {0} 条": "Collapse to the latest {0}",
+  "改 config.json": "edit config.json",
   "改为按需注入": "Only when relevant",
   "改任意一项会立刻保存并重查": "Any change saves and re-checks immediately",
   "改即保存": "Saves on change",
@@ -4333,6 +4466,7 @@ const I18N_EN = {
   "改端口需要重启 EnvKit 才生效。": "Port changes take effect after EnvKit restarts.",
   "改端口需要重启 EnvKit 才生效；评测脚本硬编码 18765，改端口后后两档会被判「不可用」。": "Port changes need a restart; eval scripts hardcode 18765, so the last two tiers report unavailable if the port differs.",
   "改这里要手改 config.json 的 recovery 段": "Change these by hand in the recovery section of config.json",
+  "改配置": "edit config",
   "放大": "Expand",
   "放我下来！……好吧，再玩一次。": "Put me down! ...Fine, one more round.",
   "放行中…（在 UAC 窗口点「是」）": "Allowing… (choose Yes in the UAC prompt)",
@@ -4370,6 +4504,7 @@ const I18N_EN = {
   "日均 {0} 次": "{0} per day",
   "日志": "Logs",
   "日志分区": "Log scopes",
+  "日志按来源分区": "Logs split by source",
   "日志窗口": "Log window",
   "日志配额": "Log quota",
   "日志里暂时没有错误行": "No error lines in the log yet",
@@ -4453,6 +4588,7 @@ const I18N_EN = {
   "未检测到数据库（点「刷新」重试）": "No databases found (click Refresh to retry)",
   "未检测（先点「重新检测」）": "Not checked (click “Re-check”)",
   "未测试": "Untested",
+  "未登记的脚本": "unregistered scripts",
   "未知": "Unknown",
   "未知原因": "Unknown cause",
   "未知设备": "Unknown device",
@@ -4502,6 +4638,7 @@ const I18N_EN = {
   "松手载入图片": "Release to attach",
   "构建并启动": "Build & start",
   "构造请求失败": "Couldn't build the request",
+  "查审计与轨迹": "read audit and traces",
   "查看天气": "Show weather",
   "查看报告": "View report",
   "查看日志": "View logs",
@@ -4542,7 +4679,9 @@ const I18N_EN = {
   "检测失败：{0}": "Test failed: {0}",
   "检测数据库连接": "Check database connection",
   "检测给结论，": "Checks give conclusions,",
+  "检测给结论，不给猜测": "Detect gives a verdict, not a guess",
   "检测请求传输": "Test request transport",
+  "检索日志与错误码 · 2 处命中": "searching logs and error codes · 2 hits",
   "棒棒糖": "Lollipop",
   "棒棒糖！转圈圈～": "Lollipop! Round and round~",
   "模型": "Model",
@@ -4567,6 +4706,7 @@ const I18N_EN = {
   "正常": "OK",
   "此电脑": "This PC",
   "步数": "Steps",
+  "步流程": " steps",
   "步骤 {0}": "{0} steps",
   "段，不碰其它配置。": " section and never touches the rest of the config.",
   "每一轮都有新信息，上限自动放宽到 {0} 轮": "every turn brought new information — limit raised to {0} turns",
@@ -4641,6 +4781,8 @@ const I18N_EN = {
   "环境 未检测": "Env not checked",
   "环境 缺失": "Env missing",
   "环境安装": "Environment Setup",
+  "环境安装 · Go / Node.js / MySQL 一次装齐": "Env setup · Go / Node.js / MySQL in one pass",
+  "环境安装已完成 · MySQL 在跑": "env setup done · MySQL running",
   "环境很健康": "Environment looks healthy",
   "环境检测报告": "Environment report",
   "环境检测报告（演示数据）": "Environment report (demo data)",
@@ -4675,15 +4817,18 @@ const I18N_EN = {
   "留空则用私钥": "Empty = use private key",
   "留空则用默认城市（上海）": "Leave blank to use the default city (Shanghai)",
   "登录": "Login",
+  "白名单内的启停": "whitelisted start/stop",
   "目录 · 数据库 · 依赖": "Directories · Database · Deps",
   "目录与库": "Directories & DB",
   "目标": "Target",
   "目标主机与 SSH": "Target host & SSH",
   "目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Target: PUA:Win32/Softcnapp family (WROberlay*.dll injecting adware).\nIt injects a DLL into newly started processes, making go / npm / mysqldump randomly exit with zero output.\n\nWill do:\n· Ask Defender to remove detected threats\n· Delete every WROberlay* file under C:\\Windows (renamed to .quarantine if locked)\n· Clean the related CLSID and icon-overlay registry entries\n· Restart Explorer to unload the injected DLL\n\nRunning EnvKit as administrator is recommended to avoid the UAC prompt. Reboot once afterwards.",
+  "直接做": "No confirm",
   "直接进配对页": "Go straight to the pairing page",
   "相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
   "看屏幕": "View screen",
   "看看它能做什么": "See what it does",
+  "看运行状态": "read status",
   "真赶不走啊你！": "You really don't take a hint!",
   "知道了": "Got it",
   "知道了（演示）": "Got it (demo)",
@@ -4707,10 +4852,12 @@ const I18N_EN = {
   "移除后这台手机要重新配对，继续？": "This phone will need to pair again after removal. Continue?",
   "程序启动": "Launch",
   "程序配置": "Configure",
+  "程序配置 · 连接、建库、导入导出都在这一页": "App config · connect, schema, import/export on one page",
   "空目录": "Empty directory",
   "空闲": "Free",
   "穿透已解除": "Click-through is off",
   "窗口内动作上限": "Actions per window",
+  "窗口被其他程序占用": "the port is taken by another process",
   "立刻弹气泡并 POST 一次": "Shows a bubble and POSTs once immediately",
   "立刻放行一次恢复探针。只有确认底层环境已经恢复时才这么做——否则等于让同一个起不来的服务再被重启一轮。": "Lets one recovery probe through immediately. Only do this once the underlying environment is really back — otherwise the same service that cannot start gets restarted all over again.",
   "立即检查": "Check now",
@@ -4723,6 +4870,7 @@ const I18N_EN = {
   "端口已保存，重启 EnvKit 后生效": "Port saved; it takes effect after EnvKit restarts",
   "端口没在监听：手机访问的开关可能已关闭，或端口被别的程序占了": "Nothing is listening on the port: mobile access may be off, or another program took the port",
   "端口线索": "Port hints",
+  "端口被占用：8888 被上一个实例占着。先结束残留进程，再点启动。": "Port in use: 8888 is held by the previous instance. Kill the leftover process, then hit start.",
   "端口需在 1024-65535": "Port must be within 1024-65535",
   "第 {0} 屏，共 {1} 屏": "Slide {0} of {1}",
   "第一步是检测本机组件，结果会直接显示在这里。": "Step one detects local components; results show up right here.",
@@ -4740,6 +4888,10 @@ const I18N_EN = {
   "系统": "System",
   "系统事件（最近错误）": "System events (recent errors)",
   "系统对话框": "System dialog",
+  "约 1 分钟": "~1 min",
+  "约 15 秒": "~15 s",
+  "约 20 秒": "~20 s",
+  "约 90": "~90",
   "纯静态数据，不会真的检测你的电脑": "Static demo data only; your machine is never scanned",
   "线程 {0} · 句柄 {1} · 已运行 {2}": "Threads {0} · handles {1} · uptime {2}",
   "组件": "Components",
@@ -4782,6 +4934,7 @@ const I18N_EN = {
   "翻页": "page",
   "耗时": "Elapsed",
   "耗时 {0}ms": "took {0}ms",
+  "能 SSH 到链端主机": "SSH access to the chain host",
   "能做什么": "What it can do",
   "能力开关": "Feature toggles",
   "能改配置、执行备份复验等可逆操作；需要一次确认，且只能走白名单里的固定动作。": "Reversible actions such as config edits and backup drills; one confirmation, allowlisted fixed actions only.",
@@ -4827,6 +4980,7 @@ const I18N_EN = {
   "装完或改完配置，点这里重新检测。这一步留给你自己点，引导不会代跑。": "After installing or changing config, click here to re-check. This tour never clicks it for you.",
   "要一次写多条，点右上角「批量导入」：每行一条，支持「- 内容 | 标签」或 JSON 数组；内容重复会自动更新而非新增。": "To add several at once, use \"Bulk import\" at the top right: one per line, either `- text | tags` or a JSON array; duplicates are updated instead of duplicated.",
   "要不直接骂他一句？！": "Or just tell them off?!",
+  "要确认": "Confirm first",
   "覆盖率（可判）": "Coverage (judgeable)",
   "解除鼠标穿透": "Disable click-through",
   "誓死捍卫深度求索！": "Defend DeepSeek with my life!",
@@ -4834,6 +4988,7 @@ const I18N_EN = {
   "让 AI 分析": "Analyze with AI",
   "让 AI 助手分析错误原因并给出解决步骤，还是直接查看日志？": "Have the AI assistant analyze the error and suggest fixes, or view the logs directly?",
   "让助手下次不再犯同样的错": "so the assistant stops repeating mistakes",
+  "记 5 条启动命令": "five startup commands to recall",
   "记忆": "Memory",
   "记忆与经验": "Memory & lessons",
   "记忆与经验面板": "memory panel",
@@ -4856,6 +5011,7 @@ const I18N_EN = {
   "该端口已在列表中": "Port already in the list",
   "详情 / 复验结论": "Detail / verification",
   "说人话就能运维": "Just describe what you need",
+  "说人话，动手前先问": "Plain words, asks before acting",
   "请先在左侧选择一张表": "Select a table on the left first",
   "请先填写记忆内容": "Please enter the memory text first",
   "请先选择 SQL 文件": "Choose a SQL file first",
@@ -4880,7 +5036,9 @@ const I18N_EN = {
   "读取轨迹…": "Reading traces…",
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
+  "读库表结构": "read schema",
   "读日志、看状态、重启服务——都会先问你。": "Read logs, check status, restart services — it asks first.",
+  "读日志与报告": "read logs and reports",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
   "调用中": "running",
   "账户已停用": "Account disabled",
@@ -4888,12 +5046,14 @@ const I18N_EN = {
   "起飞咯——": "Takeoff —",
   "越靠前越安全；后两档会改机器状态，必须确认": "Safer first; the last two change machine state and need confirmation",
   "跑一次演示检测": "Run a demo check",
+  "跑环境检测": "run env checks",
   "跟上你的鼠标": "I'll follow your cursor",
   "跟着做一遍": "Follow along step by step",
   "跟随鼠标": "Follow cursor",
   "跳过": "Skip",
   "轨迹": "Trace",
   "轨迹 / 审计 / 用量": "Trace / Audit / Usage",
+  "轮转": "Rotation",
   "输入": "Input",
   "输入 {0} · 输出 {1}": "in {0} · out {1}",
   "输入模型名，如 deepseek-flash": "Enter a model name, e.g. deepseek-flash",
@@ -4935,6 +5095,7 @@ const I18N_EN = {
   "这张图我读不出来…": "I can't read this image…",
   "这张图读不出来，换一张试试": "Couldn't read that image — try another one",
   "这张确认卡已过期，请重新发起操作": "This confirmation has expired. Please start the action again.",
+  "这段报错是什么意思？": "What does this error mean?",
   "这活我不干，找个免费模型来": "Not doing this job — get a free model",
   "这用户发的啥啊，": "What is this user even sending,",
   "这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写": "Wrong values here cannot break much: every field has a built-in default, and 0 or empty means “use the default”. Saving only writes the ",
@@ -4984,9 +5145,11 @@ const I18N_EN = {
   "配对码（每次启动都会变）": "Pairing code (changes each start)",
   "配对要验证码": "Require a code when pairing",
   "配置": "Configure",
+  "配置与链端都已就绪": "config and chain both ready",
   "配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。": "Changes are saved automatically, then the provider's /models endpoint is called to fetch available models (a successful fetch also proves the key and URL are correct; on failure you can still use the built-in list or type a model name). The API key is DPAPI-encrypted and only decryptable on this machine.",
   "配置已保存": "Config saved",
   "采用": "Used",
+  "重启后端": "restart backend",
   "重启服务": "Restart service",
   "重播汇聚": "Replay the convergence",
   "重新安装": "Reinstall",
@@ -4995,6 +5158,7 @@ const I18N_EN = {
   "重新检测组件": "re-check components",
   "重新生成密钥": "Regenerate key",
   "重新生成密钥后，已经扫过旧密钥的口令器立即失效，需要重新扫。继续？": "After regenerating, any authenticator holding the old key stops working and must be re-scanned. Continue?",
+  "重新观看介绍": "Watch the intro again",
   "重新读取": "Reload",
   "重置": "Reset",
   "重置失败": "Reset failed",
@@ -5006,9 +5170,11 @@ const I18N_EN = {
   "链端": "Chain",
   "链端参数（主机 / 端口 / 目录 / 启动脚本 / 群组 / 自动重启）": "Chain settings (host / port / dir / start script / group / auto-recover)",
   "链端口": "Chain port",
+  "链端启停": "chain start/stop",
   "链端操作": "Chain actions",
   "链端日志": "Chain log",
   "链端校验": "Chain Check",
+  "链端校验 · 节点与 WeBASE 单独一条结论": "Chain check · node and WeBASE get their own verdict",
   "链端目录": "Chain directory",
   "链端配置": "Chain settings",
   "链节点": "Chain node",
@@ -5036,6 +5202,7 @@ const I18N_EN = {
   "需要你确认": "Your confirmation is needed",
   "顶栏那条导航不是装饰：每一步都有输入、有结果、有下一步。": "The top navigation is not decoration: every step has input, output and a next step.",
   "顶栏那条导航不是装饰：走到哪一步、上一步给了什么，都写在界面上。": "The top nav is not decoration: where you are and what the last step produced are both on screen.",
+  "项检测": " checks",
   "项目与路径": "Project & paths",
   "项目目录": "Project folders",
   "项目目录与数据库": "Project directories & database",
@@ -5049,8 +5216,10 @@ const I18N_EN = {
   "预演：{0}": "Dry run: {0}",
   "预算 {0} 轮": "Budget {0} turns",
   "预算窗口": "Budget window",
+  "预计耗时": "Est. time",
   "风 {0} km/h": "Wind {0} km/h",
   "首次": "First",
+  "首次约 3–5 分钟": "~3–5 min the first time",
   "首次解决率": "First-try rate",
   "驱动器": "Drives",
   "高": "High",
@@ -13344,7 +13513,14 @@ async function ekSetSaveUpdate(recheck){
    - 8 屏不再同构，各自一套构图（字标 / 散落汇聚 / 时间轴 / 终端+报告 / 控制台 / 对话 / 阶梯 / 章节地图）
    - 头像从 5 处收敛到片头 1 处；AI 屏改成克隆主界面真实桌宠 #petSvg
    - AI 屏与检测屏加入打字机（typeText），所有文本都能被"跳过动画"一次性补全
-   - 顶栏头像进度环换成细进度条 + 章节名 */
+   - 顶栏头像进度环换成细进度条 + 章节名
+
+   v5 变化（本轮）：
+   - 首次也播完整 8 屏，不再有"首次精选 5 屏"这一层
+   - 每屏补了一层客观细节：开场 HUD 四个数字 + 剖面轮转高亮、汇聚屏"5 → 1"计数、
+     时间轴自动前进 + 前置/耗时、检测终端进度条 + 报告结论行、日志侧栏分区计数与轮转、
+     AI 屏保留多轮历史 + trace 耗时 + 桌宠状态联动、权限屏"直接做/要确认/不做"三栏清单、
+     收尾屏每章一句摘要 + 总览 */
 
 (function(){
   'use strict';
@@ -13353,7 +13529,10 @@ async function ekSetSaveUpdate(recheck){
   if(!OB) return;
 
   var KEY = 'ek-guide-v1';
-  var FIRST_RUN_SLIDES = [0, 1, 2, 5, 7];
+  /* v5：首次也完整播 8 屏（原来只播 [0,1,2,5,7] 五屏精选）。
+     常量保留成显式列表，是为了让「首次选集」这件事仍然是一个可断言的点：
+     真要回到精简版只改这行，测试会立刻告诉你屏数和顺序变了。 */
+  var FIRST_RUN_SLIDES = [0, 1, 2, 3, 4, 5, 6, 7];
   var BRAND_MS = 1400;
   var TOTAL = 8;
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -13366,16 +13545,38 @@ async function ekSetSaveUpdate(recheck){
 
   /* ---------- 静态演示数据（不来自接口，不写回任何地方） ---------- */
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
+  var CHAPTER_SUM = [
+    '五件事，一个入口',
+    '为什么不再开五个窗口',
+    '四步各有输入与产出',
+    '检测给结论，不给猜测',
+    '日志按来源分区',
+    '说人话，动手前先问',
+    '四档权限逐级放开',
+    '从安装页开始'
+  ];
+
+  /* 开场右侧叠层剖面的轮转说明：焦点到哪一块，下面这句就换成哪一句 */
+  var SLAB_NOTES = [
+    '环境安装 · Go / Node.js / MySQL 一次装齐',
+    '程序配置 · 连接、建库、导入导出都在这一页',
+    '链端校验 · 节点与 WeBASE 单独一条结论',
+    '同一个入口，同一份状态'
+  ];
 
   var STEP_TEXT = [
     {b:'环境安装', p:'检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么，国内镜像下载会校验 SHA256。',
-     i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划'},
+     i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划',
+     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟'},
     {b:'程序配置', p:'填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。',
-     i:'数据库地址与账号', o:'config.json + 初始化好的库表'},
+     i:'数据库地址与账号', o:'config.json + 初始化好的库表',
+     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟'},
     {b:'链端校验', p:'检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。',
-     i:'节点端口与证书', o:'链端健康结论 + 区块高度'},
+     i:'节点端口与证书', o:'链端健康结论 + 区块高度',
+     pre:'能 SSH 到链端主机', cost:'约 20 秒'},
     {b:'程序启动', p:'先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。',
-     i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树'}
+     i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树',
+     pre:'配置与链端都已就绪', cost:'约 15 秒'}
   ];
 
   var DETECT = [
@@ -13387,19 +13588,26 @@ async function ekSetSaveUpdate(recheck){
     {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常'}
   ];
 
+  /* 每个分区给到 6–7 行：只放 5 行时控制台下半截是空的，像没加载完 */
   var SCOPES = {
-    install:['[INFO] 检测 Go 1.27.3 ... 正常','[INFO] 检测 Node.js 22.22.2 ... 正常','[INFO] GOPROXY 已指向国内镜像','[INFO] MySQL 8.0.36 服务在线','[INFO] 依赖校验完成，无缺失组件'],
-    config: ['[INFO] 读取 config.json','[INFO] 数据库连接测试通过','[INFO] 建表脚本已就绪','[INFO] 配置原子写入完成','[INFO] 已有配置快照，可回滚'],
-    chain:  ['[INFO] 节点 20200 可达','[INFO] WeBASE-Front 5002 可达','[WARN] 区块高度为 0，可能是新链','[INFO] 客户端版本 2.11.0','[INFO] 群组 1 已就绪'],
-    start:  ['[INFO] 后端监听 :8888','[INFO] 前端监听 :5173','[INFO] 进程树已登记','[INFO] 健康检查 200 OK','[INFO] 日志采集已挂载'],
-    sys:    ['[INFO] 日志按日轮转','[INFO] 配置原子写入完成','[INFO] 单实例锁已获取','[INFO] 托盘初始化成功','[INFO] 审计库已就绪']
+    install:['[INFO] 检测 Go 1.27.3 ... 正常','[INFO] 检测 Node.js 22.22.2 ... 正常','[INFO] GOPROXY 已指向国内镜像','[INFO] MySQL 8.0.36 服务在线','[INFO] 依赖校验完成，无缺失组件','[INFO] 复用已有 C:\\EnvKit\\tools 目录','[INFO] 安装计划已生成，等待执行'],
+    config: ['[INFO] 读取 config.json','[INFO] 数据库连接测试通过','[INFO] 建表脚本已就绪','[INFO] 配置原子写入完成','[INFO] 已有配置快照，可回滚','[INFO] 前端产物校验通过（13 个片段）'],
+    chain:  ['[INFO] 节点 20200 可达','[INFO] WeBASE-Front 5002 可达','[WARN] 区块高度为 0，可能是新链','[INFO] 客户端版本 2.11.0','[INFO] 群组 1 已就绪','[INFO] 证书有效期剩余 312 天','[INFO] 链端健康结论已写入状态行'],
+    start:  ['[INFO] 后端监听 :8888','[INFO] 前端监听 :5173','[INFO] 进程树已登记','[INFO] 健康检查 200 OK','[INFO] 日志采集已挂载','[INFO] 托盘图标已显示'],
+    sys:    ['[INFO] 日志按日轮转','[INFO] 配置原子写入完成','[INFO] 单实例锁已获取','[INFO] 托盘初始化成功','[INFO] 审计库已就绪','[INFO] 上次退出为正常关机']
   };
 
+  /* 权限四档：ok = 不需要确认就能做，ask = 要先点一次确认，no = 根本不做。
+     这三栏是这一屏的"细节"所在：光说"四档权限"很抽象，列出来才看得懂边界在哪。 */
   var PERMS = [
-    {b:'只读', p:'能看状态、日志、检测报告、轨迹与审计。不需要确认，永远不会改动任何东西。'},
-    {b:'诊断', p:'在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。'},
-    {b:'受限写', p:'能改配置、执行备份复验等可逆操作。需要一次确认，且只能走白名单里的固定动作。'},
-    {b:'审批后动作', p:'启停服务、链端操作等。破坏性操作走 428 + 红色确认框；不会执行任意命令。'}
+    {b:'只读', p:'能看状态、日志、检测报告、轨迹与审计。不需要确认，永远不会改动任何东西。',
+     ok:['看运行状态','读日志与报告','查审计与轨迹'], ask:[], no:['改配置','启停服务']},
+    {b:'诊断', p:'在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。',
+     ok:['跑环境检测','读库表结构','抽样只读'], ask:[], no:['写入任何配置']},
+    {b:'受限写', p:'能改配置、执行备份复验等可逆操作。需要一次确认，且只能走白名单里的固定动作。',
+     ok:['备份复验','导出配置快照'], ask:['改 config.json','建库建表'], no:['执行任意命令']},
+    {b:'审批后动作', p:'启停服务、链端操作等。破坏性操作走 428 + 红色确认框；不会执行任意命令。',
+     ok:['白名单内的启停'], ask:['重启后端','链端启停'], no:['任意 shell','未登记的脚本']}
   ];
 
   /* AI 屏的对话脚本：trace 是"工具调用"提示，answer 是最终回答。
@@ -13409,15 +13617,31 @@ async function ekSetSaveUpdate(recheck){
     read: {
       me:'现在服务都起来了吗？',
       trace:'读取运行状态 · 3 项检查',
-      answer:'后端在跑、前端在跑，链端两项校验都过了。要我把最近十条日志摘出来吗？'
+      answer:'后端在跑、前端在跑，链端两项校验都过了。要我把最近十条日志摘出来吗？',
+      ms:'0.42s'
     },
     write: {
       me:'帮我重启一下后端',
       trace:'解析意图 · 命中白名单动作',
-      answer:'确认卡在这里：你点了才执行。真实操作仍走权限闸门。'
+      answer:'确认卡在这里：你点了才执行。真实操作仍走权限闸门。',
+      ms:'0.31s'
+    },
+    explain: {
+      me:'这段报错是什么意思？',
+      trace:'检索日志与错误码 · 2 处命中',
+      answer:'端口被占用：8888 被上一个实例占着。先结束残留进程，再点启动。',
+      ms:'0.66s'
     }
   };
   var AI_AFTER = '权限闸门照旧生效，这里不会执行任何动作。';
+
+  /* 桌宠状态跟着对话走 —— 主界面那边也是这样一句一句变的 */
+  var PET_STATE = {
+    idle:'待机 · 已连接',
+    think:'思考中 · 读取状态',
+    wait:'待你确认 · 不会自己动手',
+    done:'已就绪 · 可以继续问'
+  };
 
   /* ---------- 运行时状态 ---------- */
   var ALL_SLIDES = qa('.ob-slide');
@@ -13433,6 +13657,8 @@ async function ekSetSaveUpdate(recheck){
   var timers = [];
   var typingCancel = null;
   var petMounted = false;
+  var slabIdx = 0;
+  var stepIdx = 0;
 
   function seen(){ try{ return localStorage.getItem(KEY) === '1'; }catch(e){ return false; } }
   function mark(){ try{ localStorage.setItem(KEY, '1'); }catch(e){} }
@@ -13490,6 +13716,8 @@ async function ekSetSaveUpdate(recheck){
       typingCancel = null;
       el.textContent = text;
       el.classList.remove('typing');
+      /* 被打断也要把 done 跑完：否则 data-live 标不上，这段回答就没法被冻结进历史 */
+      if(done) done();
     };
   }
   function endType(){ if(typingCancel) typingCancel(); }
@@ -13568,7 +13796,8 @@ async function ekSetSaveUpdate(recheck){
     var s = slides[cur];
     var idx = s ? Number(s.getAttribute('data-idx')) : 0;
     var no = q('#ob-sec-no'), nm = q('#ob-sec-name');
-    if(no) no.textContent = pad(idx + 1);
+    /* 章节号写成 03 / 08：一眼能算出还剩几屏，比纯数字有进度感 */
+    if(no) no.textContent = pad(idx + 1) + ' / ' + pad(slides.length);
     if(nm) nm.textContent = t(CHAPTERS[idx]);
 
     var live = q('#ob-live');
@@ -13591,6 +13820,14 @@ async function ekSetSaveUpdate(recheck){
     setProgress();
     enterAnim(s);
     if(s) initDemo(Number(s.getAttribute('data-idx')));
+    if(s) autoplay(Number(s.getAttribute('data-idx')));
+  }
+
+  /* 回到某一屏就重新开始它自己的循环演示（离开时 clearTimers 已经把上一轮的链断掉） */
+  function autoplay(idx){
+    if(REDUCED) return;
+    if(idx === 0){ slabIdx = 0; later(rotateSlab, 260); }
+    if(idx === 2){ stepIdx = 0; showStep(0); later(stepTick, 2300); }
   }
 
   /* ---------- 各屏演示 ---------- */
@@ -13606,11 +13843,13 @@ async function ekSetSaveUpdate(recheck){
     if(idx === 1) later(mergeFlow, 420);
   }
 
-  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出） */
+  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时） */
   function showStep(i){
     var n = STEP_TEXT.length;
     qa('#ob-track .ob-step').forEach(function(b){
-      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);
+      var k = Number(b.getAttribute('data-step'));
+      b.classList.toggle('on', k === i);
+      b.classList.toggle('done', k < i);       /* 走过的段自动打勾，进度线才有意义 */
     });
     var fill = q('#ob-tl-fill');
     if(fill) fill.style.width = (i / (n - 1) * 75) + '%';   /* rail 从 12.5% 到 87.5% */
@@ -13618,8 +13857,34 @@ async function ekSetSaveUpdate(recheck){
     if(!d) return;
     var x = STEP_TEXT[i];
     d.innerHTML = '<b>' + t(x.b) + '</b><p>' + t(x.p) + '</p>' +
-      '<div class="ob-io"><span><em>' + t('输入') + '</em>' + t(x.i) + '</span>' +
-      '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span></div>';
+      '<div class="ob-io">' +
+      '<span><em>' + t('输入') + '</em>' + t(x.i) + '</span>' +
+      '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span>' +
+      '<span><em>' + t('前置') + '</em>' + t(x.pre) + '</span>' +
+      '<span><em>' + t('预计耗时') + '</em>' + t(x.cost) + '</span>' +
+      '</div>';
+  }
+
+  /* 没点过任何步骤时自动往前推一格，让这一屏自己动起来 */
+  function stepTick(){
+    if(stepIdx >= STEP_TEXT.length - 1) return;
+    stepIdx += 1;
+    showStep(stepIdx);
+    later(stepTick, 2500);
+  }
+
+  /* 01 开场：叠层剖面轮流被点亮，下面那句说明跟着走 */
+  function focusSlab(i){
+    var order = [q('.ob-slab.s1'), q('.ob-slab.s2'), q('.ob-slab.s3'), q('.ob-slab.s4')];
+    order.forEach(function(el, k){ if(el) el.classList.toggle('focus', k === i); });
+    var note = q('#ob-art-note');
+    if(note) note.textContent = t(SLAB_NOTES[i] || SLAB_NOTES[0]);
+  }
+
+  function rotateSlab(){
+    focusSlab(slabIdx);
+    slabIdx = (slabIdx + 1) % SLAB_NOTES.length;
+    later(rotateSlab, 2600);
   }
 
   /* 04 检测：终端先跑命令，报告再逐行落定 */
@@ -13640,6 +13905,12 @@ async function ekSetSaveUpdate(recheck){
     if(badge){ badge.classList.remove('on'); badge.textContent = ''; }
     var term = q('#ob-detect-cmd');
     if(term) term.innerHTML = '';
+    var foot = q('#ob-report-foot');
+    if(foot) foot.classList.remove('on');
+    var prog = q('#ob-term-prog i');
+    if(prog) prog.style.width = '0%';
+    var pct = q('#ob-term-pct');
+    if(pct) pct.textContent = t('就绪');
   }
 
   function runDetect(){
@@ -13662,20 +13933,35 @@ async function ekSetSaveUpdate(recheck){
         }, i * 210);
       });
     }
+    /* 终端顶部那条 2px 进度：让"正在跑"有个一眼可见的物理量 */
+    var prog = q('#ob-term-prog i');
+    var pct = q('#ob-term-pct');
+    if(pct) pct.textContent = t('扫描中…');
+    if(prog){ prog.style.width = '0%'; void prog.offsetWidth; prog.style.width = '100%'; }
     qa('#ob-detect-rows .ob-row').forEach(function(row, i){
       later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 170);
     });
     var badge = q('#ob-detect-badge');
+    var foot = q('#ob-report-foot');
     later(function(){
       if(badge){ badge.textContent = t('5 项正常 · 1 项待校验'); badge.classList.add('on'); }
+      if(pct) pct.textContent = '1.8s · 6 项';
+      if(foot){
+        var sp = foot.querySelector('span');
+        if(sp) sp.textContent = t('5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。');
+        foot.classList.add('on');
+      }
     }, 420 + DETECT.length * 170);
   }
 
   /* 05 日志：分区切换 + 行号由 CSS counter 生成（不影响 textContent） */
+  var SCOPE_LABEL = {install:'安装', config:'配置', chain:'链端', start:'启动', sys:'系统'};
+
   function renderScope(k){
     qa('#ob-scopes button').forEach(function(b){
       b.classList.toggle('on', b.getAttribute('data-scope') === k);
     });
+    renderScopeStats(k);
     var box = q('#ob-log-lines');
     if(!box) return;
     box.innerHTML = '';
@@ -13688,11 +13974,67 @@ async function ekSetSaveUpdate(recheck){
     });
   }
 
-  /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡） */
-  function resetChat(){
-    qa('#ob-chat-log .ob-bubble.me, #ob-chat-log .ob-trace').forEach(function(n){
-      if(n.parentNode) n.parentNode.removeChild(n);
+  /* 侧栏那一列分区计数：把"五个分区各有多少行"变成能看见的数字 */
+  function renderScopeStats(cur){
+    var st = q('#ob-scope-stats');
+    if(!st) return;
+    st.innerHTML = '';
+    Object.keys(SCOPES).forEach(function(key){
+      var d = document.createElement('i');
+      if(key === cur) d.className = 'on';
+      d.innerHTML = '<em>' + t(SCOPE_LABEL[key]) + '</em><b>' + SCOPES[key].length + '</b>';
+      st.appendChild(d);
     });
+  }
+
+  /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡）
+     v5 起保留历史：上一轮回答会被"冻结"成一条普通气泡，新回答继续在 #ob-bubble 里逐字打，
+     这样连续问三句才像真的在对话，而不是每句都覆盖同一块。 */
+  function petState(k){
+    var m = q('#ob-pet-msg');
+    if(m) m.textContent = t(PET_STATE[k] || PET_STATE.idle);
+  }
+
+  function resetChat(){
+    var log = q('#ob-chat-log');
+    if(log){
+      Array.prototype.slice.call(log.children).forEach(function(n){
+        if(n.id !== 'ob-bubble' && n.parentNode) log.removeChild(n);
+      });
+    }
+    var bub = q('#ob-bubble');
+    if(bub){
+      bub.className = 'ob-bubble';
+      bub.removeAttribute('data-live');
+      bub.innerHTML = t('今天想看点什么？') + '<em>' + t('读日志、看状态、重启服务——都会先问你。') + '</em>';
+    }
+    petState('idle');
+    showConfirm(false);
+  }
+
+  function freezeBubble(){
+    var log = q('#ob-chat-log'), bub = q('#ob-bubble');
+    if(!log || !bub) return;
+    var txt = (bub.textContent || '').trim();
+    if(bub.getAttribute('data-live') !== '1' || !txt) return;
+    var f = document.createElement('div');
+    f.className = 'ob-bubble frozen';
+    f.textContent = txt;
+    log.insertBefore(f, bub);
+    bub.removeAttribute('data-live');
+    bub.textContent = '';
+  }
+
+  /* 气泡多了会把面板顶爆：只留最近几轮，从最旧的开始丢 */
+  function trimLog(){
+    var log = q('#ob-chat-log');
+    if(!log) return;
+    var kids = Array.prototype.slice.call(log.children);
+    while(kids.length > 9){
+      var n = kids.shift();
+      if(n.id === 'ob-bubble'){ kids.push(n); continue; }
+      if(n.parentNode) log.removeChild(n);
+    }
   }
 
   function askAI(kind){
@@ -13701,8 +14043,11 @@ async function ekSetSaveUpdate(recheck){
     var bub = q('#ob-bubble');
     if(!script || !log || !bub) return;
 
-    resetChat();
     endType();
+    freezeBubble();
+    bub.classList.remove('me');
+    bub.textContent = '';
+    petState('think');
 
     var me = document.createElement('div');
     me.className = 'ob-bubble me';
@@ -13711,7 +14056,8 @@ async function ekSetSaveUpdate(recheck){
 
     var tr = document.createElement('div');
     tr.className = 'ob-trace';
-    tr.innerHTML = '<i></i><b>' + t('调用中') + '</b><span>' + t(script.trace) + '</span>';
+    tr.innerHTML = '<i></i><b>' + t('调用中') + '</b><span>' + t(script.trace) + '</span>' +
+                   '<em>' + script.ms + '</em>';
     log.insertBefore(tr, bub);
     requestAnimationFrame(function(){ tr.classList.add('on'); });
 
@@ -13720,12 +14066,15 @@ async function ekSetSaveUpdate(recheck){
 
     var startTyping = function(){
       tr.classList.add('done');
-      bub.classList.remove('me');
-      typeText(bub, t(script.answer), 18);
+      typeText(bub, t(script.answer), 18, function(){
+        bub.setAttribute('data-live', '1');
+        petState(kind === 'write' ? 'wait' : 'done');
+      });
     };
     if(kind === 'write') startTyping();
     else later(startTyping, 420);
 
+    trimLog();
     if(log.scrollHeight) log.scrollTop = log.scrollHeight;
   }
 
@@ -13735,12 +14084,28 @@ async function ekSetSaveUpdate(recheck){
   }
 
   /* 07 权限阶梯 */
+  var PERM_COLS = [['ok','直接做'], ['ask','要确认'], ['no','不做']];
+
   function showPerm(i){
     qa('#ob-perms button').forEach(function(b){
       b.classList.toggle('on', Number(b.getAttribute('data-perm')) === i);
     });
     var d = q('#ob-perm-desc');
     if(d) d.innerHTML = '<b>' + t(PERMS[i].b) + '</b>' + t(PERMS[i].p);
+
+    var box = q('#ob-perm-acts');
+    if(!box) return;
+    box.innerHTML = '';
+    PERM_COLS.forEach(function(col){
+      var cell = document.createElement('div');
+      cell.className = col[0];
+      var items = PERMS[i][col[0]] || [];
+      var html = '<em>' + t(col[1]) + '</em>';
+      if(!items.length) html += '<span>—</span>';
+      else items.forEach(function(x){ html += '<span>' + t(x) + '</span>'; });
+      cell.innerHTML = html;
+      box.appendChild(cell);
+    });
   }
 
   /* 08 章节地图 */
@@ -13755,7 +14120,7 @@ async function ekSetSaveUpdate(recheck){
       b.setAttribute('data-jump', String(i));
       b.innerHTML = '<span class="ob-ch-no">' + pad(n + 1) + '</span>' +
                     '<span class="ob-ch-nm">' + t(CHAPTERS[n]) + '</span>' +
-                    '<span class="ob-ch-bar"><i></i><i></i><i></i></span>';
+                    '<span class="ob-ch-sum">' + t(CHAPTER_SUM[n]) + '</span>';
       g.appendChild(b);
     });
     setProgress();
@@ -13766,13 +14131,16 @@ async function ekSetSaveUpdate(recheck){
     var m = q('#ob-merge');
     var beam = q('#ob-beam');
     var card = q('.ob-new-card');
+    var foot = q('#ob-merge-foot');
     if(m) m.classList.remove('flow');
     if(beam){ beam.classList.remove('flow'); void beam.offsetWidth; beam.classList.add('flow'); }
+    if(foot) foot.classList.remove('on');
     later(function(){ if(m) m.classList.add('flow'); }, 120);
     if(card){
       card.classList.remove('lit');
       later(function(){ card.classList.add('lit'); }, 620);
     }
+    later(function(){ if(foot) foot.classList.add('on'); }, 900);
   }
 
   /* ---------- Swiper ---------- */
@@ -13826,6 +14194,7 @@ async function ekSetSaveUpdate(recheck){
     setProgress();
     enterAnim(slides[0]);
     initDemo(Number(slides[0].getAttribute('data-idx')));
+    autoplay(Number(slides[0].getAttribute('data-idx')));
 
     var skip = q('#ob-skip');
     if(skip && typeof skip.focus === 'function') skip.focus();
@@ -13908,6 +14277,7 @@ async function ekSetSaveUpdate(recheck){
     if(id === 'ob-merge-replay'){ mergeFlow(); return; }
 
     if(id === 'ob-track-run'){
+      stepIdx = STEP_TEXT.length - 1;   /* 手动操作后停止自动前进，别和人抢 */
       qa('#ob-track .ob-step').forEach(function(s, i){
         later(function(){ s.classList.add('done'); }, i * 240);
       });
@@ -13915,7 +14285,7 @@ async function ekSetSaveUpdate(recheck){
       return;
     }
     var step = b.getAttribute('data-step');
-    if(step !== null){ showStep(Number(step)); return; }
+    if(step !== null){ stepIdx = STEP_TEXT.length - 1; showStep(Number(step)); return; }
 
     if(id === 'ob-detect-run'){ runDetect(); return; }
 
@@ -13940,9 +14310,10 @@ async function ekSetSaveUpdate(recheck){
     if(id === 'ob-demo-ok' || id === 'ob-demo-cancel'){
       showConfirm(false);
       endType();
+      petState('done');
       var bb = q('#ob-bubble');
       if(id === 'ob-demo-ok'){
-        if(bb) typeText(bb, t(AI_AFTER), 16);
+        if(bb) typeText(bb, t(AI_AFTER), 16, function(){ bb.setAttribute('data-live', '1'); });
       }
       return;
     }

@@ -10,7 +10,14 @@
    - 8 屏不再同构，各自一套构图（字标 / 散落汇聚 / 时间轴 / 终端+报告 / 控制台 / 对话 / 阶梯 / 章节地图）
    - 头像从 5 处收敛到片头 1 处；AI 屏改成克隆主界面真实桌宠 #petSvg
    - AI 屏与检测屏加入打字机（typeText），所有文本都能被"跳过动画"一次性补全
-   - 顶栏头像进度环换成细进度条 + 章节名 */
+   - 顶栏头像进度环换成细进度条 + 章节名
+
+   v5 变化（本轮）：
+   - 首次也播完整 8 屏，不再有"首次精选 5 屏"这一层
+   - 每屏补了一层客观细节：开场 HUD 四个数字 + 剖面轮转高亮、汇聚屏"5 → 1"计数、
+     时间轴自动前进 + 前置/耗时、检测终端进度条 + 报告结论行、日志侧栏分区计数与轮转、
+     AI 屏保留多轮历史 + trace 耗时 + 桌宠状态联动、权限屏"直接做/要确认/不做"三栏清单、
+     收尾屏每章一句摘要 + 总览 */
 
 (function(){
   'use strict';
@@ -19,7 +26,10 @@
   if(!OB) return;
 
   var KEY = 'ek-guide-v1';
-  var FIRST_RUN_SLIDES = [0, 1, 2, 5, 7];
+  /* v5：首次也完整播 8 屏（原来只播 [0,1,2,5,7] 五屏精选）。
+     常量保留成显式列表，是为了让「首次选集」这件事仍然是一个可断言的点：
+     真要回到精简版只改这行，测试会立刻告诉你屏数和顺序变了。 */
+  var FIRST_RUN_SLIDES = [0, 1, 2, 3, 4, 5, 6, 7];
   var BRAND_MS = 1400;
   var TOTAL = 8;
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -32,16 +42,38 @@
 
   /* ---------- 静态演示数据（不来自接口，不写回任何地方） ---------- */
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
+  var CHAPTER_SUM = [
+    '五件事，一个入口',
+    '为什么不再开五个窗口',
+    '四步各有输入与产出',
+    '检测给结论，不给猜测',
+    '日志按来源分区',
+    '说人话，动手前先问',
+    '四档权限逐级放开',
+    '从安装页开始'
+  ];
+
+  /* 开场右侧叠层剖面的轮转说明：焦点到哪一块，下面这句就换成哪一句 */
+  var SLAB_NOTES = [
+    '环境安装 · Go / Node.js / MySQL 一次装齐',
+    '程序配置 · 连接、建库、导入导出都在这一页',
+    '链端校验 · 节点与 WeBASE 单独一条结论',
+    '同一个入口，同一份状态'
+  ];
 
   var STEP_TEXT = [
     {b:'环境安装', p:'检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么，国内镜像下载会校验 SHA256。',
-     i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划'},
+     i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划',
+     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟'},
     {b:'程序配置', p:'填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。',
-     i:'数据库地址与账号', o:'config.json + 初始化好的库表'},
+     i:'数据库地址与账号', o:'config.json + 初始化好的库表',
+     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟'},
     {b:'链端校验', p:'检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。',
-     i:'节点端口与证书', o:'链端健康结论 + 区块高度'},
+     i:'节点端口与证书', o:'链端健康结论 + 区块高度',
+     pre:'能 SSH 到链端主机', cost:'约 20 秒'},
     {b:'程序启动', p:'先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。',
-     i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树'}
+     i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树',
+     pre:'配置与链端都已就绪', cost:'约 15 秒'}
   ];
 
   var DETECT = [
@@ -53,19 +85,26 @@
     {n:'磁盘剩余',   v:'18.4 GB',   p:'D:\\BCGD\\FarmTrace',          k:'ok',   s:'正常'}
   ];
 
+  /* 每个分区给到 6–7 行：只放 5 行时控制台下半截是空的，像没加载完 */
   var SCOPES = {
-    install:['[INFO] 检测 Go 1.27.3 ... 正常','[INFO] 检测 Node.js 22.22.2 ... 正常','[INFO] GOPROXY 已指向国内镜像','[INFO] MySQL 8.0.36 服务在线','[INFO] 依赖校验完成，无缺失组件'],
-    config: ['[INFO] 读取 config.json','[INFO] 数据库连接测试通过','[INFO] 建表脚本已就绪','[INFO] 配置原子写入完成','[INFO] 已有配置快照，可回滚'],
-    chain:  ['[INFO] 节点 20200 可达','[INFO] WeBASE-Front 5002 可达','[WARN] 区块高度为 0，可能是新链','[INFO] 客户端版本 2.11.0','[INFO] 群组 1 已就绪'],
-    start:  ['[INFO] 后端监听 :8888','[INFO] 前端监听 :5173','[INFO] 进程树已登记','[INFO] 健康检查 200 OK','[INFO] 日志采集已挂载'],
-    sys:    ['[INFO] 日志按日轮转','[INFO] 配置原子写入完成','[INFO] 单实例锁已获取','[INFO] 托盘初始化成功','[INFO] 审计库已就绪']
+    install:['[INFO] 检测 Go 1.27.3 ... 正常','[INFO] 检测 Node.js 22.22.2 ... 正常','[INFO] GOPROXY 已指向国内镜像','[INFO] MySQL 8.0.36 服务在线','[INFO] 依赖校验完成，无缺失组件','[INFO] 复用已有 C:\\EnvKit\\tools 目录','[INFO] 安装计划已生成，等待执行'],
+    config: ['[INFO] 读取 config.json','[INFO] 数据库连接测试通过','[INFO] 建表脚本已就绪','[INFO] 配置原子写入完成','[INFO] 已有配置快照，可回滚','[INFO] 前端产物校验通过（13 个片段）'],
+    chain:  ['[INFO] 节点 20200 可达','[INFO] WeBASE-Front 5002 可达','[WARN] 区块高度为 0，可能是新链','[INFO] 客户端版本 2.11.0','[INFO] 群组 1 已就绪','[INFO] 证书有效期剩余 312 天','[INFO] 链端健康结论已写入状态行'],
+    start:  ['[INFO] 后端监听 :8888','[INFO] 前端监听 :5173','[INFO] 进程树已登记','[INFO] 健康检查 200 OK','[INFO] 日志采集已挂载','[INFO] 托盘图标已显示'],
+    sys:    ['[INFO] 日志按日轮转','[INFO] 配置原子写入完成','[INFO] 单实例锁已获取','[INFO] 托盘初始化成功','[INFO] 审计库已就绪','[INFO] 上次退出为正常关机']
   };
 
+  /* 权限四档：ok = 不需要确认就能做，ask = 要先点一次确认，no = 根本不做。
+     这三栏是这一屏的"细节"所在：光说"四档权限"很抽象，列出来才看得懂边界在哪。 */
   var PERMS = [
-    {b:'只读', p:'能看状态、日志、检测报告、轨迹与审计。不需要确认，永远不会改动任何东西。'},
-    {b:'诊断', p:'在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。'},
-    {b:'受限写', p:'能改配置、执行备份复验等可逆操作。需要一次确认，且只能走白名单里的固定动作。'},
-    {b:'审批后动作', p:'启停服务、链端操作等。破坏性操作走 428 + 红色确认框；不会执行任意命令。'}
+    {b:'只读', p:'能看状态、日志、检测报告、轨迹与审计。不需要确认，永远不会改动任何东西。',
+     ok:['看运行状态','读日志与报告','查审计与轨迹'], ask:[], no:['改配置','启停服务']},
+    {b:'诊断', p:'在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。',
+     ok:['跑环境检测','读库表结构','抽样只读'], ask:[], no:['写入任何配置']},
+    {b:'受限写', p:'能改配置、执行备份复验等可逆操作。需要一次确认，且只能走白名单里的固定动作。',
+     ok:['备份复验','导出配置快照'], ask:['改 config.json','建库建表'], no:['执行任意命令']},
+    {b:'审批后动作', p:'启停服务、链端操作等。破坏性操作走 428 + 红色确认框；不会执行任意命令。',
+     ok:['白名单内的启停'], ask:['重启后端','链端启停'], no:['任意 shell','未登记的脚本']}
   ];
 
   /* AI 屏的对话脚本：trace 是"工具调用"提示，answer 是最终回答。
@@ -75,15 +114,31 @@
     read: {
       me:'现在服务都起来了吗？',
       trace:'读取运行状态 · 3 项检查',
-      answer:'后端在跑、前端在跑，链端两项校验都过了。要我把最近十条日志摘出来吗？'
+      answer:'后端在跑、前端在跑，链端两项校验都过了。要我把最近十条日志摘出来吗？',
+      ms:'0.42s'
     },
     write: {
       me:'帮我重启一下后端',
       trace:'解析意图 · 命中白名单动作',
-      answer:'确认卡在这里：你点了才执行。真实操作仍走权限闸门。'
+      answer:'确认卡在这里：你点了才执行。真实操作仍走权限闸门。',
+      ms:'0.31s'
+    },
+    explain: {
+      me:'这段报错是什么意思？',
+      trace:'检索日志与错误码 · 2 处命中',
+      answer:'端口被占用：8888 被上一个实例占着。先结束残留进程，再点启动。',
+      ms:'0.66s'
     }
   };
   var AI_AFTER = '权限闸门照旧生效，这里不会执行任何动作。';
+
+  /* 桌宠状态跟着对话走 —— 主界面那边也是这样一句一句变的 */
+  var PET_STATE = {
+    idle:'待机 · 已连接',
+    think:'思考中 · 读取状态',
+    wait:'待你确认 · 不会自己动手',
+    done:'已就绪 · 可以继续问'
+  };
 
   /* ---------- 运行时状态 ---------- */
   var ALL_SLIDES = qa('.ob-slide');
@@ -99,6 +154,8 @@
   var timers = [];
   var typingCancel = null;
   var petMounted = false;
+  var slabIdx = 0;
+  var stepIdx = 0;
 
   function seen(){ try{ return localStorage.getItem(KEY) === '1'; }catch(e){ return false; } }
   function mark(){ try{ localStorage.setItem(KEY, '1'); }catch(e){} }
@@ -156,6 +213,8 @@
       typingCancel = null;
       el.textContent = text;
       el.classList.remove('typing');
+      /* 被打断也要把 done 跑完：否则 data-live 标不上，这段回答就没法被冻结进历史 */
+      if(done) done();
     };
   }
   function endType(){ if(typingCancel) typingCancel(); }
@@ -234,7 +293,8 @@
     var s = slides[cur];
     var idx = s ? Number(s.getAttribute('data-idx')) : 0;
     var no = q('#ob-sec-no'), nm = q('#ob-sec-name');
-    if(no) no.textContent = pad(idx + 1);
+    /* 章节号写成 03 / 08：一眼能算出还剩几屏，比纯数字有进度感 */
+    if(no) no.textContent = pad(idx + 1) + ' / ' + pad(slides.length);
     if(nm) nm.textContent = t(CHAPTERS[idx]);
 
     var live = q('#ob-live');
@@ -257,6 +317,14 @@
     setProgress();
     enterAnim(s);
     if(s) initDemo(Number(s.getAttribute('data-idx')));
+    if(s) autoplay(Number(s.getAttribute('data-idx')));
+  }
+
+  /* 回到某一屏就重新开始它自己的循环演示（离开时 clearTimers 已经把上一轮的链断掉） */
+  function autoplay(idx){
+    if(REDUCED) return;
+    if(idx === 0){ slabIdx = 0; later(rotateSlab, 260); }
+    if(idx === 2){ stepIdx = 0; showStep(0); later(stepTick, 2300); }
   }
 
   /* ---------- 各屏演示 ---------- */
@@ -272,11 +340,13 @@
     if(idx === 1) later(mergeFlow, 420);
   }
 
-  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出） */
+  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时） */
   function showStep(i){
     var n = STEP_TEXT.length;
     qa('#ob-track .ob-step').forEach(function(b){
-      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);
+      var k = Number(b.getAttribute('data-step'));
+      b.classList.toggle('on', k === i);
+      b.classList.toggle('done', k < i);       /* 走过的段自动打勾，进度线才有意义 */
     });
     var fill = q('#ob-tl-fill');
     if(fill) fill.style.width = (i / (n - 1) * 75) + '%';   /* rail 从 12.5% 到 87.5% */
@@ -284,8 +354,34 @@
     if(!d) return;
     var x = STEP_TEXT[i];
     d.innerHTML = '<b>' + t(x.b) + '</b><p>' + t(x.p) + '</p>' +
-      '<div class="ob-io"><span><em>' + t('输入') + '</em>' + t(x.i) + '</span>' +
-      '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span></div>';
+      '<div class="ob-io">' +
+      '<span><em>' + t('输入') + '</em>' + t(x.i) + '</span>' +
+      '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span>' +
+      '<span><em>' + t('前置') + '</em>' + t(x.pre) + '</span>' +
+      '<span><em>' + t('预计耗时') + '</em>' + t(x.cost) + '</span>' +
+      '</div>';
+  }
+
+  /* 没点过任何步骤时自动往前推一格，让这一屏自己动起来 */
+  function stepTick(){
+    if(stepIdx >= STEP_TEXT.length - 1) return;
+    stepIdx += 1;
+    showStep(stepIdx);
+    later(stepTick, 2500);
+  }
+
+  /* 01 开场：叠层剖面轮流被点亮，下面那句说明跟着走 */
+  function focusSlab(i){
+    var order = [q('.ob-slab.s1'), q('.ob-slab.s2'), q('.ob-slab.s3'), q('.ob-slab.s4')];
+    order.forEach(function(el, k){ if(el) el.classList.toggle('focus', k === i); });
+    var note = q('#ob-art-note');
+    if(note) note.textContent = t(SLAB_NOTES[i] || SLAB_NOTES[0]);
+  }
+
+  function rotateSlab(){
+    focusSlab(slabIdx);
+    slabIdx = (slabIdx + 1) % SLAB_NOTES.length;
+    later(rotateSlab, 2600);
   }
 
   /* 04 检测：终端先跑命令，报告再逐行落定 */
@@ -306,6 +402,12 @@
     if(badge){ badge.classList.remove('on'); badge.textContent = ''; }
     var term = q('#ob-detect-cmd');
     if(term) term.innerHTML = '';
+    var foot = q('#ob-report-foot');
+    if(foot) foot.classList.remove('on');
+    var prog = q('#ob-term-prog i');
+    if(prog) prog.style.width = '0%';
+    var pct = q('#ob-term-pct');
+    if(pct) pct.textContent = t('就绪');
   }
 
   function runDetect(){
@@ -328,20 +430,35 @@
         }, i * 210);
       });
     }
+    /* 终端顶部那条 2px 进度：让"正在跑"有个一眼可见的物理量 */
+    var prog = q('#ob-term-prog i');
+    var pct = q('#ob-term-pct');
+    if(pct) pct.textContent = t('扫描中…');
+    if(prog){ prog.style.width = '0%'; void prog.offsetWidth; prog.style.width = '100%'; }
     qa('#ob-detect-rows .ob-row').forEach(function(row, i){
       later(function(){ row.classList.add('lit', DETECT[i].k); }, 420 + i * 170);
     });
     var badge = q('#ob-detect-badge');
+    var foot = q('#ob-report-foot');
     later(function(){
       if(badge){ badge.textContent = t('5 项正常 · 1 项待校验'); badge.classList.add('on'); }
+      if(pct) pct.textContent = '1.8s · 6 项';
+      if(foot){
+        var sp = foot.querySelector('span');
+        if(sp) sp.textContent = t('5 项正常、1 项待校验（链端未连通）。下一步是「程序配置」。');
+        foot.classList.add('on');
+      }
     }, 420 + DETECT.length * 170);
   }
 
   /* 05 日志：分区切换 + 行号由 CSS counter 生成（不影响 textContent） */
+  var SCOPE_LABEL = {install:'安装', config:'配置', chain:'链端', start:'启动', sys:'系统'};
+
   function renderScope(k){
     qa('#ob-scopes button').forEach(function(b){
       b.classList.toggle('on', b.getAttribute('data-scope') === k);
     });
+    renderScopeStats(k);
     var box = q('#ob-log-lines');
     if(!box) return;
     box.innerHTML = '';
@@ -354,11 +471,67 @@
     });
   }
 
-  /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡） */
-  function resetChat(){
-    qa('#ob-chat-log .ob-bubble.me, #ob-chat-log .ob-trace').forEach(function(n){
-      if(n.parentNode) n.parentNode.removeChild(n);
+  /* 侧栏那一列分区计数：把"五个分区各有多少行"变成能看见的数字 */
+  function renderScopeStats(cur){
+    var st = q('#ob-scope-stats');
+    if(!st) return;
+    st.innerHTML = '';
+    Object.keys(SCOPES).forEach(function(key){
+      var d = document.createElement('i');
+      if(key === cur) d.className = 'on';
+      d.innerHTML = '<em>' + t(SCOPE_LABEL[key]) + '</em><b>' + SCOPES[key].length + '</b>';
+      st.appendChild(d);
     });
+  }
+
+  /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡）
+     v5 起保留历史：上一轮回答会被"冻结"成一条普通气泡，新回答继续在 #ob-bubble 里逐字打，
+     这样连续问三句才像真的在对话，而不是每句都覆盖同一块。 */
+  function petState(k){
+    var m = q('#ob-pet-msg');
+    if(m) m.textContent = t(PET_STATE[k] || PET_STATE.idle);
+  }
+
+  function resetChat(){
+    var log = q('#ob-chat-log');
+    if(log){
+      Array.prototype.slice.call(log.children).forEach(function(n){
+        if(n.id !== 'ob-bubble' && n.parentNode) log.removeChild(n);
+      });
+    }
+    var bub = q('#ob-bubble');
+    if(bub){
+      bub.className = 'ob-bubble';
+      bub.removeAttribute('data-live');
+      bub.innerHTML = t('今天想看点什么？') + '<em>' + t('读日志、看状态、重启服务——都会先问你。') + '</em>';
+    }
+    petState('idle');
+    showConfirm(false);
+  }
+
+  function freezeBubble(){
+    var log = q('#ob-chat-log'), bub = q('#ob-bubble');
+    if(!log || !bub) return;
+    var txt = (bub.textContent || '').trim();
+    if(bub.getAttribute('data-live') !== '1' || !txt) return;
+    var f = document.createElement('div');
+    f.className = 'ob-bubble frozen';
+    f.textContent = txt;
+    log.insertBefore(f, bub);
+    bub.removeAttribute('data-live');
+    bub.textContent = '';
+  }
+
+  /* 气泡多了会把面板顶爆：只留最近几轮，从最旧的开始丢 */
+  function trimLog(){
+    var log = q('#ob-chat-log');
+    if(!log) return;
+    var kids = Array.prototype.slice.call(log.children);
+    while(kids.length > 9){
+      var n = kids.shift();
+      if(n.id === 'ob-bubble'){ kids.push(n); continue; }
+      if(n.parentNode) log.removeChild(n);
+    }
   }
 
   function askAI(kind){
@@ -367,8 +540,11 @@
     var bub = q('#ob-bubble');
     if(!script || !log || !bub) return;
 
-    resetChat();
     endType();
+    freezeBubble();
+    bub.classList.remove('me');
+    bub.textContent = '';
+    petState('think');
 
     var me = document.createElement('div');
     me.className = 'ob-bubble me';
@@ -377,7 +553,8 @@
 
     var tr = document.createElement('div');
     tr.className = 'ob-trace';
-    tr.innerHTML = '<i></i><b>' + t('调用中') + '</b><span>' + t(script.trace) + '</span>';
+    tr.innerHTML = '<i></i><b>' + t('调用中') + '</b><span>' + t(script.trace) + '</span>' +
+                   '<em>' + script.ms + '</em>';
     log.insertBefore(tr, bub);
     requestAnimationFrame(function(){ tr.classList.add('on'); });
 
@@ -386,12 +563,15 @@
 
     var startTyping = function(){
       tr.classList.add('done');
-      bub.classList.remove('me');
-      typeText(bub, t(script.answer), 18);
+      typeText(bub, t(script.answer), 18, function(){
+        bub.setAttribute('data-live', '1');
+        petState(kind === 'write' ? 'wait' : 'done');
+      });
     };
     if(kind === 'write') startTyping();
     else later(startTyping, 420);
 
+    trimLog();
     if(log.scrollHeight) log.scrollTop = log.scrollHeight;
   }
 
@@ -401,12 +581,28 @@
   }
 
   /* 07 权限阶梯 */
+  var PERM_COLS = [['ok','直接做'], ['ask','要确认'], ['no','不做']];
+
   function showPerm(i){
     qa('#ob-perms button').forEach(function(b){
       b.classList.toggle('on', Number(b.getAttribute('data-perm')) === i);
     });
     var d = q('#ob-perm-desc');
     if(d) d.innerHTML = '<b>' + t(PERMS[i].b) + '</b>' + t(PERMS[i].p);
+
+    var box = q('#ob-perm-acts');
+    if(!box) return;
+    box.innerHTML = '';
+    PERM_COLS.forEach(function(col){
+      var cell = document.createElement('div');
+      cell.className = col[0];
+      var items = PERMS[i][col[0]] || [];
+      var html = '<em>' + t(col[1]) + '</em>';
+      if(!items.length) html += '<span>—</span>';
+      else items.forEach(function(x){ html += '<span>' + t(x) + '</span>'; });
+      cell.innerHTML = html;
+      box.appendChild(cell);
+    });
   }
 
   /* 08 章节地图 */
@@ -421,7 +617,7 @@
       b.setAttribute('data-jump', String(i));
       b.innerHTML = '<span class="ob-ch-no">' + pad(n + 1) + '</span>' +
                     '<span class="ob-ch-nm">' + t(CHAPTERS[n]) + '</span>' +
-                    '<span class="ob-ch-bar"><i></i><i></i><i></i></span>';
+                    '<span class="ob-ch-sum">' + t(CHAPTER_SUM[n]) + '</span>';
       g.appendChild(b);
     });
     setProgress();
@@ -432,13 +628,16 @@
     var m = q('#ob-merge');
     var beam = q('#ob-beam');
     var card = q('.ob-new-card');
+    var foot = q('#ob-merge-foot');
     if(m) m.classList.remove('flow');
     if(beam){ beam.classList.remove('flow'); void beam.offsetWidth; beam.classList.add('flow'); }
+    if(foot) foot.classList.remove('on');
     later(function(){ if(m) m.classList.add('flow'); }, 120);
     if(card){
       card.classList.remove('lit');
       later(function(){ card.classList.add('lit'); }, 620);
     }
+    later(function(){ if(foot) foot.classList.add('on'); }, 900);
   }
 
   /* ---------- Swiper ---------- */
@@ -492,6 +691,7 @@
     setProgress();
     enterAnim(slides[0]);
     initDemo(Number(slides[0].getAttribute('data-idx')));
+    autoplay(Number(slides[0].getAttribute('data-idx')));
 
     var skip = q('#ob-skip');
     if(skip && typeof skip.focus === 'function') skip.focus();
@@ -574,6 +774,7 @@
     if(id === 'ob-merge-replay'){ mergeFlow(); return; }
 
     if(id === 'ob-track-run'){
+      stepIdx = STEP_TEXT.length - 1;   /* 手动操作后停止自动前进，别和人抢 */
       qa('#ob-track .ob-step').forEach(function(s, i){
         later(function(){ s.classList.add('done'); }, i * 240);
       });
@@ -581,7 +782,7 @@
       return;
     }
     var step = b.getAttribute('data-step');
-    if(step !== null){ showStep(Number(step)); return; }
+    if(step !== null){ stepIdx = STEP_TEXT.length - 1; showStep(Number(step)); return; }
 
     if(id === 'ob-detect-run'){ runDetect(); return; }
 
@@ -606,9 +807,10 @@
     if(id === 'ob-demo-ok' || id === 'ob-demo-cancel'){
       showConfirm(false);
       endType();
+      petState('done');
       var bb = q('#ob-bubble');
       if(id === 'ob-demo-ok'){
-        if(bb) typeText(bb, t(AI_AFTER), 16);
+        if(bb) typeText(bb, t(AI_AFTER), 16, function(){ bb.setAttribute('data-live', '1'); });
       }
       return;
     }

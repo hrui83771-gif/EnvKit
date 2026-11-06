@@ -1462,7 +1462,13 @@
               <div class="ob-slab s3"><em>03</em><b>链端校验</b><span>FISCO 节点 · WeBASE</span></div>
               <div class="ob-slab s4 main"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
             </div>
-            <div class="ob-art-note">同一个入口，同一份状态</div>
+            <div class="ob-art-note" id="ob-art-note">同一个入口，同一份状态</div>
+            <div class="ob-hud">
+              <span><b>4</b>步流程</span><i></i>
+              <span><b>6</b>项检测</span><i></i>
+              <span><b>5</b>日志分区</span><i></i>
+              <span><b>1</b>个入口</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1482,11 +1488,11 @@
           </div>
           <div class="ob-merge" id="ob-merge">
             <div class="ob-old" id="ob-old-list">
-              <span class="ob-old-card" data-tip="被「环境安装」接管">终端</span>
-              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端</span>
-              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具</span>
-              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签</span>
-              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口</span>
+              <span class="ob-old-card" data-tip="被「环境安装」接管">终端<em>记 5 条启动命令</em></span>
+              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端<em>另开一个 GUI</em></span>
+              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具<em>手动连链端主机</em></span>
+              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签<em>5 个页面来回切</em></span>
+              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口<em>只能靠 scrollback</em></span>
             </div>
             <div class="ob-beam" id="ob-beam"><i></i><b>收拢</b></div>
             <div class="ob-new-card">
@@ -1494,6 +1500,9 @@
               <b>EnvKit</b>
               <small>检测 · 配置 · 链端 · 启动</small>
               <i class="ob-sheen"></i>
+            </div>
+            <div class="ob-merge-foot" id="ob-merge-foot">
+              <s>5 个窗口 · 3 套工具链</s><em>收拢成 1 条状态线</em>
             </div>
           </div>
         </div>
@@ -1548,12 +1557,14 @@
           </div>
           <div class="ob-detect">
             <div class="ob-term">
-              <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span></div>
+              <div class="ob-term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>envkit · check --all</span><em id="ob-term-pct">就绪</em></div>
+              <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
             <div class="ob-report">
               <div class="ob-report-head"><span>环境检测报告</span><b id="ob-detect-badge"></b></div>
               <div class="ob-detect-rows" id="ob-detect-rows"></div>
+              <div class="ob-report-foot" id="ob-report-foot"><b>结论</b><span></span></div>
             </div>
           </div>
         </div>
@@ -1581,7 +1592,11 @@
             </div>
             <div class="ob-console-body">
               <div class="ob-log" id="ob-log-lines"></div>
-              <aside class="ob-recent" id="ob-recent-err"><b>最近错误</b><span>暂无</span></aside>
+              <aside class="ob-recent" id="ob-recent-err">
+                <b>最近错误</b><span>暂无</span>
+                <div class="ob-stats" id="ob-scope-stats"></div>
+                <div class="ob-rotate"><b>轮转</b><span>今日 4 份 · 保留 30 天</span></div>
+              </aside>
             </div>
           </div>
           <div class="ob-actions"><button class="ob-ghost" id="ob-log-insert">插入一条异常</button><span class="ob-hint">切分区看看联动</span></div>
@@ -1595,7 +1610,7 @@
             <div class="ob-pet-glow"></div>
             <div class="ob-pet-slot" id="ob-pet-slot"></div>
             <div class="ob-pet-shadow"></div>
-            <div class="ob-pet-state"><i></i><span>待机 · 已连接</span></div>
+            <div class="ob-pet-state"><i></i><span id="ob-pet-msg">待机 · 已连接</span></div>
             <div class="ob-pet-tag">桌宠也在主界面上</div>
           </div>
           <div class="ob-ai-chat">
@@ -1610,6 +1625,7 @@
               <div class="ob-questions">
                 <button data-q="read">现在服务都起来了吗？</button>
                 <button data-q="write">帮我重启一下后端</button>
+                <button data-q="explain">这段报错是什么意思？</button>
               </div>
               <div class="ob-chat-input"><span>问我任何环境问题…</span><b>发送</b></div>
               <div class="ob-confirm" id="ob-demo-confirm" hidden>
@@ -1639,6 +1655,7 @@
               <button data-perm="3"><span class="ob-perm-no">04</span><span class="ob-perm-nm">审批后动作</span><span class="ob-perm-tag hot">428 + 红框</span></button>
             </div>
             <div class="ob-perm-desc" id="ob-perm-desc"></div>
+            <div class="ob-perm-acts" id="ob-perm-acts"></div>
           </div>
         </div>
       </div>
@@ -1652,12 +1669,15 @@
             <p class="ob-lead">照着做一遍最快。以后想再看完整八屏，「关于」里随时能打开。</p>
           </div>
           <div class="ob-chapter-grid" id="ob-chapter-grid"></div>
+          <div class="ob-end-stats">
+            <span><b>8</b> 屏</span><i></i><span><b>约 90</b> 秒</span><i></i><span>全部是演示数据</span>
+          </div>
           <div class="ob-actions ob-actions-end">
             <button class="ob-primary" id="ob-cta-install">去看安装页<span class="ob-arrow">&#8594;</span></button>
             <button class="ob-primary ob-soft" id="ob-cta-tour" hidden>跟着做一遍</button>
             <button class="ob-ghost" id="ob-cta-later">以后再说</button>
           </div>
-          <div class="ob-end-note">权限与外连边界在完整导览第 7 屏 · 所有演示都不会改动你的配置</div>
+          <div class="ob-end-note">权限与外连边界在第 7 屏 · 所有演示都不会改动你的配置</div>
         </div>
       </div>
 

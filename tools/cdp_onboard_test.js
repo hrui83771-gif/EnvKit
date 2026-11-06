@@ -3,12 +3,14 @@
 // ## 这个用例防什么
 //  1. 三个 vendor 库（Swiper 12 / Anime.js v4 / driver.js）真的从同域加载成功，
 //     且全局导出名对得上 —— 名字猜错会「页面能开但动画/翻页全空转」。
-//  2. 首次自动播 5 屏 + 1.2s 片头出现后结束；「关于 > 重新观看介绍」重放 8 屏。
+//  2. 首次自动播 8 屏 + 1.2s 片头出现后结束；「关于 > 重新观看介绍」重放 8 屏。
 //  3. 8 屏交互演示真的动了（不是静态摆设），且**全程不触发任何写操作 /api/**。
 //  4. 翻页、跳过、演示按钮都用真实鼠标（Input.dispatchMouseEvent）+ 命中测试，
 //     不用 element.click() —— DOM click 会绕过命中测试，overlay 层级错了也全绿。
 //  5. 自动化环境（navigator.webdriver=true）不自动播，否则 33 个既有 CDP
 //     回归脚本会被全屏 overlay 挡住点击；但手动 open('first') 仍必须可用。
+//  6. v5 细节层（HUD / 收拢计数 / 检测结论行 / 分区计数 / 多轮对话 / 权限三栏 / 章节摘要）
+//     真的有内容，不是留了个空壳 class。
 //
 // 用法：node tools/cdp_onboard_test.js（需先 go build -o EnvKit.exe .）
 // 隔离：独立端口 18799 + 独立调试端口 + ENVKIT_INSTANCE_TAG + 独立 profile + exe 副本。
@@ -193,17 +195,33 @@ function seed() {
       dots: document.querySelectorAll('#ob-dots > *').length,
       live: (document.getElementById('ob-live')||{}).textContent||'',
       crumb: (document.getElementById('ob-sec-name')||{}).textContent||'',
+      secNo: (document.getElementById('ob-sec-no')||{}).textContent||'',
+      hud: document.querySelectorAll('.ob-hud span').length,
+      fam: document.querySelectorAll('.ob-slab.focus').length,
+      note: (document.getElementById('ob-art-note')||{}).textContent||'',
       barW: (document.getElementById('ob-progress-bar')||{}).style.width||''
     })`);
     let F = {}; try { F = JSON.parse(first || '{}'); } catch (e) {}
     check('first-autoshow', F.show === true, first);
     check('layout-crumb', /开场/.test(F.crumb || ''), 'crumb=' + F.crumb);
+    check('layout-crumb-total', /^01 \/ 08$/.test((F.secNo || '').trim()), 'secNo=' + F.secNo);
     check('layout-progress', /%$/.test(F.barW || '') && parseFloat(F.barW) > 0, 'bar=' + F.barW);
-    check('first-5-slides', JSON.stringify(F.slides) === JSON.stringify(['0','1','2','5','7']), 'slides=' + JSON.stringify(F.slides));
-    check('first-5-dots', F.dots === 5, 'dots=' + F.dots);
+    check('first-8-slides', JSON.stringify(F.slides) === JSON.stringify(['0','1','2','3','4','5','6','7']), 'slides=' + JSON.stringify(F.slides));
+    check('first-8-dots', F.dots === 8, 'dots=' + F.dots);
     check('brand-appeared', F.brandSeen === true, first);
     check('brand-ended', F.brandEnded === true && F.brandPlaying === false, first);
-    check('live-page-1', /第 1 屏/.test(F.live || '') && /共 5 屏/.test(F.live || ''), 'live=' + F.live);
+    check('live-page-1', /第 1 屏/.test(F.live || '') && /共 8 屏/.test(F.live || ''), 'live=' + F.live);
+
+    // 细节层：开场右下四个硬数字 + 剖面轮转高亮（等一轮 2.6s 才轮到下一块）
+    check('detail-hud', F.hud === 4, 'hud spans=' + F.hud);
+    await sleep(2900);
+    const slab = await evalJS(`JSON.stringify({
+      focus: document.querySelectorAll('.ob-slab.focus').length,
+      note: (document.getElementById('ob-art-note')||{}).textContent||'',
+      first: (document.querySelector('.ob-slab.s1')||{}).className||''
+    })`);
+    let SL = {}; try { SL = JSON.parse(slab || '{}'); } catch (e) {}
+    check('detail-slab-rotate', SL.focus === 1 && /环境安装|程序配置|链端校验|同一个入口/.test(SL.note || ''), slab);
 
     // ===== C. 真实鼠标翻页 / 跳过 =====
     await clickSel('#ob-next', 'next');
@@ -280,14 +298,33 @@ function seed() {
       return 'ok';
     })()`);
 
-    // 屏 3（四步走）：点步骤看说明卡切换
-    await arrowRight(); await arrowRight();
+    // 屏 2（为什么存在）：汇聚跑完后"5 → 1"那行才出现
+    await arrowRight();
+    await sleep(900);
+    const mf = await evalJS(`JSON.stringify({
+      on: document.getElementById('ob-merge-foot').classList.contains('on'),
+      txt: (document.getElementById('ob-merge-foot')||{}).innerText||'',
+      flow: document.getElementById('ob-merge').classList.contains('flow')
+    })`);
+    let MF = {}; try { MF = JSON.parse(mf || '{}'); } catch (e) {}
+    check('detail-merge-foot', MF.on === true && MF.flow === true && /1 条状态线/.test(MF.txt || ''), mf);
+
+    // 屏 3（四步走）：点步骤看说明卡切换（自动前进已在此前 2.3s 内走了一格）
+    await arrowRight();
     const stepBefore = await evalJS(`(document.getElementById('ob-step-desc')||{}).innerText||''`);
     await clickSel('#ob-track .ob-step[data-step="2"]', 'step2');
     await sleep(250);
     const stepAfter = await evalJS(`(document.getElementById('ob-step-desc')||{}).innerText||''`);
     check('demo-step-desc', /环境安装/.test(stepBefore || '') && /链端校验/.test(stepAfter || '') && /WeBASE|FISCO/.test(stepAfter || ''),
       'before=' + (stepBefore || '').slice(0, 30) + ' after=' + (stepAfter || '').slice(0, 40));
+    // 详情卡现在是 2×2：输入 / 产出 / 前置 / 预计耗时
+    const ioCount = await evalJS(`JSON.stringify({
+      n: document.querySelectorAll('#ob-step-desc .ob-io span').length,
+      t: (document.getElementById('ob-step-desc')||{}).innerText||''
+    })`);
+    let IO = {}; try { IO = JSON.parse(ioCount || '{}'); } catch (e) {}
+    check('detail-step-io4', IO.n === 4 && /前置/.test(IO.t || '') && /预计耗时/.test(IO.t || ''),
+      'spans=' + IO.n + ' txt=' + (IO.t || '').replace(/\n/g, ' ').slice(0, 70));
 
     // 屏 4（检测报告）：逐行扫入 + 总评
     await arrowRight();
@@ -302,6 +339,16 @@ function seed() {
     check('demo-detect-scan', D.lit === 6 && D.warn === 1 && /5 项正常/.test(D.badge || ''), det);
     const termLines = await evalJS(`document.querySelectorAll('#ob-detect-cmd div').length`);
     check('demo-detect-console', termLines === 4, 'console lines=' + termLines);
+    // 细节层：终端进度条跑满 + 报告结论行出现
+    const dfoot = await evalJS(`JSON.stringify({
+      on: document.getElementById('ob-report-foot').classList.contains('on'),
+      txt: (document.getElementById('ob-report-foot')||{}).innerText||'',
+      pct: (document.getElementById('ob-term-pct')||{}).textContent||'',
+      progW: (document.getElementById('ob-term-prog').firstElementChild.getAttribute('style')||'')
+    })`);
+    let DF = {}; try { DF = JSON.parse(dfoot || '{}'); } catch (e) {}
+    check('detail-detect-conclusion', DF.on === true && /程序配置/.test(DF.txt || '') &&
+      /1\.8s/.test(DF.pct || '') && /100%/.test(DF.progW || ''), dfoot);
 
     // 屏 5（日志分区）：切 scope + 插一条错误看联动
     await arrowRight();
@@ -318,6 +365,14 @@ function seed() {
     let E = {}; try { E = JSON.parse(errState || '{}'); } catch (e) {}
     check('demo-scope-switch', /WeBASE-Front/.test(scopeTxt || ''), 'log=' + (scopeTxt || '').slice(0, 50));
     check('demo-log-error-link', E.hot === true && /端口 8888/.test(E.recent || '') && /演示异常/.test(E.last || ''), errState);
+    // 细节层：侧栏五个分区计数都在，且当前分区高亮到了「链端」
+    const stats = await evalJS(`JSON.stringify({
+      n: document.querySelectorAll('#ob-scope-stats i').length,
+      on: (document.querySelector('#ob-scope-stats i.on em')||{}).textContent||'',
+      rot: (document.querySelector('.ob-rotate span')||{}).textContent||''
+    })`);
+    let ST = {}; try { ST = JSON.parse(stats || '{}'); } catch (e) {}
+    check('detail-scope-stats', ST.n === 5 && ST.on === '链端' && /30 天/.test(ST.rot || ''), stats);
 
     // 屏 6（AI 与桌宠）：真桌宠克隆 + 写类问句弹演示确认卡，确认后收起
     await arrowRight();
@@ -351,17 +406,53 @@ function seed() {
     })`);
     check('demo-confirm-closes', /"confirm":true/.test(q2 || '') && /权限闸门/.test(q2 || ''), q2);
 
+    // 细节层：桌宠状态跟着对话变；再问一句，上一轮回答要冻结成历史气泡（多轮而不是覆盖）
+    const petAfterOk = await evalJS(`(document.getElementById('ob-pet-msg')||{}).textContent||''`);
+    await clickSel('.ob-questions button[data-q="read"]', 'q-read');
+    await sleep(1500);
+    const hist = await evalJS(`JSON.stringify({
+      frozen: document.querySelectorAll('#ob-chat-log .ob-bubble.frozen').length,
+      frozenTxt: (document.querySelector('#ob-chat-log .ob-bubble.frozen')||{}).textContent||'',
+      traces: document.querySelectorAll('#ob-chat-log .ob-trace').length,
+      ms: (document.querySelector('#ob-chat-log .ob-trace em')||{}).textContent||'',
+      pet: (document.getElementById('ob-pet-msg')||{}).textContent||'',
+      bubble: (document.getElementById('ob-bubble')||{}).textContent||'',
+      confirm: document.getElementById('ob-demo-confirm').hidden
+    })`);
+    let H = {}; try { H = JSON.parse(hist || '{}'); } catch (e) {}
+    check('detail-ai-history', H.frozen >= 1 && /权限闸门/.test(H.frozenTxt || '') && H.traces >= 2 &&
+      /0\.31s|0\.42s/.test(H.ms || ''), hist);
+    check('detail-ai-pet-state', /已就绪/.test(petAfterOk || '') || /已就绪/.test(H.pet || ''),
+      'petAfterOk=' + petAfterOk + ' petNow=' + (H.pet || ''));
+    check('detail-ai-second-answer', /后端在跑/.test(H.bubble || '') && H.confirm === true, hist);
+
     // 屏 7（安全边界）：点最高档看 428 说明
     await arrowRight();
     await clickSel('#ob-perms button[data-perm="3"]', 'perm3');
     await sleep(250);
     const perm = await evalJS(`(document.getElementById('ob-perm-desc')||{}).innerText||''`);
     check('demo-perm-428', /428/.test(perm || '') && /不会执行任意命令/.test(perm || ''), 'desc=' + (perm || '').slice(0, 60));
+    // 细节层：三栏清单（直接做 / 要确认 / 不做）
+    const acts = await evalJS(`JSON.stringify({
+      n: document.querySelectorAll('#ob-perm-acts > div').length,
+      ok: (document.querySelector('#ob-perm-acts .ok')||{}).innerText||'',
+      no: (document.querySelector('#ob-perm-acts .no')||{}).innerText||''
+    })`);
+    let PA = {}; try { PA = JSON.parse(acts || '{}'); } catch (e) {}
+    check('detail-perm-acts', PA.n === 3 && /直接做/.test(PA.ok || '') &&
+      /任意 shell/.test(PA.no || ''), acts);
 
     // 屏 8（收尾）：8 个章节点
     await arrowRight();
     const chapters = await evalJS(`document.querySelectorAll('#ob-chapter-grid button').length`);
     check('demo-8-chapters', chapters === 8, 'chapters=' + chapters);
+    // 细节层：每章一句摘要 + 总览行
+    const chSum = await evalJS(`JSON.stringify({
+      sums: Array.from(document.querySelectorAll('.ob-ch-sum')).filter(function(e){return (e.textContent||'').trim().length>3;}).length,
+      stats: (document.querySelector('.ob-end-stats')||{}).innerText||''
+    })`);
+    let CS = {}; try { CS = JSON.parse(chSum || '{}'); } catch (e) {}
+    check('detail-chapter-summary', CS.sums === 8 && /8/.test(CS.stats || '') && /90/.test(CS.stats || ''), chSum);
 
     const fetches = await evalJS(`JSON.stringify(window.__obFetch||[])`);
     let FL = []; try { FL = JSON.parse(fetches || '[]'); } catch (e) {}

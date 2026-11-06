@@ -22,8 +22,8 @@ ENV.update({'GOROOT': r'C:/EnvKit/tools/go', 'GOTOOLCHAIN': 'local',
 # (编号, 文件, 原文锚点, 改坏后, 必须变红的断言名)
 MUTATIONS = [
     ('M1 首次选集换掉',      'web/src/js/90-onboard.js',
-     'var FIRST_RUN_SLIDES = [0, 1, 2, 5, 7];',
-     'var FIRST_RUN_SLIDES = [0, 1, 2, 3, 4];', 'first-5-slides'),
+     'var FIRST_RUN_SLIDES = [0, 1, 2, 3, 4, 5, 6, 7];',
+     'var FIRST_RUN_SLIDES = [0, 1, 2, 5, 7];', 'first-8-slides'),
     ('M2 片头不播',          'web/src/js/90-onboard.js',
      "if(mode === 'first' && !REDUCED) playBrand();",
      'if(false) playBrand();', 'brand-appeared'),

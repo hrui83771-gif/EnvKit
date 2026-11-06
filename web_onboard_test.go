@@ -6,7 +6,7 @@ package main
 // 防的是三类回归：
 //  1. 演示页偷偷改成调真实接口 / 执行任意代码 —— 权限闸门必须一行不动；
 //  2. 5 个 vendor 产物只下载了但没 embed、没路由、没声明许可 —— 页面会静默降级；
-//  3. 首次 5 屏选集被改坏、自动化环境保护被误删 —— 后者会让 33 个既有
+//  3. 首次 8 屏选集被改坏、自动化环境保护被误删 —— 后者会让 33 个既有
 //     CDP 回归脚本被全屏 overlay 挡住点击。
 
 import (
@@ -44,16 +44,16 @@ func TestOnboardDemoHasNoSideEffects(t *testing.T) {
 	if n := strings.Count(s, "localStorage.setItem"); n != 1 {
 		t.Errorf("localStorage.setItem 出现 %d 次，应当恰好 1 次（只有 mark()）", n)
 	}
-	// 首次固定 5 屏，且必须包含开场(0)、主流程(2)、AI(5)、收尾(7)
+	// 首次完整播 8 屏（v5 起不再有"首次精选 5 屏"），八屏必须按顺序全在
 	m := regexp.MustCompile(`FIRST_RUN_SLIDES\s*=\s*\[([^\]]+)\]`).FindStringSubmatch(s)
 	if len(m) != 2 {
 		t.Fatal("找不到 FIRST_RUN_SLIDES 定义")
 	}
 	parts := strings.Split(strings.ReplaceAll(m[1], " ", ""), ",")
-	if len(parts) != 5 {
-		t.Errorf("首次应播 5 屏，实际 %d 屏：%v", len(parts), parts)
+	if len(parts) != 8 {
+		t.Errorf("首次应播 8 屏，实际 %d 屏：%v", len(parts), parts)
 	}
-	want := []string{"0", "1", "2", "5", "7"}
+	want := []string{"0", "1", "2", "3", "4", "5", "6", "7"}
 	for i, w := range want {
 		if i < len(parts) && parts[i] != w {
 			t.Errorf("首次第 %d 屏应为 %s，实际 %s（完整：%v）", i+1, w, parts[i], parts)
