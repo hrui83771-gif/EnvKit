@@ -44,3 +44,8 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.37.0
 )
+
+// 上游 v1.2.2 的 registerSystray() 在 initInstance 失败时只打日志就 return：
+// 不调 systrayReady、不重试、不通知调用方，托盘图标与菜单会静默消失。
+// 本地最小 fork 只修这一处（见 third_party/systray/systray_windows.go 的 ENVKIT 注释）。
+replace github.com/getlantern/systray => ./third_party/systray

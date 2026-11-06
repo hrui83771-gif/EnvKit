@@ -25,6 +25,10 @@ type TrayActions struct {
 	OpenLogs    func()
 	Exit        func()
 	Ready       func() // 托盘创建成功（日志/自检用；菜单此时已可用）
+	// Failed 托盘初始化失败（本地 fork 的 OnInitError 回调）。
+	// 上游 v1.2.2 失败时只打日志就 return，宿主完全感知不到托盘没了；
+	// 现在由宿主明确告知用户「控制台照常、退出走哪里」，窗口也保持可见。
+	Failed func(error)
 	// CreateShortcut 在桌面创建指向当前 exe 的快捷方式。
 	// 由 main 注入（platform 是叶子包，不碰业务里的 exe 路径与日志）。
 	CreateShortcut func()
@@ -43,6 +47,11 @@ type TrayActions struct {
 func RunTray(icon []byte, act TrayActions) {
 	if len(icon) == 0 {
 		return
+	}
+	// 失败回调必须在 systray.Run 之前注册：Run → Register → registerSystray
+	// 是同步链路，回调就在那条链里触发。
+	if act.Failed != nil {
+		systray.OnInitError(act.Failed)
 	}
 	systray.Run(func() {
 		systray.SetIcon(icon)

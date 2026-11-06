@@ -340,6 +340,14 @@ func main() {
 			info(scSys, "服务", "已在桌面创建快捷方式：%s", lnk)
 			platform.Notify("EnvKit", "桌面快捷方式已创建")
 		},
+		Failed: func(err error) {
+			warn(scSys, "服务", "托盘未能启动：%v（控制台与网页照常可用）", err)
+			fmt.Println()
+			fmt.Println("  [托盘不可用] " + err.Error())
+			fmt.Println("  控制台和网页不受影响；窗口会保持显示，不会被藏到托盘里。")
+			fmt.Println("  退出请按 Ctrl+C，或在网页里点退出；任务栏恢复后会自动补回图标。")
+			fmt.Println()
+		},
 		Ready: func() {
 			info(scSys, "服务", "托盘菜单已就绪：右键图标可打开控制台 / 配置 / 日志，或退出")
 			cfgMu.Lock()
