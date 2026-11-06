@@ -115,6 +115,7 @@ $ai('ai-clear').onclick = ()=>{
   // aiBusy 也仍然为 true 直到流自然结束。
   if(aiCtrl){ try{ aiCtrl.abort(); }catch(_){} aiCtrl = null; }
   if(aiPending){ try{ aiPending.card.remove(); }catch(_){} aiPending = null; }
+  petConfirmDone('idle');   // 抽屉卡清了，桌宠迷你卡与 confirm 态必须一起清
   aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
   aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
   // 待发附件一并清掉：对话都清了，还挂着一张图/一份文件在输入区上方，下次发送会莫名其妙带上它
@@ -332,6 +333,7 @@ async function aiSendText(tx, missionId, imgs, docs){
   // 用户无视确认卡片直接发新消息：把悬挂的 assistant(tool_calls) 从历史里剥掉，
   // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
   if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
+  petConfirmDone('idle');   // 悬挂回合被清掉时，桌宠那边也必须收口，别留一张点了没反应的空卡
   const sendTs = aiNow();
   const el = aiAdd('user', tx, sendTs);
   const um = {role:'user', content:tx, ts:sendTs};

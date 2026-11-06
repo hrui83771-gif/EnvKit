@@ -345,6 +345,16 @@ async function aiConsume(path, body){
     planList.appendChild(row);
     $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   };
+  /* P0-2 的计时状态与清理函数必须放在 try **外面**：finally 也要调 aiWaitStop，
+     而 const/let 是块级作用域，放在 try 里收尾时会抛 ReferenceError。
+     aiWaitSet 仍在 try 内（它要闭包访问 mkThink），共用这里的状态。 */
+  let aiWaitState = null, aiWaitTimer = null;
+  const aiWaitStop = ()=>{
+    if(aiWaitTimer){ clearInterval(aiWaitTimer); aiWaitTimer = null; }
+    aiWaitState = null;
+    const host = $ai('ai-msgs');
+    if(host) host.querySelectorAll('.ai-wait').forEach(n=>n.remove());
+  };
   try{
   // 思考气泡的构造函数。**单独抽出来是因为它要能被重建** ——
   // v2.3 起 `plan_start` 是服务端第一个事件，到达时就把气泡删了，
@@ -358,8 +368,41 @@ async function aiConsume(path, body){
     $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
     return think;
   };
+  /* P0-2：等待态给原因 + 真实计时。不画「还剩 N 秒」那种会归零的假倒计时：
+     budget_ms 一律来自服务端真实超时常量，0 表示没有可承诺的上限；
+     超过上限只把文案换成「比预期久」，计时继续往上走。
+     计时行挂在 host 上（默认思考气泡，确认阶段挂在确认卡里），所以 dropThink /
+     卡片被移除时它会一起消失；一份状态一个定时器，切阶段先 aiWaitStop。 */
+  const AI_WAIT_WHY = {
+    model:   ()=>t('正在等模型回复'),
+    summary: ()=>t('正在压缩较早的对话历史'),
+    confirm: ()=>t('等你确认是否执行'),
+    rescue:  ()=>t('连接断了一次，正在补结论')
+  };
+  const aiWaitSet = (reason, budgetMs, hostEl)=>{
+    aiWaitStop();
+    const host = hostEl || mkThink();
+    if(!host) return;
+    const line = document.createElement('div'); line.className = 'ai-wait';
+    host.appendChild(line);
+    const why = (AI_WAIT_WHY[reason] || AI_WAIT_WHY.model)();
+    const budget = Number(budgetMs) > 0 ? Math.round(Number(budgetMs) / 1000) : 0;
+    aiWaitState = {why: why, budget: budget, at: Date.now()};
+    const tick = ()=>{
+      if(!aiWaitState || !line.parentNode){ aiWaitStop(); return; }
+      const s = Math.floor((Date.now() - aiWaitState.at) / 1000);
+      const clock = budget
+        ? (s <= budget ? t('最长约 {0}s · 已等 {1}s', budget, s)
+                       : t('比预期久，仍在等 · 已等 {0}s', s))
+        : t('已等 {0}s', s);
+      line.textContent = why + ' · ' + clock;
+    };
+    tick();
+    aiWaitTimer = setInterval(tick, 1000);
+  };
   mkThink();
-  const dropThink = ()=>{ if(think && think.parentNode){ think.remove(); think = null; } };
+  aiWaitSet('model', 0);
+  const dropThink = ()=>{ aiWaitStop(); if(think && think.parentNode){ think.remove(); think = null; } };
     aiCtrl = new AbortController();
     // 声明"我发了多少字节"：服务端据此判断请求体是**没到**还是**被截断**。
     // 长度按 UTF-8 字节算（不是 JS 的字符数，中文一个字 3 字节，用字符数会假报不符）。
@@ -532,8 +575,13 @@ async function aiConsume(path, body){
           aiTraceAdd('grant', t('批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left), {cls:''});
           aiAdd('sys', t('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left));
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
+        } else if(ev.type === 'wait'){
+          /* 服务端给稳定 reason + 真实上限，文案与计时都在前端按界面语言算。
+             确认阶段的思考气泡已被 dropThink 删掉，计时改挂到确认卡里。 */
+          aiWaitSet(ev.reason, ev.budget_ms,
+            (ev.reason === 'confirm' && aiPending) ? aiPending.card : null);
         } else if(ev.type === 'info'){
-          // 服务端阶段性提示（如"正在压缩较早的对话历史"）：换掉思考气泡的文案。
+          // 旧版后端的阶段性提示（新后端统一发 wait）：换掉思考气泡的文案。
           // 不发这种提示时，摘要那次前置调用最长 60s 里用户只看到三点动画，
           // 第一反应就是"卡死了"去刷新，白烧一次 token。
           dropThink(); mkThink();
@@ -567,6 +615,7 @@ async function aiConsume(path, body){
     else { if(think && think.parentNode) think.remove(); aiErr(t('连接中断：') + e); }
   }
   finally{
+    aiWaitStop();   // 清本流的计时器：代际不匹配时也要清，否则旧流每秒还在刷 DOM
     // 只有**当代际**才复位全局态：旧流晚到的 finally 不能把新流的
     // aiBusy/按钮态冲掉（那会让输入框在流式中途重新可用，两条流交错贴消息）。
     if(gen === aiGen){

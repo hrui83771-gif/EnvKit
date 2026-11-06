@@ -149,13 +149,21 @@ func TestAbortSettleRescuesWhenStepsExist(t *testing.T) {
 		t.Fatalf("补答成功的文案要说清结论是断线后补出来的，实际 %q", note)
 	}
 	evs := readSSE(t, w)
-	var hasPlanEnd, hasInfo, hasDelta bool
+	// P0-2 起"告知在补"由 wait 事件承载（info 只能写死一句措辞）。
+	// 判据随之升级：不仅要有这个事件，reason 必须对得上、上限必须是真实预算，
+	// 否则前端的"最长 Ns"就是编的。
+	var hasPlanEnd, hasWait, hasDelta bool
 	for _, e := range evs {
 		switch e["type"] {
 		case "plan_end":
 			hasPlanEnd = true
-		case "info":
-			hasInfo = true
+		case "wait":
+			if r, _ := e["reason"].(string); r == "rescue" {
+				if budget, _ := e["budget_ms"].(float64); budget <= 0 {
+					t.Fatalf("补结论的等待态要带真实上限（budget_ms>0），实际 %v", e)
+				}
+				hasWait = true
+			}
 		case "delta":
 			hasDelta = true
 			if txt, _ := e["text"].(string); !strings.Contains(txt, "3306") {
@@ -163,8 +171,8 @@ func TestAbortSettleRescuesWhenStepsExist(t *testing.T) {
 			}
 		}
 	}
-	if !hasPlanEnd || !hasInfo || !hasDelta {
-		t.Fatalf("补答要交代进度、告知在补、并把结论推出去，实际事件 %v", evs)
+	if !hasPlanEnd || !hasWait || !hasDelta {
+		t.Fatalf("补答要交代进度、用 wait:rescue 告知在补、并把结论推出去，实际事件 %v", evs)
 	}
 }
 

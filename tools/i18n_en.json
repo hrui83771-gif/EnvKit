@@ -1492,5 +1492,13 @@
   "：把脱敏诊断报告交给大模型，输出现状总结、问题定位与建议步骤": ": sends the sanitized diagnostic report to the LLM and returns a summary, likely causes and suggested steps",
   "：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告": ": connection test, one-step DB+table creation, one-click backup/restore (auto-retry), frontend npm install / backend go mod tidy, config import/export (sanitized sharing), environment diagnostic report",
   "：自然语言查询日志与环境状态，执行数据库备份、组件检测、前后端启停 / 重启、清理进程、加 Defender 白名单（共 26 个工具）": ": natural-language queries of logs and environment state, plus database backup, component checks, frontend/backend start/stop/restart, process cleanup, and Defender whitelisting (26 tools in total)",
-  "；每次切到本页都会重新读取最新值，两边不会各存一份。": " with Configure and Chain Check; every visit re-reads the latest values, so neither page keeps its own copy."
+  "；每次切到本页都会重新读取最新值，两边不会各存一份。": " with Configure and Chain Check; every visit re-reads the latest values, so neither page keeps its own copy.",
+  "这张确认卡已过期，请重新发起操作": "This confirmation has expired. Please start the action again.",
+  "正在等模型回复": "Waiting for the model to reply",
+  "正在压缩较早的对话历史": "Compressing older conversation history",
+  "等你确认是否执行": "Waiting for your confirmation to run it",
+  "连接断了一次，正在补结论": "Connection dropped once; rebuilding the answer",
+  "已等 {0}s": "Waited {0}s",
+  "最长约 {0}s · 已等 {1}s": "Up to ~{0}s · waited {1}s",
+  "比预期久，仍在等 · 已等 {0}s": "Taking longer than expected, still waiting · waited {0}s"
 }

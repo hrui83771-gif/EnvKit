@@ -199,11 +199,11 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	msgs = aiTrimDanglingToolCalls(msgs)
 	// 滚动摘要：历史变长后把较早的部分压缩成要点备忘（按前缀缓存，不每回合重复生成），
 	// 必须在下面的 40 条硬裁剪之前做——否则最早的用户目标会被无感截断，模型显得健忘。
-	// 摘要是一次**静默的前置 LLM 调用**（最长 60s）：不发 info 事件的话，
+	// 摘要是一次**静默的前置 LLM 调用**（httpAPI 的 60s 超时）：不发 wait 事件的话，
 	// 用户只看到"思考中"三点动画干等，第一反应就是"卡死了，刷新一下"。
+	// budget 传 httpAPI.Timeout 而不是写 60：上限只有一份真源，改超时不用改这里。
 	msgs = aiMaybeSummarize(msgs, func() {
-		sseWrite(w, fl, map[string]any{"type": "info",
-			"text": "正在压缩较早的对话历史（约十几秒，只压这一轮）…"})
+		sseWait(w, fl, "summary", httpAPI.Timeout)
 	})
 	if len(msgs) > 40 {
 		msgs = msgs[len(msgs)-40:]
@@ -500,7 +500,7 @@ func aiAbortSettle(w http.ResponseWriter, fl http.Flusher, plan *planTrack, msgs
 // **不是掩盖失败**：无论补答成功与否，done 的 reason 都是 aborted，
 // 用户看到的是"断过一次"，不是"一切正常"。
 func aiAbortRescue(w http.ResponseWriter, fl http.Flusher, msgs []aiMsg) bool {
-	sseWrite(w, fl, map[string]any{"type": "info", "text": "连接断了一次，正在用已查到的信息补结论…"})
+	sseWait(w, fl, "rescue", httpAPI.Timeout)
 	head := make([]aiMsg, 0, len(msgs)+1)
 	head = append(head, msgs...)
 	head = append(head, aiMsg{Role: "user", Content: "（系统提示）上面的工具结果已经拿到了，但你还欠用户一个回答。" +

@@ -1069,10 +1069,22 @@ function aiBodyWarn(n){
    原地送达 = 服务端还在同一个 SSE 流里等着，决定一到就接着执行；
    旧路径 = 带 confirm 重新提交，等于把上下文整体重建一次（贵，且把任务切成两段）。 */
 async function aiDecide(approved){
-  const p = aiPending; if(!p) return;
+  const p = aiPending;
+  /* 两个入口（抽屉确认卡 / 桌宠迷你卡）共用这个函数，状态收口必须无条件先做。
+     原来只藏迷你卡、不清桌宠 confirm 态：v3.2 原地送达不新开 aiConsume，
+     petAIState('thinking') 不会跑，桌宠会一直喊「点我确认！」，而 mcCb 已被清空
+     —— 再点宠物/徽标只是 toggle 一张空卡，按钮点了什么都不会发生。
+     用户实测的「AI 弹出的确认按钮是假的」就是这条路径。 */
+  petConfirmDone(p ? (approved ? 'busy' : 'idle') : 'idle');
+  if(!p){
+    // 清空对话 / 无视卡片发新消息后 aiPending 已空，但迷你卡可能还挂着。
+    // 原来直接 return 是静默无操作，必须给一句明确说明。
+    toast(t('这张确认卡已过期，请重新发起操作'));
+    aiHstat('');
+    return;
+  }
   aiPending = null;
   try{ p.card.remove(); }catch(_){}
-  petConfirmHide();
   aiAdd('sys', approved ? t('已确认，继续执行…') : t('已拒绝，让助手换个做法…'));
   aiTraceAdd('human', approved ? t('你已确认：{0}', p.tool) : t('你已拒绝：{0}', p.tool), {cls: approved ? 'ok' : 'warn'});
   aiHstat(approved ? t('执行中') : t('已拒绝'));

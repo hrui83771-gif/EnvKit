@@ -25,7 +25,7 @@ window.__ekSvcProbe = {concl: ekSvcConcl, event: ekSvcEvent};
 /* ---------- AI 桌宠「小画师」（v1.9.6，替代原右下角悬浮球）----------
    点它=开 AI 抽屉；右键=归位/隐藏/检测；等确认时点蓝徽标不开抽屉直接批；
    出错点红徽标深链日志；长任务外圈进度环；拖 .sql 上桌宠走 apply-upload 确认流。 */
-let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmHide = ()=>{},
+let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmDone = ()=>{},
     petShift = ()=>{}, petNoteErr = ()=>{}, petTasksSync = ()=>{},
     petCheckStart = ()=>{}, petCheckDone = ()=>{};
 (function(){
@@ -152,6 +152,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(st==='sleep' && next!=='idle') pet.classList.remove('sleep');
     st = next;
     pet.classList.remove('thinking','busy','error','success','confirm','sleep','dizzy','show-badge','show-bubble','show-ring','show-tip');
+    // 状态切换时清掉上一条气泡：confirm 结束后 DOM 里还留着「点我确认！」，
+    // 虽然 CSS 隐藏了，但无障碍朗读 / 样式变化时它会被读出来，看着像还能点。
+    bubble.textContent = '';
     badge.className = 'pet-badge'; badge.textContent = '!';
     clearTimeout(sleepTimer); armSleep();
     minicard.classList.remove('show'); mcCb = null;
@@ -197,7 +200,18 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     minicard.classList.add('show');
   }
   petAskConfirm = askConfirm;
-  petConfirmHide = ()=>{ minicard.classList.remove('show'); mcCb = null; };
+  /* 确认已决定（批 / 拒 / 会话清空 / 卡过期）的统一收口：迷你卡 + 桌宠状态一起归位。
+     原来只 hide 不改 st，桌宠还停在 confirm 喊「点我确认！」，点它只会 toggle 一张
+     mcCb=null 的空卡 —— 这就是用户说的「AI 弹出的确认按钮是个假的」。
+     next 由调用方给：批了就 busy（工具接着跑），拒了/过期就 idle。
+     守卫 if(st==='confirm')：正在 thinking/busy 时不打断其它状态。 */
+  petConfirmDone = (next)=>{
+    minicard.classList.remove('show'); mcCb = null;
+    if(st==='confirm') setSt(next || 'idle');
+  };
+  // CDP 只读探针：桌宠状态 / 迷你卡回调是否还有效。
+  // 「确认按钮点了没反应」的判据在内部 st 与 mcCb 上，光看 DOM 看不出来。
+  window.__ekPetProbe = ()=>({st: st, cb: !!mcCb, show: minicard.classList.contains('show')});
   /* 检测开始/结束差分表情（数据源：pollState 的 phase 迁移，覆盖按钮/右键/AI 所有触发来源） */
   petCheckStart = ()=>{
     if(st==='confirm') return;                 // 确认卡挂起时不劫持状态（会清掉迷你卡）
@@ -223,7 +237,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   });
   badge.addEventListener('click', e=>{
     e.stopPropagation();
-    if(badge.classList.contains('blue')){ minicard.classList.toggle('show'); }
+    if(badge.classList.contains('blue')){ if(mcCb) minicard.classList.toggle('show'); else aiOpen(); }
     else if(badge.classList.contains('red')){ deepLink(); }
     else if(badge.classList.contains('warn')){ goto('install'); setSt('idle'); }
   });
@@ -677,7 +691,11 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
     if(pet.dataset.pat==='1'){ pet.dataset.pat=''; return; }
     if(st==='sleep'){ wake(true); return; }
-    if(st==='confirm'){ minicard.classList.toggle('show'); return; }
+    if(st==='confirm'){
+      // 已收口的 confirm 不该再 toggle 出一张 mcCb=null 的空卡（按钮点了没反应）
+      if(mcCb) minicard.classList.toggle('show'); else aiOpen();
+      return;
+    }
     if(st==='error'){
       // 失败时用户的本能是点桌宠：给「AI 分析 / 看日志」二选一，而不是只有日志一条路
       // 注意：本 IIFE 里有同名的迷你卡版 askConfirm，这里必须走 window 上的弹窗版

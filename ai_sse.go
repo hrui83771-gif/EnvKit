@@ -15,12 +15,27 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func sseWrite(w http.ResponseWriter, fl http.Flusher, v map[string]any) {
 	b, _ := json.Marshal(v)
 	fmt.Fprintf(w, "data: %s\n\n", b)
 	fl.Flush()
+}
+
+// sseWait 在"用户只能干等"的阶段开始时发一条带原因和真实上限的事件。
+//
+// budget 一律取服务端真实的超时常量（0 = 没有可承诺的上限）。前端据此显示
+// 「原因 · 最长约 Ns · 已等 Ms」；超过上限只把文案换成「比预期久」，计时继续往上走
+// ——绝不画一个会归零的假倒计时。reason 是稳定标识，文案由前端按界面语言翻译，
+// 不把中文原文塞进事件里（英文界面就不会冒出中文）。
+func sseWait(w http.ResponseWriter, fl http.Flusher, reason string, budget time.Duration) {
+	ev := map[string]any{"type": "wait", "reason": reason}
+	if budget > 0 {
+		ev["budget_ms"] = int64(budget / time.Millisecond)
+	}
+	sseWrite(w, fl, ev)
 }
 
 // sseToolResult 发 tool_result 事件，并带上**结构化的成败标志** ok。

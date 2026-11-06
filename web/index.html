@@ -668,6 +668,8 @@
   .ai-tb-btn.done{color:var(--ok)}
   .ai-think{align-self:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .ai-think-txt{display:block;width:100%;margin-top:6px;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:88px;overflow:hidden;line-height:1.5}
+  /* 等待态的原因 + 计时：tabular-nums 让秒数跳动时不抖；挂在思考气泡或确认卡里都行 */
+  .ai-wait{display:block;width:100%;margin-top:6px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1.5}
   .ai-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:aiblink 1.2s infinite}
   .ai-dot:nth-child(2){animation-delay:.2s}
   .ai-dot:nth-child(3){animation-delay:.4s}
@@ -3157,6 +3159,7 @@ const I18N_EN = {
   "已用批量授权执行：{0}（剩余 {1} 次）": "Executed under batch grant: {0} ({1} left)",
   "已确认，继续执行…": "Confirmed — continuing…",
   "已移除该设备": "Device removed",
+  "已等 {0}s": "Waited {0}s",
   "已经加过了": "Already attached",
   "已经开始了新对话，无法撤销清空": "A new conversation has started, so clearing can no longer be undone",
   "已结束 PID {0}，可重新扫描确认": "Killed PID {0}; rescan to confirm",
@@ -3417,6 +3420,7 @@ const I18N_EN = {
   "最近有任务失败": "A recent task failed",
   "最近没有严重或错误级事件。": "No Critical or Error events recently.",
   "最近的日志里没有发现错误": "No errors found in recent logs",
+  "最长约 {0}s · 已等 {1}s": "Up to ~{0}s · waited {1}s",
   "有任务正在执行，请稍候": "Another task is running — please wait",
   "有异常": "has issues",
   "有改动，待保存…": "Unsaved changes…",
@@ -3543,10 +3547,12 @@ const I18N_EN = {
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
   "次": "tries",
   "次数": "Hits",
+  "正在压缩较早的对话历史": "Compressing older conversation history",
   "正在压缩较早的对话历史（约十几秒，只压这一轮）…": "Compacting earlier conversation history (~10s, this turn only)…",
   "正在启动{0}…": "Starting {0}…",
   "正在执行：{0} …（完成前其它操作已禁用）": "Running: {0} … (other actions are disabled until it finishes)",
   "正在检测…": "Detecting…",
+  "正在等模型回复": "Waiting for the model to reply",
   "正在读取…": "Reading…",
   "正在读取事件日志…": "Reading the event log…",
   "正在读取：{0}": "Reading: {0}",
@@ -3561,6 +3567,7 @@ const I18N_EN = {
   "每行一条，支持": "One per line; supports ",
   "每行一条，支持「- 内容 | 标签」或 JSON 数组；重复内容自动更新而非新增": "One per line: `- text | tags` or a JSON array; duplicates are updated, not duplicated",
   "每轮都注入": "Always inject",
+  "比预期久，仍在等 · 已等 {0}s": "Taking longer than expected, still waiting · waited {0}s",
   "沙箱内测得：无人值守场景下恒为 0，仅作对照": "Measured in the sandbox: always 0 in unattended runs, for reference only",
   "没拿到天气数据": "No weather data came back",
   "没接到文件呢": "Hmm, no file received",
@@ -3692,6 +3699,7 @@ const I18N_EN = {
   "端口线索": "Port hints",
   "端口需在 1024-65535": "Port must be within 1024-65535",
   "等你确认": "Waiting for you",
+  "等你确认是否执行": "Waiting for your confirmation to run it",
   "等待你确认：{0}": "Waiting for your confirmation: {0}",
   "等确认": "Awaiting confirm",
   "策略预期行为，不算失败": "Expected policy behaviour, not a failure",
@@ -3879,6 +3887,7 @@ const I18N_EN = {
   "这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓": "Not backing down this time... though you led me astray a few times. 😓",
   "这张图我读不出来…": "I can't read this image…",
   "这张图读不出来，换一张试试": "Couldn't read that image — try another one",
+  "这张确认卡已过期，请重新发起操作": "This confirmation has expired. Please start the action again.",
   "这活我不干，找个免费模型来": "Not doing this job — get a free model",
   "这用户发的啥啊，": "What is this user even sending,",
   "这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写": "Wrong values here cannot break much: every field has a built-in default, and 0 or empty means “use the default”. Saving only writes the ",
@@ -3892,6 +3901,7 @@ const I18N_EN = {
   "连接中断：": "Connection lost: ",
   "连接失败": "Connection failed",
   "连接成功": "Connected",
+  "连接断了一次，正在补结论": "Connection dropped once; rebuilding the answer",
   "连接正常": "Connection OK",
   "连接正常 · ": "Connected · ",
   "连接终端": "Connect terminal",
@@ -6453,7 +6463,7 @@ window.__ekSvcProbe = {concl: ekSvcConcl, event: ekSvcEvent};
 /* ---------- AI 桌宠「小画师」（v1.9.6，替代原右下角悬浮球）----------
    点它=开 AI 抽屉；右键=归位/隐藏/检测；等确认时点蓝徽标不开抽屉直接批；
    出错点红徽标深链日志；长任务外圈进度环；拖 .sql 上桌宠走 apply-upload 确认流。 */
-let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmHide = ()=>{},
+let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmDone = ()=>{},
     petShift = ()=>{}, petNoteErr = ()=>{}, petTasksSync = ()=>{},
     petCheckStart = ()=>{}, petCheckDone = ()=>{};
 (function(){
@@ -6580,6 +6590,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(st==='sleep' && next!=='idle') pet.classList.remove('sleep');
     st = next;
     pet.classList.remove('thinking','busy','error','success','confirm','sleep','dizzy','show-badge','show-bubble','show-ring','show-tip');
+    // 状态切换时清掉上一条气泡：confirm 结束后 DOM 里还留着「点我确认！」，
+    // 虽然 CSS 隐藏了，但无障碍朗读 / 样式变化时它会被读出来，看着像还能点。
+    bubble.textContent = '';
     badge.className = 'pet-badge'; badge.textContent = '!';
     clearTimeout(sleepTimer); armSleep();
     minicard.classList.remove('show'); mcCb = null;
@@ -6625,7 +6638,18 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     minicard.classList.add('show');
   }
   petAskConfirm = askConfirm;
-  petConfirmHide = ()=>{ minicard.classList.remove('show'); mcCb = null; };
+  /* 确认已决定（批 / 拒 / 会话清空 / 卡过期）的统一收口：迷你卡 + 桌宠状态一起归位。
+     原来只 hide 不改 st，桌宠还停在 confirm 喊「点我确认！」，点它只会 toggle 一张
+     mcCb=null 的空卡 —— 这就是用户说的「AI 弹出的确认按钮是个假的」。
+     next 由调用方给：批了就 busy（工具接着跑），拒了/过期就 idle。
+     守卫 if(st==='confirm')：正在 thinking/busy 时不打断其它状态。 */
+  petConfirmDone = (next)=>{
+    minicard.classList.remove('show'); mcCb = null;
+    if(st==='confirm') setSt(next || 'idle');
+  };
+  // CDP 只读探针：桌宠状态 / 迷你卡回调是否还有效。
+  // 「确认按钮点了没反应」的判据在内部 st 与 mcCb 上，光看 DOM 看不出来。
+  window.__ekPetProbe = ()=>({st: st, cb: !!mcCb, show: minicard.classList.contains('show')});
   /* 检测开始/结束差分表情（数据源：pollState 的 phase 迁移，覆盖按钮/右键/AI 所有触发来源） */
   petCheckStart = ()=>{
     if(st==='confirm') return;                 // 确认卡挂起时不劫持状态（会清掉迷你卡）
@@ -6651,7 +6675,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
   });
   badge.addEventListener('click', e=>{
     e.stopPropagation();
-    if(badge.classList.contains('blue')){ minicard.classList.toggle('show'); }
+    if(badge.classList.contains('blue')){ if(mcCb) minicard.classList.toggle('show'); else aiOpen(); }
     else if(badge.classList.contains('red')){ deepLink(); }
     else if(badge.classList.contains('warn')){ goto('install'); setSt('idle'); }
   });
@@ -7105,7 +7129,11 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmH
     if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
     if(pet.dataset.pat==='1'){ pet.dataset.pat=''; return; }
     if(st==='sleep'){ wake(true); return; }
-    if(st==='confirm'){ minicard.classList.toggle('show'); return; }
+    if(st==='confirm'){
+      // 已收口的 confirm 不该再 toggle 出一张 mcCb=null 的空卡（按钮点了没反应）
+      if(mcCb) minicard.classList.toggle('show'); else aiOpen();
+      return;
+    }
     if(st==='error'){
       // 失败时用户的本能是点桌宠：给「AI 分析 / 看日志」二选一，而不是只有日志一条路
       // 注意：本 IIFE 里有同名的迷你卡版 askConfirm，这里必须走 window 上的弹窗版
@@ -7426,6 +7454,7 @@ $ai('ai-clear').onclick = ()=>{
   // aiBusy 也仍然为 true 直到流自然结束。
   if(aiCtrl){ try{ aiCtrl.abort(); }catch(_){} aiCtrl = null; }
   if(aiPending){ try{ aiPending.card.remove(); }catch(_){} aiPending = null; }
+  petConfirmDone('idle');   // 抽屉卡清了，桌宠迷你卡与 confirm 态必须一起清
   aiMessages = []; try{ localStorage.removeItem('ek-ai-hist'); }catch(_){} $ai('ai-msgs').innerHTML = '<div class="ai-msg sys">' + t('对话已清空。') + '</div>';
   aiCurMission = null;   // 清空对话 = 解除行动绑定（行动本身仍在列表里，可从「行动」tab 继续）
   // 待发附件一并清掉：对话都清了，还挂着一张图/一份文件在输入区上方，下次发送会莫名其妙带上它
@@ -7643,6 +7672,7 @@ async function aiSendText(tx, missionId, imgs, docs){
   // 用户无视确认卡片直接发新消息：把悬挂的 assistant(tool_calls) 从历史里剥掉，
   // 否则下一轮请求历史变成 [..., assistant(tool_calls), user(新消息)]，上游直接 400
   if(aiPending){ aiPending.card.remove(); const ix = aiMessages.indexOf(aiPending.asst); if(ix >= 0) aiMessages.splice(ix, 1); aiPending = null; }
+  petConfirmDone('idle');   // 悬挂回合被清掉时，桌宠那边也必须收口，别留一张点了没反应的空卡
   const sendTs = aiNow();
   const el = aiAdd('user', tx, sendTs);
   const um = {role:'user', content:tx, ts:sendTs};
@@ -9655,10 +9685,22 @@ function aiBodyWarn(n){
    原地送达 = 服务端还在同一个 SSE 流里等着，决定一到就接着执行；
    旧路径 = 带 confirm 重新提交，等于把上下文整体重建一次（贵，且把任务切成两段）。 */
 async function aiDecide(approved){
-  const p = aiPending; if(!p) return;
+  const p = aiPending;
+  /* 两个入口（抽屉确认卡 / 桌宠迷你卡）共用这个函数，状态收口必须无条件先做。
+     原来只藏迷你卡、不清桌宠 confirm 态：v3.2 原地送达不新开 aiConsume，
+     petAIState('thinking') 不会跑，桌宠会一直喊「点我确认！」，而 mcCb 已被清空
+     —— 再点宠物/徽标只是 toggle 一张空卡，按钮点了什么都不会发生。
+     用户实测的「AI 弹出的确认按钮是假的」就是这条路径。 */
+  petConfirmDone(p ? (approved ? 'busy' : 'idle') : 'idle');
+  if(!p){
+    // 清空对话 / 无视卡片发新消息后 aiPending 已空，但迷你卡可能还挂着。
+    // 原来直接 return 是静默无操作，必须给一句明确说明。
+    toast(t('这张确认卡已过期，请重新发起操作'));
+    aiHstat('');
+    return;
+  }
   aiPending = null;
   try{ p.card.remove(); }catch(_){}
-  petConfirmHide();
   aiAdd('sys', approved ? t('已确认，继续执行…') : t('已拒绝，让助手换个做法…'));
   aiTraceAdd('human', approved ? t('你已确认：{0}', p.tool) : t('你已拒绝：{0}', p.tool), {cls: approved ? 'ok' : 'warn'});
   aiHstat(approved ? t('执行中') : t('已拒绝'));
@@ -10307,6 +10349,16 @@ async function aiConsume(path, body){
     planList.appendChild(row);
     $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   };
+  /* P0-2 的计时状态与清理函数必须放在 try **外面**：finally 也要调 aiWaitStop，
+     而 const/let 是块级作用域，放在 try 里收尾时会抛 ReferenceError。
+     aiWaitSet 仍在 try 内（它要闭包访问 mkThink），共用这里的状态。 */
+  let aiWaitState = null, aiWaitTimer = null;
+  const aiWaitStop = ()=>{
+    if(aiWaitTimer){ clearInterval(aiWaitTimer); aiWaitTimer = null; }
+    aiWaitState = null;
+    const host = $ai('ai-msgs');
+    if(host) host.querySelectorAll('.ai-wait').forEach(n=>n.remove());
+  };
   try{
   // 思考气泡的构造函数。**单独抽出来是因为它要能被重建** ——
   // v2.3 起 `plan_start` 是服务端第一个事件，到达时就把气泡删了，
@@ -10320,8 +10372,41 @@ async function aiConsume(path, body){
     $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
     return think;
   };
+  /* P0-2：等待态给原因 + 真实计时。不画「还剩 N 秒」那种会归零的假倒计时：
+     budget_ms 一律来自服务端真实超时常量，0 表示没有可承诺的上限；
+     超过上限只把文案换成「比预期久」，计时继续往上走。
+     计时行挂在 host 上（默认思考气泡，确认阶段挂在确认卡里），所以 dropThink /
+     卡片被移除时它会一起消失；一份状态一个定时器，切阶段先 aiWaitStop。 */
+  const AI_WAIT_WHY = {
+    model:   ()=>t('正在等模型回复'),
+    summary: ()=>t('正在压缩较早的对话历史'),
+    confirm: ()=>t('等你确认是否执行'),
+    rescue:  ()=>t('连接断了一次，正在补结论')
+  };
+  const aiWaitSet = (reason, budgetMs, hostEl)=>{
+    aiWaitStop();
+    const host = hostEl || mkThink();
+    if(!host) return;
+    const line = document.createElement('div'); line.className = 'ai-wait';
+    host.appendChild(line);
+    const why = (AI_WAIT_WHY[reason] || AI_WAIT_WHY.model)();
+    const budget = Number(budgetMs) > 0 ? Math.round(Number(budgetMs) / 1000) : 0;
+    aiWaitState = {why: why, budget: budget, at: Date.now()};
+    const tick = ()=>{
+      if(!aiWaitState || !line.parentNode){ aiWaitStop(); return; }
+      const s = Math.floor((Date.now() - aiWaitState.at) / 1000);
+      const clock = budget
+        ? (s <= budget ? t('最长约 {0}s · 已等 {1}s', budget, s)
+                       : t('比预期久，仍在等 · 已等 {0}s', s))
+        : t('已等 {0}s', s);
+      line.textContent = why + ' · ' + clock;
+    };
+    tick();
+    aiWaitTimer = setInterval(tick, 1000);
+  };
   mkThink();
-  const dropThink = ()=>{ if(think && think.parentNode){ think.remove(); think = null; } };
+  aiWaitSet('model', 0);
+  const dropThink = ()=>{ aiWaitStop(); if(think && think.parentNode){ think.remove(); think = null; } };
     aiCtrl = new AbortController();
     // 声明"我发了多少字节"：服务端据此判断请求体是**没到**还是**被截断**。
     // 长度按 UTF-8 字节算（不是 JS 的字符数，中文一个字 3 字节，用字符数会假报不符）。
@@ -10494,8 +10579,13 @@ async function aiConsume(path, body){
           aiTraceAdd('grant', t('批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left), {cls:''});
           aiAdd('sys', t('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left));
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
+        } else if(ev.type === 'wait'){
+          /* 服务端给稳定 reason + 真实上限，文案与计时都在前端按界面语言算。
+             确认阶段的思考气泡已被 dropThink 删掉，计时改挂到确认卡里。 */
+          aiWaitSet(ev.reason, ev.budget_ms,
+            (ev.reason === 'confirm' && aiPending) ? aiPending.card : null);
         } else if(ev.type === 'info'){
-          // 服务端阶段性提示（如"正在压缩较早的对话历史"）：换掉思考气泡的文案。
+          // 旧版后端的阶段性提示（新后端统一发 wait）：换掉思考气泡的文案。
           // 不发这种提示时，摘要那次前置调用最长 60s 里用户只看到三点动画，
           // 第一反应就是"卡死了"去刷新，白烧一次 token。
           dropThink(); mkThink();
@@ -10529,6 +10619,7 @@ async function aiConsume(path, body){
     else { if(think && think.parentNode) think.remove(); aiErr(t('连接中断：') + e); }
   }
   finally{
+    aiWaitStop();   // 清本流的计时器：代际不匹配时也要清，否则旧流每秒还在刷 DOM
     // 只有**当代际**才复位全局态：旧流晚到的 finally 不能把新流的
     // aiBusy/按钮态冲掉（那会让输入框在流式中途重新可用，两条流交错贴消息）。
     if(gen === aiGen){

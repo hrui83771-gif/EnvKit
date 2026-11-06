@@ -94,6 +94,9 @@ func aiAwaitConfirm(ctx context.Context, w http.ResponseWriter, fl http.Flusher,
 	defer tick.Stop()
 	// 先告诉前端"这一轮没结束，它在等你的决定"
 	sseWrite(w, fl, map[string]any{"type": "waiting_confirm", "tool_call_id": callID})
+	// 10 分钟窗口必须让用户看见：卡会一直挂在那儿，不写清"最长多久、已等多久"，
+	// 超时退回旧路径时就成了"点过的确认自己没了"。上限直接取本文件的常量。
+	sseWait(w, fl, "confirm", aiConfirmWaitMax)
 	for {
 		select {
 		case d := <-wt.ch:
