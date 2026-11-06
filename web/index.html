@@ -1629,8 +1629,10 @@
         <div class="frow"><label>API Key</label><input id="ai_key" type="password" placeholder="sk-...（留空保留已存值）"></div>
         <div class="frow"><label>温度</label><input id="ai_temp" type="number" step="0.1" min="0" max="2" placeholder="留空 = 0.3（部分模型只接受 1，会自动适配）"></div>
         <!-- 内部调用模型（utility_model）：只影响「压缩历史」这类用户看不见的后台调用。
-             文案必须说清"不影响你看到的回答"，否则用户会以为换了它就换了助手水平。 -->
-        <div class="frow"><label>内部调用模型</label><input id="ai_utility_model" placeholder="留空 = 与主模型相同；可填更便宜的模型，如 deepseek-flash"></div>
+             文案必须说清"不影响你看到的回答"，否则用户会以为换了它就换了助手水平。
+             占位别写具体型号名：默认主模型就是 deepseek-flash，举例举它等于让用户
+             "照着填=没填"（2026-11-06）。改成描述用途 + 什么时候才用得上。 -->
+        <div class="frow"><label>内部调用模型</label><input id="ai_utility_model" placeholder="留空 = 与主模型相同；只用于后台摘要，主模型换更贵的型号时再填便宜的"></div>
         <div class="frow" id="ai_quirk_row" style="display:none"><label>已自动适配</label><span class="muted" id="ai_quirk"></span></div>
         <div class="ckrow">
           <label class="switch"><input type="checkbox" id="ai_enabled"><span class="sl"></span></label>
@@ -3610,7 +3612,7 @@ const I18N_EN = {
   "留空 = exe 同级的 backups": "Empty = backups/ next to the exe",
   "留空 = 不检查（可填 Releases API 或 version.json）": "Empty = no check (Releases API or version.json)",
   "留空 = 不检查（返回 version/notes 的 JSON）": "Empty = no check (JSON returning version/notes)",
-  "留空 = 与主模型相同；可填更便宜的模型，如 deepseek-flash": "Empty = same as the main model; you can use a cheaper one, e.g. deepseek-flash",
+  "留空 = 与主模型相同；只用于后台摘要，主模型换更贵的型号时再填便宜的": "Empty = same as the main model; for background summarization only — set a cheaper one when the main model is upgraded to a pricier one",
   "留空 = 只弹桌面气泡，不外发": "Empty = desktop bubble only, nothing sent out",
   "留空 = 只弹气泡，不外发": "Empty = in-app bubble only, nothing is sent out",
   "留空 = 用系统默认。改源之后建议到「程序配置 → 依赖」重跑一次安装。": "Empty = system default. After changing a mirror, re-run the install from Configure → Dependencies.",
