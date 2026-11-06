@@ -142,7 +142,7 @@ func aiHistoryKey(head []aiMsg) string {
 }
 
 // aiMaybeSummarize 把 msgs 的较早部分替换成一条摘要消息；摘要失败时静默降级为原始历史
-// （宁可上下文长一点，也不能因为摘要挂掉而且回合）。
+// （宁可上下文长一点，也不能因为摘要挂掉而卡住回合）。
 //
 // onStart：真正要发起那次**前置 LLM 调用**（最多 60s）之前调用。
 // 它不是可有可无的钩子——没有它，用户在长对话里发一条消息后只能对着
@@ -157,13 +157,17 @@ func aiMaybeSummarize(msgs []aiMsg, onStart func()) []aiMsg {
 	aiSumMu.Lock()
 	cached := aiSumCache.key == key
 	text := aiSumCache.text
-	// 冷却中的失败：同一段历史刚失败过，别再让用户干等一次前置调用。
-	cooling := !cached && aiSumCache.failKey == key && time.Since(aiSumCache.failAt) < aiSumFailCooldown
+	// 冷却：连续失败达标后按时间窗**全局**生效，不再要求 head 指纹相同。
+	// 真实对话每回合历史都在增长、指纹必变，按 key 精确匹配等于不设防
+	// （2026-11-04 日志：连续三次失败，每次都真发了一次前置调用）。
+	cooling := !cached && aiSumCache.failStreak >= aiSumFailStreakMin &&
+		time.Since(aiSumCache.failAt) < aiSumFailCooldown
+	streak := aiSumCache.failStreak
 	aiSumMu.Unlock()
 	if !cached {
 		if cooling {
-			warn(scSys, "AI", "同一段历史的摘要刚失败过，%s 内不再重试（本回合按原始历史继续，上下文会长一些）",
-				aiSumFailCooldown)
+			warn(scSys, "AI", "摘要已连续失败 %d 次，%s 内不再发起前置调用（本回合按原始历史继续，上下文会长一些）",
+				streak, aiSumFailCooldown)
 			return msgs
 		}
 		if onStart != nil {
@@ -173,14 +177,17 @@ func aiMaybeSummarize(msgs []aiMsg, onStart func()) []aiMsg {
 		text, err = aiSummarizeHistoryFunc(head)
 		if err != nil {
 			aiSumMu.Lock()
-			aiSumCache.failKey, aiSumCache.failAt = key, time.Now()
+			aiSumCache.failAt = time.Now()
+			aiSumCache.failStreak++
 			aiSumMu.Unlock()
 			warn(scSys, "AI", "对话摘要生成失败，本回合按原始历史继续：%v", err)
 			return msgs
 		}
 		aiSumMu.Lock()
 		aiSumCache.key, aiSumCache.text = key, text
-		aiSumCache.failKey = "" // 成功了就清掉冷却，别让它挡下一次
+		// 成功即清零：否则一次故障会把后续 5 分钟的正常摘要全挡住。
+		aiSumCache.failAt = time.Time{}
+		aiSumCache.failStreak = 0
 		aiSumMu.Unlock()
 		info(scSys, "AI", "已生成对话摘要（压缩 %d 条 → %d 字），长对话上下文已续上", cut, len([]rune(text)))
 	}
