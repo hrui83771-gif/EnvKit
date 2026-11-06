@@ -166,3 +166,83 @@ SOFTWARE.
   `getlantern/hex`、`getlantern/hidden`、`getlantern/ops`、`oxtoacart/bpool` 均为
   Apache-2.0；`go-stack/stack` 为 MIT。
 
+## 首次引导 / 产品导览：Swiper / Anime.js / driver.js
+
+首次运行的品牌片头与 8 屏产品导览、以及收尾衔接的 4 步操作教学，由下面三个库完成。三者都是上游官方 UMD / IIFE 发布产物，**原样内嵌、未作任何修改**，走 `go:embed` + 同域 `/vendor/…` 路由加载，不经由任何外网 CDN；页面 CSP `default-src 'self'` 保持不变。锁版本后记录的 SHA256 见下表，升级时须重跑前端全门禁。
+
+| 资源 | 版本 | 许可 | 在本项目中的位置 | SHA256 |
+|---|---|---|---|---|
+| Swiper（`swiper-bundle.min.js`） | 12.2.0 | MIT | `web/vendor/swiper-bundle.min.js` | `1e313555b04cb9b5273b7a817158708a05f58e18f91d97a4239dab6f68d23c4a` |
+| Swiper（`swiper-bundle.min.css`） | 12.2.0 | MIT | `web/vendor/swiper-bundle.min.css` | `95482d9f6501bcbcb3fb9309e776cf547d3553ed4dbb95c595223cf876277684` |
+| Anime.js UMD bundle | 4.5.0 | MIT | `web/vendor/anime.umd.min.js` | `8d5b3a58a1f64023a04a4cedeef135a2263b18da04b35177ac13438a0bad033b` |
+| driver.js IIFE | 1.10.2 | MIT | `web/vendor/driver.js.iife.js` | `541520f33f84cc5cf6696b421f705cc9efe2d72656b3b5cd7f72c22e6d7e17c0` |
+| driver.js 样式 | 1.10.2 | MIT | `web/vendor/driver.css` | `ff1934a5a7ef3f50deb9266ba8945b3eb407ee10b97da12feda4b7c10055bf12` |
+
+> 三者 CSS 均为 `.swiper*` / `.driver*` 前缀类名，不含全局 reset 或元素级规则；引入前已核对，不会污染主界面样式。
+
+### MIT License（Swiper）
+
+Copyright (c) 2019 Vladimir Kharlampidi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### MIT License（Anime.js）
+
+Copyright (c) 2025 Julian Garnier
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### MIT License（driver.js）
+
+Copyright (c) Kamran Ahmed
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+

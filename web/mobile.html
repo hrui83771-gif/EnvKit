@@ -42,9 +42,9 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
 .svc{display:flex;align-items:center;gap:10px;padding:6px 0}
 .svc+.svc{border-top:1px dashed #ece7de;margin-top:6px;padding-top:12px}
 .dot{width:9px;height:9px;border-radius:50%;background:#c9c3b8;flex:none}
-.dot.on{background:#5fa87a;box-shadow:0 0 0 3px rgba(95,168,122,.16)}
-.dot.wait{background:#d9a441;box-shadow:0 0 0 3px rgba(217,164,65,.16)}
-.dot.bad{background:#c96a5f}
+.dot.on{background:#526E96;box-shadow:0 0 0 3px rgba(82,110,150,.16)}
+.dot.wait{background:#C9A15C;box-shadow:0 0 0 3px rgba(201,161,92,.16)}
+.dot.bad{background:#B05652}
 .svc-name{flex:1;min-width:0}
 .svc-name b{display:block;font-weight:600;font-size:14.5px}
 .svc-name span{display:block;color:#8c96a2;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -54,8 +54,8 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
   font-family:inherit;cursor:pointer;
 }
 .btn:active{background:#f1ede5}
-.btn.primary{background:#4a6fa5;border-color:#4a6fa5;color:#fff}
-.btn.primary:active{background:#3f5f8e}
+.btn.primary{background:#526E96;border-color:#526E96;color:#fff}
+.btn.primary:active{background:#425F86}
 .btn.danger{background:#fff;border-color:#e0b5ae;color:#b4553f}
 .btn.danger.armed{background:#c96a5f;border-color:#c96a5f;color:#fff}
 .btn:disabled{opacity:.45}
@@ -83,7 +83,7 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
 .msg.md li{margin:2px 0}
 .msg.md blockquote{margin:6px 0;padding:2px 0 2px 9px;border-left:3px solid #e0e5ec;color:#7d8794}
 .msg.md hr{border:0;border-top:1px solid #e6e9ee;margin:10px 0}
-.msg.md a{color:#4a6fa5;word-break:break-all}
+.msg.md a{color:#526E96;word-break:break-all}
 .msg.md code{background:#eef1f5;padding:1px 4px;border-radius:4px;font-family:Consolas,monospace;font-size:12.5px}
 .msg.md pre{background:#f3f5f8;border:1px solid #e6e9ee;border-radius:8px;padding:8px 10px;overflow-x:auto;margin:8px 0;white-space:pre}
 .msg.md pre code{background:transparent;padding:0;display:block}
@@ -95,17 +95,17 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
   flex:1;min-width:0;min-height:44px;border:1px solid #d8d1c4;border-radius:10px;
   padding:0 12px;font-size:15px;font-family:inherit;background:#fff;color:#2f3742;
 }
-#ask input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+#ask input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(82,110,150,.12)}
 .hint{color:#98a2ae;font-size:11.5px;margin-top:8px;line-height:1.5}
 
 /* 通用行 */
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .row .btn{min-height:40px;padding:0 14px;font-size:13.5px}
 .chk{display:flex;align-items:center;gap:6px;font-size:13px;color:#5c6675}
-.chk input{width:18px;height:18px;accent-color:#4a6fa5;margin:0}
+.chk input{width:18px;height:18px;accent-color:#526E96;margin:0}
 .field{width:100%;min-height:44px;border:1px solid #d8d1c4;border-radius:10px;padding:0 12px;
   font-size:14px;font-family:inherit;background:#fff;color:#2f3742}
-.field:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+.field:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(82,110,150,.12)}
 
 /* 电脑屏幕 */
 .shotwrap{margin:0 0 10px;border:1px solid #e6e1d8;border-radius:10px;background:#f3f1ec;
@@ -132,7 +132,7 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
 /* 剪贴板 */
 #clipText{width:100%;min-height:78px;border:1px solid #d8d1c4;border-radius:10px;padding:10px 12px;
   font:13px/1.5 Consolas,Menlo,monospace;background:#fff;color:#2f3742;resize:vertical}
-#clipText:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+#clipText:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(82,110,150,.12)}
 
 /* 终端全屏层：手机上终端必须占满整屏，半屏的终端用来敲命令只会让人抓狂 */
 #termView{position:fixed;inset:0;z-index:60;background:#1e2228;display:flex;flex-direction:column;
@@ -204,7 +204,7 @@ h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.5px}
   width:100%;min-height:48px;border:1px solid #d8d1c4;border-radius:10px;padding:0 14px;
   font-size:20px;letter-spacing:4px;text-align:center;font-family:inherit;background:#fff;
 }
-#pair input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(74,111,165,.1)}
+#pair input:focus{outline:none;border-color:#9db2ce;box-shadow:0 0 0 3px rgba(82,110,150,.12)}
 #pair .btn{width:100%;margin-top:12px}
 #pairMsg{color:#b4553f;font-size:13px;min-height:20px;text-align:center;margin-top:8px}
 .hidden{display:none!important}

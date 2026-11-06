@@ -130,7 +130,7 @@ function termFit(){ try{ const w=document.getElementById('term-wrap'); if(!w || 
 $('#btn-term-connect').onclick = ()=>{
   if(!term){
     term = new Terminal({cursorBlink:true, fontSize:13, fontFamily:'Consolas,"Courier New",monospace',
-      theme:{background:'#10161f', foreground:'#d7dde6', cursor:'#9ad1a8', selectionBackground:'#2f7d4f55'}});
+      theme:{background:'#10161f', foreground:'#d7dde6', cursor:'#8CA6C6', selectionBackground:'#526E9655'}});
     fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(document.getElementById('term'));

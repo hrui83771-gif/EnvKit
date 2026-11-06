@@ -132,17 +132,17 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     fx.appendChild(s); setTimeout(()=>s.remove(), life||1600);
   }
   function notes(n){
-    for(let i=0;i<(n||2);i++) spawn('up',{left:(38+Math.random()*30)+'%',top:'26%',animationDelay:(i*.2)+'s',color:'#9fd8cb'},1700,['♪','♫','♬'][i%3]);
+    for(let i=0;i<(n||2);i++) spawn('up',{left:(38+Math.random()*30)+'%',top:'26%',animationDelay:(i*.2)+'s',color:'#D9B2A0'},1700,['♪','♫','♬'][i%3]);
   }
   function sweat(){ for(let i=0;i<2;i++) spawn('drop',{left:(56+i*14)+'%',top:'34%',animationDelay:(i*.3)+'s'},1300); }
   function confetti(n){
-    const cols = ['#ff5d7e','#e8b23c','#5aa8d8','#9fd8cb','#b78af7'];
+    const cols = ['#D98C96','#D6B27C','#8CA6C6','#D9B2A0','#B7A9C4'];
     for(let i=0;i<(n||16);i++) spawn('conf',{left:(15+Math.random()*70)+'%',top:'28%',
       background:cols[i%5],'--cx':((Math.random()*180)-90)+'px','--cr':(Math.random()*720-360)+'deg',
       animationDuration:(1.1+Math.random()*.7)+'s',animationDelay:(Math.random()*.3)+'s'},2100);
   }
   function paintDrops(){
-    const cols = ['#ef456c','#e8b23c','#5aa8d8'];
+    const cols = ['#C8908C','#D6B27C','#8CA6C6'];
     spawn('paint',{left:'78%',top:'52%',background:cols[Math.floor(Math.random()*3)],
       '--px':((Math.random()*60)-30)+'px','--py':(10+Math.random()*40)+'px'},950);
   }
@@ -664,7 +664,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     dizzyStage = 1;
     pet.classList.add('dizzy');
     say(t('晕了晕了…别晃了~'), true);
-    for(let i=0;i<3;i++) spawn('up',{left:(28+i*20)+'%',top:'12%',animationDelay:(i*.15)+'s',color:'#e8b23c'},1600,'★');
+    for(let i=0;i<3;i++) spawn('up',{left:(28+i*20)+'%',top:'12%',animationDelay:(i*.15)+'s',color:'#D6B27C'},1600,'★');
     clearTimeout(dizzyT); dizzyT = setTimeout(recoverDizzy, 2200);
   }
   function recoverDizzy(){
@@ -876,7 +876,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
         if(wobble > 26 && !pet.classList.contains('dizzy')) enterDizzy();
         if(pet.classList.contains('dizzy') && wobble > 60 && dizzyStage === 1){
           dizzyStage = 2; say(t('再晃要吐了🫠'), true);
-          for(let i=0;i<5;i++) spawn('up',{left:(22+i*14)+'%',top:'10%',animationDelay:(i*.1)+'s',color:'#e8b23c'},1700,'★');
+          for(let i=0;i<5;i++) spawn('up',{left:(22+i*14)+'%',top:'10%',animationDelay:(i*.1)+'s',color:'#D6B27C'},1700,'★');
         }
       }
     }

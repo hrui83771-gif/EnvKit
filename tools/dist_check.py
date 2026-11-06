@@ -86,6 +86,26 @@ try:
             fail.append(name)
         print(f"{'OK ' if ok else 'BAD'} {name:<24} = [{got}]")
 
+    # 首次引导的 5 个 vendor 产物必须真的嵌进 exe 并同域可达（改了 tpl 只跑
+    # web_build.py 不 go build 的话，这里会直接红）。同时卡死 script/link 外链：
+    # <a href> 里的作者主页是既有内容，不算外部资源。
+    print("--- 引导依赖 / 零 CDN ---")
+    for fn in ["swiper-bundle.min.js", "swiper-bundle.min.css",
+               "anime.umd.min.js", "driver.js.iife.js", "driver.css"]:
+        try:
+            r = urllib.request.urlopen("http://127.0.0.1:18765/vendor/" + fn, timeout=10)
+            size = len(r.read())
+            ok = (r.status == 200 and size > 1000)
+        except Exception:
+            size, ok = 0, False
+        if not ok:
+            fail.append("vendor/" + fn)
+        print(f"{'OK ' if ok else 'BAD'} /vendor/{fn:<26} {size} bytes")
+    ext = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^\"]+)"', page)
+    if ext:
+        fail.append("external script/link")
+    print(f"{'OK ' if not ext else 'BAD'} script/link 外链 = {ext}")
+
     print("chain_guard  =", j["chain"]["chain_guard"], "(应 False，否则会去连别人的服务器)")
     if j["chain"]["chain_guard"]:
         fail.append("chain_guard")

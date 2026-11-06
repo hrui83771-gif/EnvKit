@@ -1198,13 +1198,13 @@ function psRenderResult(rows){
     const tr=document.createElement('tr');
     tr.appendChild(mk(r.port));
     if(r.state==='LISTENING'){
-      tr.appendChild(mk(t('占用'), false, '#e5484d'));
+      tr.appendChild(mk(t('占用'), false, 'var(--err)'));
       tr.appendChild(mk(r.pid)); tr.appendChild(mk(r.name||'—'));
       const td=document.createElement('td'); td.style.padding='4px 8px';
       const b=document.createElement('button'); b.className='warn'; b.style.padding='2px 10px'; b.textContent=t('结束');
       b.onclick=()=>psKill(r); td.appendChild(b); tr.appendChild(td);
     } else {
-      tr.appendChild(mk(t('空闲'), false, '#2fb344'));
+      tr.appendChild(mk(t('空闲'), false, 'var(--ok)'));
       tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk(''));
     }
     tbl.appendChild(tr);
@@ -1324,7 +1324,7 @@ async function dbvLoadRows(){
     const pages = Math.max(1, Math.ceil(total / dbv.size));
     $('#dbv-pageinfo').textContent = t('共 {0} 行 · 第 {1}/{2} 页', total.toLocaleString(), dbv.page, pages);
   }catch(e){ grid.textContent = ''; const tr=document.createElement('tr'), c=document.createElement('td');
-    c.textContent = t('查询失败：{0}', e.message); c.style.color='#e5484d'; c.style.padding='10px'; tr.appendChild(c); grid.appendChild(tr); }
+    c.textContent = t('查询失败：{0}', e.message); c.style.color='var(--err)'; c.style.padding='10px'; tr.appendChild(c); grid.appendChild(tr); }
 }
 
 function dbvRenderGrid(){
@@ -1561,7 +1561,13 @@ $('#syslog').addEventListener('click', function(e){ if(e.target.id === 'syslog')
 
 /* ---------- 启动 ---------- */
 (async function init(){
-  await loadConfig();
+  /* 读取配置是页面唯一的启动期真实等待：产品头像呼吸环只在它进行时出现，
+     finally 保证一定收尾（loadConfig 抛错也不会留一个永远转的头像）。
+     不造等待、不做首屏 loading —— 见设计 §7。 */
+  var endCfgWait = (typeof window.EKAvatarWait === 'function')
+    ? window.EKAvatarWait(document.getElementById('app-logo'), t('正在读取配置…'))
+    : function(){};
+  try{ await loadConfig(); } finally { endCfgWait(); }
   auditBind();
   // v2.3 N4：守护状态的手动刷新
   const gb = $('#guard-refresh');
@@ -1569,6 +1575,19 @@ $('#syslog').addEventListener('click', function(e){ if(e.target.id === 'syslog')
   memBind();
   fetch('/api/check',{method:'POST'});
   pollHealth(); pollState(); pollProg();
+  /* 首次引导：只看这台浏览器有没有看过（ek-guide-v1），不写后端配置、
+     不阻塞上面的初始化。window.EKOnboard 由 90-onboard.js 定义；本 init 已经
+     await 过 loadConfig()，整条内联脚本此时已执行完，不会撞 TDZ。
+     自动化环境不自动播：全屏 overlay 会挡住既有 CDP 回归脚本对主界面控件的
+     真实鼠标点击。判据用 navigator.webdriver **或** UA 里的 HeadlessChrome ——
+     实测本项目 --headless=new 只开 remote-debugging-port 时 webdriver 仍是 false，
+     单靠 webdriver 判不住；真实浏览器两者皆非，引导照常播。
+     「关于 > 重新观看介绍」两种环境都可用。 */
+  try{
+    var automated = !!(navigator.webdriver || /HeadlessChrome|PhantomJS/i.test(navigator.userAgent));
+    if(!automated && window.EKOnboard && !window.EKOnboard.hasSeen())
+      window.EKOnboard.open('first');
+  }catch(e){}
   setInterval(()=>{
     if(document.hidden) return;   // 页面切走时暂停 2s×3 的状态轮询，回来后下一轮自动恢复
     pollHealth(); pollState(); pollProg();

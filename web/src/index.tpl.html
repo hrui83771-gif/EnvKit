@@ -12,6 +12,13 @@
 <!-- 离线内置：Markdown 渲染 + 代码高亮（与 xterm 一样走 go:embed，不依赖外网 CDN） -->
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/highlight.min.js"></script>
+<!-- 首次引导 / 产品导览 + P1-4 操作教学：同域离线产物，不走任何 CDN。
+     Swiper 12 管翻页，Anime.js v4 管动画，driver.js 管控件高亮。 -->
+<link rel="stylesheet" href="/vendor/swiper-bundle.min.css" />
+<link rel="stylesheet" href="/vendor/driver.css" />
+<script src="/vendor/swiper-bundle.min.js"></script>
+<script src="/vendor/anime.umd.min.js"></script>
+<script src="/vendor/driver.js.iife.js"></script>
 </head>
 <body>
 <header>
@@ -1199,7 +1206,7 @@
         <li>作者保留在不另行通知的情况下修改、暂停或停止提供本软件及其相关服务的权利。</li>
       </ol>
     </div>
-    <div class="mfoot"><button id="about-close">知道了</button></div>
+    <div class="mfoot"><button class="ghost" id="about-replay">重新观看介绍</button><button id="about-close">知道了</button></div>
   </div>
 </div>
 
@@ -1398,6 +1405,196 @@
   </div>
 </div>
 
+
+<!-- ==================== 首次引导 / 产品导览（v3） ====================
+     独立全屏 overlay，不新增路由、不碰 panel 切换。8 屏是 Swiper slide；
+     #ob-brand 是覆盖层，不占 slide、不影响进度点（片头只在首次自动播时出现）。
+     所有演示数据写死在 90-onboard.js，不 fetch 任何 /api/*、不写配置、
+     不触发真实确认卡/权限逻辑。 -->
+<div id="onboard" class="ob" role="dialog" aria-modal="true" aria-labelledby="ob-title">
+  <div id="ob-brand" aria-hidden="true">
+    <div class="ob-brand-glow"></div>
+    <div class="ob-brand-inner">
+      <div class="ob-brand-ava"><img id="ob-brand-avatar" alt="" /><i class="ob-brand-ring"></i></div>
+      <div class="ob-brand-word">EnvKit</div>
+      <div class="ob-brand-tag">统一开发环境助手</div>
+      <div class="ob-brand-ver">v__APP_VERSION__</div>
+    </div>
+    <div class="ob-brand-skip">点一下或按任意键跳过片头</div>
+  </div>
+
+  <div class="ob-top">
+    <div class="ob-guide" title="导览进度">
+      <img id="ob-guide-avatar" alt="" />
+      <svg class="ob-guide-ring" viewBox="0 0 48 48" aria-hidden="true">
+        <circle class="ob-ring-bg" cx="24" cy="24" r="21"></circle>
+        <circle class="ob-ring-fg" id="ob-guide-arc" cx="24" cy="24" r="21"></circle>
+      </svg>
+    </div>
+    <span class="ob-demo-tag">演示 · 不会改动你的配置</span>
+    <button class="ob-skip" id="ob-skip">跳过</button>
+  </div>
+
+  <div class="swiper ob-swiper" id="ob-swiper">
+    <div class="swiper-wrapper">
+
+      <div class="swiper-slide ob-slide" data-idx="0">
+        <div class="ob-in">
+          <div class="ob-kicker">01 / 08 · 开场</div>
+          <h2 class="ob-h" id="ob-title">一个文件就够了</h2>
+          <p class="ob-lead">检测、配置、链端、启动、AI 助手，都装在这一个 exe 里。<br />不用装运行时，不用配环境，双击就能用。</p>
+          <div class="ob-stage ob-stage-hero">
+            <div class="ob-hero-ava"><img id="ob-hero-avatar" alt="" /><i class="ob-hero-halo"></i></div>
+            <div class="ob-hero-meta"><b>EnvKit</b><span>单文件 Go · 零依赖 · 内置 AI 运维助手</span><em>v__APP_VERSION__</em></div>
+          </div>
+          <div class="ob-actions">
+            <button class="ob-primary" id="ob-hero-next">看看它能做什么</button>
+            <button class="ob-ghost" id="ob-hero-skip">跳过</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="1">
+        <div class="ob-in">
+          <div class="ob-kicker">02 / 08 · 为什么存在</div>
+          <h2 class="ob-h">把散落的工具收成一个</h2>
+          <p class="ob-lead">以前开五个窗口来回切，出事了还不知道该看哪一个。<br />现在入口只有一个，状态也只有一个。</p>
+          <div class="ob-stage ob-stage-merge" id="ob-merge">
+            <div class="ob-old" id="ob-old-list">
+              <span class="ob-old-card" data-tip="被「环境安装」接管">终端</span>
+              <span class="ob-old-card" data-tip="被「程序配置」接管">数据库客户端</span>
+              <span class="ob-old-card" data-tip="被「链端校验」接管">SSH 工具</span>
+              <span class="ob-old-card" data-tip="被「程序启动」接管">浏览器标签</span>
+              <span class="ob-old-card" data-tip="被「日志分区」接管">日志窗口</span>
+            </div>
+            <div class="ob-beam"><i></i><span>收拢</span></div>
+            <div class="ob-new-card"><b>EnvKit</b><small>检测 · 配置 · 链端 · 启动</small></div>
+          </div>
+          <div class="ob-actions"><button class="ob-ghost" id="ob-merge-replay">重播汇聚</button><span class="ob-hint">鼠标悬停旧卡片，看看被谁接管了</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="2">
+        <div class="ob-in">
+          <div class="ob-kicker">03 / 08 · 主流程</div>
+          <h2 class="ob-h">四步走，是一条明确的线</h2>
+          <p class="ob-lead">顶栏那条导航不是装饰：每一步都有输入、有结果、有下一步。</p>
+          <div class="ob-stage ob-stage-track">
+            <div class="ob-track" id="ob-track">
+              <button class="ob-step on" data-step="0"><i>1</i><span>环境安装</span></button>
+              <button class="ob-step" data-step="1"><i>2</i><span>程序配置</span></button>
+              <button class="ob-step" data-step="2"><i>3</i><span>链端校验</span></button>
+              <button class="ob-step" data-step="3"><i>4</i><span>程序启动</span></button>
+            </div>
+            <div class="ob-step-desc" id="ob-step-desc"><b>环境安装</b><p>检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么。</p></div>
+          </div>
+          <div class="ob-actions"><button class="ob-ghost" id="ob-track-run">依次打勾</button><span class="ob-hint">点任一段可切换说明</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="3">
+        <div class="ob-in">
+          <div class="ob-kicker">04 / 08 · 状态看得见</div>
+          <h2 class="ob-h">检测不是黑盒</h2>
+          <p class="ob-lead">每一项都给出版本、位置和结论；异常会直接告诉你该怎么办。</p>
+          <div class="ob-stage ob-stage-detect">
+            <div class="ob-detect-head"><span>环境检测报告（演示数据）</span><b id="ob-detect-badge"></b></div>
+            <div class="ob-detect-rows" id="ob-detect-rows"></div>
+          </div>
+          <div class="ob-actions"><button class="ob-ghost" id="ob-detect-run">跑一次演示检测</button><span class="ob-hint">纯静态数据，不会真的检测你的电脑</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="4">
+        <div class="ob-in">
+          <div class="ob-kicker">05 / 08 · 日志分区</div>
+          <h2 class="ob-h">出问题，一眼定位</h2>
+          <p class="ob-lead">安装、配置、链端、启动、系统各走一条分区；最近错误单独收一栏。</p>
+          <div class="ob-stage ob-stage-log">
+            <div class="ob-scopes" id="ob-scopes">
+              <button class="on" data-scope="install">安装</button>
+              <button data-scope="config">配置</button>
+              <button data-scope="chain">链端</button>
+              <button data-scope="start">启动</button>
+              <button data-scope="sys">系统</button>
+            </div>
+            <div class="ob-log" id="ob-log-lines"></div>
+            <div class="ob-recent" id="ob-recent-err"><b>最近错误</b><span>暂无</span></div>
+          </div>
+          <div class="ob-actions"><button class="ob-ghost" id="ob-log-insert">插入一条异常</button><span class="ob-hint">切分区看看联动</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="5">
+        <div class="ob-in">
+          <div class="ob-kicker">06 / 08 · AI 助手与桌宠</div>
+          <h2 class="ob-h">说人话就能运维</h2>
+          <p class="ob-lead">问状态、读日志、解报告都可以直接说；真要动手时，会先问你一句。</p>
+          <div class="ob-stage ob-stage-ai">
+            <div class="ob-pet" id="ob-pet"><img id="ob-pet-avatar" alt="" /><i class="ob-pet-eye l"></i><i class="ob-pet-eye r"></i></div>
+            <div class="ob-chat">
+              <div class="ob-bubble" id="ob-bubble">今天想看点什么？</div>
+              <div class="ob-questions">
+                <button data-q="read">现在服务都起来了吗？</button>
+                <button data-q="write">帮我重启一下后端</button>
+              </div>
+            </div>
+            <div class="ob-confirm" id="ob-demo-confirm" hidden>
+              <b>需要你确认</b><p>「重启后端」属于写操作，会先弹一张确认卡。</p>
+              <div><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
+            </div>
+          </div>
+          <div class="ob-actions"><span class="ob-hint">两个问句分别演示「只读回复」与「写操作确认」</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="6">
+        <div class="ob-in">
+          <div class="ob-kicker">07 / 08 · 安全边界</div>
+          <h2 class="ob-h">权限闸门是特性，不是限制</h2>
+          <p class="ob-lead">四档权限逐级放开；动作类默认关，破坏性操作一律先确认。</p>
+          <div class="ob-stage ob-stage-perm">
+            <div class="ob-perms" id="ob-perms">
+              <button class="on" data-perm="0"><i>01</i><span>只读</span></button>
+              <button data-perm="1"><i>02</i><span>诊断</span></button>
+              <button data-perm="2"><i>03</i><span>受限写</span></button>
+              <button data-perm="3"><i>04</i><span>审批后动作</span></button>
+            </div>
+            <div class="ob-perm-desc" id="ob-perm-desc"></div>
+            <div class="ob-perm-note">默认关闭 · 不执行任意命令 · 只有天气会出网，新增外连默认关</div>
+          </div>
+          <div class="ob-actions"><span class="ob-hint">点任一档位看「能做什么 / 需要什么确认」</span></div>
+        </div>
+      </div>
+
+      <div class="swiper-slide ob-slide" data-idx="7">
+        <div class="ob-in">
+          <div class="ob-kicker">08 / 08 · 收尾</div>
+          <h2 class="ob-h">准备好了</h2>
+          <p class="ob-lead">从这里开始照着做一遍；以后想再看，「关于」里随时能打开。</p>
+          <div class="ob-stage ob-stage-end">
+            <div class="ob-end-ava"><img id="ob-end-avatar" alt="" /><i class="ob-end-halo"></i></div>
+            <div class="ob-chapter-grid" id="ob-chapter-grid"></div>
+          </div>
+          <div class="ob-actions ob-actions-end">
+            <button class="ob-primary" id="ob-cta-install">去看安装页</button>
+            <button class="ob-primary ob-soft" id="ob-cta-tour" hidden>跟着做一遍</button>
+            <button class="ob-ghost" id="ob-cta-later">以后再说</button>
+          </div>
+          <div class="ob-end-note">权限与外连边界在完整导览第 7 屏 · 引导里的演示不会改动任何配置</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="ob-foot">
+    <button class="ob-nav" id="ob-prev" aria-label="上一屏">&#8249;</button>
+    <div class="swiper-pagination" id="ob-dots"></div>
+    <button class="ob-nav" id="ob-next" aria-label="下一屏">&#8250;</button>
+  </div>
+  <div class="ob-live" id="ob-live" aria-live="polite"></div>
+</div>
 
 <script><!--@appjs--></script>
 </body>

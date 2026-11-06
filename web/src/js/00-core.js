@@ -26,3 +26,23 @@ const APP_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACq
   if(aboutLogo) aboutLogo.src = APP_ICON;
 })();
 
+/* ---------- 产品头像等待态（设计 §7：真实等待场景） ----------
+   只挂在真实异步等待上，调用方必须用 finally 保证「有开始必有结束」。
+   #app-logo 是 <img>，没有伪元素，所以呼吸环用 box-shadow 动画，不插 DOM；
+   title / aria-busy 同时给出人话状态与无障碍语义。
+   规则：没有等待就不显示，有等待才显示，且必须能结束。 */
+window.EKAvatarWait = function(host, text){
+  if(!host) return function(){};
+  host.classList.add('ek-wait');
+  host.setAttribute('aria-busy','true');
+  if(text) host.setAttribute('title', text);
+  var done = false;
+  return function(){
+    if(done) return;
+    done = true;
+    host.classList.remove('ek-wait');
+    host.removeAttribute('aria-busy');
+    host.removeAttribute('title');
+  };
+};
+

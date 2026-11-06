@@ -62,6 +62,23 @@ var (
 	vconsoleJS []byte
 )
 
+// 首次引导 / 产品导览与 P1-4 操作教学：Swiper 12（翻页容器）、Anime.js v4（动画编排）、
+// driver.js（控件高亮）。都是官方 UMD / IIFE 发布产物，原样内嵌、未经修改，
+// 版本与许可全文见 THIRD-PARTY-NOTICE.md。
+// 注意：embed 进的是 exe —— 只跑 web_build.py 不会更新二进制，必须 go build。
+var (
+	//go:embed web/vendor/swiper-bundle.min.js
+	swiperJS []byte
+	//go:embed web/vendor/swiper-bundle.min.css
+	swiperCSS []byte
+	//go:embed web/vendor/anime.umd.min.js
+	animeJS []byte
+	//go:embed web/vendor/driver.js.iife.js
+	driverTourJS []byte
+	//go:embed web/vendor/driver.css
+	driverTourCSS []byte
+)
+
 func main() {
 	if !platform.AcquireSingleInstance() {
 		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）。
@@ -165,6 +182,11 @@ func main() {
 	http.HandleFunc("/xterm/xterm.css", staticBytes("text/css; charset=utf-8", xtermCSS))
 	http.HandleFunc("/vendor/marked.min.js", staticBytes("application/javascript; charset=utf-8", markedJS))
 	http.HandleFunc("/vendor/highlight.min.js", staticBytes("application/javascript; charset=utf-8", highlightJS))
+	http.HandleFunc("/vendor/swiper-bundle.min.js", staticBytes("application/javascript; charset=utf-8", swiperJS))
+	http.HandleFunc("/vendor/swiper-bundle.min.css", staticBytes("text/css; charset=utf-8", swiperCSS))
+	http.HandleFunc("/vendor/anime.umd.min.js", staticBytes("application/javascript; charset=utf-8", animeJS))
+	http.HandleFunc("/vendor/driver.js.iife.js", staticBytes("application/javascript; charset=utf-8", driverTourJS))
+	http.HandleFunc("/vendor/driver.css", staticBytes("text/css; charset=utf-8", driverTourCSS))
 	http.HandleFunc("/api/config/export", handleConfigExport)
 	http.HandleFunc("/api/config/import", handleConfigImport)
 	http.HandleFunc("/api/program/db-test", handleDBTest)
