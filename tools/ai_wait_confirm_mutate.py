@@ -11,10 +11,11 @@
      目标断言名出现在输出里，且不含假红标记。
   4) 复原后再跑一次全绿，并字节比对源码。
 
-装置局限（写进 cdp_ai_wait_confirm_test.js 注释里，不冒充产品判定）：
-  CDP 真实鼠标在 #pet（fixed + right 过渡 + confirm 态持续动画）上命中偏移到
-  桌宠主体，因此桌宠按钮的命中测试由 elementFromPoint 独立完成、功能链路用 DOM
-  click 驱动；抽屉卡按钮仍走真实鼠标。
+上一轮这里写过一条错误结论，已纠正（11/6 二次实测）：
+  「CDP 真实鼠标在动画元素上会偏移到桌宠主体」不是装置局限，而是
+  50-pet.js 的 pointerdown 对 .pet-mc 等子元素也 setPointerCapture，把 click
+  劫持到了 #pet 本体。当时用 DOM .click() 绕过它，M1-M6 全绿但用户照样点不动。
+  现在两个入口都走真实鼠标，并新增 M7 专门验证这条指针捕获修复。
 """
 import os
 import subprocess
@@ -88,6 +89,14 @@ MUTATIONS = [
         'old': "    bubble.textContent = '';\n",
         'new': "    /* 变异：留着「点我确认！」 */\n",
         'expect': '桌宠按钮：不再喊「点我确认！」',
+    },
+    {
+        'name': 'M7 恢复对子元素的指针捕获（迷你卡按钮点不动）',
+        'file': 'web/src/js/50-pet.js',
+        'old': "    if(e.target && e.target.closest &&\n"
+               "       e.target.closest('.pet-mc, .pet-badge, .pet-tip, .pet-food, .pet-ctx')) return;\n",
+        'new': "    /* 变异：又对迷你卡/徽标做 setPointerCapture */\n",
+        'expect': '桌宠按钮：真的把决定发到 /api/ai/confirm',
     },
 ]
 

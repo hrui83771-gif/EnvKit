@@ -36,15 +36,33 @@ import (
 // drillMaxCount 计数上限。只用于统计，设个上限防病态输入。
 const drillMaxCount = 5000
 
-// backupStaticCheck 从 dump 文本确认关键内容是否存在。
-//
-// 返回"发现"与"缺口"两类，**不判失败**——
-// "缺触发器"是警告级（可能是项目本来就不用），
-// "一张表都没有"才是失败级。判定交给调用方分级。
+// backupStaticCheck 兼容包装：两值返回，供 AI 备份列表与既有调用方使用。
+// 要区分「确凿缺失」与「没核对源库」，用 backupStaticCheckEx。
 func backupStaticCheck(path string) (finds []string, gaps []string) {
+	f, g, _ := backupStaticCheckEx(path)
+	return f, g
+}
+
+// backupStaticCheckEx 读备份时落盘的源库对象清单，再交给纯判据。
+// 没有清单（老备份 / 采样失败）时 unknown=true：文案改为"未核对"，
+// 调用方不得把它当成确凿缺失、更不得据此判失败。
+func backupStaticCheckEx(path string) (finds []string, gaps []string, unknown bool) {
+	inv, ok := readObjectInventory(inventoryPath(path))
+	if !ok || !inv.Verified {
+		return backupStaticCheckWithBaseline(path, nil)
+	}
+	return backupStaticCheckWithBaseline(path, &inv)
+}
+
+// backupStaticCheckWithBaseline 纯判据：inv 为 nil 或 Verified=false 时按"未核实"处理。
+//
+// 三类对象只有一条判据入口 checkObj，避免"源库有没有"这个事实在不同分支里
+// 被算成不同口径。表定义与字符集不依赖源库清单，判据保持原样。
+func backupStaticCheckWithBaseline(path string, inv *dbObjectInventory) (finds []string, gaps []string, unknown bool) {
+	unknown = inv == nil || !inv.Verified
 	head := readHead(path, 4*1024*1024) // 4MB 足够覆盖绝大多数项目的建表段
 	if head == "" {
-		return nil, []string{"无法读取备份内容（文件可能已损坏或被占用）"}
+		return nil, []string{"无法读取备份内容（文件可能已损坏或被占用）"}, unknown
 	}
 	low := strings.ToLower(head)
 
@@ -54,27 +72,36 @@ func backupStaticCheck(path string) (finds []string, gaps []string) {
 		gaps = append(gaps, "未发现任何 CREATE TABLE（空库，或产物根本不是有效 dump）")
 	}
 
-	// 触发器：mysqldump 默认包含，但 --skip-triggers 会静默丢掉。
-	// 这是"文件完整但内容缺失"最典型的形态，值得单独提醒。
-	trig := countSubstr(low, "create trigger") + countSubstr(low, "create definer")
-	if trig == 0 {
-		gaps = append(gaps,
-			"未发现触发器定义：若项目靠触发器维护业务逻辑，还原后它们会缺失"+
-				"（备份时若用了 --skip-triggers 就是这种情况）")
-	} else {
-		finds = append(finds, fmt.Sprintf("触发器 %d 个", trig))
+	var sTrig, sView, sRout int
+	if !unknown {
+		sTrig, sView, sRout = inv.Triggers, inv.Views, inv.Routines
+	}
+	checkObj := func(label string, inDump, inSource int, tip string) {
+		if inDump > 0 {
+			finds = append(finds, fmt.Sprintf("%s %d 个", label, inDump))
+			return
+		}
+		if unknown {
+			// "没发现"不等于"丢了"：没有源库清单时只能标未核实，不能下缺失结论。
+			gaps = append(gaps, fmt.Sprintf(
+				"未核对源库：备份里未见%s定义（不一定是缺失；%s；请核对源库或点「恢复演练」）",
+				label, tip))
+			return
+		}
+		if inSource == 0 {
+			finds = append(finds, fmt.Sprintf("源库无%s（非缺失）", label))
+			return
+		}
+		gaps = append(gaps, fmt.Sprintf("源库有 %d 个%s，但备份里一个都没有：%s", inSource, label, tip))
 	}
 
-	if v := countSubstr(low, "create view"); v > 0 {
-		finds = append(finds, fmt.Sprintf("视图 %d 个", v))
-	} else {
-		gaps = append(gaps, "未见视图定义（若项目用视图，还原后会缺失）")
-	}
-	if p := countSubstr(low, "create procedure") + countSubstr(low, "create function"); p > 0 {
-		finds = append(finds, fmt.Sprintf("存储过程/函数 %d 个", p))
-	} else {
-		gaps = append(gaps, "未见存储过程/函数（若项目用到，还原后会缺失）")
-	}
+	// 触发器：mysqldump 默认包含，但 --skip-triggers 会静默丢掉。
+	trig := countSubstr(low, "create trigger") + countSubstr(low, "create definer")
+	checkObj("触发器", trig, sTrig, "备份时若用了 --skip-triggers 就是这种情况")
+	checkObj("视图", countSubstr(low, "create view"), sView, "若项目用视图，还原后会缺失")
+	checkObj("存储过程/函数",
+		countSubstr(low, "create procedure")+countSubstr(low, "create function"),
+		sRout, "若项目用到，还原后会缺失")
 
 	if strings.Contains(low, "set names") || strings.Contains(low, "charset=") {
 		finds = append(finds, "含字符集声明")
@@ -82,7 +109,7 @@ func backupStaticCheck(path string) (finds []string, gaps []string) {
 		gaps = append(gaps, "未见字符集声明（还原后中文可能乱码，建议备份时带 --default-character-set）")
 	}
 
-	return finds, gaps
+	return finds, gaps, unknown
 }
 
 // countSubstr 统计子串出现次数。
@@ -117,18 +144,32 @@ func verifyBackupStatic(path string) OpResult {
 		// 基础验证都没过，静态检查没有意义
 		return r
 	}
-	finds, gaps := backupStaticCheck(r.Artifact)
+	inv := backupBaseline(r.Artifact)
+	finds, gaps, unknown := backupStaticCheckWithBaseline(r.Artifact, &inv)
 	ev := append([]string{}, r.Evidence...)
+	ev = append(ev, "baseline:"+inv.String())
 	for _, f := range finds {
 		ev = append(ev, "static:"+f)
 	}
 
-	// 无缺口：仍然算复验通过，但要如实说明"只验了完整性，没验可还原性"
+	// 源库清单没核实：既不能说"齐全"，也不能把"不知有没有"当成"丢了"。
+	// 结论落在 Ok=true / Verified=false —— 动作已执行，但没证明能还原。
+	if unknown {
+		for _, g := range gaps {
+			ev = append(ev, "unverified:"+g)
+		}
+		ev = append(ev, "hint=源库对象清单未核实；请点「恢复演练」实测能否真的还原")
+		return opOK("verify_backup", cfg.Projects.DBName,
+			"备份已生成且文件校验通过；源库对象清单未核实，静态检查不能据此判定缺失"+
+				"，也未证明能还原（未做真实还原演练）", ev...).withArtifact(r.Artifact)
+	}
+
+	// 清单已核实且无缺口：仍只证明"文件没坏 + 该有的都在"，不证明能还原。
 	if len(gaps) == 0 {
-		ev = append(ev, "hint=静态检查未发现缺失项；可点「恢复演练」实测能否真的还原")
+		ev = append(ev, "hint=静态检查按源库清单核对未发现缺失项；可点「恢复演练」实测能否真的还原")
 		return opVerified("verify_backup", cfg.Projects.DBName,
-			"备份已复验通过：产物非空、校验和一致、内容完整、关键对象齐全"+
-				"（未做真实还原演练）", ev...).withArtifact(r.Artifact)
+			"备份已复验通过：产物非空、校验和一致、内容完整、关键对象与源库清单一致"+
+				"（源库本来就没有的不算缺失；未做真实还原演练）", ev...).withArtifact(r.Artifact)
 	}
 
 	// 有缺口：降级为"未复验"，并把缺口说清楚。

@@ -132,14 +132,21 @@ func TestVerifyBackupStaticCleanPass(t *testing.T) {
 	}
 }
 
-// 内容缺损：文件完整但触发器没了 → 降级为 restore_fail
+// 内容缺损：文件完整但触发器没了 → 降级为 restore_fail。
+// 判据已升级：必须**先有源库清单证明源库本来有触发器**，才允许判缺失；
+// 没有清单时只能标"未核实"（见 backup_inventory_test.go），不能靠"备份里没找到"
+// 就下结论。所以这里显式喂一份已核实的清单作为 ground truth。
 func TestVerifyBackupStaticDegradesOnGap(t *testing.T) {
 	body := "-- MySQL dump 10.13\nSET NAMES utf8mb4;\n" +
 		"CREATE TABLE `t1` (`id` int, PRIMARY KEY (`id`)) ENGINE=InnoDB;\n" +
 		"CREATE VIEW v1 AS SELECT 1;\n" +
 		"CREATE PROCEDURE p1() BEGIN SELECT 1; END;\n" +
 		"-- Dump completed on 2026-10-03 10:00:00\n"
-	r := verifyBackupStatic(writeDump(t, body))
+	p := writeDump(t, body)
+	writeInventory(t, p, dbObjectInventory{
+		Schema: "farm", Triggers: 1, Views: 1, Routines: 1, Verified: true,
+	})
+	r := verifyBackupStatic(p)
 	if r.Ok {
 		t.Fatal("内容缺损时不应判成功")
 	}

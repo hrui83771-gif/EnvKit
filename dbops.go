@@ -71,6 +71,7 @@ func pruneBackups(dir, dbName string, keep int) int {
 			removed++
 		}
 		_ = os.Remove(filepath.Join(dir, n+".sha256"))
+		_ = os.Remove(filepath.Join(dir, n+".objects.json")) // 源库对象清单别留孤儿
 	}
 	return removed
 }
@@ -311,8 +312,10 @@ func doBackup(actor string, h *TaskHandle) string {
 		fin(resFail, "备份文件为空")
 		return ""
 	}
-	// 成功：写校验和 + 按保留策略清理旧备份
+	// 成功：写校验和 + 源库对象清单（静态复验的 ground truth）+ 按保留策略清理旧备份。
+	// 清单必须在备份这一刻采样：事后源库变了，就不再是"这份备份该有什么"的事实。
 	writeChecksum(dest)
+	writeObjectInventory(dest)
 	keep := devSnap().backupKeep()
 	if n := pruneBackups(dir, p.DBName, keep); n > 0 {
 		info(scConfig, "备份", "已清理 %d 份超出保留上限（%d 份）的旧备份", n, keep)

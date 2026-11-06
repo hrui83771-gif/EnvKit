@@ -6,16 +6,21 @@
 //    现在 SSE 的 wait 事件带稳定 reason + 服务端真实超时，前端显示
 //    「原因 · 最长约 Ns · 已等 Ms」。**不许画会归零的假倒计时**：超过上限只换
 //    文案为「比预期久」，计时继续往上走。这里用 1 秒上限在 2 秒内验到越界。
-// 2) 「AI 弹出的确认按钮是假的」：抽屉确认卡与桌宠迷你卡共用 aiDecide，但
-//    aiDecide 原来只 petConfirmHide()（藏卡不改桌宠状态），且 aiPending 为空时
-//    静默 return。v3.2 是原地送达、不新开 aiConsume，petAIState('thinking') 不会跑，
-//    桌宠就一直停在 confirm 喊「点我确认！」，点它只 toggle 一张 mcCb=null 的空卡。
-//    这里分别点**两个入口**，断言两侧 DOM / 桌宠状态 / 真正发出的 /api/ai/confirm
-//    请求字节全部同步；再验清空对话后不残留、残留按钮点了有明确提示。
+// 2) 「AI 弹出的确认按钮是假的」有两层，第二层更隐蔽：
+//    (a) aiDecide 原来只 petConfirmHide()（藏卡不改桌宠状态），且 aiPending 为空时
+//        静默 return。v3.2 是原地送达、不新开 aiConsume，petAIState('thinking') 不会跑，
+//        桌宠就一直停在 confirm 喊「点我确认！」。
+//    (b) **真正让按钮点不动的是 50-pet.js 的 pointerdown**：#pet 对所有子元素
+//        一律 setPointerCapture(e.pointerId)，迷你卡是 #pet 的子节点，点「确认执行」
+//        时 pointerup/click 被劫持到 #pet 本体，mcYes 的 click 根本不触发。
+//    上一轮只用 DOM .click() 驱动功能链路，把 (b) 误判成「CDP 在动画元素上会偏移」
+//    的夹具限制，于是 28 条断言全绿、用户照样点不动。这次**两个入口都走真实鼠标**，
+//    断言 DOM / 桌宠状态 / 真正发出的 /api/ai/confirm 请求字节全部同步。
 //
 // ## 装置约束（都是踩过的坑）
 // - 命中测试用 elementFromPoint + Input.dispatchMouseEvent 真实鼠标，不用
-//   element.click() 绕过命中测试 —— DOM 全绿 ≠ 点得到。
+//   element.click() 绕过命中测试 —— DOM 全绿 ≠ 点得到。**尤其别把真实鼠标点不动
+//   解释成"动画偏移/夹具限制"**：先查 pointer capture / z-index / pointer-events。
 // - 抓的是**真正 fetch 发出去的请求体**，不桩掉被测函数 aiDecide/aiConsume。
 // - 前端 embed 在 exe 里：变异时必须 web_build.py → go build → CDP。
 // - seed() 每次无条件复制最新 exe，避免隔离目录残留导致「在测旧二进制」。
@@ -245,12 +250,11 @@ const WAITING_EV = { type: 'waiting_confirm', tool_call_id: 'call-1' };
     await sleep(700);   // 等 .pet-mc.show 的 CSS 过渡走完，别量到动画中途的位置
     const pPet = await pointOf('#pet-mcYes');
     ok(!!(pPet && pPet.ok), '命中测试：桌宠迷你卡按钮在最上层', JSON.stringify(pPet));
-    /* CDP 的 Input.dispatchMouseEvent 在 #pet（fixed + right 过渡 + confirm 态
-       持续 nudge 动画）上会命中偏移到 #pet 主体：实测 target=pet、坐标 632/867
-       与 elementFromPoint 一致。这是装置的命中路径差异，不是产品判定。
-       命中测试已由上面的 elementFromPoint 独立完成，功能链路这里用 DOM click 驱动；
-       抽屉卡那一侧仍走真实鼠标，两种入口都覆盖到。 */
-    await evalJS(`(function(){ document.getElementById('pet-mcYes').click(); return 'ok'; })()`);
+    /* 必须用真实鼠标：#pet 的 pointerdown 若对子元素 setPointerCapture，
+       click 会被劫持到 #pet 本体，迷你卡按钮收不到，请求也就不会发出。
+       上一条注释曾把这种现象误写成「CDP 在动画元素上会偏移」，并用
+       DOM .click() 绕过 —— 那正是用户实测「点了没反应」却测试全绿的原因。 */
+    await realClick(pPet);
     await sleep(700);
     const afterPet = await petClean();
     ok(afterPet.card === 0, '桌宠按钮：抽屉确认卡同步消失', JSON.stringify(afterPet));

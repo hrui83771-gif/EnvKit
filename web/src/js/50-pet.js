@@ -687,6 +687,9 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
   /* ---------- 点击：开抽屉 / 恢复 / 深链 / 批确认 / 连击彩蛋 ---------- */
   let combo = 0, comboT = 0, pendingOpen = null;
   pet.addEventListener('click', e=>{
+    // 迷你卡空白处的点击不该把卡 toggle 掉；按钮/徽标自己有 stopPropagation，
+    // 这里再兜一层，避免冒泡上来被当成「点桌宠」。
+    if(e.target && e.target.closest && e.target.closest('.pet-mc, .pet-badge')) return;
     if(pet.classList.contains('min')){ pet.classList.remove('min'); say(t('我回来啦')); return; }
     if(pet.dataset.dragged==='1'){ pet.dataset.dragged=''; return; }
     if(pet.dataset.pat==='1'){ pet.dataset.pat=''; return; }
@@ -837,6 +840,14 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
   pet.addEventListener('pointerdown', e=>{
     if(pet.classList.contains('min')) return;
     if(e.button!==0) return;
+    /* 迷你卡 / 徽标 / 提示条 / 食物栏 / 右键菜单都是 #pet 的**子节点**。
+       点它们时若照常 setPointerCapture(e.pointerId)，后续 pointerup 与由它派生的
+       click 会被重定向到 #pet 本体 —— 按钮自己的 click 永远收不到，确认卡就成了
+       「点了没反应、什么都没执行」。这不是动画偏移，也不是测试装置的局限，
+       是真实的产品缺陷（用户连续两轮实测复现）。
+       只有按在桌宠本体（SVG / 空白处）上才启用拖拽与指针捕获。 */
+    if(e.target && e.target.closest &&
+       e.target.closest('.pet-mc, .pet-badge, .pet-tip, .pet-food, .pet-ctx')) return;
     wake();
     const r = pet.getBoundingClientRect();
     pet.style.left = r.left+'px'; pet.style.top = r.top+'px';

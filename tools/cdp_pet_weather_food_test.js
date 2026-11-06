@@ -26,6 +26,11 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const SRC_EXE = 'D:\\BCGD\\FarmTrace\\envkit\\EnvKit.exe';
 const SRC_CFG = 'D:\\BCGD\\FarmTrace\\envkit\\config.json';
 const WORK = 'D:\\BCGD\\_wxtest';
+// 每轮用唯一的 Chrome profile：既保证状态干净，又不必在开头 rmSync 整个 WORK。
+// 安全层的批量删除闸门会拦 recursive rm（累计文件数超阈值就抛
+// SAFE_DELETE_BULK_CONFIRM_REQUIRED），让这条回归在跑过几轮之后随机挂掉。
+// config.json / EnvKit.exe 每轮覆盖写，本身不需要先删目录。
+const PROFILE = path.join(WORK, '_cdp_' + Date.now().toString(36) + '_' + process.pid);
 const DBG = 9337;
 
 function getJSON(url) {
@@ -37,8 +42,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
   // 隔离运行目录：测试会改 pet 配置，绝不能写用户真实 config.json
-  fs.rmSync(WORK, { recursive: true, force: true });
   fs.mkdirSync(WORK, { recursive: true });
+  fs.mkdirSync(PROFILE, { recursive: true });
   fs.copyFileSync(SRC_EXE, path.join(WORK, 'EnvKit.exe'));
   const cfg = JSON.parse(fs.readFileSync(SRC_CFG, 'utf8'));
   cfg.pet = { weather_enabled: false, weather_city: '合肥' };   // 从"关闭"开始，才能验证勾上就生效
@@ -56,7 +61,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--no-proxy-server', '--disable-extensions',
-    '--remote-debugging-port=' + DBG, '--user-data-dir=' + path.join(WORK, '_cdp'),
+    '--remote-debugging-port=' + DBG, '--user-data-dir=' + PROFILE,
     '--window-size=1280,900', '--no-first-run', 'about:blank',
   ], { stdio: 'ignore' });
   await sleep(2500);
@@ -213,7 +218,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     try { chrome.kill(); } catch (e) {}
     try { envkit.kill(); } catch (e) {}
     await sleep(600);
-    try { fs.rmSync(WORK, { recursive: true, force: true }); } catch (e) {}
+    // 只清本轮 Chrome profile；删不掉（安全层闸门）也不影响判据，下一轮用新目录。
+    try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch (e) {}
   }
   console.log(fail === 0 ? 'ALL PASS' : ('FAILED ' + fail));
   process.exit(fail === 0 ? 0 : 1);
