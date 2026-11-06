@@ -348,6 +348,9 @@ func main() {
 			fmt.Println("  退出请按 Ctrl+C，或在网页里点退出；任务栏恢复后会自动补回图标。")
 			fmt.Println()
 		},
+		Recovered: func(note string) {
+			info(scSys, "服务", "托盘图标已恢复：%s（菜单照常可用）", note)
+		},
 		Ready: func() {
 			info(scSys, "服务", "托盘菜单已就绪：右键图标可打开控制台 / 配置 / 日志，或退出")
 			cfgMu.Lock()

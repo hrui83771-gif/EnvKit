@@ -108,6 +108,14 @@ jobs:
         run: go test -count=1 ./...
         timeout-minutes: 20
 
+      # third_party/systray 是被 go.mod replace 指向的**独立模块**，
+      # 主模块的 go test ./... 根本不会跑到它；托盘图标恢复决策的
+      # 确定性测试必须单独执行一次，否则改坏了也没人知道。
+      - name: 托盘恢复决策测试
+        run: |
+          cd third_party/systray
+          go test -count=1 ./...
+
       # ---- 全量层：只有 tag / 手动触发时跑 ----
       #
       # key 为什么走 secret 而不是提交 config.json：

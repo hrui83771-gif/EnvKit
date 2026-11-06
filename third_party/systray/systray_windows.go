@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time" // ENVKIT: addIcon 的就绪等待与重试退避
@@ -42,7 +43,9 @@ var (
 	pDestroyWindow         = u32.NewProc("DestroyWindow")
 	pDispatchMessage       = u32.NewProc("DispatchMessageW")
 	pDrawIconEx            = u32.NewProc("DrawIconEx")
-	pFindWindow            = u32.NewProc("FindWindowW") // ENVKIT: 等任务栏窗口就绪
+	pFindWindow            = u32.NewProc("FindWindowW")   // ENVKIT: 等任务栏窗口就绪
+	pFindWindowEx          = u32.NewProc("FindWindowExW") // ENVKIT: 通知区域子窗口是否就绪
+	pIsWindow              = u32.NewProc("IsWindow")      // ENVKIT: 失败诊断里核实宿主窗口有效
 	pGetCursorPos          = u32.NewProc("GetCursorPos")
 	pGetDC                 = u32.NewProc("GetDC")
 	pGetMessage            = u32.NewProc("GetMessageW")
@@ -427,60 +430,136 @@ func (t *winTray) initInstance() error {
 
 	t.muNID.Lock()
 	defer t.muNID.Unlock()
+	// ENVKIT: 一次成型。上游只带 NIF_MESSAGE（Icon/Tip 全空），要等 onReady
+	// 里的 SetIcon 才能补上图标；一旦 NIM_ADD 被拒，onReady 根本不跑，通知区域
+	// 里就永远是个空壳。这里先用系统默认图标 + ASCII 提示占位，随后 SetIcon /
+	// SetTooltip 会替换成宿主真正的内容。本机实测带 NIF_ICON|NIF_TIP 的
+	// NIM_ADD 比空条目稳（2026-11-06 .gotmp/traydiag 探针 A/D/F/G 组）。
 	t.nid = &notifyIconData{
 		Wnd:             windows.Handle(t.window),
 		ID:              100,
-		Flags:           NIF_MESSAGE,
+		Flags:           NIF_MESSAGE | 0x00000002 /* NIF_ICON */ | 0x00000004 /* NIF_TIP */,
 		CallbackMessage: t.wmSystrayMessage,
+		Icon:            t.icon,
+	}
+	if tip, err := windows.UTF16FromString("EnvKit"); err == nil {
+		copy(t.nid.Tip[:], tip)
 	}
 	t.nid.Size = uint32(unsafe.Sizeof(*t.nid))
 
 	return t.addIcon()
 }
 
-// ENVKIT —— 托盘图标添加：等任务栏就绪 + 有限重试。
+// ENVKIT —— 托盘图标添加：等通知区域就绪 + 换键重试 + 接管已有条目。
 //
-// 上游 v1.2.2 在 initInstance() 末尾直接 `return t.nid.add()`。
-// Shell_NotifyIcon(NIM_ADD) 在任务栏未就绪（开机自启 / Explorer 重启）、
-// 通知区域策略、或进程完整性级别不同时会失败，而它**不设置 LastError**
-// （微软文档明确），库于是把调用前残留的 COM 错误码（常见 0x80004005 E_FAIL）
-// 打印成 "Unspecified error"。更要命的是 registerSystray() 只 log 完就 return：
-// 不调 systrayReady()，菜单不建、宿主也永远不知道托盘已经没了。
+// 上游 v1.2.2 在 initInstance() 末尾直接 `return t.nid.add()`；失败只 log 一行
+// 就 return，既不调 systrayReady()（菜单不建、宿主无感），也没有任何恢复动作。
 //
-// 实测（2026-11-06，本机逐步探针）：正常会话下 initInstance 六步全成功；
-// 让 NIM_ADD 失败时返回的正是 errno=2147500037 → "Unspecified error"；
-// 而 RegisterClassExW 重复注册报的是 1410 "Class already exists"，与此无关。
+// 2026-11-06 本机 .gotmp/traydiag 逐步 Win32 探针的客观事实：
+//   - 首次 Shell_NotifyIcon(NIM_ADD) 成功；
+//   - **同一个 ID 再 NIM_ADD 必失败，返回 0x80004005 "Unspecified error"** ——
+//     这不是"调用前残留的 COM 错误码"（上一版注释写错了），而是这个 API 在
+//     条目已存在 / 被拒时自己的返回值；同 ID 跨 hWnd 也一样失败（G 组）；
+//   - 条目已存在时 NIM_MODIFY 成功；条目不存在时 NIM_MODIFY 必失败（F 组），
+//     所以拿 MODIFY 探测"是否已存在"不会假成功；
+//   - NIM_DELETE 后用**同一个 ID** 再 NIM_ADD 仍然失败（B 组），别指望删了重加；
+//   - 换一个图标 ID 通常能成功（C/G 组），带 NIF_ICON|NIF_TIP 一次成型更稳（D 组）。
 //
-// 这里做两件事：① 先等 Shell_TrayWnd 出现（任务栏就绪的客观事实）；
-// ② NIM_ADD 有限次重试。仍失败时返回带客观事实的错误，不再拿残留 errno 冒充原因。
-// 调用方（initInstance / wndProc）负责持有 muNID，本函数不自己加锁，与 nid.add 一致。
+// 上一版只做了「等 Shell_TrayWnd + 对同一个 ID=100 重试 6 次」，而失败恰恰是
+// 这个 ID 被占，重试一万次也不会变 —— 这就是 11-06 第二次实测仍然失败的原因。
+// 现在每轮失败后换 ID，并先用 MODIFY 接管可能已存在的条目。
+//
+// 下面几个包级变量是给本模块包内单元测试注入桩用的（replace 指向的模块不会被
+// 宿主 go test ./... 自动跑到），默认值就是真实调用，产品路径行为不变。
+var (
+	iconAddOp       = func(n *notifyIconData) error { return n.add() }
+	iconModifyOp    = func(n *notifyIconData) error { return n.modify() }
+	iconReadyProbe  = func() (shell, region uintptr) { return probeTrayReady() }
+	iconRetryDelay  = 800 * time.Millisecond
+	iconMaxAttempts = 6
+	iconLastNote    string
+	onInitRecovered func(string)
+)
+
+// OnInitRecovered 让宿主在「走了兜底才把图标加回来」时收到一条可读说明。
+// 首次 NIM_ADD 直接成功不触发（宿主已有 Ready 日志）。
+func OnInitRecovered(fn func(string)) { onInitRecovered = fn }
+
+func onoff(v uintptr) string {
+	if v != 0 {
+		return "存在"
+	}
+	return "未出现"
+}
+
+func probeTrayReady() (shell, region uintptr) {
+	cls, _ := windows.UTF16PtrFromString("Shell_TrayWnd")
+	shell, _, _ = pFindWindow.Call(uintptr(unsafe.Pointer(cls)), 0)
+	if shell != 0 {
+		sub, _ := windows.UTF16PtrFromString("TrayNotifyWnd")
+		region, _, _ = pFindWindowEx.Call(shell, 0, uintptr(unsafe.Pointer(sub)), 0)
+	}
+	return shell, region
+}
+
+func (t *winTray) recoveredNote(note string) {
+	iconLastNote = note
+	if onInitRecovered != nil {
+		onInitRecovered(note)
+	}
+}
+
+// addIcon 调用方（initInstance / wndProc）负责持有 muNID，本函数不自己加锁。
 func (t *winTray) addIcon() error {
-	const maxAttempts = 6
-	shellTray, _ := windows.UTF16PtrFromString("Shell_TrayWnd")
+	firstID := t.nid.ID
+	var facts []string
 	var lastErr error
-	for i := 0; i < maxAttempts; i++ {
-		hwnd, _, _ := pFindWindow.Call(uintptr(unsafe.Pointer(shellTray)), 0)
-		if hwnd != 0 {
-			if err := t.nid.add(); err == nil {
+	for i := 0; i < iconMaxAttempts; i++ {
+		shell, _ := iconReadyProbe()
+		if shell != 0 {
+			id := t.nid.ID
+			if err := iconAddOp(t.nid); err == nil {
+				if i > 0 || id != firstID {
+					t.recoveredNote(fmt.Sprintf("第 %d 轮用图标 ID=%d 的 NIM_ADD 成功", i+1, id))
+				}
 				return nil
 			} else {
 				lastErr = err
 			}
+			// 条目已存在时 MODIFY 能接管；实测条目不存在时 MODIFY 必失败，
+			// 所以这里不会把"没加上"误判成成功。
+			if iconModifyOp(t.nid) == nil {
+				t.recoveredNote(fmt.Sprintf("NIM_MODIFY 接管了已有的图标条目（ID=%d）", id))
+				return nil
+			}
+			facts = append(facts, fmt.Sprintf("ID=%d 的 ADD/MODIFY 均被拒", id))
+			// 关键：换键。同一个 ID 反复重试只会撞同一份残留条目。
+			t.nid.ID++
+			if err := iconAddOp(t.nid); err == nil {
+				t.recoveredNote(fmt.Sprintf("原 ID=%d 被占，换到 ID=%d 后 NIM_ADD 成功", id, t.nid.ID))
+				return nil
+			} else {
+				lastErr = err // 保留真实底层错误，别拿自己拼的说明冒充
+			}
+			facts = append(facts, fmt.Sprintf("换到 ID=%d 仍被拒", t.nid.ID))
+			t.nid.ID++ // 下一轮再换一个
+		} else {
+			facts = append(facts, fmt.Sprintf("第 %d 轮 Shell_TrayWnd 未出现", i+1))
 		}
-		if i < maxAttempts-1 {
-			time.Sleep(800 * time.Millisecond)
+		if i < iconMaxAttempts-1 && iconRetryDelay > 0 {
+			time.Sleep(iconRetryDelay)
 		}
 	}
-	hwnd, _, _ := pFindWindow.Call(uintptr(unsafe.Pointer(shellTray)), 0)
-	state := "任务栏窗口始终未出现（Explorer 未就绪或不在交互桌面）"
-	if hwnd != 0 {
-		state = "任务栏窗口存在，但通知区域拒绝添加（策略限制或权限级别不同）"
-	}
+	shell, region := iconReadyProbe()
+	windowOK, _, _ := pIsWindow.Call(uintptr(t.window))
+	state := fmt.Sprintf("任务栏窗口%s、通知区域窗口%s、宿主窗口%s",
+		onoff(shell), onoff(region), onoff(windowOK))
 	last := "未调用 Shell_NotifyIcon"
 	if lastErr != nil {
 		last = lastErr.Error()
 	}
-	return fmt.Errorf("托盘图标添加失败：%s；已重试 %d 次；末次底层信息 %s", state, maxAttempts, last)
+	return fmt.Errorf("托盘图标添加失败：%s；已尝试图标 ID %d..%d（%d 轮）；逐轮事实 %s；末次底层信息 %s",
+		state, firstID, t.nid.ID, iconMaxAttempts, strings.Join(facts, " / "), last)
 }
 
 func (t *winTray) createMenu() error {

@@ -12,6 +12,7 @@ type TrayActions struct {
 	Exit           func()
 	Ready          func()
 	Failed         func(error) // 与 Windows 版同形；非 Windows 没有托盘，永不触发
+	Recovered      func(string)
 	CreateShortcut func()
 	ToggleWindow   func() bool
 	// LanBadge / OpenLan：与 Windows 版同一语义（见 tray_windows.go）。

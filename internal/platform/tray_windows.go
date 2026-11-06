@@ -29,6 +29,10 @@ type TrayActions struct {
 	// 上游 v1.2.2 失败时只打日志就 return，宿主完全感知不到托盘没了；
 	// 现在由宿主明确告知用户「控制台照常、退出走哪里」，窗口也保持可见。
 	Failed func(error)
+	// Recovered 托盘是「走了兜底（换图标 ID / 接管已有条目）」才加回来的。
+	// 与 Ready 分开：Ready 只说明菜单可用，Recovered 说明这次启动为什么慢了半拍，
+	// 也便于日后判断通知区域是不是又残留了旧条目。
+	Recovered func(string)
 	// CreateShortcut 在桌面创建指向当前 exe 的快捷方式。
 	// 由 main 注入（platform 是叶子包，不碰业务里的 exe 路径与日志）。
 	CreateShortcut func()
@@ -52,6 +56,9 @@ func RunTray(icon []byte, act TrayActions) {
 	// 是同步链路，回调就在那条链里触发。
 	if act.Failed != nil {
 		systray.OnInitError(act.Failed)
+	}
+	if act.Recovered != nil {
+		systray.OnInitRecovered(act.Recovered)
 	}
 	systray.Run(func() {
 		systray.SetIcon(icon)
