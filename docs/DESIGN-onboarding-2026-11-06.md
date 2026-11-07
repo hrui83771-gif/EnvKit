@@ -786,3 +786,64 @@ v6 给五张窗口各配了 ±1.2° 的旋转，想让它们"像真的开了五�
 
 M9 的变异锚点直接改 `pointer-events:none` 本身——在它前面插 `auto` 会被同一条
 规则里的 `none` 盖掉，等于没变异。
+
+## 18. v8：EN 模式下的 66 条中文（i18n 补全）
+
+### 18.1 现象与判据
+
+切到 EN 后 8 屏里仍有 66 条中文。`tools/i18n_gap.py --check` 却报「缺口 0 条」——
+它只认三种来源：`t('…')` 字面量、模板 `>文本<`、`placeholder/title/aria-label`。
+引导页恰好三条都不占：
+
+1. 演示数据（`SCOPES` 的日志行、`STEP_TEXT` 的输入/产出、桌宠台词）用
+   `textContent` 直接写，没走 `t()`；
+2. 02 屏两行演示报错在 `<code>` 里，而全局翻译器 `EK_SKIP` **故意跳过 CODE/PRE**
+   （真实日志必须原文照出），所以词典里有 `[WARN] 区块高度为 0` 也翻不出来；
+3. 翻页按钮只有图标，可见文案全在 `aria-label` 上，而 `ekTrAttrs` 只翻
+   `placeholder/title`。
+
+所以先补一把「以界面为准」的尺子：`tools/_onboard_i18n_dump.js` 起真 exe + 无头
+Chrome，EN 模式下逐屏（含四步详情、四档权限、五个分区、三轮问答、四种桌宠动作、
+01 剖面轮转）抓**可见**文本节点与属性里的 CJK。第一行固定输出 `CNT`——
+即该屏可见文本节点总数，它是正对照：引导没渲染出来时残留也是 0 条，只看 0
+会把「页面没开」误判成「全翻好了」。
+
+### 18.2 补了什么
+
+`tools/_onboard_i18n.py` 追加 69 条（词典 1756 → 1825），集中在四类：
+03 四步详情的输入/产出/会写、04 终端三行与检测分组、05 五个分区的演示日志、
+06 桌宠台词与三轮回答；07 另外两档权限说明（只点开一档时看不见）。
+
+演示日志行也翻，是个有意的取舍：真实日志由后端吐，永远不会命中词典，保持原文；
+而引导里的 `[INFO] …` 是内置演示数据，不翻就成了英文页面里一整块中文。
+
+另外三处是**运行时的**修补，不是词典能解决的：
+
+| 问题 | 补法 |
+| --- | --- |
+| `<code>` 里的演示报错翻不出来 | `90-onboard.js` 加 `trCode()`，只扫引导层内的 `code,pre`；打开引导时跑一次，切语言时由 `ek:lang` 事件再跑 |
+| `aria-label` 不翻 | `ekTrAttrs` 的属性表加 `aria-label` |
+| 切语言时没人通知 CODE 节点 | `ekSetLang()` 末尾派发 `ek:lang`（`10-i18n.js` 不反向依赖任何面板，谁有 CODE 谁自己补） |
+
+`trCode()` 用 `t()` 直译，因此换回中文时靠 `EK_ZH_OF` 反查，重复调用幂等——
+CDP 里有一条 `i18n-zh-restore-code` 专门盯这件事（切回中文后那两行必须又是中文）。
+
+### 18.3 顺带修的真 bug：`\t`
+
+`STEP_TEXT[0].w` 原来写的是 `'C:\EnvKit\tools 下的解压目录 …'`。JS 里 `\t` 是制表符，
+所以 03 屏一直显示 `C:EnvKit    ools 下的解压目录`——中文界面下也是坏的，只是
+混在长句里没人细看。改成 `'C:\\EnvKit\\tools …'`，词典 key 也随之对上。
+
+### 18.4 门禁变化
+
+| 装置 | v7 | v8 |
+| --- | --- | --- |
+| `tools/cdp_onboard_test.js` | 100 断言 | **131**：`i18n-en-slide-1..8`（每屏 CNT>60 且 CJK=0）、`i18n-en-step-*` / `-perm-*` / `-scope-*` / `-ask-*` / `-pet-*`（22 条细节层，选择器没命中 `found=false` 也算失败，避免空转）、`i18n-en-code-nodes`（`<code>` 全 10 行非中文）、`i18n-en-aria-label`、`i18n-zh-restore-code` |
+| `tools/onboard_mutate.py` | M1–M11 | **M1–M14**：M12「词典漏掉一条」（`"会写"→"会写"`）→ `i18n-en-step-…step3` 必红；M13「不补 CODE 节点」（`trCode()` 短路）→ `i18n-en-code-nodes` 必红；M14「不翻 aria-label」→ `i18n-en-aria-label` 必红 |
+
+M12 改的是 `web/src/js/10-i18n.js` 而不是 `tools/i18n_en.json`：后者要靠
+`i18n_build.py` 才进产物，而变异链只跑 `web_build.py` + `go build`，改 json 等于没改。
+
+`i18n_gap.py` 仍是「新增界面文案」的日常尺子（快、不需要起进程），
+`_onboard_i18n_dump.js` 是覆盖率的兜底尺子（慢、但以真实渲染为准）——
+两者判据不同，缺一条就会像这次一样「静态全绿、界面上还有 66 条中文」。

@@ -48,6 +48,18 @@
   function has(o, k){ return !!(o && typeof o[k] === 'function'); }
   function pad(n){ return (n < 10 ? '0' : '') + n; }
 
+  /* 全局翻译器故意跳过 CODE / PRE（真实日志、命令回显必须原文照出，见 10-i18n.js 的 EK_SKIP）。
+     但引导里的报错行是**演示数据**，不是真实输出：跳过它，EN 模式下这屏就会留一句中文。
+     所以这里单独补一次，用 t() 直译 —— 换回中文时 t() 会沿 EK_ZH_OF 反查，重复调用也幂等。 */
+  function trCode(){
+    qa('code,pre').forEach(function(el){
+      var s = (el.textContent || '').trim();
+      if(!s) return;
+      var v = t(s);
+      if(v !== s) el.textContent = v;
+    });
+  }
+
   /* ---------- 静态演示数据（不来自接口，不写回任何地方） ---------- */
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
   var CHAPTER_SUM = [
@@ -75,7 +87,7 @@
     {b:'环境安装', p:'检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么，国内镜像下载会校验 SHA256。',
      i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划',
      pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟',
-     w:'C:\EnvKit\tools 下的解压目录 · 当前用户的 PATH 与 GOPROXY', ro:false},
+     w:'C:\\EnvKit\\tools 下的解压目录 · 当前用户的 PATH 与 GOPROXY', ro:false},
     {b:'程序配置', p:'填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。',
      i:'数据库地址与账号', o:'config.json + 初始化好的库表',
      pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟',
@@ -836,6 +848,7 @@
 
     OB.classList.add('show');
     document.body.classList.add('ob-active');
+    trCode();                       /* CODE/PRE 里是演示报错，全局翻译器不碰，这里补 */
     sw = buildSwiper();
     cur = 0;
     setProgress();
@@ -894,6 +907,11 @@
   window.EKTour = EKTour;
 
   document.addEventListener('ek:tour-start', function(){ EKTour.start(); });
+
+  /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上 */
+  document.addEventListener('ek:lang', function(){
+    if(OB.classList.contains('show')) trCode();
+  });
 
   /* ---------- 事件委托（跨 IIFE，一律 document + closest） ---------- */
   document.addEventListener('click', function(e){

@@ -629,6 +629,86 @@ function seed() {
     check('demo-zero-write-api', writes.length === 0, 'writes=' + JSON.stringify(writes) + ' all=' + FL.length);
     check('demo-zero-ai-api', aiCalls.length === 0, 'ai=' + JSON.stringify(aiCalls));
 
+    // ===== E2. EN 模式：引导 8 屏不得留中文（含 CODE/PRE 与 aria-label） =====
+    // 判据是「可见文本节点里还有没有 CJK」，同时记 cnt 作为正对照：
+    // 引导没渲染出来时残留也是 0 条，只看 0 会把「没开页面」误判成「全翻好了」。
+    await evalJS(`(function(){
+      window.__obScan=function(){
+        var root=document.getElementById('onboard');
+        if(!root) return {err:'no-onboard'};
+        var CJK=/[\\u4e00-\\u9fa5]/;
+        function vis(el){
+          if(!el||el.nodeType!==1) return true;
+          var s=getComputedStyle(el);
+          if(s.display==='none'||s.visibility==='hidden'||s.opacity==='0') return false;
+          return el.getClientRects().length>0;
+        }
+        var cnt=0,bad=[];
+        var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n;
+        while((n=w.nextNode())){
+          var s=(n.data||'').trim();
+          if(!s||!vis(n.parentNode)) continue;
+          cnt++;
+          if(CJK.test(s)) bad.push(s.slice(0,42));
+        }
+        root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(function(el){
+          ['placeholder','title','aria-label'].forEach(function(a){
+            var v=el.getAttribute(a);
+            if(v&&CJK.test(v)) bad.push(a+'='+v.slice(0,42));
+          });
+        });
+        return {cnt:cnt,bad:bad.slice(0,6),n:bad.length};
+      };
+      return 'ok';
+    })()`);
+    const scanOB = async () => { const s = await evalJS('JSON.stringify(window.__obScan())'); try { return JSON.parse(s); } catch (e) { return { err: String(s) }; } };
+    await evalJS(`(function(){ try{ ekSetLang('en', true); }catch(e){} try{ EKOnboard.close(); }catch(e){} EKOnboard.open('replay'); return 'ok'; })()`);
+    await sleep(900);
+    for (let i = 0; i < 8; i++) {
+      await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(${i},0); return 'ok'; })()`);
+      await sleep(1000);
+      const sc = await scanOB();
+      check('i18n-en-slide-' + (i + 1), !sc.err && sc.cnt > 60 && sc.n === 0, JSON.stringify(sc));
+    }
+    // 只有点开/找到才可见的细节层：四步详情、四档权限、六个分区、三轮问答、四种桌宠动作
+    const i18nDeep = async (selList, label) => {
+      for (const sel of selList) {
+        // found 一起断言：选择器写错时点击不会发生，残留自然是 0 条 —— 那是空转不是通过
+        const found = await evalJS(`(function(){ var b=document.querySelector(${JSON.stringify(sel)}); if(!b) return false; b.click(); return true; })()`);
+        await sleep(900);
+        const sc = await scanOB();
+        check('i18n-en-' + label + '-' + sel.replace(/[^0-9a-z]/gi, ''),
+          found === true && !sc.err && sc.n === 0, sel + ' found=' + found + ' :: ' + JSON.stringify(sc));
+      }
+    };
+    await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(2,0); return 'ok'; })()`);
+    await i18nDeep([0, 1, 2, 3].map(k => '#ob-track .ob-step[data-step="' + k + '"]'), 'step');
+    await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(6,0); return 'ok'; })()`);
+    await i18nDeep([0, 1, 2, 3].map(k => '#ob-perms [data-perm="' + k + '"]'), 'perm');
+    await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(4,0); return 'ok'; })()`);
+    await i18nDeep(['install', 'config', 'chain', 'start', 'sys'].map(k => '#ob-scopes [data-scope="' + k + '"]'), 'scope');
+    await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(5,0); return 'ok'; })()`);
+    await i18nDeep(['read', 'write', 'explain'].map(k => '.ob-questions [data-q="' + k + '"]'), 'ask');
+    await i18nDeep(['say', 'feed', 'weather', 'err'].map(k => '#ob-pet-menu [data-pact="' + k + '"]'), 'pet');
+    // 02 屏的演示报错在 <code> 里：全局翻译器跳过 CODE（真实日志要原文），必须由 trCode() 补
+    const codeTxt = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-old-list .ob-win-body code')).map(function(c){return c.textContent.trim();}))`);
+    let CT = []; try { CT = JSON.parse(codeTxt || '[]'); } catch (e) {}
+    check('i18n-en-code-nodes', CT.length === 10 && CT.every(s => !/[\u4e00-\u9fa5]/.test(s)), codeTxt);
+    const ariaTxt = await evalJS(`JSON.stringify({
+      prev: document.getElementById('ob-prev').getAttribute('aria-label'),
+      next: document.getElementById('ob-next').getAttribute('aria-label')
+    })`);
+    let AR = {}; try { AR = JSON.parse(ariaTxt || '{}'); } catch (e) {}
+    check('i18n-en-aria-label', /[A-Za-z]/.test(AR.prev || '') && /[A-Za-z]/.test(AR.next || ''), ariaTxt);
+    // 挨着切回来：CODE 里的英文要能原路反查到中文（否则切回中文会停在英文）
+    await evalJS(`(function(){ try{ ekSetLang('zh', true); }catch(e){} return 'ok'; })()`);
+    await sleep(500);
+    const backZh = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-old-list .ob-win-body code')).map(function(c){return c.textContent.trim();}).filter(function(s){return /[\\u4e00-\\u9fa5]/.test(s);}))`);
+    let BZ = []; try { BZ = JSON.parse(backZh || '[]'); } catch (e) {}
+    check('i18n-zh-restore-code', BZ.length === 2, backZh);
+    await evalJS(`(function(){ try{ EKOnboard.close(); }catch(e){} return 'ok'; })()`);
+    await sleep(300);
+
     // ===== F. 源码级红线：演示代码不得碰接口 / 任意执行 =====
     const src = fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '90-onboard.js'), 'utf8');
     check('src-no-fetch', !/fetch\s*\(|XMLHttpRequest|new WebSocket|sendBeacon/.test(src));

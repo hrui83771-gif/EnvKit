@@ -73,6 +73,24 @@ MUTATIONS = [
      "      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);",
      "      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);\n      b.classList.toggle('done', Number(b.getAttribute('data-step')) < i);",
      'detail-step-nowrite-check'),
+    # ---- v8：i18n 缺口的三条变异 ----
+    # 词典里把译文写成原文（ekTrText 见 e === t 就不替换）＝ EN 模式下这句停在中文。
+    # 直接改 10-i18n.js 而不是 i18n_en.json：后者要靠 i18n_build.py 才进产物，
+    # 而 rebuild() 只跑 web_build.py + go build，改 json 等于没改。
+    ('M12 词典漏掉一条',     'web/src/js/10-i18n.js',
+     '  "会写": "Writes",',
+     '  "会写": "会写",',
+     'i18n-en-step-obtrackobstepdatastep3'),
+    # 全局翻译器故意跳过 CODE/PRE，演示报错行靠 trCode() 补 —— 停掉它，02 屏那两行就是中文
+    ('M13 不补 CODE 节点',   'web/src/js/90-onboard.js',
+     '      if(v !== s) el.textContent = v;',
+     '      if(false) el.textContent = v;',
+     'i18n-en-code-nodes'),
+    # 翻页按钮只有图标，可见文案全在 aria-label 上；漏掉就是英文界面里唯一一句中文
+    ('M14 不翻 aria-label',  'web/src/js/10-i18n.js',
+     "  for(const a of ['placeholder','title','aria-label']){",
+     "  for(const a of ['placeholder','title']){",
+     'i18n-en-aria-label'),
 ]
 
 TARGETS = sorted(set(m[1] for m in MUTATIONS))
