@@ -782,6 +782,42 @@ function seed() {
     let rs = {}; try { rs = JSON.parse(RS || '{}'); } catch (e) {}
     check('tools-restored', rs.theme === 'light' && rs.lang !== 'en' && rs.show === false, RS);
 
+    // ===== E3. AI 抽屉的 sys 提示条跟着语言走 =====
+    // 用户实测反馈：中文模式下「恢复最近对话」还写着 "Restored previous conversation (10 messages)"。
+    // 根因不是漏翻，是 aiAdd 给所有消息打了 data-no-i18n（保护模型原文），而 sys 条是界面文案、
+    // 且 {0} 已替换成数字，切语言时既进不了 Observer、也查不到字典 → 永远停在生成时那门语言。
+    const SY = await evalJS(`(function(){
+      try{
+        var out = {};
+        ekSetLang('zh', false);
+        var a = aiSys('已恢复上次的对话（{0} 条）', 10);
+        out.zh = a.textContent.trim();
+        ekSetLang('en', false);
+        out.en = a.textContent.trim();
+        ekSetLang('zh', false);
+        out.zh2 = a.textContent.trim();
+        /* 反向：英文态生成（等于"上次是英文，这次切回中文"）也必须能翻回来 */
+        ekSetLang('en', false);
+        var b = aiSys('已恢复上次的对话（{0} 条）', 7);
+        out.en2 = b.textContent.trim();
+        ekSetLang('zh', false);
+        out.zh3 = b.textContent.trim();
+        a.remove(); b.remove();
+        return JSON.stringify(out);
+      }catch(e){ return 'EX:' + e.message; }
+    })()`);
+    let sy = {}; try { sy = JSON.parse(SY || '{}'); } catch (e) {}
+    check('sys-i18n-zh', sy.zh === '已恢复上次的对话（10 条）', SY);
+    check('sys-i18n-zh2en', sy.en === 'Restored previous conversation (10 messages)', SY);
+    check('sys-i18n-en2zh', sy.zh2 === '已恢复上次的对话（10 条）', SY);
+    check('sys-i18n-en-born-zh', sy.zh3 === '已恢复上次的对话（7 条）', SY);
+    // 源码级：aiAdd('sys', …) 直接调用会绕过重译表，必须走 aiSys（aiSys 自身那一处除外）
+    const aiSrc = fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '60-ai.js'), 'utf8')
+      + fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '62-agent.js'), 'utf8')
+      + fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '64-ai-settings.js'), 'utf8');
+    const rawSys = (aiSrc.match(/aiAdd\('sys'/g) || []).length;
+    check('src-sys-via-aiSys', rawSys === 1, 'aiAdd(\'sys\') 出现 ' + rawSys + ' 次（应只有 aiSys 内部那一处）');
+
     // ===== F. 源码级红线：演示代码不得碰接口 / 任意执行 =====
     const src = fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '90-onboard.js'), 'utf8');
     check('src-no-fetch', !/fetch\s*\(|XMLHttpRequest|new WebSocket|sendBeacon/.test(src));

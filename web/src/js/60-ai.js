@@ -270,6 +270,25 @@ function aiAdd(cls, text, ts, reask){
   $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   return d;
 }
+/* sys 提示条：界面文案，不是模型/用户原文。
+   aiAdd 给所有消息打 data-no-i18n 是为了保护模型输出（流式 innerHTML 每帧重扫 + 
+   模型正文恰好撞字典键），但带参数的提示条两头都够不着：Observer 不碰这个子树，
+   而参数替换后的实例文本（"已恢复上次的对话（10 条）"）也查不到字典。
+   表现就是：界面已经切成中文，这一条还停在英文。
+   这里记下模板与参数，切语言时用 t() 重新生成 —— 与 ekSetLang 里"拼接式文案
+   切换后重拉一次状态"同一个套路，只是这条没有状态可拉。 */
+const aiSysTpl = new WeakMap();
+function aiSys(tpl, ...args){
+  const el = aiAdd('sys', t(tpl, ...args));
+  aiSysTpl.set(el, [tpl, args]);
+  return el;
+}
+document.addEventListener('ek:lang', function(){
+  document.querySelectorAll('#ai-msgs .ai-msg.sys').forEach(function(el){
+    const rec = aiSysTpl.get(el);
+    if(rec) el.textContent = t(rec[0], ...rec[1]);
+  });
+});
 /* 回合末尾小工具栏：时间 + 复制 + 重新提问。
    reask 是触发这一回合的那条用户原话；为空（如「解读诊断报告」这种无用户提问的回合）
    就不放「重新提问」——没有可重问的问题，放一个按钮只会误导。 */
@@ -480,7 +499,7 @@ function aiHistRestore(){
     if(m.role === 'user' && m.images) aiMsgImgsRender(el, m.images);
     if(m.role === 'user' && m.docs) aiMsgDocsRender(el, m.docs);
   });
-  aiAdd('sys', t('已恢复上次的对话（{0} 条）', aiMessages.length));
+  aiSys('已恢复上次的对话（{0} 条）', aiMessages.length);
 }
 aiHistRestore();
 

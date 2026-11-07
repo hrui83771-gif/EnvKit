@@ -1085,7 +1085,11 @@ async function aiDecide(approved){
   }
   aiPending = null;
   try{ p.card.remove(); }catch(_){}
-  aiAdd('sys', approved ? t('已确认，继续执行…') : t('已拒绝，让助手换个做法…'));
+  /* 两条文案各自紧跟 aiSys('…')：三元表达式会把字面量藏到括号后面，
+     tools/i18n_gap.py 的静态扫描（aiSys( 后必须直接是字符串）就抓不到，
+     新加的文案会绕过缺口检查。 */
+  if(approved) aiSys('已确认，继续执行…');
+  else aiSys('已拒绝，让助手换个做法…');
   aiTraceAdd('human', approved ? t('你已确认：{0}', p.tool) : t('你已拒绝：{0}', p.tool), {cls: approved ? 'ok' : 'warn'});
   aiHstat(approved ? t('执行中') : t('已拒绝'));
   // 批量授权只认"确认"这一次：拒绝时即使勾了也不开

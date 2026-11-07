@@ -569,11 +569,11 @@ async function aiConsume(path, body){
           // 用户勾了"后续同类不再问"：把这件事显式说出来。
           // 不显示的话，后面几步不再弹卡就会变成"它怎么自己动了"——授权必须可见。
           aiTraceAdd('grant', t('已开启批量授权：{0} · 本任务内最多 {1} 次', t(ev.label || ''), ev.left), {cls:'warn'});
-          aiAdd('sys', t('已授权：本任务内{0}最多再执行 {1} 次，不再逐次询问', t(ev.label || ''), ev.left));
+          aiSys('已授权：本任务内{0}最多再执行 {1} 次，不再逐次询问', t(ev.label || ''), ev.left);
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
         } else if(ev.type === 'grant_used'){
           aiTraceAdd('grant', t('批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left), {cls:''});
-          aiAdd('sys', t('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left));
+          aiSys('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left);
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
         } else if(ev.type === 'wait'){
           /* 服务端给稳定 reason + 真实上限，文案与计时都在前端按界面语言算。
@@ -599,7 +599,7 @@ async function aiConsume(path, body){
              completed 与 awaiting_confirm 是预期路径，不打扰。 */
           if(ev.reason && ev.reason !== 'completed' && ev.reason !== 'awaiting_confirm' && ev.note){
             dropThink();
-            aiAdd('sys', t(ev.note));
+            aiSys(ev.note);
           }
         }      }
     }
@@ -611,7 +611,7 @@ async function aiConsume(path, body){
     }
   }catch(e){
     if(gen !== aiGen) return; // 已有新流开跑：这次 abort 是被取代的旧流，别再贴"已停止"消息
-    if(e && e.name === 'AbortError'){ aiAdd('sys', t('已停止生成')); }
+    if(e && e.name === 'AbortError'){ aiSys('已停止生成'); }
     else { if(think && think.parentNode) think.remove(); aiErr(t('连接中断：') + e); }
   }
   finally{

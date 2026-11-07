@@ -95,8 +95,11 @@ def js_keys():
         if not name.endswith(".js"):
             continue
         src = strip_comments(io.open(os.path.join(JSDIR, name), encoding="utf-8").read())
-        found += re.findall(r"\bt\(\s*'((?:[^'\\\n]|\\.)*)'", src)
-        found += re.findall(r'\bt\(\s*"((?:[^"\\\n]|\\.)*)"', src)
+        # aiSys('…') 与 t('…') 走同一条翻译管线（前者多存模板与参数，供切语言重译），
+        # 两个都要扫：只认 t( 的话，新加的 sys 提示条会完全绕过缺口检查。
+        pat = r"\b(?:aiSys|t)\(\s*"
+        found += re.findall(pat + r"'((?:[^'\\\n]|\\.)*)'", src)
+        found += re.findall(pat + r'"((?:[^"\\\n]|\\.)*)"', src)
     return [unescape_js(s) for s in found if CJK.search(s)]
 
 

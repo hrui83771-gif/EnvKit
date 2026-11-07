@@ -9317,6 +9317,25 @@ function aiAdd(cls, text, ts, reask){
   $ai('ai-msgs').scrollTop = $ai('ai-msgs').scrollHeight;
   return d;
 }
+/* sys 提示条：界面文案，不是模型/用户原文。
+   aiAdd 给所有消息打 data-no-i18n 是为了保护模型输出（流式 innerHTML 每帧重扫 + 
+   模型正文恰好撞字典键），但带参数的提示条两头都够不着：Observer 不碰这个子树，
+   而参数替换后的实例文本（"已恢复上次的对话（10 条）"）也查不到字典。
+   表现就是：界面已经切成中文，这一条还停在英文。
+   这里记下模板与参数，切语言时用 t() 重新生成 —— 与 ekSetLang 里"拼接式文案
+   切换后重拉一次状态"同一个套路，只是这条没有状态可拉。 */
+const aiSysTpl = new WeakMap();
+function aiSys(tpl, ...args){
+  const el = aiAdd('sys', t(tpl, ...args));
+  aiSysTpl.set(el, [tpl, args]);
+  return el;
+}
+document.addEventListener('ek:lang', function(){
+  document.querySelectorAll('#ai-msgs .ai-msg.sys').forEach(function(el){
+    const rec = aiSysTpl.get(el);
+    if(rec) el.textContent = t(rec[0], ...rec[1]);
+  });
+});
 /* 回合末尾小工具栏：时间 + 复制 + 重新提问。
    reask 是触发这一回合的那条用户原话；为空（如「解读诊断报告」这种无用户提问的回合）
    就不放「重新提问」——没有可重问的问题，放一个按钮只会误导。 */
@@ -9527,7 +9546,7 @@ function aiHistRestore(){
     if(m.role === 'user' && m.images) aiMsgImgsRender(el, m.images);
     if(m.role === 'user' && m.docs) aiMsgDocsRender(el, m.docs);
   });
-  aiAdd('sys', t('已恢复上次的对话（{0} 条）', aiMessages.length));
+  aiSys('已恢复上次的对话（{0} 条）', aiMessages.length);
 }
 aiHistRestore();
 
@@ -11409,7 +11428,11 @@ async function aiDecide(approved){
   }
   aiPending = null;
   try{ p.card.remove(); }catch(_){}
-  aiAdd('sys', approved ? t('已确认，继续执行…') : t('已拒绝，让助手换个做法…'));
+  /* 两条文案各自紧跟 aiSys('…')：三元表达式会把字面量藏到括号后面，
+     tools/i18n_gap.py 的静态扫描（aiSys( 后必须直接是字符串）就抓不到，
+     新加的文案会绕过缺口检查。 */
+  if(approved) aiSys('已确认，继续执行…');
+  else aiSys('已拒绝，让助手换个做法…');
   aiTraceAdd('human', approved ? t('你已确认：{0}', p.tool) : t('你已拒绝：{0}', p.tool), {cls: approved ? 'ok' : 'warn'});
   aiHstat(approved ? t('执行中') : t('已拒绝'));
   // 批量授权只认"确认"这一次：拒绝时即使勾了也不开
@@ -12281,11 +12304,11 @@ async function aiConsume(path, body){
           // 用户勾了"后续同类不再问"：把这件事显式说出来。
           // 不显示的话，后面几步不再弹卡就会变成"它怎么自己动了"——授权必须可见。
           aiTraceAdd('grant', t('已开启批量授权：{0} · 本任务内最多 {1} 次', t(ev.label || ''), ev.left), {cls:'warn'});
-          aiAdd('sys', t('已授权：本任务内{0}最多再执行 {1} 次，不再逐次询问', t(ev.label || ''), ev.left));
+          aiSys('已授权：本任务内{0}最多再执行 {1} 次，不再逐次询问', t(ev.label || ''), ev.left);
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
         } else if(ev.type === 'grant_used'){
           aiTraceAdd('grant', t('批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left), {cls:''});
-          aiAdd('sys', t('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left));
+          aiSys('已用批量授权执行：{0}（剩余 {1} 次）', ev.text || aiToolName(ev.tool), ev.left);
           aiHstat(t('批量授权 · 剩 {0} 次', ev.left));
         } else if(ev.type === 'wait'){
           /* 服务端给稳定 reason + 真实上限，文案与计时都在前端按界面语言算。
@@ -12311,7 +12334,7 @@ async function aiConsume(path, body){
              completed 与 awaiting_confirm 是预期路径，不打扰。 */
           if(ev.reason && ev.reason !== 'completed' && ev.reason !== 'awaiting_confirm' && ev.note){
             dropThink();
-            aiAdd('sys', t(ev.note));
+            aiSys(ev.note);
           }
         }      }
     }
@@ -12323,7 +12346,7 @@ async function aiConsume(path, body){
     }
   }catch(e){
     if(gen !== aiGen) return; // 已有新流开跑：这次 abort 是被取代的旧流，别再贴"已停止"消息
-    if(e && e.name === 'AbortError'){ aiAdd('sys', t('已停止生成')); }
+    if(e && e.name === 'AbortError'){ aiSys('已停止生成'); }
     else { if(think && think.parentNode) think.remove(); aiErr(t('连接中断：') + e); }
   }
   finally{
