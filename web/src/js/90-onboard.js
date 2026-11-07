@@ -1086,6 +1086,10 @@
   document.addEventListener('click', function(e){
     var replay = e.target.closest && e.target.closest('#about-replay');
     if(replay){ open('replay'); return; }
+    /* v3.8.1：个人中心里的「新手指引」。全项目原本只有「关于」一个入口，
+       想再看一遍得先猜它藏在哪。 */
+    var guide = e.target.closest && e.target.closest('#btn-guide');
+    if(guide){ open('replay'); return; }
 
     if(!OB.classList.contains('show')) return;
     if(brandArmed && OB.contains(e.target)){ endBrand(); return; }

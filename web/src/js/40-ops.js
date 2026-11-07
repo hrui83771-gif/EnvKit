@@ -269,12 +269,28 @@ async function pollState(){
     $('#btn-install').disabled = !!busyNow || (ph==='checking'||ph==='installing');
   }catch(e){}
 }
-$('#btn-check').onclick = ()=>fetch('/api/check',{method:'POST'});
+/* 统一的「跑一次检测」入口：所有触发源（主按钮 / 复检条 / 桌宠 / 启动期）
+   都走这里，这样"配置已改"的标记只在一个地方清。 */
+function runCheck(){
+  markCfgStale(false);
+  return fetch('/api/check',{method:'POST'});
+}
+$('#btn-check').onclick = ()=>runCheck();
+const recheckBtn = $('#btn-recheck');
+if(recheckBtn) recheckBtn.onclick = ()=>{ runCheck(); toast(t('正在按新配置重新检测…')); };
 $('#btn-install').onclick = ()=>fetch('/api/install',{method:'POST'});
 $('#btn-reinstall').onclick = async ()=>{ if(await askConfirm('重新安装','将重新走一遍安装流程：重新下载并解压所有组件（已装的会跳过）。\n可能耗时较久。','开始重装')) fetch('/api/install',{method:'POST'}); };
 
 /* ---------- 健康状态 ---------- */
-function chip(id, cls, text){ const el=$('#'+id); el.className='chip '+cls; el.textContent=text; }
+/* cfgStale 时不改结论、只加「待复检」——结论本身还是上一次检测算出来的真值，
+ * 把它抹成「未检测」等于丢证据；加一句"这条按旧配置算的"才是完整的事实。 */
+function chip(id, cls, text){
+  const el=$('#'+id); if(!el) return;
+  const stale = (typeof cfgStale === 'boolean' && cfgStale);
+  el.className='chip '+cls+(stale?' stale':'');
+  /* 先翻再拼：整串「环境 就绪 · 待复检」进不了字典，翻的是两段 */
+  el.textContent = stale ? t(text) + ' · ' + t('待复检') : text;
+}
 /* ---------- 操作审计：把审计流从"只有文件"变成页面上能看 ---------- */
 const AUDIT_ACTOR = {user:'用户', ai:'AI', guard:'守护', system:'系统', shadow:'影子'};
 let auditActor = '';
@@ -1020,18 +1036,99 @@ function aggregateSvcState(services){
 }
 
 /* renderIssues 渲染状态源算好的问题清单。
- * 每条带「该怎么办」——只报问题不给下一步，等于把负担推回给用户。 */
+ * 每条带「该怎么办」——只报问题不给下一步，等于把负担推回给用户。
+ *
+ * v3.8.1：后端在每条 issue 上多给了 `acts`（如 `check`、`restart:web`、
+ * `focus:cfg_web_script`），这里渲染成按钮。**按钮只点页面上已有的控件**，
+ * 不新开执行路径：跑检测 = 点「重新检测」、装依赖 = 点「npm install」、
+ * 重启 = 停一次再点「启动」。所以权限闸与 428 确认卡一行没动。
+ *
+ * 列表每 2 秒被 pollHealth 重建一次，事件必须挂在 document 上（委托），
+ * 绑在列表元素上下一轮就丢了。 */
+/* label 写成函数：**渲染那一刻**才翻译。表格是模块加载期求值的常量，
+   直接写 t() 会把加载时的语言烤死，切中英后按钮还是旧语言。
+   写成 () => t('…') 也让 i18n_gap.py 的 t(' 正则照样扫得到。 */
+const ISSUE_ACTS = {
+  'check':        {label:()=>t('立即检测'),     run:()=>$('#btn-check').click()},
+  'install':      {label:()=>t('一键安装'),     run:()=>$('#btn-install').click()},
+  'deps:web':     {label:()=>t('装前端依赖'),   run:()=>$('#btn-web-install').click()},
+  'deps:backend': {label:()=>t('整理后端依赖'), run:()=>$('#btn-backend-tidy').click()},
+  'dbtest':       {label:()=>t('测试连接'),     run:()=>$('#btn-db-test').click()},
+  'createdb':     {label:()=>t('建库'),         run:()=>$('#btn-init-db').click()},
+  'ports':        {label:()=>t('查端口占用'),   run:()=>{ goto('start'); $('#btn-ps-scan').click(); }},
+  'ai':           {label:()=>t('问 AI'),        run:(iss)=>askAIAboutIssue(iss)},
+};
+/* restart / breaker / goto / focus 带参数，单独解释 */
+function issueActInfo(act){
+  if(!act || typeof act !== 'string') return null;
+  const i = act.indexOf(':');
+  const kind = i < 0 ? act : act.slice(0, i);
+  const arg  = i < 0 ? '' : act.slice(i + 1);
+  if(ISSUE_ACTS[act]) return {label: ISSUE_ACTS[act].label(), run: ISSUE_ACTS[act].run};
+  if(kind === 'goto' && arg) return {label: t('去看看'), run: ()=>goto(arg)};
+  if(kind === 'focus' && arg) return {label: t('去填写'), run: ()=>focusInPanel(arg)};
+  if(kind === 'restart') return {label: t('重试'), run: ()=>restartService(arg)};
+  if(kind === 'start')   return {label: t('启动'), run: ()=>$('#btn-' + arg + '-start').click()};
+  if(kind === 'breaker') return {label: t('复位断路器'), run: ()=>$('#btn-sd-breaker').click()};
+  return null;   // 白名单外：宁可不显示，也不猜
+}
+/* 跳到某个控件所在的 panel，滚进视窗并聚焦——用户少找一次 */
+function focusInPanel(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const panel = el.closest && el.closest('section.panel');
+  if(panel && panel.id.indexOf('panel-') === 0) goto(panel.id.slice(6));
+  if(el.type === 'checkbox' && el.closest('label')) el.closest('label').scrollIntoView({block:'center'});
+  else el.scrollIntoView({block:'center'});
+  try{ el.focus({preventScroll:true}); }catch(e){ try{ el.focus(); }catch(_){} }
+  el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 1200);
+}
+async function restartService(key){
+  if(!key) return;
+  const ok = await askConfirm(t('重新启动{0}？', key==='web'?t('前端'):t('后端')),
+    t('将先停止再启动：停止后端口需要约 3 秒释放，期间服务短暂不可用。'), t('重启'));
+  if(!ok) return;
+  await stopPost(key);
+  guardedStart(key, ()=>$('#btn-' + key + '-start').click());
+}
+/* 把这条问题连同它自带的建议一起喂进 AI 输入框——只填不发，用户还能改 */
+function askAIAboutIssue(iss){
+  const box = document.getElementById('ai-in');
+  if(!box) return;
+  const lines = [t('这条我搞不定，帮我看看：'), '· ' + ((iss && iss.what) || '')];
+  if(iss && iss.action) lines.push('· ' + t('系统给的建议是：') + iss.action);
+  box.value = lines.join('\n');
+  if(typeof aiOpen === 'function') aiOpen();
+  try{ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }catch(e){}
+}
+document.addEventListener('click', ev=>{
+  const b = ev.target.closest ? ev.target.closest('[data-issue-act]') : null;
+  if(!b) return;
+  const info = issueActInfo(b.getAttribute('data-issue-act'));
+  if(info) info.run(b._issue || {what:'', action:''});
+});
 function renderIssues(issues){
   const box = $('#issues-box'), list = $('#issues-list');
   if(!box || !list) return;
   const arr = Array.isArray(issues) ? issues : [];
-  if(!arr.length){ box.style.display='none'; return; }
+  if(!arr.length){ box.style.display='none'; list.innerHTML=''; return; }
   box.style.display='';
   list.innerHTML = arr.map(i=>{
     const cls = i.level==='error' ? 'err' : (i.level==='warn' ? 'warn' : 'info');
+    const btns = (Array.isArray(i.acts) ? i.acts : []).map(a=>{
+      const info = issueActInfo(a);
+      if(!info) return '';
+      return '<button class="mini" data-issue-act="'+esc(a)+'">'+esc(info.label)+'</button>';
+    }).join('');
     return '<li class="'+cls+'"><b>'+esc(i.what)+'</b>'+
-           (i.action ? '<span class="act">'+esc(t('建议：{0}', i.action))+'</span>' : '')+'</li>';
+           (i.action ? '<span class="act">'+esc(t('建议：{0}', i.action))+'</span>' : '')+
+           (btns ? '<span class="issue-acts">'+btns+'</span>' : '')+'</li>';
   }).join('');
+  /* 「问 AI」需要整条 issue 的正文与建议，从数据里取而不是从 DOM 反解 */
+  Array.prototype.forEach.call(list.children, (li, idx)=>{
+    if(!arr[idx]) return;
+    Array.prototype.forEach.call(li.querySelectorAll('[data-issue-act]'), b=>{ b._issue = arr[idx]; });
+  });
 }
 
 /* ---------- 链端校验 ---------- */

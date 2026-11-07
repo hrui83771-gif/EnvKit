@@ -123,6 +123,9 @@
   .chip.err{background:var(--errbg);color:var(--err)}
   .chip.off{background:var(--off);color:var(--muted)}
   .chip.admin{background:var(--infobg);color:var(--info);cursor:default}
+  /* 「按旧配置算的」——不换配色（结论本身没变），只把实线边改虚线，
+     扫一眼就能看出这条还没按新配置复核过 */
+  .chip.stale{border-style:dashed;border-color:currentColor;opacity:.9}
   .layout{max-width:1160px;margin:0 auto;padding:14px 22px 40px;display:flex;gap:18px;align-items:flex-start}
   .content{flex:1;min-width:0}
   .sidebar{width:240px;flex:none;position:sticky;top:62px;display:flex;flex-direction:column;gap:10px}
@@ -224,6 +227,17 @@
   #issues-list li.warn{border-left-color:var(--warn)}
   #issues-list li.info{border-left-color:var(--info)}
   #issues-list li .act{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  /* v3.8.1：「建议」下面那排按钮。跟 .act 同一行起，间距别把条目的高度撑开太多——
+     问题清单本来就是一屏能扫完的密度，加按钮不能再加一行。 */
+  #issues-list li .issue-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  #issues-list li .issue-acts .mini{padding:2px 9px;font-size:12px;line-height:1.7}
+  /* 从问题清单跳到某个输入框时闪一下，让眼睛知道该看哪儿（用 outline 不参与布局） */
+  .flash{animation:ek-flash 1.2s ease-out}
+  @keyframes ek-flash{
+    0%,100%{outline:2px solid transparent;outline-offset:2px}
+    15%,55%{outline:2px solid var(--brand);outline-offset:2px}
+  }
+  @media (prefers-reduced-motion: reduce){ .flash{animation:none;outline:2px solid var(--brand);outline-offset:2px} }
   /* ===== v2.7 统计看板 =====
      纯 SVG，不引任何图表库——「单文件零依赖」是本工具的硬约束。
      配色全部走 CSS 变量，深浅色自动适配。 */

@@ -82,7 +82,7 @@ function ekWeatherLine(w){
     });
     document.addEventListener('keydown', e=>{ if(e.key === 'Escape') pop.hidden = true; });
     // 工具类动作点完就收；语言/主题留在面板里（用户常连着切）
-    ['btn-av','btn-avclean','btn-elevate'].forEach(id=>{
+    ['btn-av','btn-avclean','btn-elevate','btn-guide'].forEach(id=>{
       const b = document.getElementById(id);
       if(b) b.addEventListener('click', ()=>{ pop.hidden = true; });
     });

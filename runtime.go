@@ -86,7 +86,14 @@ type Issue struct {
 	Level  string `json:"level"`  // error | warn | info
 	Scope  string `json:"scope"`  // env | project | service | db | chain
 	What   string `json:"what"`   // 问题
-	Action string `json:"action"` // 该怎么办
+	Action string `json:"action"` // 该怎么办（人话）
+	// Acts 是「该怎么办」的可点版本：kind 或 kind:arg，由前端白名单解释成
+	// **点击页面上已有的按钮**（跳面板 / 聚焦输入框 / 跑检测 / 启动 / 复检）。
+	//
+	// 它不携带任何命令、路径或参数，也不新增执行能力——权限闸仍在 aiExecTool
+	// 与 428 确认卡那一层。写成结构化字符串而不是让前端从 Action 的措辞里猜，
+	// 是为了不违反"能用客观事实判就别用措辞判"。
+	Acts []string `json:"acts,omitempty"`
 }
 
 // RuntimeState 是唯一状态源。
@@ -282,16 +289,18 @@ func runtimeService(target string) ServiceState {
 // 等于把负担推回给用户——而这正是 EnvKit 存在的意义。
 func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db DBHealth, chain ChainInfo) []Issue {
 	var out []Issue
-	add := func(level, scope, what, action string) {
-		out = append(out, Issue{Level: level, Scope: scope, What: what, Action: action})
+	// acts 是变参：已有调用点不传就保持"只有人话建议"，需要的地方再补按钮。
+	add := func(level, scope, what, action string, acts ...string) {
+		out = append(out, Issue{Level: level, Scope: scope, What: what, Action: action, Acts: acts})
 	}
 
 	// ---- 环境 ----
 	if !env.HasResults {
-		add(rtIssInfo, "env", "尚未检测环境", "先在「环境安装」跑一次检测")
+		add(rtIssInfo, "env", "尚未检测环境", "先在「环境安装」跑一次检测", "check")
 	}
 	for _, m := range env.Missing {
-		add(rtIssError, "env", "缺少组件："+m, "在「环境安装」里安装 "+m)
+		// install 是幂等的：已装的会跳过，只补缺的（与卡片上「一键安装」同一个入口）
+		add(rtIssError, "env", "缺少组件："+m, "在「环境安装」里安装 "+m, "install")
 	}
 	// v2.3 N7：环境符合性。**装了不等于够用**——项目可能要更高版本。
 	//
@@ -304,18 +313,18 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 			if r.Status != reqTooLow {
 				continue
 			}
-			add(rtIssError, "env", r.Component+" 版本不满足项目要求："+r.Why, r.Action)
+			add(rtIssError, "env", r.Component+" 版本不满足项目要求："+r.Why, r.Action, "goto:install")
 		}
 	}
 
 	// ---- 项目 ----
 	if strings.TrimSpace(proj.FrontendDir) == "" {
-		add(rtIssWarn, "project", "未配置前端目录", "在「程序配置」选择前端目录")
+		add(rtIssWarn, "project", "未配置前端目录", "在「程序配置」选择前端目录", "focus:fe_dir")
 	} else if !proj.WebDepsUnknown && !proj.WebDepsInstalled {
-		add(rtIssError, "project", "前端依赖未安装（node_modules 缺失）", "先执行 npm install，否则 npm run 必然失败")
+		add(rtIssError, "project", "前端依赖未安装（node_modules 缺失）", "先执行 npm install，否则 npm run 必然失败", "deps:web")
 	}
 	if strings.TrimSpace(proj.BackendDir) == "" {
-		add(rtIssWarn, "project", "未配置后端目录", "在「程序配置」选择后端目录")
+		add(rtIssWarn, "project", "未配置后端目录", "在「程序配置」选择后端目录", "focus:be_dir")
 	}
 	// 启动方式识别不出来是最容易让人卡住的一类问题，必须单列并给手动入口
 	if proj.WebSource == "none" {
@@ -324,10 +333,10 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 			msg += "（项目类型：" + strings.Join(proj.Kinds, "、") + "）"
 		}
 		add(rtIssWarn, "project", msg,
-			"在「程序配置 → 启动方式」手动填写前端启动脚本（dev / serve / start 这类）")
+			"在「程序配置 → 启动方式」手动填写前端启动脚本（dev / serve / start 这类）", "focus:cfg_web_script")
 	}
 	if proj.FrontendDir != "" && proj.Backend == "" && strings.TrimSpace(proj.BackendDir) != "" {
-		add(rtIssWarn, "project", "识别不出后端入口", "在「程序配置 → 启动方式」手动填写后端入口（相对后端目录，如 main.go）")
+		add(rtIssWarn, "project", "识别不出后端入口", "在「程序配置 → 启动方式」手动填写后端入口（相对后端目录，如 main.go）", "focus:cfg_backend_file")
 	}
 
 	// ---- 服务 ----
@@ -342,16 +351,19 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 		}
 		switch s.Phase {
 		case phDegraded:
+			// 界面上**没有**单独的「复验」按钮，复验是启动流程里的一步。
+			// 旧文案让人去点一个不存在的东西——改成"重启一次会重新复验"，
+			// 并把重启做成可点的。
 			add(rtIssWarn, "service", name+"进程在运行但未通过复验",
-				"点「复验」确认服务真的可用；未复验前不要当作已就绪")
+				"重启一次会重新走复验；未复验前不要当作已就绪", "restart:"+key, "goto:start")
 		case phFailed:
 			// 反复崩溃是最容易让人盲目重启的场景：把次数与建议一起给出来。
-			act := "查看「程序启动」日志最后几行"
+			how := "查看「程序启动」日志最后几行"
 			switch {
 			case s.Restarts >= 3:
-				act = "已连续失败 " + itoa(s.Restarts) + " 次，别再盲目重启——" + s.Backoff
+				how = "已连续失败 " + itoa(s.Restarts) + " 次，别再盲目重启——" + s.Backoff
 			case s.LastErr != "":
-				act += "：" + firstLines(s.LastErr, 60)
+				how += "：" + firstLines(s.LastErr, 60)
 			}
 			what := name + "启动失败"
 			if s.Restarts > 1 {
@@ -360,7 +372,9 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 			if s.LastErr != "" {
 				what += "：" + firstLines(s.LastErr, 80)
 			}
-			add(rtIssError, "service", what, act)
+			// 三个出口：再试一次 / 看看端口是不是被占 / 把这段错误交给 AI。
+			// 第三个只填输入框不发送，用户还能改。
+			add(rtIssError, "service", what, how, "restart:"+key, "ports", "ai")
 		}
 		// v3.0 T1.9：熔断态单列。它和"启动失败"是两件事——失败是结果，
 		// 熔断是产品在故意拒绝继续自动重启。混成一条，用户会以为
@@ -371,7 +385,8 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 				wait = fmt.Sprintf("；%d 秒后放行一次探针重启", s.BreakerRemainSecs)
 			}
 			add(rtIssError, "service", name+"处于熔断态：自动重启已被拒绝（连续失败达限）",
-				"查看「程序启动」日志定位崩溃原因；处理后点服务卡片上的「复位断路器」，或等待冷静期自然解除"+wait)
+				"查看「程序启动」日志定位崩溃原因；处理后点服务卡片上的「复位断路器」，或等待冷静期自然解除"+wait,
+				"breaker:"+key, "goto:start")
 		}
 	}
 
@@ -379,9 +394,9 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 	if strings.TrimSpace(cfg.Projects.DBName) != "" {
 		switch {
 		case !db.Connected:
-			add(rtIssError, "db", "数据库未连接", "检查 MySQL 服务是否运行、账号密码是否正确")
+			add(rtIssError, "db", "数据库未连接", "检查 MySQL 服务是否运行、账号密码是否正确", "dbtest", "focus:mysql_pass")
 		case !db.DBExists:
-			add(rtIssWarn, "db", "数据库不存在："+db.Msg, "在「程序配置」执行建库")
+			add(rtIssWarn, "db", "数据库不存在："+db.Msg, "在「程序配置」执行建库", "createdb")
 		}
 	}
 
@@ -391,12 +406,12 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 	if chain.Checked {
 		if !chain.SSHOK && !chain.Port20200 {
 			add(rtIssWarn, "chain", "链端不可达（SSH 与 20200 端口均无响应）",
-				"确认链端已启动；本机虚拟机场景请确认端口转发与 chain_host 配置")
+				"确认链端已启动；本机虚拟机场景请确认端口转发与 chain_host 配置", "goto:chain", "ai")
 		} else if !chain.Port20200 {
-			add(rtIssWarn, "chain", "链节点端口未监听（20200）", "在「链端校验」查看详情")
+			add(rtIssWarn, "chain", "链节点端口未监听（20200）", "在「链端校验」查看详情", "goto:chain")
 		}
 		if !chain.WebaseOK {
-			add(rtIssWarn, "chain", "WeBASE-Front 未响应（5002）", "确认 WeBASE-Front 已启动")
+			add(rtIssWarn, "chain", "WeBASE-Front 未响应（5002）", "确认 WeBASE-Front 已启动", "goto:chain")
 		}
 	}
 

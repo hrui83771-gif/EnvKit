@@ -230,13 +230,28 @@ function markDirty(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 800);
 }
+/* 「配置已改，状态还是旧的」——保存成功到下一次检测之间的事实。
+ *
+ * 旧行为：存完只把三个「已保存」写上，顶部芯片和检测卡仍挂着旧结论。
+ * 用户改完 MySQL 密码会以为这就好了，其实一次都没验过。
+ *
+ * 不自动重跑检测：检测会刷日志、会动桌宠表情，还会让「谁发起了什么」变糊涂。
+ * 只把事实摆出来（这些状态是按旧配置算的）+ 一个一键复检。 */
+let cfgStale = false;
+function markCfgStale(on){
+  cfgStale = !!on;
+  const b = $('#stale-banner');
+  if(b) b.style.display = cfgStale ? '' : 'none';
+  /* 芯片文案由 pollHealth 每 2 秒重写；立刻拉一次，别让用户等那 2 秒 */
+  if(typeof pollHealth === 'function'){ try{ pollHealth(); }catch(e){} }
+}
 async function saveNow(){
   if(!loaded || !dirty) return;
   const body = configBody();
   const fail = (msg)=>{ ['save-state','save-state2','save-state3'].forEach(id=>{ const el=$('#'+id); el.textContent=msg; el.title=msg; }); };
   try{
     const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(r.ok){ cfg = body; dirty = false; $('#save-state').textContent=t('已保存'); $('#save-state2').textContent=t('已保存'); $('#save-state3').textContent=t('已保存'); syncStartDirs(); loadLaunchPlan(); }
+    if(r.ok){ cfg = body; dirty = false; $('#save-state').textContent=t('已保存'); $('#save-state2').textContent=t('已保存'); $('#save-state3').textContent=t('已保存'); syncStartDirs(); loadLaunchPlan(); markCfgStale(true); }
     else if(r.status===400){
       // 硬校验拒绝：把第一个问题亮在保存状态上，完整列表放悬浮提示
       let msg = t('保存失败');

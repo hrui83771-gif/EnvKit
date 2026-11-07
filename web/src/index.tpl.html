@@ -78,6 +78,12 @@
             <button class="ghost" id="btn-elevate" style="display:none">以管理员身份重启</button>
           </div>
           <div class="pp-sep"></div>
+          <!-- v3.8.1：引导原来只能从「关于」里重看，藏得太深。这里是它该在的地方 -->
+          <div class="pp-row">
+            <button class="ghost" id="btn-guide">新手指引</button>
+            <span class="hint" style="margin-left:auto">再看一遍那 8 屏介绍</span>
+          </div>
+          <div class="pp-sep"></div>
           <!-- v3.6.2：手机访问独立开关放在个人中心下，不再混在「程序配置」的卡片里。
                点开弹出配对弹窗（配对码 / 注意项 / 网址 / 二维码）。 -->
           <div class="pp-lan" id="pp-lan-row">
@@ -99,6 +105,13 @@
 <div class="layout">
   <main class="content">
     <div id="busy-banner" class="banner info" style="display:none;margin-bottom:12px"></div>
+    <!-- v3.8.1：配置存了、但状态还没来得及按新配置重算。
+         不自动重跑检测是有意的：安装/检测会刷日志，也会让"谁发起了什么"变糊涂；
+         给一条明确的提示 + 一个按钮，用户自己决定什么时候复检。 -->
+    <div id="stale-banner" class="banner warn" style="display:none;margin-bottom:12px">
+      <span id="stale-text">配置已保存。下面这些状态还是按旧配置算的，重新检测一次才准。</span>
+      <button class="mini" id="btn-recheck" style="margin-left:8px">重新检测</button>
+    </div>
     <!-- v2.7 问题清单：数据来自 /api/health 的 issues（由唯一状态源 runtime.go 算出）。
          每条带「该怎么办」——只报问题不给下一步，等于把负担推回给用户。 -->
     <div id="issues-box" class="card" style="display:none;margin-bottom:12px">

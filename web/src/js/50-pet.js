@@ -272,7 +272,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
       else if(ev === 'ok'){ setSt('success'); say(t('{0} 已启动', label)); }
       else if(ev === 'warn'){ if(st === 'busy' || st === 'error'){ setSt('idle'); } say(t('{0} 已启动，但还没通过复验', label), false); }
       else if(ev === 'stopped'){ if(st === 'busy' || st === 'error'){ setSt('idle'); } }
-      else if(ev === 'fail'){ setSt('error'); say(t('{0} 失败了，点红标看日志', label)); }
+      else if(ev === 'fail'){ setSt('error'); say(t('{0} 失败了，日志已标红；待处理里可以重试', label)); }
       svcPrev[k] = {running:!!s.running, msg:s.msg||'', ok:!!s.ok, status:s.status||''};
     }
     // 任务语义：一次性任务 running→结束
@@ -291,7 +291,7 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     }
     if(running){ ringOn(running); return; }
     ringOff();
-    if(failed){ setSt('error'); say(t('{0} 失败了，点红标看日志', failed.label), false); }
+    if(failed){ setSt('error'); say(t('{0} 失败了，日志已标红；待处理里可以重试', failed.label), false); }
     else if(done){ setSt('success'); }
   };
   /* busy 是两种来源共用的：进度环（一次性任务）与服务启动。
