@@ -1481,30 +1481,27 @@
             <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
             <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。</p>
             <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
-            <div class="ob-actions">
-              <button class="ob-ghost" id="ob-merge-replay">重播汇聚</button>
-              <span class="ob-hint">悬停任一窗口，看它被哪个节点接管</span>
-            </div>
+            <div class="ob-tip"><i></i>悬停窗口看归属，点节点看它顶替了谁</div>
           </div>
           <div class="ob-merge" id="ob-merge">
             <div class="ob-win" id="ob-old-list">
-              <div class="ob-win-card dark" style="--i:0;--r:-1.2deg" data-own="0">
+              <div class="ob-win-card dark" style="--i:0" data-own="0">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>终端</span><em>2 分钟前</em></div>
                 <div class="ob-win-body"><code class="pr">$ go run ./server</code><code class="bad">panic: dial tcp :3306</code></div>
               </div>
-              <div class="ob-win-card" style="--i:1;--r:.9deg" data-own="1">
+              <div class="ob-win-card" style="--i:1" data-own="1">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>数据库客户端</span><em>未刷新</em></div>
                 <div class="ob-win-body"><code class="pr">SELECT * FROM batch</code><code class="bad">ERROR 2003 (HY000)</code></div>
               </div>
-              <div class="ob-win-card" style="--i:2;--r:-.7deg" data-own="2">
+              <div class="ob-win-card" style="--i:2" data-own="2">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>SSH 工具</span><em>断线</em></div>
                 <div class="ob-win-body"><code class="pr">ssh root@10.0.0.21</code><code class="bad">Connection timed out</code></div>
               </div>
-              <div class="ob-win-card" style="--i:3;--r:1.1deg" data-own="3">
+              <div class="ob-win-card" style="--i:3" data-own="3">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>浏览器标签</span><em>3 个标签</em></div>
                 <div class="ob-win-body"><code>:5173　:8888　:5002</code><code class="bad">看不出哪个是新的</code></div>
               </div>
-              <div class="ob-win-card" style="--i:4;--r:-.9deg" data-own="4">
+              <div class="ob-win-card" style="--i:4" data-own="4">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>日志窗口</span><em>滚屏中</em></div>
                 <div class="ob-win-body"><code class="bad">[WARN] 区块高度为 0</code><code class="bad">[ERROR] read timeout</code></div>
               </div>
@@ -1568,7 +1565,7 @@
             </button>
           </div>
           <div class="ob-detail" id="ob-step-desc"></div>
-          <div class="ob-actions"><button class="ob-ghost" id="ob-track-run">依次打勾</button><span class="ob-hint">点任一段可切换说明</span></div>
+          <div class="ob-tip ob-tip-c"><i></i>点任一段切换说明 · 上一步的产出就是这一步的输入</div>
         </div>
       </div>
 
@@ -1639,10 +1636,19 @@
         <div class="ob-scene ob-ai">
           <div class="ob-ai-stage">
             <div class="ob-pet-glow"></div>
-            <div class="ob-pet-slot" id="ob-pet-slot"></div>
+            <div class="ob-pet-slot" id="ob-pet-slot">
+              <div class="ob-pet-say" id="ob-pet-say"></div>
+            </div>
             <div class="ob-pet-shadow"></div>
             <div class="ob-pet-state"><i></i><span id="ob-pet-msg">待机 · 已连接</span></div>
-            <div class="ob-pet-tag">桌宠也在主界面上</div>
+            <div class="ob-pet-menu-h">右键菜单 · 节选</div>
+            <div class="ob-pet-menu" id="ob-pet-menu">
+              <button data-pact="say">说句话</button>
+              <button data-pact="feed">投喂 🐟</button>
+              <button data-pact="weather">查天气</button>
+              <button data-pact="err">看错误</button>
+            </div>
+            <div class="ob-pet-tag">台词都是内置的，主界面上右键就能点</div>
           </div>
           <div class="ob-ai-chat">
             <div class="ob-kicker"><i></i>AI 助手</div>
@@ -1653,17 +1659,17 @@
               <div class="ob-chat-log" id="ob-chat-log">
                 <div class="ob-bubble" id="ob-bubble">今天想看点什么？<em>读日志、看状态、重启服务——都会先问你。</em></div>
               </div>
+              <div class="ob-confirm" id="ob-demo-confirm" hidden>
+                <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
+                <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
+                <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
+              </div>
               <div class="ob-questions">
                 <button data-q="read">现在服务都起来了吗？</button>
                 <button data-q="write">帮我重启一下后端</button>
                 <button data-q="explain">这段报错是什么意思？</button>
               </div>
               <div class="ob-chat-input"><span>问我任何环境问题…</span><b>发送</b></div>
-              <div class="ob-confirm" id="ob-demo-confirm" hidden>
-                <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
-                <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
-                <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
-              </div>
             </div>
           </div>
         </div>

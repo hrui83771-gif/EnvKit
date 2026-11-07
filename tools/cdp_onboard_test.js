@@ -351,6 +351,39 @@ function seed() {
     const hov0 = await evalJS(`document.querySelectorAll('#ob-state .ob-line-node.own').length`);
     check('detail-merge-hover-reset', hov0 === 0, 'own=' + hov0);
 
+    // 反向联动：点第 4 个节点 → 第 4 个窗口被挑出来（.picked）+ 第 4 条线亮；
+    // 再点一次取消。没有这条，02 屏就只剩"悬停看看"，按钮删掉后等于没有交互。
+    await clickSel('#ob-state .ob-line-node[data-node="3"]', 'node4');
+    await sleep(220);
+    const pick = await evalJS(`JSON.stringify({
+      node: (document.querySelector('#ob-state .ob-line-node.own')||{getAttribute:function(){return null}}).getAttribute('data-node'),
+      win: (document.querySelector('#ob-old-list .ob-win-card.picked')||{getAttribute:function(){return null}}).getAttribute('data-own'),
+      wires: document.querySelectorAll('.ob-wires path.on').length
+    })`);
+    let PK = {}; try { PK = JSON.parse(pick || '{}'); } catch (e) {}
+    check('detail-merge-pick', PK.node === '3' && PK.win === '3' && PK.wires === 1, pick);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4 });
+    await sleep(160);
+    const pickStays = await evalJS(`document.querySelectorAll('#ob-state .ob-line-node.own').length`);
+    check('detail-merge-pick-sticky', pickStays === 1, 'own after leaving=' + pickStays);
+    await clickSel('#ob-state .ob-line-node[data-node="3"]', 'node4-again');
+    await sleep(180);
+    const pickOff = await evalJS(`JSON.stringify({
+      own: document.querySelectorAll('#ob-state .ob-line-node.own').length,
+      picked: document.querySelectorAll('#ob-old-list .ob-win-card.picked').length
+    })`);
+    let PO = {}; try { PO = JSON.parse(pickOff || '{}'); } catch (e) {}
+    check('detail-merge-pick-off', PO.own === 0 && PO.picked === 0, pickOff);
+
+    // 两个"没意义"的按钮已经被删掉了：重播汇聚 / 依次打勾。
+    // 这条断言防的是有人把假进度按钮加回来。
+    const deadBtn = await evalJS(`JSON.stringify({
+      replay: !!document.getElementById('ob-merge-replay'),
+      run: !!document.getElementById('ob-track-run')
+    })`);
+    let DB = {}; try { DB = JSON.parse(deadBtn || '{}'); } catch (e) {}
+    check('no-fake-buttons', DB.replay === false && DB.run === false, deadBtn);
+
     // 屏 3（四步走）：点步骤看说明卡切换（自动前进已在此前 2.3s 内走了一格）
     await arrowRight();
     const stepBefore = await evalJS(`(document.getElementById('ob-step-desc')||{}).innerText||''`);
@@ -367,6 +400,22 @@ function seed() {
     let IO = {}; try { IO = JSON.parse(ioCount || '{}'); } catch (e) {}
     check('detail-step-io4', IO.n === 4 && /前置/.test(IO.t || '') && /预计耗时/.test(IO.t || ''),
       'spans=' + IO.n + ' txt=' + (IO.t || '').replace(/\n/g, ' ').slice(0, 70));
+
+    // 没有"完成"标记：演示一次也没跑过，勾号等于撒谎。切到纯只读的那一步，
+    // 标签必须变成「只读」而不是「会写」。
+    const stepMeta = await evalJS(`document.querySelectorAll('#ob-track .ob-step.done').length`);
+    await clickSel('#ob-track .ob-step[data-step="2"]', 'step3-ro');
+    await sleep(220);
+    const roTxt = await evalJS(`JSON.stringify({
+      chip: (document.querySelector('#ob-step-desc .ob-writes em')||{}).textContent||'',
+      body: (document.querySelector('#ob-step-desc .ob-writes span')||{}).textContent||'',
+      done: document.querySelectorAll('#ob-track .ob-step.done').length
+    })`);
+    let RO = {}; try { RO = JSON.parse(roTxt || '{}'); } catch (e) {}
+    check('detail-step-nowrite-check', RO.done === 0 && stepMeta === 0, roTxt + ' / done=' + stepMeta);
+    check('detail-step-writes', RO.chip === '只读' && /不写任何东西/.test(RO.body || ''), roTxt);
+    await clickSel('#ob-track .ob-step[data-step="0"]', 'step1-back');
+    await sleep(180);
 
     // 屏 4（检测报告）：逐行扫入 + 总评
     await arrowRight();
@@ -445,10 +494,35 @@ function seed() {
     })`);
     let Q = {}; try { Q = JSON.parse(q || '{}'); } catch (e) {}
     check('demo-confirm-card', Q.confirm === false && /确认卡/.test(Q.bubble || ''), q);
+
+    // 确认卡是排进对话流里的，不是浮层：浮层会正好盖住刚打出来的那句回答
+    const geo = await evalJS(`JSON.stringify((function(){
+      var c=document.getElementById('ob-demo-confirm'), l=document.getElementById('ob-chat-log'),
+          b=document.getElementById('ob-bubble'), qs=document.querySelector('.ob-questions');
+      var cr=c.getBoundingClientRect(), lr=l.getBoundingClientRect(), br=b.getBoundingClientRect(),
+          qr=qs.getBoundingClientRect();
+      return {pos:getComputedStyle(c).position, cardTop:Math.round(cr.top),
+        logBottom:Math.round(lr.bottom), bubbleBottom:Math.round(br.bottom), qTop:Math.round(qr.top)};
+    })())`);
+    let G = {}; try { G = JSON.parse(geo || '{}'); } catch (e) {}
+    check('detail-confirm-inline', G.pos === 'relative' && G.cardTop >= G.logBottom - 1 &&
+      G.cardTop >= G.bubbleBottom - 1 && G.cardTop < G.qTop, geo);
+
+    // 桌宠气泡两个阶段都要断到：打字期间「思考中」，回答落地后「点我确认！」。
+    // 顺序反了就是"先撒花再干活"。
+    const say0 = await evalJS(`(document.getElementById('ob-pet-say')||{}).innerText||''`);
+    check('detail-pet-bubble-think', /思考中/.test(say0 || ''), 'bubble=' + (say0 || '').slice(0, 20));
     await sleep(1200);
     const typed = await evalJS(`(document.getElementById('ob-bubble')||{}).textContent||''`);
     check('demo-typing-complete', /确认卡在这里/.test(typed || '') && /权限闸门/.test(typed || ''),
       'bubble=' + (typed || '').slice(0, 50));
+    // 回答打完 → 气泡换成「点我确认！」并常驻（sticky，不自动收）
+    const say1 = await evalJS(`JSON.stringify({
+      shown: document.getElementById('ob-pet-say').classList.contains('show'),
+      txt: (document.getElementById('ob-pet-say')||{}).innerText||''
+    })`);
+    let S1 = {}; try { S1 = JSON.parse(say1 || '{}'); } catch (e) {}
+    check('detail-pet-bubble-wait', S1.shown === true && /点我确认/.test(S1.txt || ''), say1);
     await clickSel('#ob-demo-ok', 'demo-ok');
     await sleep(250);
     const q2 = await evalJS(`JSON.stringify({
@@ -477,6 +551,27 @@ function seed() {
       'petAfterOk=' + petAfterOk + ' petNow=' + (H.pet || ''));
     check('detail-ai-second-answer', /后端在跑/.test(H.bubble || '') && H.confirm === true, hist);
 
+    // 桌宠内置对话：四个菜单动作，说的必须是真的内置台词（不是为演示另编的）
+    const menuN = await evalJS(`document.querySelectorAll('#ob-pet-menu button[data-pact]').length`);
+    check('detail-pet-menu', menuN === 4, 'menu=' + menuN);
+    await clickSel('#ob-pet-menu button[data-pact="say"]', 'pet-say');
+    await sleep(320);
+    const sayRes = await evalJS(`JSON.stringify({
+      shown: document.getElementById('ob-pet-say').classList.contains('show'),
+      txt: (document.getElementById('ob-pet-say')||{}).innerText||''
+    })`);
+    let SR = {}; try { SR = JSON.parse(sayRes || '{}'); } catch (e) {}
+    check('detail-pet-say-line', SR.shown === true &&
+      /我不思考了|我先去吃饭啦|大肥鱼坐的住/.test(SR.txt || ''), sayRes);
+    // 查天气是两步：先「我瞅瞅天…」，再给实况。一步到位反而假。
+    await clickSel('#ob-pet-menu button[data-pact="weather"]', 'pet-weather');
+    await sleep(260);
+    const wx1 = await evalJS(`(document.getElementById('ob-pet-say')||{}).innerText||''`);
+    await sleep(880);
+    const wx2 = await evalJS(`(document.getElementById('ob-pet-say')||{}).innerText||''`);
+    check('detail-pet-weather', /瞅瞅天/.test(wx1 || '') && /合肥|湿度/.test(wx2 || ''),
+      'step1=' + (wx1 || '').slice(0, 16) + ' step2=' + (wx2 || '').slice(0, 30));
+
     // 屏 7（安全边界）：点最高档看 428 说明
     await arrowRight();
     await clickSel('#ob-perms button[data-perm="3"]', 'perm3');
@@ -504,6 +599,28 @@ function seed() {
     })`);
     let CS = {}; try { CS = JSON.parse(chSum || '{}'); } catch (e) {}
     check('detail-chapter-summary', CS.sums === 8 && /8/.test(CS.stats || '') && /90/.test(CS.stats || ''), chSum);
+
+    // 收尾「跟着做一遍」：从「关于」里重看再点它时，#about 还开着。
+    // driver.js 会把浮层画在遮罩之上、却按底下控件的坐标定位 —— 于是导航指着一个
+    // 被弹窗盖住的位置。断言弹窗被收掉、浮层真的出现、而且落在视口内。
+    await clickSel('#ob-cta-tour', 'cta-tour');
+    await sleep(400);
+    const tour = await evalJS(`JSON.stringify((function(){
+      var p=document.querySelector('.driver-popover');
+      var r=p?p.getBoundingClientRect():null;
+      return {about:document.getElementById('about').classList.contains('show'),
+        ob:document.getElementById('onboard').classList.contains('show'),
+        pop:!!p, left:r?Math.round(r.left):-1, top:r?Math.round(r.top):-1,
+        right:r?Math.round(r.right):-1, vw:window.innerWidth, vh:window.innerHeight,
+        overlay:!!document.querySelector('.driver-overlay')};
+    })())`);
+    let TR = {}; try { TR = JSON.parse(tour || '{}'); } catch (e) {}
+    check('tour-closes-modal', TR.about === false && TR.ob === false, tour);
+    check('tour-popover-shown', TR.pop === true && TR.overlay === true, tour);
+    check('tour-popover-inside', TR.left >= 0 && TR.top >= 0 && TR.right <= TR.vw && TR.top < TR.vh, tour);
+    await evalJS(`(function(){ var b=document.querySelector('.driver-popover-close-btn'); if(b) b.click(); return 1; })()`);
+    await sleep(300);
+    check('tour-closed', (await evalJS(`!!document.querySelector('.driver-popover')`)) === false);
 
     const fetches = await evalJS(`JSON.stringify(window.__obFetch||[])`);
     let FL = []; try { FL = JSON.parse(fetches || '[]'); } catch (e) {}

@@ -1245,6 +1245,14 @@
   .ob-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .ob-head+.ob-actions,.ob-actions-center{justify-content:center}
   .ob-hint{font-size:11.5px;color:var(--muted);line-height:1.6}
+  /* 一屏只有一句"怎么玩"的提示。不放进按钮旁边当副标题，
+     没有按钮的时候它就是这一屏唯一的操作说明。 */
+  .ob-tip{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;line-height:1.7;
+    color:var(--muted);max-width:44ch}
+  .ob-tip i{width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none;
+    margin-top:7px}
+  /* 居中版式里这句是整屏唯一的一行提示，不能让它自己折成"…的输 / 入" */
+  .ob-tip-c{max-width:none;justify-content:center;margin:14px auto 0;text-align:center}
   .ob-arrow{margin-left:8px;font-size:14px;transition:transform .2s}
   .ob-primary:hover .ob-arrow{transform:translateX(3px)}
 
@@ -1313,16 +1321,18 @@
     column-gap:0;row-gap:14px;align-items:center;min-width:0}
 
   /* 五个旧窗口：左边缘错位、右边缘统一对齐到 290。
-     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边 */
+     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边。
+     不加旋转：v6 给每张卡配了 ±1.2°，五张一起看就是"没对齐"，
+     错位要靠**规律的位移**做出来，不能靠随机角度。20px 的台阶足够读成
+     "五个窗口先后打开"，又不至于像排版事故。 */
   .ob-win{position:relative;width:290px;height:314px;flex:none}
-  .ob-win-card{position:absolute;left:calc(var(--i) * 10px);top:calc(var(--i) * 64px);
-    width:calc(290px - var(--i) * 10px);height:58px;overflow:hidden;text-align:left;
+  .ob-win-card{position:absolute;left:calc(var(--i) * 20px);top:calc(var(--i) * 64px);
+    width:calc(290px - var(--i) * 20px);height:58px;overflow:hidden;text-align:left;
     background:var(--card);border:1px solid var(--line);border-radius:10px;
     box-shadow:0 10px 22px -16px rgba(30,38,54,.62);
-    transform:rotate(var(--r,0deg));
     transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s,
       border-color .25s,opacity .3s}
-  .ob-win-card:hover{transform:rotate(0deg) translateX(8px) scale(1.035);z-index:4;
+  .ob-win-card:hover,.ob-win-card.picked{transform:translateX(7px) scale(1.03);z-index:4;
     border-color:var(--brand2);box-shadow:0 18px 30px -18px rgba(30,38,54,.78)}
   .ob-win-bar{display:flex;align-items:center;gap:4px;height:20px;padding:0 9px;
     background:var(--ob-glass-2);border-bottom:1px solid var(--ob-hair)}
@@ -1381,7 +1391,9 @@
   /* 名称与值之间用一条淡引导线连起来。少了它，两端对齐会把一行拉成
      "名字 ……… 一大片空白 ……… 值"，看着像两列不相干的东西 */
   .ob-line-node{position:relative;display:flex;align-items:baseline;
-    justify-content:flex-start;gap:10px;padding:6px 0}
+    justify-content:flex-start;gap:10px;padding:6px 0;cursor:pointer;
+    border-radius:6px;transition:background .2s}
+  .ob-line-node:hover{background:color-mix(in srgb,var(--brand-weak) 42%,transparent)}
   .ob-line-node>i{position:absolute;left:-18.5px;top:11px;width:9px;height:9px;border-radius:50%;
     background:var(--bg);border:1.5px solid var(--brand2);box-sizing:border-box;
     transition:transform .3s,box-shadow .3s,background .3s,border-color .3s}
@@ -1422,9 +1434,8 @@
     box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 14%,transparent)}
   .ob-step.on .ob-step-no{opacity:1;color:var(--brand);transform:translateY(-2px)}
   .ob-step.on .ob-step-name{color:var(--text)}
-  .ob-step.done .ob-step-dot{background:var(--brand2);border-color:var(--brand2)}
-  .ob-step.done .ob-step-dot::after{content:'\2713';font-size:8px;color:#fff;
-    display:flex;align-items:center;justify-content:center;height:100%}
+  /* 这里没有"打勾"状态：演示页没有真跑过任何一步，勾号等于撒谎。
+     进度只表达"现在看到第几段"（.on + 进度线），不表达"完成了几段"。 */
   .ob-detail{width:100%;max-width:680px;margin:0 auto;text-align:left;
     background:var(--ob-glass);border:1px solid var(--ob-edge);border-radius:14px;
     padding:18px 22px;box-shadow:var(--ob-lift-sm);
@@ -1552,7 +1563,8 @@
   body[data-theme="dark"] .ob-verdict.hot .ob-vd-num b,
   body[data-theme="dark"] .ob-report-foot b,
   body[data-theme="dark"] .ob-merge-foot em,
-  body[data-theme="dark"] .ob-line-node.own b{color:var(--brand2)}
+  body[data-theme="dark"] .ob-line-node.own b,
+  body[data-theme="dark"] .ob-writes.ro em{color:var(--brand2)}
   body[data-theme="dark"] .ob-report-foot b{
     background:color-mix(in srgb,var(--brand2) 18%,transparent)}
   body[data-theme="dark"] .ob-win-body .pr{
@@ -1607,7 +1619,10 @@
     justify-content:flex-end;min-width:0;padding-bottom:8px}
   .ob-pet-glow{position:absolute;width:260px;height:260px;bottom:6%;border-radius:50%;
     background:radial-gradient(circle,color-mix(in srgb,var(--ob-glow) 34%,transparent) 0%,transparent 68%);
-    filter:blur(12px)}
+    filter:blur(12px);
+    /* 装饰层必须让点击穿过去：这块 260×260 的光斑正好盖在下面的桌宠菜单上，
+       不设 none 的话真实鼠标永远点不到那四个按钮（DOM .click() 却能过，最坑） */
+    pointer-events:none}
   .ob-pet-slot{position:relative;width:212px;height:228px;display:flex;align-items:flex-end;
     justify-content:center}
   .ob-pet-slot svg{width:100%;height:100%;overflow:visible;
@@ -1626,7 +1641,42 @@
     font-size:11px;color:var(--muted);box-shadow:var(--ob-lift-sm);white-space:nowrap}
   .ob-pet-state i{width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none;
     animation:obLive 2.4s ease-in-out infinite}
-  .ob-pet-tag{font-size:10.5px;color:var(--muted);opacity:.72;margin-top:10px}
+  .ob-pet-state.hot{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,var(--ob-edge))}
+  .ob-pet-state.hot i{background:var(--warn);animation:none}
+  .ob-pet-state.done i{background:var(--brand);animation:none}
+  .ob-pet-tag{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
+    text-align:center;line-height:1.6}
+  /* 桌宠气泡：位置和真实气泡一样——贴在头顶往上长，尾巴朝下。
+     里面放的是主界面同一批内置台词（思考中 / 点我确认！/ 出错了…点我看日志）。
+     59% 不是随手写的：#petSvg 里三张视角图并排、只显示正面那张，
+     可见的那只并不在 SVG 盒子的正中间，实测偏右约 10%（=212px 里的 22px）。
+     用百分比而不是 22px，窄屏下桌宠缩小后气泡仍然对得上头。 */
+  .ob-pet-say{position:absolute;left:59%;bottom:calc(100% - 22px);z-index:2;
+    width:max-content;max-width:206px;padding:8px 12px;border-radius:12px;
+    background:var(--card);border:1px solid var(--line);color:var(--text);
+    font-size:11.5px;line-height:1.6;text-align:center;
+    box-shadow:0 14px 26px -20px rgba(30,38,54,.8);
+    opacity:0;pointer-events:none;
+    transform:translateX(-50%) translateY(6px) scale(.94);transform-origin:50% 100%;
+    transition:opacity .22s,transform .3s cubic-bezier(.22,1,.36,1)}
+  .ob-pet-say::after{content:'';position:absolute;left:50%;bottom:-4.5px;width:8px;height:8px;
+    margin-left:-4px;background:var(--card);border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);transform:rotate(45deg)}
+  .ob-pet-say.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+  .ob-pet-say em{display:block;font-style:normal;font-size:10.5px;line-height:1.6;
+    color:var(--muted);margin-top:3px}
+  .ob-pet-say b{font-weight:500;color:var(--text)}
+  .ob-pet-menu-h{margin-top:14px;font:500 9px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.16em;color:var(--muted);opacity:.7}
+  .ob-pet-menu{display:grid;grid-template-columns:1fr 1fr;gap:6px;
+    width:100%;max-width:216px;margin-top:7px}
+  .ob-pet-menu button{font-size:11px!important;padding:6px 8px!important;border-radius:8px!important;
+    background:var(--ob-glass)!important;border:1px solid var(--ob-edge)!important;
+    color:var(--muted)!important;cursor:pointer;white-space:nowrap;
+    transition:color .2s,border-color .2s,transform .2s,background .2s!important}
+  .ob-pet-menu button:hover{color:var(--text)!important;border-color:var(--brand2)!important;
+    transform:translateY(-1px)}
+  .ob-pet-menu button:active{transform:translateY(0)}
   .ob-ai-chat{min-width:0;text-align:left}
   .ob-ai-chat .ob-h{font-size:clamp(24px,2.9vw,33px)}
   .ob-ai-chat .ob-lead{margin-bottom:16px}
@@ -1669,8 +1719,10 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ob-chat-input b{flex:none;font-size:11px;font-weight:500;color:#fff;background:var(--brand);
     border-radius:7px;padding:5px 11px;letter-spacing:.02em}
-  .ob-confirm{position:absolute;right:12px;bottom:62px;left:auto;
-    width:min(300px,calc(100% - 24px));z-index:5;padding:14px 16px;border-radius:13px;
+  /* 确认卡不再浮在对话上方：浮层会正好盖住刚打出来的那句回答，
+     而"回答 + 卡片"本来就是一条消息的两半。改成占位排在输入框上面，
+     出现时把对话面板撑高一点，谁也不盖谁。 */
+  .ob-confirm{position:relative;margin:0 12px 10px;padding:14px 16px;border-radius:13px;
     background:color-mix(in srgb,var(--card) 94%,transparent);
     border:1px solid color-mix(in srgb,var(--err) 34%,var(--line));
     box-shadow:0 1px 0 rgba(255,255,255,.8) inset,0 26px 54px -26px rgba(40,20,20,.45);
@@ -1821,7 +1873,6 @@
       padding:0 0 8px;justify-content:flex-start}
     .ob-report-foot{padding-left:0;border-left:0;padding-top:8px;
       border-top:1px solid var(--ob-hair)}
-    .ob-confirm{left:12px;right:12px;bottom:12px;width:auto}
     .ob-perms button:nth-child(n){margin-right:0}
   }
   @media (prefers-reduced-motion:reduce){
@@ -1834,6 +1885,16 @@
   .ob-io span{font-size:11.5px;line-height:1.65;color:var(--text);opacity:.74}
   .ob-io em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.14em;
     color:var(--muted);margin-bottom:3px;opacity:.85}
+  /* "会写什么"：一步一步写清副作用。只读的那一步用绿一点的小标签，
+     其余用中性的——它不是警告，只是事实。 */
+  .ob-writes{display:flex;align-items:baseline;gap:9px;margin-top:11px;padding-top:10px;
+    border-top:1px solid var(--ob-hair);font-size:11.5px;line-height:1.65;color:var(--text);
+    opacity:.8}
+  .ob-writes em{flex:none;font-style:normal;font-size:9.5px;letter-spacing:.13em;
+    color:var(--muted);padding:2px 7px;border-radius:5px;background:var(--ob-glass-2);
+    border:1px solid var(--ob-hair)}
+  .ob-writes.ro{opacity:.92}
+  .ob-writes.ro em{color:var(--brand);background:var(--brand-weak);border-color:transparent}
 
   /* ---------- v5 细节层：HUD / 收拢计数 / 进度 / 权限清单 / 章节摘要 ---------- */
   /* 01 开场右下的四个硬数字：比一句口号更能说明"它到底做了多少事" */

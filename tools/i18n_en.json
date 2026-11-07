@@ -1741,5 +1741,18 @@
   "先做「程序配置」，链端连通第 3 步再复核": "Set up program config first; chain connectivity is rechecked in step 3",
   "先跑「程序配置」，再复核链端": "Run program config first, then recheck the chain",
   "先跑配置，再复核链端": "Run config first, then recheck the chain",
-  "终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。": "Terminal, DB client, SSH, browser tabs, log window — when something breaks you dig through all of them and still do not know which one is current."
+  "终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。": "Terminal, DB client, SSH, browser tabs, log window — when something breaks you dig through all of them and still do not know which one is current.",
+  "悬停窗口看它被谁接管；点右侧节点，看它顶替了谁": "Hover a window to see what took it over; click a node to see which window it replaced",
+  "点任一段切换说明 · 上一步的产出就是这一步的输入": "Click any step for details · each step consumes what the previous one produced",
+  "右键菜单 · 节选": "RIGHT-CLICK MENU · SELECTION",
+  "说句话": "Say something",
+  "投喂 🐟": "Feed 🐟",
+  "查天气": "Weather",
+  "看错误": "Show error",
+  "台词都是内置的，主界面上右键就能点": "Every line is built in — right-click it on the main screen",
+  "读日志、查状态，起手就来": "reads logs and status straight away",
+  "搞定": "done",
+  "那就不动了，随时可以改主意。": "Nothing changed then — change your mind anytime.",
+  "那就不动，随时可以改主意。": "Nothing changed then — change your mind anytime.",
+  "悬停窗口看归属，点节点看它顶替了谁": "Hover a window for ownership; click a node to see what it replaced"
 }

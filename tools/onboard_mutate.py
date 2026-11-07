@@ -49,6 +49,30 @@ MUTATIONS = [
      "countUp(q('#ob-vd-score'), 5, 300);",
      "countUp(q('#ob-vd-score'), 4, 300);",
      'detail-detect-score'),
+    # 从「关于」进来再点"跟着做一遍"时，弹窗必须被收掉。closeModals() 里改用
+    # OB.querySelectorAll（= qa 的作用域）就是这次真撞到的 bug：引导层内部根本没有
+    # .modal，一个也关不掉，driver 浮层于是指着一个被弹窗盖住的位置。
+    # 注意别只改按钮里那一处调用 —— EKTour.start() 里还有一次兜底，改一处不会红。
+    ('M8 关弹窗查错作用域',  'web/src/js/90-onboard.js',
+     "    Array.prototype.forEach.call(document.querySelectorAll('.modal.show'), function(m){\n      m.classList.remove('show');\n    });",
+     "    Array.prototype.forEach.call(OB.querySelectorAll('.modal.show'), function(m){\n      m.classList.remove('show');\n    });",
+     'tour-closes-modal'),
+    # 桌宠那圈光斑正好压在菜单按钮上，少了 pointer-events:none 真实鼠标点不到。
+    # 注意变异要改的是 none 本身：在它前面插 auto 会被同一条规则里的 none 盖掉，等于没变异。
+    ('M9 光斑挡住桌宠菜单',  'web/src/app.css',
+     "       不设 none 的话真实鼠标永远点不到那四个按钮（DOM .click() 却能过，最坑） */\n    pointer-events:none}",
+     "       不设 none 的话真实鼠标永远点不到那四个按钮（DOM .click() 却能过，最坑） */\n    pointer-events:auto}",
+     'mouse-hit-pet-say'),
+    # 内置台词必须真的是内置的：随便编一句就得红
+    ('M10 自编桌宠台词',     'web/src/js/90-onboard.js',
+     "say:     {l:['我不思考了',",
+     "say:     {l:['我是一句演示专用的台词',",
+     'detail-pet-say-line'),
+    # 03 的"打勾"是假进度，加回来必须被抓住
+    ('M11 加回打勾',         'web/src/js/90-onboard.js',
+     "      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);",
+     "      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);\n      b.classList.toggle('done', Number(b.getAttribute('data-step')) < i);",
+     'detail-step-nowrite-check'),
 ]
 
 TARGETS = sorted(set(m[1] for m in MUTATIONS))

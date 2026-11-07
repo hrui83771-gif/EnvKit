@@ -35,6 +35,14 @@
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var AM = window.anime || null;
 
+  /* qa() 是**在引导层内部**查的（OB.querySelectorAll），拿它查 .modal 永远查不到。
+     弹窗在主页面文档里，必须用 document 查。 */
+  function closeModals(){
+    Array.prototype.forEach.call(document.querySelectorAll('.modal.show'), function(m){
+      m.classList.remove('show');
+    });
+  }
+
   function q(sel){ return OB.querySelector(sel); }
   function qa(sel){ return Array.prototype.slice.call(OB.querySelectorAll(sel)); }
   function has(o, k){ return !!(o && typeof o[k] === 'function'); }
@@ -61,19 +69,25 @@
     '同一个入口，同一份状态'
   ];
 
+  /* w = 这一步会往磁盘上写什么。四步里只有"链端校验"是纯只读的，
+     把它写出来比只说"有输入产出"有用——用户真正担心的是"会不会动我的机器"。 */
   var STEP_TEXT = [
     {b:'环境安装', p:'检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么，国内镜像下载会校验 SHA256。',
      i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划',
-     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟'},
+     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟',
+     w:'C:\EnvKit\tools 下的解压目录 · 当前用户的 PATH 与 GOPROXY', ro:false},
     {b:'程序配置', p:'填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。',
      i:'数据库地址与账号', o:'config.json + 初始化好的库表',
-     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟'},
+     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟',
+     w:'config.json（原子写入，旧配置留快照）· 目标库的表结构', ro:false},
     {b:'链端校验', p:'检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。',
      i:'节点端口与证书', o:'链端健康结论 + 区块高度',
-     pre:'能 SSH 到链端主机', cost:'约 20 秒'},
+     pre:'能 SSH 到链端主机', cost:'约 20 秒',
+     w:'不写任何东西：只读端口、证书与区块高度', ro:true},
     {b:'程序启动', p:'先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。',
      i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树',
-     pre:'配置与链端都已就绪', cost:'约 15 秒'}
+     pre:'配置与链端都已就绪', cost:'约 15 秒',
+     w:'两个子进程 · 按日轮转的日志文件 · 进程树登记', ro:false}
   ];
 
   /* 检测项按"属于哪一类"分组，而不是平铺成一张表。
@@ -143,6 +157,19 @@
     done:'已就绪 · 可以继续问'
   };
 
+  /* 桌宠的内置台词，逐句照抄主界面（50-pet.js 的 FISH_LINES / FISH_FOOD 与 say()）。
+     演示页不另编台词 —— 另编了就只是"看起来像"，接过来才叫同一个角色。
+     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。 */
+  var PET_ACT = {
+    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住'],
+              d:'右键「说句话」抽一条，一轮之内不会重复'},
+    feed:    {l:['小鱼干！我的最爱！'], d:'双击它投喂，给的东西不同台词也不同'},
+    weather: {l:['我瞅瞅天…', '合肥今天 19° · 湿度 42° · 体感 17°'],
+              d:'只有天气会出网，开关默认是关的'},
+    err:     {l:['出错了…点我看日志', '帮你在日志里标出来了'],
+              d:'红色告警时点它，会直接跳到那条错误行'}
+  };
+
   /* ---------- 运行时状态 ---------- */
   var ALL_SLIDES = qa('.ob-slide');
   var WRAP = OB.querySelector('.swiper-wrapper');
@@ -158,7 +185,6 @@
   var typingCancel = null;
   var petMounted = false;
   var slabIdx = 0;
-  var stepIdx = 0;
 
   function seen(){ try{ return localStorage.getItem(KEY) === '1'; }catch(e){ return false; } }
   function mark(){ try{ localStorage.setItem(KEY, '1'); }catch(e){} }
@@ -327,7 +353,6 @@
   function autoplay(idx){
     if(REDUCED) return;
     if(idx === 0){ slabIdx = 0; later(rotateSlab, 260); }
-    if(idx === 2){ stepIdx = 0; showStep(0); later(stepTick, 2300); }
   }
 
   /* ---------- 各屏演示 ---------- */
@@ -343,13 +368,13 @@
     if(idx === 1) later(mergeFlow, 420);
   }
 
-  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时） */
+  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时）
+     没有"打勾"：这一屏一次也没真的跑过，勾号只会让人以为已经做完了。
+     自动前进也去掉——它和打勾是同一个假进度，读说明的时候还会抢走焦点。 */
   function showStep(i){
     var n = STEP_TEXT.length;
     qa('#ob-track .ob-step').forEach(function(b){
-      var k = Number(b.getAttribute('data-step'));
-      b.classList.toggle('on', k === i);
-      b.classList.toggle('done', k < i);       /* 走过的段自动打勾，进度线才有意义 */
+      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);
     });
     var fill = q('#ob-tl-fill');
     if(fill) fill.style.width = (i / (n - 1) * 75) + '%';   /* rail 从 12.5% 到 87.5% */
@@ -362,16 +387,11 @@
       '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span>' +
       '<span><em>' + t('前置') + '</em>' + t(x.pre) + '</span>' +
       '<span><em>' + t('预计耗时') + '</em>' + t(x.cost) + '</span>' +
-      '</div>';
+      '</div>' +
+      '<div class="ob-writes' + (x.ro ? ' ro' : '') + '"><em>' +
+        t(x.ro ? '只读' : '会写') + '</em><span>' + t(x.w) + '</span></div>';
   }
 
-  /* 没点过任何步骤时自动往前推一格，让这一屏自己动起来 */
-  function stepTick(){
-    if(stepIdx >= STEP_TEXT.length - 1) return;
-    stepIdx += 1;
-    showStep(stepIdx);
-    later(stepTick, 2500);
-  }
 
   /* 01 开场：叠层剖面轮流被点亮，下面那句说明跟着走 */
   function focusSlab(i){
@@ -536,9 +556,62 @@
   /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡）
      v5 起保留历史：上一轮回答会被"冻结"成一条普通气泡，新回答继续在 #ob-bubble 里逐字打，
      这样连续问三句才像真的在对话，而不是每句都覆盖同一块。 */
+  /* 06 的桌宠会说话：气泡贴在头顶，内容全部来自内置台词。
+     sticky=true 时不自动收（"点我确认！"要一直挂着，和主界面一致）。 */
+  var petSayTimer = null;
+
+  function petSay(html, sticky, ms){
+    var b = q('#ob-pet-say');
+    if(!b) return;
+    clearTimeout(petSayTimer);
+    b.innerHTML = html;
+    b.classList.add('show');
+    if(!sticky){
+      petSayTimer = setTimeout(function(){ b.classList.remove('show'); }, ms || 2600);
+    }
+  }
+
+  function petSayHide(){
+    clearTimeout(petSayTimer);
+    var b = q('#ob-pet-say');
+    if(b) b.classList.remove('show');
+  }
+
+  /* 内置动作：说的这句就是主界面会说的那句，没有为演示另写文案 */
+  var petRot = 0;
+
+  function petAct(k){
+    var A = PET_ACT[k];
+    if(!A) return;
+    if(k === 'say'){
+      petSay('<b>' + t(A.l[petRot++ % A.l.length]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      return;
+    }
+    if(k === 'feed'){
+      petSay('<b>' + t(A.l[0]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      return;
+    }
+    /* 天气和看错误都是两步：先出声，再给结果 */
+    petSay('<b>' + t(A.l[0]) + '</b>', true);
+    later(function(){
+      petSay('<b>' + t(A.l[1]) + '</b><em>' + t(A.d) + '</em>', false, 3800);
+    }, 900);
+  }
+
   function petState(k){
     var m = q('#ob-pet-msg');
     if(m) m.textContent = t(PET_STATE[k] || PET_STATE.idle);
+    var chip = q('.ob-pet-state');
+    if(chip){
+      chip.classList.toggle('hot', k === 'wait');
+      chip.classList.toggle('done', k === 'done');
+    }
+    /* 状态和气泡是同一个状态机的两个出口：芯片写"在干什么"，
+       气泡说"它此刻会说什么"——主界面这两件事本来就是一起变的 */
+    if(k === 'think') petSay('<b>' + t('思考中') + '</b><em>' + t('读日志、查状态，起手就来') + '</em>', true);
+    else if(k === 'wait') petSay('<b>' + t('点我确认！') + '</b>', true);
+    else if(k === 'done') petSay('<b>✓ ' + t('搞定') + '</b>', false, 2000);
+    else petSayHide();
   }
 
   function resetChat(){
@@ -685,7 +758,11 @@
   }
 
   /* 悬停某个旧窗口：它自己被抬起、对应的状态节点亮、那条连线变粗。
-     "被谁接管"用联动回答，比一个 tooltip 直接得多。 */
+     "被谁接管"用联动回答，比一个 tooltip 直接得多。
+     反向也成立：点（或悬停）状态线上的节点，反向把那个窗口挑出来。
+     这是这一屏唯一的交互承诺，两个方向都得通，不然就只有"看"没有"对"。 */
+  var pinK = null;                       /* 点住的窗口序号，null = 没点 */
+
   function ownFocus(k){
     qa('#ob-state .ob-line-node').forEach(function(n){
       n.classList.toggle('own', k !== null && n.getAttribute('data-node') === k);
@@ -693,11 +770,24 @@
     qa('.ob-wires path').forEach(function(p){
       p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);
     });
+    qa('#ob-old-list .ob-win-card').forEach(function(c){
+      c.classList.toggle('picked', k !== null && c.getAttribute('data-own') === k);
+    });
+  }
+  /* 鼠标离开时若已点住，就回到点住的那一项，别把用户的选择擦掉 */
+  function ownRelease(){
+    if(pinK === null) ownFocus(null);
+    else ownFocus(pinK);
   }
   qa('.ob-win-card').forEach(function(c){
     var k = c.getAttribute('data-own');
     c.addEventListener('mouseenter', function(){ ownFocus(k); });
-    c.addEventListener('mouseleave', function(){ ownFocus(null); });
+    c.addEventListener('mouseleave', ownRelease);
+  });
+  qa('#ob-state .ob-line-node').forEach(function(n){
+    var k = n.getAttribute('data-node');
+    n.addEventListener('mouseenter', function(){ ownFocus(k); });
+    n.addEventListener('mouseleave', ownRelease);
   });
 
   /* ---------- Swiper ---------- */
@@ -790,6 +880,8 @@
       if(!tourAvailable()) return false;
       var steps = TOUR_STEPS.filter(function(s){ return !!document.querySelector(s.element); });
       if(!steps.length) return false;
+      /* 教学高亮的是主界面控件，任何还开着的弹窗都会把浮层顶偏 —— 先收掉 */
+      closeModals();
       try{
         var d = window.driver.js.driver({steps: steps, showProgress: true, showButtons: ['next','previous','close'],
           nextBtnText: t('下一步'), prevBtnText: t('上一步'), doneBtnText: t('完成'),
@@ -811,6 +903,15 @@
     if(!OB.classList.contains('show')) return;
     if(brandArmed && OB.contains(e.target)){ endBrand(); return; }
 
+    /* 02 反向联动：点状态节点 → 挑出它顶替的那个窗口；再点一次取消 */
+    var node = e.target.closest ? e.target.closest('#ob-state .ob-line-node') : null;
+    if(node){
+      var nk = node.getAttribute('data-node');
+      pinK = (pinK === nk) ? null : nk;
+      ownFocus(pinK);
+      return;
+    }
+
     var b = e.target.closest ? e.target.closest('button') : null;
     if(!b || !OB.contains(b)) return;
     var id = b.id;
@@ -828,21 +929,18 @@
     }
     if(id === 'ob-cta-tour'){
       finish();
+      /* 从「关于」里重看再点这个按钮时，#about 还开着。driver.js 会把浮层画在
+         遮罩之上、却按底下那些控件的坐标定位 —— 于是浮层指着一个被弹窗盖住的
+         位置，看起来就是"导航歪了"。先关掉所有弹窗，再开始教学。 */
+      closeModals();
       document.dispatchEvent(new CustomEvent('ek:tour-start', {detail:{source:'onboard-finish'}}));
       return;
     }
-    if(id === 'ob-merge-replay'){ mergeFlow(); return; }
+    var pact = b.getAttribute('data-pact');
+    if(pact !== null){ petAct(pact); return; }
 
-    if(id === 'ob-track-run'){
-      stepIdx = STEP_TEXT.length - 1;   /* 手动操作后停止自动前进，别和人抢 */
-      qa('#ob-track .ob-step').forEach(function(s, i){
-        later(function(){ s.classList.add('done'); }, i * 240);
-      });
-      showStep(STEP_TEXT.length - 1);
-      return;
-    }
     var step = b.getAttribute('data-step');
-    if(step !== null){ stepIdx = STEP_TEXT.length - 1; showStep(Number(step)); return; }
+    if(step !== null){ showStep(Number(step)); return; }
 
     if(id === 'ob-detect-run'){ runDetect(); return; }
 
@@ -867,10 +965,19 @@
     if(id === 'ob-demo-ok' || id === 'ob-demo-cancel'){
       showConfirm(false);
       endType();
-      petState('done');
       var bb = q('#ob-bubble');
       if(id === 'ob-demo-ok'){
-        if(bb) typeText(bb, t(AI_AFTER), 16, function(){ bb.setAttribute('data-live', '1'); });
+        /* 点了"知道了"才算这一轮收尾：桌宠的 ✓ 跟回答同时出现，
+           而不是在用户还没点的时候就先撒花 */
+        if(bb) typeText(bb, t(AI_AFTER), 16, function(){
+          bb.setAttribute('data-live', '1');
+          petState('done');
+        });
+      } else {
+        petState('idle');
+        if(bb) typeText(bb, t('那就不动，随时可以改主意。'), 16, function(){
+          bb.setAttribute('data-live', '1');
+        });
       }
       return;
     }

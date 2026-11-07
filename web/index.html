@@ -1251,6 +1251,14 @@
   .ob-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .ob-head+.ob-actions,.ob-actions-center{justify-content:center}
   .ob-hint{font-size:11.5px;color:var(--muted);line-height:1.6}
+  /* 一屏只有一句"怎么玩"的提示。不放进按钮旁边当副标题，
+     没有按钮的时候它就是这一屏唯一的操作说明。 */
+  .ob-tip{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;line-height:1.7;
+    color:var(--muted);max-width:44ch}
+  .ob-tip i{width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none;
+    margin-top:7px}
+  /* 居中版式里这句是整屏唯一的一行提示，不能让它自己折成"…的输 / 入" */
+  .ob-tip-c{max-width:none;justify-content:center;margin:14px auto 0;text-align:center}
   .ob-arrow{margin-left:8px;font-size:14px;transition:transform .2s}
   .ob-primary:hover .ob-arrow{transform:translateX(3px)}
 
@@ -1319,16 +1327,18 @@
     column-gap:0;row-gap:14px;align-items:center;min-width:0}
 
   /* 五个旧窗口：左边缘错位、右边缘统一对齐到 290。
-     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边 */
+     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边。
+     不加旋转：v6 给每张卡配了 ±1.2°，五张一起看就是"没对齐"，
+     错位要靠**规律的位移**做出来，不能靠随机角度。20px 的台阶足够读成
+     "五个窗口先后打开"，又不至于像排版事故。 */
   .ob-win{position:relative;width:290px;height:314px;flex:none}
-  .ob-win-card{position:absolute;left:calc(var(--i) * 10px);top:calc(var(--i) * 64px);
-    width:calc(290px - var(--i) * 10px);height:58px;overflow:hidden;text-align:left;
+  .ob-win-card{position:absolute;left:calc(var(--i) * 20px);top:calc(var(--i) * 64px);
+    width:calc(290px - var(--i) * 20px);height:58px;overflow:hidden;text-align:left;
     background:var(--card);border:1px solid var(--line);border-radius:10px;
     box-shadow:0 10px 22px -16px rgba(30,38,54,.62);
-    transform:rotate(var(--r,0deg));
     transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s,
       border-color .25s,opacity .3s}
-  .ob-win-card:hover{transform:rotate(0deg) translateX(8px) scale(1.035);z-index:4;
+  .ob-win-card:hover,.ob-win-card.picked{transform:translateX(7px) scale(1.03);z-index:4;
     border-color:var(--brand2);box-shadow:0 18px 30px -18px rgba(30,38,54,.78)}
   .ob-win-bar{display:flex;align-items:center;gap:4px;height:20px;padding:0 9px;
     background:var(--ob-glass-2);border-bottom:1px solid var(--ob-hair)}
@@ -1387,7 +1397,9 @@
   /* 名称与值之间用一条淡引导线连起来。少了它，两端对齐会把一行拉成
      "名字 ……… 一大片空白 ……… 值"，看着像两列不相干的东西 */
   .ob-line-node{position:relative;display:flex;align-items:baseline;
-    justify-content:flex-start;gap:10px;padding:6px 0}
+    justify-content:flex-start;gap:10px;padding:6px 0;cursor:pointer;
+    border-radius:6px;transition:background .2s}
+  .ob-line-node:hover{background:color-mix(in srgb,var(--brand-weak) 42%,transparent)}
   .ob-line-node>i{position:absolute;left:-18.5px;top:11px;width:9px;height:9px;border-radius:50%;
     background:var(--bg);border:1.5px solid var(--brand2);box-sizing:border-box;
     transition:transform .3s,box-shadow .3s,background .3s,border-color .3s}
@@ -1428,9 +1440,8 @@
     box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 14%,transparent)}
   .ob-step.on .ob-step-no{opacity:1;color:var(--brand);transform:translateY(-2px)}
   .ob-step.on .ob-step-name{color:var(--text)}
-  .ob-step.done .ob-step-dot{background:var(--brand2);border-color:var(--brand2)}
-  .ob-step.done .ob-step-dot::after{content:'\2713';font-size:8px;color:#fff;
-    display:flex;align-items:center;justify-content:center;height:100%}
+  /* 这里没有"打勾"状态：演示页没有真跑过任何一步，勾号等于撒谎。
+     进度只表达"现在看到第几段"（.on + 进度线），不表达"完成了几段"。 */
   .ob-detail{width:100%;max-width:680px;margin:0 auto;text-align:left;
     background:var(--ob-glass);border:1px solid var(--ob-edge);border-radius:14px;
     padding:18px 22px;box-shadow:var(--ob-lift-sm);
@@ -1558,7 +1569,8 @@
   body[data-theme="dark"] .ob-verdict.hot .ob-vd-num b,
   body[data-theme="dark"] .ob-report-foot b,
   body[data-theme="dark"] .ob-merge-foot em,
-  body[data-theme="dark"] .ob-line-node.own b{color:var(--brand2)}
+  body[data-theme="dark"] .ob-line-node.own b,
+  body[data-theme="dark"] .ob-writes.ro em{color:var(--brand2)}
   body[data-theme="dark"] .ob-report-foot b{
     background:color-mix(in srgb,var(--brand2) 18%,transparent)}
   body[data-theme="dark"] .ob-win-body .pr{
@@ -1613,7 +1625,10 @@
     justify-content:flex-end;min-width:0;padding-bottom:8px}
   .ob-pet-glow{position:absolute;width:260px;height:260px;bottom:6%;border-radius:50%;
     background:radial-gradient(circle,color-mix(in srgb,var(--ob-glow) 34%,transparent) 0%,transparent 68%);
-    filter:blur(12px)}
+    filter:blur(12px);
+    /* 装饰层必须让点击穿过去：这块 260×260 的光斑正好盖在下面的桌宠菜单上，
+       不设 none 的话真实鼠标永远点不到那四个按钮（DOM .click() 却能过，最坑） */
+    pointer-events:none}
   .ob-pet-slot{position:relative;width:212px;height:228px;display:flex;align-items:flex-end;
     justify-content:center}
   .ob-pet-slot svg{width:100%;height:100%;overflow:visible;
@@ -1632,7 +1647,42 @@
     font-size:11px;color:var(--muted);box-shadow:var(--ob-lift-sm);white-space:nowrap}
   .ob-pet-state i{width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none;
     animation:obLive 2.4s ease-in-out infinite}
-  .ob-pet-tag{font-size:10.5px;color:var(--muted);opacity:.72;margin-top:10px}
+  .ob-pet-state.hot{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,var(--ob-edge))}
+  .ob-pet-state.hot i{background:var(--warn);animation:none}
+  .ob-pet-state.done i{background:var(--brand);animation:none}
+  .ob-pet-tag{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
+    text-align:center;line-height:1.6}
+  /* 桌宠气泡：位置和真实气泡一样——贴在头顶往上长，尾巴朝下。
+     里面放的是主界面同一批内置台词（思考中 / 点我确认！/ 出错了…点我看日志）。
+     59% 不是随手写的：#petSvg 里三张视角图并排、只显示正面那张，
+     可见的那只并不在 SVG 盒子的正中间，实测偏右约 10%（=212px 里的 22px）。
+     用百分比而不是 22px，窄屏下桌宠缩小后气泡仍然对得上头。 */
+  .ob-pet-say{position:absolute;left:59%;bottom:calc(100% - 22px);z-index:2;
+    width:max-content;max-width:206px;padding:8px 12px;border-radius:12px;
+    background:var(--card);border:1px solid var(--line);color:var(--text);
+    font-size:11.5px;line-height:1.6;text-align:center;
+    box-shadow:0 14px 26px -20px rgba(30,38,54,.8);
+    opacity:0;pointer-events:none;
+    transform:translateX(-50%) translateY(6px) scale(.94);transform-origin:50% 100%;
+    transition:opacity .22s,transform .3s cubic-bezier(.22,1,.36,1)}
+  .ob-pet-say::after{content:'';position:absolute;left:50%;bottom:-4.5px;width:8px;height:8px;
+    margin-left:-4px;background:var(--card);border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);transform:rotate(45deg)}
+  .ob-pet-say.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+  .ob-pet-say em{display:block;font-style:normal;font-size:10.5px;line-height:1.6;
+    color:var(--muted);margin-top:3px}
+  .ob-pet-say b{font-weight:500;color:var(--text)}
+  .ob-pet-menu-h{margin-top:14px;font:500 9px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.16em;color:var(--muted);opacity:.7}
+  .ob-pet-menu{display:grid;grid-template-columns:1fr 1fr;gap:6px;
+    width:100%;max-width:216px;margin-top:7px}
+  .ob-pet-menu button{font-size:11px!important;padding:6px 8px!important;border-radius:8px!important;
+    background:var(--ob-glass)!important;border:1px solid var(--ob-edge)!important;
+    color:var(--muted)!important;cursor:pointer;white-space:nowrap;
+    transition:color .2s,border-color .2s,transform .2s,background .2s!important}
+  .ob-pet-menu button:hover{color:var(--text)!important;border-color:var(--brand2)!important;
+    transform:translateY(-1px)}
+  .ob-pet-menu button:active{transform:translateY(0)}
   .ob-ai-chat{min-width:0;text-align:left}
   .ob-ai-chat .ob-h{font-size:clamp(24px,2.9vw,33px)}
   .ob-ai-chat .ob-lead{margin-bottom:16px}
@@ -1675,8 +1725,10 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ob-chat-input b{flex:none;font-size:11px;font-weight:500;color:#fff;background:var(--brand);
     border-radius:7px;padding:5px 11px;letter-spacing:.02em}
-  .ob-confirm{position:absolute;right:12px;bottom:62px;left:auto;
-    width:min(300px,calc(100% - 24px));z-index:5;padding:14px 16px;border-radius:13px;
+  /* 确认卡不再浮在对话上方：浮层会正好盖住刚打出来的那句回答，
+     而"回答 + 卡片"本来就是一条消息的两半。改成占位排在输入框上面，
+     出现时把对话面板撑高一点，谁也不盖谁。 */
+  .ob-confirm{position:relative;margin:0 12px 10px;padding:14px 16px;border-radius:13px;
     background:color-mix(in srgb,var(--card) 94%,transparent);
     border:1px solid color-mix(in srgb,var(--err) 34%,var(--line));
     box-shadow:0 1px 0 rgba(255,255,255,.8) inset,0 26px 54px -26px rgba(40,20,20,.45);
@@ -1827,7 +1879,6 @@
       padding:0 0 8px;justify-content:flex-start}
     .ob-report-foot{padding-left:0;border-left:0;padding-top:8px;
       border-top:1px solid var(--ob-hair)}
-    .ob-confirm{left:12px;right:12px;bottom:12px;width:auto}
     .ob-perms button:nth-child(n){margin-right:0}
   }
   @media (prefers-reduced-motion:reduce){
@@ -1840,6 +1891,16 @@
   .ob-io span{font-size:11.5px;line-height:1.65;color:var(--text);opacity:.74}
   .ob-io em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.14em;
     color:var(--muted);margin-bottom:3px;opacity:.85}
+  /* "会写什么"：一步一步写清副作用。只读的那一步用绿一点的小标签，
+     其余用中性的——它不是警告，只是事实。 */
+  .ob-writes{display:flex;align-items:baseline;gap:9px;margin-top:11px;padding-top:10px;
+    border-top:1px solid var(--ob-hair);font-size:11.5px;line-height:1.65;color:var(--text);
+    opacity:.8}
+  .ob-writes em{flex:none;font-style:normal;font-size:9.5px;letter-spacing:.13em;
+    color:var(--muted);padding:2px 7px;border-radius:5px;background:var(--ob-glass-2);
+    border:1px solid var(--ob-hair)}
+  .ob-writes.ro{opacity:.92}
+  .ob-writes.ro em{color:var(--brand);background:var(--brand-weak);border-color:transparent}
 
   /* ---------- v5 细节层：HUD / 收拢计数 / 进度 / 权限清单 / 章节摘要 ---------- */
   /* 01 开场右下的四个硬数字：比一句口号更能说明"它到底做了多少事" */
@@ -3380,30 +3441,27 @@
             <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
             <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。</p>
             <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
-            <div class="ob-actions">
-              <button class="ob-ghost" id="ob-merge-replay">重播汇聚</button>
-              <span class="ob-hint">悬停任一窗口，看它被哪个节点接管</span>
-            </div>
+            <div class="ob-tip"><i></i>悬停窗口看归属，点节点看它顶替了谁</div>
           </div>
           <div class="ob-merge" id="ob-merge">
             <div class="ob-win" id="ob-old-list">
-              <div class="ob-win-card dark" style="--i:0;--r:-1.2deg" data-own="0">
+              <div class="ob-win-card dark" style="--i:0" data-own="0">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>终端</span><em>2 分钟前</em></div>
                 <div class="ob-win-body"><code class="pr">$ go run ./server</code><code class="bad">panic: dial tcp :3306</code></div>
               </div>
-              <div class="ob-win-card" style="--i:1;--r:.9deg" data-own="1">
+              <div class="ob-win-card" style="--i:1" data-own="1">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>数据库客户端</span><em>未刷新</em></div>
                 <div class="ob-win-body"><code class="pr">SELECT * FROM batch</code><code class="bad">ERROR 2003 (HY000)</code></div>
               </div>
-              <div class="ob-win-card" style="--i:2;--r:-.7deg" data-own="2">
+              <div class="ob-win-card" style="--i:2" data-own="2">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>SSH 工具</span><em>断线</em></div>
                 <div class="ob-win-body"><code class="pr">ssh root@10.0.0.21</code><code class="bad">Connection timed out</code></div>
               </div>
-              <div class="ob-win-card" style="--i:3;--r:1.1deg" data-own="3">
+              <div class="ob-win-card" style="--i:3" data-own="3">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>浏览器标签</span><em>3 个标签</em></div>
                 <div class="ob-win-body"><code>:5173　:8888　:5002</code><code class="bad">看不出哪个是新的</code></div>
               </div>
-              <div class="ob-win-card" style="--i:4;--r:-.9deg" data-own="4">
+              <div class="ob-win-card" style="--i:4" data-own="4">
                 <div class="ob-win-bar"><i></i><i></i><i></i><span>日志窗口</span><em>滚屏中</em></div>
                 <div class="ob-win-body"><code class="bad">[WARN] 区块高度为 0</code><code class="bad">[ERROR] read timeout</code></div>
               </div>
@@ -3467,7 +3525,7 @@
             </button>
           </div>
           <div class="ob-detail" id="ob-step-desc"></div>
-          <div class="ob-actions"><button class="ob-ghost" id="ob-track-run">依次打勾</button><span class="ob-hint">点任一段可切换说明</span></div>
+          <div class="ob-tip ob-tip-c"><i></i>点任一段切换说明 · 上一步的产出就是这一步的输入</div>
         </div>
       </div>
 
@@ -3538,10 +3596,19 @@
         <div class="ob-scene ob-ai">
           <div class="ob-ai-stage">
             <div class="ob-pet-glow"></div>
-            <div class="ob-pet-slot" id="ob-pet-slot"></div>
+            <div class="ob-pet-slot" id="ob-pet-slot">
+              <div class="ob-pet-say" id="ob-pet-say"></div>
+            </div>
             <div class="ob-pet-shadow"></div>
             <div class="ob-pet-state"><i></i><span id="ob-pet-msg">待机 · 已连接</span></div>
-            <div class="ob-pet-tag">桌宠也在主界面上</div>
+            <div class="ob-pet-menu-h">右键菜单 · 节选</div>
+            <div class="ob-pet-menu" id="ob-pet-menu">
+              <button data-pact="say">说句话</button>
+              <button data-pact="feed">投喂 🐟</button>
+              <button data-pact="weather">查天气</button>
+              <button data-pact="err">看错误</button>
+            </div>
+            <div class="ob-pet-tag">台词都是内置的，主界面上右键就能点</div>
           </div>
           <div class="ob-ai-chat">
             <div class="ob-kicker"><i></i>AI 助手</div>
@@ -3552,17 +3619,17 @@
               <div class="ob-chat-log" id="ob-chat-log">
                 <div class="ob-bubble" id="ob-bubble">今天想看点什么？<em>读日志、看状态、重启服务——都会先问你。</em></div>
               </div>
+              <div class="ob-confirm" id="ob-demo-confirm" hidden>
+                <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
+                <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
+                <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
+              </div>
               <div class="ob-questions">
                 <button data-q="read">现在服务都起来了吗？</button>
                 <button data-q="write">帮我重启一下后端</button>
                 <button data-q="explain">这段报错是什么意思？</button>
               </div>
               <div class="ob-chat-input"><span>问我任何环境问题…</span><b>发送</b></div>
-              <div class="ob-confirm" id="ob-demo-confirm" hidden>
-                <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
-                <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
-                <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
-              </div>
             </div>
           </div>
         </div>
@@ -4124,7 +4191,9 @@ const I18N_EN = {
   "可达": "Reachable",
   "可达 · {0}ms": "Reachable · {0}ms",
   "可选": "Optional",
+  "台词都是内置的，主界面上右键就能点": "Every line is built in — right-click it on the main screen",
   "右键可以让我藏起来": "Right-click lets me hide",
+  "右键菜单 · 节选": "RIGHT-CLICK MENU · SELECTION",
   "各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。": "How many days / copies of records and backups stay on this machine before automatic cleanup. Higher values use more disk (10 copies of a 1GB DB = 10GB); lower values discard troubleshooting history sooner.",
   "合法候选：": "Valid candidates:",
   "同一个 WiFi 下的其他设备也能看到这个地址，配对码就是唯一的门。": "Other devices on the same WiFi can also see this address — the pairing code is the only door.",
@@ -4498,6 +4567,8 @@ const I18N_EN = {
   "恢复默认": "Reset",
   "悬停任一窗口，看它被哪个节点接管": "Hover any window to see which node took it over",
   "悬停旧卡片，看它被谁接管": "Hover an old card to see what replaced it",
+  "悬停窗口看它被谁接管；点右侧节点，看它顶替了谁": "Hover a window to see what took it over; click a node to see which window it replaced",
+  "悬停窗口看归属，点节点看它顶替了谁": "Hover a window for ownership; click a node to see what it replaced",
   "慢机器把窗口调大，避免把「还在编译」判成「启动失败」": "On slow machines, widen the window so \"still compiling\" is not judged as \"failed to start\"",
   "慢路径": "Slow path",
   "成功": "OK",
@@ -4561,6 +4632,7 @@ const I18N_EN = {
   "把散落的工具收成一个": "Turn scattered tools into one",
   "把这次的步骤序列存成可复用预案": "Save this run's step sequence as a reusable playbook",
   "投喂": "Feed",
+  "投喂 🐟": "Feed 🐟",
   "折叠": "Collapse",
   "报告": "Report",
   "报告文件不会被删除，仍按报告的份数上限自动清理。": "The report file is not deleted; it still follows the report retention limit.",
@@ -4586,6 +4658,7 @@ const I18N_EN = {
   "插入一条异常": "Insert a demo error",
   "搜索目标或动作": "Search target or action",
   "搜索项目文件": "Search project files",
+  "搞定": "done",
   "摘要后保留量": "Keep after summary",
   "摘要后至少原样留几条消息": "Messages kept verbatim at minimum after summarizing",
   "摘要触发阈值": "Summarize threshold",
@@ -4789,6 +4862,7 @@ const I18N_EN = {
   "松手载入图片": "Release to attach",
   "构建并启动": "Build & start",
   "构造请求失败": "Couldn't build the request",
+  "查天气": "Weather",
   "查审计与轨迹": "read audit and traces",
   "查看天气": "Show weather",
   "查看报告": "View report",
@@ -4913,6 +4987,7 @@ const I18N_EN = {
   "点一下或按任意键跳过片头": "Click or press any key to skip the intro",
   "点上面的按钮，结论直接写在这里": "Hit the button above and the verdict lands right here",
   "点任一档位看「能做什么 / 需要什么确认」": "Pick a tier to see what it can do and what needs confirmation",
+  "点任一段切换说明 · 上一步的产出就是这一步的输入": "Click any step for details · each step consumes what the previous one produced",
   "点任一段可切换说明": "Click any step to switch the description",
   "点击 × 移除": "Click × to remove",
   "点开看本轮用量明细": "Click for this turn's token breakdown",
@@ -4983,6 +5058,7 @@ const I18N_EN = {
   "看屏幕": "View screen",
   "看看它能做什么": "See what it does",
   "看运行状态": "read status",
+  "看错误": "Show error",
   "真赶不走啊你！": "You really don't take a hint!",
   "知道了": "Got it",
   "知道了（演示）": "Got it (demo)",
@@ -5167,6 +5243,7 @@ const I18N_EN = {
   "详情 / 复验结论": "Detail / verification",
   "说人话就能运维": "Just describe what you need",
   "说人话，动手前先问": "Plain words, asks before acting",
+  "说句话": "Say something",
   "请先在左侧选择一张表": "Select a table on the left first",
   "请先填写记忆内容": "Please enter the memory text first",
   "请先选择 SQL 文件": "Choose a SQL file first",
@@ -5192,6 +5269,7 @@ const I18N_EN = {
   "读取项目文件": "Read project file",
   "读取项目画像": "Read project profile",
   "读库表结构": "read schema",
+  "读日志、查状态，起手就来": "reads logs and status straight away",
   "读日志、看状态、重启服务——都会先问你。": "Read logs, check status, restart services — it asks first.",
   "读日志与报告": "read logs and reports",
   "谁 · 何时 · 做了什么 · 结果如何": "who · when · what · outcome",
@@ -5290,6 +5368,8 @@ const I18N_EN = {
   "通知已恢复": "Notifications restored",
   "通过": "Passed",
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
+  "那就不动了，随时可以改主意。": "Nothing changed then — change your mind anytime.",
+  "那就不动，随时可以改主意。": "Nothing changed then — change your mind anytime.",
   "部分 {0}": "{0} partial",
   "部分不可用": "Partly unavailable",
   "部分完成": "Partial",
@@ -13695,6 +13775,14 @@ async function ekSetSaveUpdate(recheck){
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var AM = window.anime || null;
 
+  /* qa() 是**在引导层内部**查的（OB.querySelectorAll），拿它查 .modal 永远查不到。
+     弹窗在主页面文档里，必须用 document 查。 */
+  function closeModals(){
+    Array.prototype.forEach.call(document.querySelectorAll('.modal.show'), function(m){
+      m.classList.remove('show');
+    });
+  }
+
   function q(sel){ return OB.querySelector(sel); }
   function qa(sel){ return Array.prototype.slice.call(OB.querySelectorAll(sel)); }
   function has(o, k){ return !!(o && typeof o[k] === 'function'); }
@@ -13721,19 +13809,25 @@ async function ekSetSaveUpdate(recheck){
     '同一个入口，同一份状态'
   ];
 
+  /* w = 这一步会往磁盘上写什么。四步里只有"链端校验"是纯只读的，
+     把它写出来比只说"有输入产出"有用——用户真正担心的是"会不会动我的机器"。 */
   var STEP_TEXT = [
     {b:'环境安装', p:'检测 Go / Node.js / MySQL 的版本和安装位置，缺什么补什么，国内镜像下载会校验 SHA256。',
      i:'无 · 只读本机 PATH 与版本号', o:'一份可执行的安装计划',
-     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟'},
+     pre:'Windows 10 / 11 · 有管理员权限', cost:'首次约 3–5 分钟',
+     w:'C:\EnvKit\tools 下的解压目录 · 当前用户的 PATH 与 GOPROXY', ro:false},
     {b:'程序配置', p:'填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。',
      i:'数据库地址与账号', o:'config.json + 初始化好的库表',
-     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟'},
+     pre:'环境安装已完成 · MySQL 在跑', cost:'约 1 分钟',
+     w:'config.json（原子写入，旧配置留快照）· 目标库的表结构', ro:false},
     {b:'链端校验', p:'检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。',
      i:'节点端口与证书', o:'链端健康结论 + 区块高度',
-     pre:'能 SSH 到链端主机', cost:'约 20 秒'},
+     pre:'能 SSH 到链端主机', cost:'约 20 秒',
+     w:'不写任何东西：只读端口、证书与区块高度', ro:true},
     {b:'程序启动', p:'先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。',
      i:'前端产物 + 后端二进制', o:'两个监听端口 + 可托管的进程树',
-     pre:'配置与链端都已就绪', cost:'约 15 秒'}
+     pre:'配置与链端都已就绪', cost:'约 15 秒',
+     w:'两个子进程 · 按日轮转的日志文件 · 进程树登记', ro:false}
   ];
 
   /* 检测项按"属于哪一类"分组，而不是平铺成一张表。
@@ -13803,6 +13897,19 @@ async function ekSetSaveUpdate(recheck){
     done:'已就绪 · 可以继续问'
   };
 
+  /* 桌宠的内置台词，逐句照抄主界面（50-pet.js 的 FISH_LINES / FISH_FOOD 与 say()）。
+     演示页不另编台词 —— 另编了就只是"看起来像"，接过来才叫同一个角色。
+     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。 */
+  var PET_ACT = {
+    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住'],
+              d:'右键「说句话」抽一条，一轮之内不会重复'},
+    feed:    {l:['小鱼干！我的最爱！'], d:'双击它投喂，给的东西不同台词也不同'},
+    weather: {l:['我瞅瞅天…', '合肥今天 19° · 湿度 42° · 体感 17°'],
+              d:'只有天气会出网，开关默认是关的'},
+    err:     {l:['出错了…点我看日志', '帮你在日志里标出来了'],
+              d:'红色告警时点它，会直接跳到那条错误行'}
+  };
+
   /* ---------- 运行时状态 ---------- */
   var ALL_SLIDES = qa('.ob-slide');
   var WRAP = OB.querySelector('.swiper-wrapper');
@@ -13818,7 +13925,6 @@ async function ekSetSaveUpdate(recheck){
   var typingCancel = null;
   var petMounted = false;
   var slabIdx = 0;
-  var stepIdx = 0;
 
   function seen(){ try{ return localStorage.getItem(KEY) === '1'; }catch(e){ return false; } }
   function mark(){ try{ localStorage.setItem(KEY, '1'); }catch(e){} }
@@ -13987,7 +14093,6 @@ async function ekSetSaveUpdate(recheck){
   function autoplay(idx){
     if(REDUCED) return;
     if(idx === 0){ slabIdx = 0; later(rotateSlab, 260); }
-    if(idx === 2){ stepIdx = 0; showStep(0); later(stepTick, 2300); }
   }
 
   /* ---------- 各屏演示 ---------- */
@@ -14003,13 +14108,13 @@ async function ekSetSaveUpdate(recheck){
     if(idx === 1) later(mergeFlow, 420);
   }
 
-  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时） */
+  /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时）
+     没有"打勾"：这一屏一次也没真的跑过，勾号只会让人以为已经做完了。
+     自动前进也去掉——它和打勾是同一个假进度，读说明的时候还会抢走焦点。 */
   function showStep(i){
     var n = STEP_TEXT.length;
     qa('#ob-track .ob-step').forEach(function(b){
-      var k = Number(b.getAttribute('data-step'));
-      b.classList.toggle('on', k === i);
-      b.classList.toggle('done', k < i);       /* 走过的段自动打勾，进度线才有意义 */
+      b.classList.toggle('on', Number(b.getAttribute('data-step')) === i);
     });
     var fill = q('#ob-tl-fill');
     if(fill) fill.style.width = (i / (n - 1) * 75) + '%';   /* rail 从 12.5% 到 87.5% */
@@ -14022,16 +14127,11 @@ async function ekSetSaveUpdate(recheck){
       '<span><em>' + t('产出') + '</em>' + t(x.o) + '</span>' +
       '<span><em>' + t('前置') + '</em>' + t(x.pre) + '</span>' +
       '<span><em>' + t('预计耗时') + '</em>' + t(x.cost) + '</span>' +
-      '</div>';
+      '</div>' +
+      '<div class="ob-writes' + (x.ro ? ' ro' : '') + '"><em>' +
+        t(x.ro ? '只读' : '会写') + '</em><span>' + t(x.w) + '</span></div>';
   }
 
-  /* 没点过任何步骤时自动往前推一格，让这一屏自己动起来 */
-  function stepTick(){
-    if(stepIdx >= STEP_TEXT.length - 1) return;
-    stepIdx += 1;
-    showStep(stepIdx);
-    later(stepTick, 2500);
-  }
 
   /* 01 开场：叠层剖面轮流被点亮，下面那句说明跟着走 */
   function focusSlab(i){
@@ -14196,9 +14296,62 @@ async function ekSetSaveUpdate(recheck){
   /* 06 AI：用户气泡 → trace → 逐字回答（写类同步弹确认卡）
      v5 起保留历史：上一轮回答会被"冻结"成一条普通气泡，新回答继续在 #ob-bubble 里逐字打，
      这样连续问三句才像真的在对话，而不是每句都覆盖同一块。 */
+  /* 06 的桌宠会说话：气泡贴在头顶，内容全部来自内置台词。
+     sticky=true 时不自动收（"点我确认！"要一直挂着，和主界面一致）。 */
+  var petSayTimer = null;
+
+  function petSay(html, sticky, ms){
+    var b = q('#ob-pet-say');
+    if(!b) return;
+    clearTimeout(petSayTimer);
+    b.innerHTML = html;
+    b.classList.add('show');
+    if(!sticky){
+      petSayTimer = setTimeout(function(){ b.classList.remove('show'); }, ms || 2600);
+    }
+  }
+
+  function petSayHide(){
+    clearTimeout(petSayTimer);
+    var b = q('#ob-pet-say');
+    if(b) b.classList.remove('show');
+  }
+
+  /* 内置动作：说的这句就是主界面会说的那句，没有为演示另写文案 */
+  var petRot = 0;
+
+  function petAct(k){
+    var A = PET_ACT[k];
+    if(!A) return;
+    if(k === 'say'){
+      petSay('<b>' + t(A.l[petRot++ % A.l.length]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      return;
+    }
+    if(k === 'feed'){
+      petSay('<b>' + t(A.l[0]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      return;
+    }
+    /* 天气和看错误都是两步：先出声，再给结果 */
+    petSay('<b>' + t(A.l[0]) + '</b>', true);
+    later(function(){
+      petSay('<b>' + t(A.l[1]) + '</b><em>' + t(A.d) + '</em>', false, 3800);
+    }, 900);
+  }
+
   function petState(k){
     var m = q('#ob-pet-msg');
     if(m) m.textContent = t(PET_STATE[k] || PET_STATE.idle);
+    var chip = q('.ob-pet-state');
+    if(chip){
+      chip.classList.toggle('hot', k === 'wait');
+      chip.classList.toggle('done', k === 'done');
+    }
+    /* 状态和气泡是同一个状态机的两个出口：芯片写"在干什么"，
+       气泡说"它此刻会说什么"——主界面这两件事本来就是一起变的 */
+    if(k === 'think') petSay('<b>' + t('思考中') + '</b><em>' + t('读日志、查状态，起手就来') + '</em>', true);
+    else if(k === 'wait') petSay('<b>' + t('点我确认！') + '</b>', true);
+    else if(k === 'done') petSay('<b>✓ ' + t('搞定') + '</b>', false, 2000);
+    else petSayHide();
   }
 
   function resetChat(){
@@ -14345,7 +14498,11 @@ async function ekSetSaveUpdate(recheck){
   }
 
   /* 悬停某个旧窗口：它自己被抬起、对应的状态节点亮、那条连线变粗。
-     "被谁接管"用联动回答，比一个 tooltip 直接得多。 */
+     "被谁接管"用联动回答，比一个 tooltip 直接得多。
+     反向也成立：点（或悬停）状态线上的节点，反向把那个窗口挑出来。
+     这是这一屏唯一的交互承诺，两个方向都得通，不然就只有"看"没有"对"。 */
+  var pinK = null;                       /* 点住的窗口序号，null = 没点 */
+
   function ownFocus(k){
     qa('#ob-state .ob-line-node').forEach(function(n){
       n.classList.toggle('own', k !== null && n.getAttribute('data-node') === k);
@@ -14353,11 +14510,24 @@ async function ekSetSaveUpdate(recheck){
     qa('.ob-wires path').forEach(function(p){
       p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);
     });
+    qa('#ob-old-list .ob-win-card').forEach(function(c){
+      c.classList.toggle('picked', k !== null && c.getAttribute('data-own') === k);
+    });
+  }
+  /* 鼠标离开时若已点住，就回到点住的那一项，别把用户的选择擦掉 */
+  function ownRelease(){
+    if(pinK === null) ownFocus(null);
+    else ownFocus(pinK);
   }
   qa('.ob-win-card').forEach(function(c){
     var k = c.getAttribute('data-own');
     c.addEventListener('mouseenter', function(){ ownFocus(k); });
-    c.addEventListener('mouseleave', function(){ ownFocus(null); });
+    c.addEventListener('mouseleave', ownRelease);
+  });
+  qa('#ob-state .ob-line-node').forEach(function(n){
+    var k = n.getAttribute('data-node');
+    n.addEventListener('mouseenter', function(){ ownFocus(k); });
+    n.addEventListener('mouseleave', ownRelease);
   });
 
   /* ---------- Swiper ---------- */
@@ -14450,6 +14620,8 @@ async function ekSetSaveUpdate(recheck){
       if(!tourAvailable()) return false;
       var steps = TOUR_STEPS.filter(function(s){ return !!document.querySelector(s.element); });
       if(!steps.length) return false;
+      /* 教学高亮的是主界面控件，任何还开着的弹窗都会把浮层顶偏 —— 先收掉 */
+      closeModals();
       try{
         var d = window.driver.js.driver({steps: steps, showProgress: true, showButtons: ['next','previous','close'],
           nextBtnText: t('下一步'), prevBtnText: t('上一步'), doneBtnText: t('完成'),
@@ -14471,6 +14643,15 @@ async function ekSetSaveUpdate(recheck){
     if(!OB.classList.contains('show')) return;
     if(brandArmed && OB.contains(e.target)){ endBrand(); return; }
 
+    /* 02 反向联动：点状态节点 → 挑出它顶替的那个窗口；再点一次取消 */
+    var node = e.target.closest ? e.target.closest('#ob-state .ob-line-node') : null;
+    if(node){
+      var nk = node.getAttribute('data-node');
+      pinK = (pinK === nk) ? null : nk;
+      ownFocus(pinK);
+      return;
+    }
+
     var b = e.target.closest ? e.target.closest('button') : null;
     if(!b || !OB.contains(b)) return;
     var id = b.id;
@@ -14488,21 +14669,18 @@ async function ekSetSaveUpdate(recheck){
     }
     if(id === 'ob-cta-tour'){
       finish();
+      /* 从「关于」里重看再点这个按钮时，#about 还开着。driver.js 会把浮层画在
+         遮罩之上、却按底下那些控件的坐标定位 —— 于是浮层指着一个被弹窗盖住的
+         位置，看起来就是"导航歪了"。先关掉所有弹窗，再开始教学。 */
+      closeModals();
       document.dispatchEvent(new CustomEvent('ek:tour-start', {detail:{source:'onboard-finish'}}));
       return;
     }
-    if(id === 'ob-merge-replay'){ mergeFlow(); return; }
+    var pact = b.getAttribute('data-pact');
+    if(pact !== null){ petAct(pact); return; }
 
-    if(id === 'ob-track-run'){
-      stepIdx = STEP_TEXT.length - 1;   /* 手动操作后停止自动前进，别和人抢 */
-      qa('#ob-track .ob-step').forEach(function(s, i){
-        later(function(){ s.classList.add('done'); }, i * 240);
-      });
-      showStep(STEP_TEXT.length - 1);
-      return;
-    }
     var step = b.getAttribute('data-step');
-    if(step !== null){ stepIdx = STEP_TEXT.length - 1; showStep(Number(step)); return; }
+    if(step !== null){ showStep(Number(step)); return; }
 
     if(id === 'ob-detect-run'){ runDetect(); return; }
 
@@ -14527,10 +14705,19 @@ async function ekSetSaveUpdate(recheck){
     if(id === 'ob-demo-ok' || id === 'ob-demo-cancel'){
       showConfirm(false);
       endType();
-      petState('done');
       var bb = q('#ob-bubble');
       if(id === 'ob-demo-ok'){
-        if(bb) typeText(bb, t(AI_AFTER), 16, function(){ bb.setAttribute('data-live', '1'); });
+        /* 点了"知道了"才算这一轮收尾：桌宠的 ✓ 跟回答同时出现，
+           而不是在用户还没点的时候就先撒花 */
+        if(bb) typeText(bb, t(AI_AFTER), 16, function(){
+          bb.setAttribute('data-live', '1');
+          petState('done');
+        });
+      } else {
+        petState('idle');
+        if(bb) typeText(bb, t('那就不动，随时可以改主意。'), 16, function(){
+          bb.setAttribute('data-live', '1');
+        });
       }
       return;
     }
