@@ -42,12 +42,21 @@ function getJSON(url) {
   }
   fs.copyFileSync(path.join(ROOT, 'EnvKit.exe'), path.join(SANDBOX, 'EnvKit.exe'));
 
-  const envkit = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
   // 控制台端口默认 18765，被占用会顺延到 port_scan_limit（18815）。
   // 不写死单个端口：沙箱里没有 config.json，正常就是默认值，但别的前提不该让脚本假红。
+  // ★ 启动前先记下已被占用的端口：用户自己开着的 EnvKit 常常就挂在 18765，
+  //   不排除的话会连到那个旧实例，跑出来的全是旧代码的结果（假绿）。
+  const occupied = new Set();
+  for (let p = 18765; p <= 18815; p++) {
+    try { await getJSON('http://127.0.0.1:' + p + '/api/health'); occupied.add(p); } catch (e) {}
+  }
+  if (occupied.size) console.log('已占用端口（跳过）:', [...occupied].join(','));
+
+  const envkit = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
   let base = '';
   for (let i = 0; i < 60 && !base; i++) {
     for (let p = 18765; p <= 18815; p++) {
+      if (occupied.has(p)) continue;
       try { await getJSON('http://127.0.0.1:' + p + '/api/health'); base = 'http://127.0.0.1:' + p + '/'; break; } catch (e) {}
     }
     if (!base) await sleep(500);
@@ -197,15 +206,20 @@ function getJSON(url) {
 
     // ---- 6. 个人中心的新手指引 ----
     const guideBtn = await evalJS(`!!document.getElementById('btn-guide')`);
+    // 按钮旁边不许再有说明文字（用户明确要求删掉；加回来要能看见红）
+    await realClick('#btn-profile');
+    await sleep(400);
+    const rowNow = await evalJS(`(()=>{const b=document.getElementById('btn-guide'); if(!b) return null;
+      const row=b.closest('.pp-row'); return {txt:(row?row.textContent:'').replace(/\\s+/g,''), hints:row?row.querySelectorAll('.hint').length:-1};})()`);
     let guideOpened = false;
     if (guideBtn) {
-      await realClick('#btn-profile');
-      await sleep(400);
       await realClick('#btn-guide');
       await sleep(1200);
       guideOpened = await evalJS(`(()=>{const o=document.getElementById('onboard'); return !!o && o.classList.contains('show');})()`);
     }
-    ok('6  个人中心能重新打开引导', guideBtn && guideOpened, 'btn=' + guideBtn + ' opened=' + guideOpened);
+    ok('6  个人中心能重新打开引导，且只留按钮本身',
+       guideBtn && guideOpened && rowNow && rowNow.hints === 0 && rowNow.txt === '新手指引',
+       'btn=' + guideBtn + ' opened=' + guideOpened + ' row=' + JSON.stringify(rowNow));
 
     // ---- 7. 白名单覆盖 + 「问 AI」真的把问题填进输入框 ----
     // 沙箱里触发不到「服务崩溃 / 熔断 / 建库」这些分支，所以直接验解释器：

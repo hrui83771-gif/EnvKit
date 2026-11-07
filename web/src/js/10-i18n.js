@@ -384,7 +384,6 @@ const I18N_EN = {
   "内置默认（600 秒）": "Built-in default (600s)",
   "内部调用模型": "Utility model",
   "再晃要吐了🫠": "Keep shaking and I'll be sick🫠",
-  "再看一遍那 8 屏介绍": "Replay the 8-screen intro",
   "写一条长期规矩，例如：备份前先停掉后端服务（Ctrl+Enter 添加）": "Write a standing rule, e.g. stop the backend before backing up (Ctrl+Enter to add)",
   "写入任何配置": "write any config",
   "冷却（秒）": "Cooldown (s)",

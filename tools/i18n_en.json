@@ -1843,6 +1843,5 @@
   "这条我搞不定，帮我看看：": "I can't sort this one out — take a look:",
   "系统给的建议是：": "what EnvKit suggests: ",
   "{0} 失败了，日志已标红；待处理里可以重试": "{0} failed — the log line is highlighted; you can retry from the pending list",
-  "新手指引": "Quick tour",
-  "再看一遍那 8 屏介绍": "Replay the 8-screen intro"
+  "新手指引": "Quick tour"
 }
