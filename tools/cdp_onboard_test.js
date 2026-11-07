@@ -646,15 +646,24 @@ function seed() {
           if(s.display==='none'||s.visibility==='hidden'||s.opacity==='0') return false;
           return el.getClientRects().length>0;
         }
+        /* 语言开关按钮上写的是"点了会变成什么"，EN 模式下就是「中文」——
+           那是它该有的样子（主界面 #btn-lang 也是 data-no-i18n），不算残留。 */
+        function skipped(el){
+          for(var p=el;p&&p!==root;p=p.parentNode){
+            if(p.nodeType===1&&p.hasAttribute&&p.hasAttribute('data-no-i18n')) return true;
+          }
+          return false;
+        }
         var cnt=0,bad=[];
         var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n;
         while((n=w.nextNode())){
           var s=(n.data||'').trim();
-          if(!s||!vis(n.parentNode)) continue;
+          if(!s||!vis(n.parentNode)||skipped(n.parentNode)) continue;
           cnt++;
           if(CJK.test(s)) bad.push(s.slice(0,42));
         }
         root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(function(el){
+          if(skipped(el)) return;
           ['placeholder','title','aria-label'].forEach(function(a){
             var v=el.getAttribute(a);
             if(v&&CJK.test(v)) bad.push(a+'='+v.slice(0,42));
@@ -711,6 +720,67 @@ function seed() {
     check('i18n-zh-restore-code', BZ.length === 2, backZh);
     await evalJS(`(function(){ try{ EKOnboard.close(); }catch(e){} return 'ok'; })()`);
     await sleep(300);
+
+    // ===== E2. 顶栏两个开关：中英 / 明暗 =====
+    // 断言的是"软件本身也变了"（body[data-theme] / html[lang] / 主界面按钮文案 / localStorage），
+    // 不是"引导层里看起来变了"。两个按钮都用真实鼠标点，并且要求命中测试通过。
+    await evalJS(`(function(){ try{ ekSetLang('zh', true); applyTheme('light'); }catch(e){} EKOnboard.open('replay'); return 'ok'; })()`);
+    await sleep(900);
+    check('tools-count', await evalJS(`document.querySelectorAll('.ob-tools .ob-tool').length`) === 2);
+
+    await clickSel('#ob-theme', 'ob-theme');
+    await sleep(600);
+    const TH = await evalJS(`JSON.stringify({
+      theme: document.body.dataset.theme || '',
+      main: (document.getElementById('btn-theme') || {}).textContent,
+      ls: (function(){ try{ return localStorage.getItem('ek-theme'); }catch(e){ return null; } })(),
+      bg: getComputedStyle(document.getElementById('onboard')).backgroundColor
+    })`);
+    let th = {}; try { th = JSON.parse(TH || '{}'); } catch (e) {}
+    check('theme-switch-app', th.theme === 'dark' && th.ls === 'dark', TH);
+    check('theme-switch-main-ui', /亮色|Light/.test(th.main || ''), TH);
+    check('theme-switch-page', /9, 13, 20|#090d14/i.test(th.bg || ''), TH);
+
+    // 粒子层：画布有尺寸、真的画了东西、并且不吃点击
+    const FX = await evalJS(`(function(){
+      var c = document.getElementById('ob-fx');
+      if(!c || !c.getContext) return JSON.stringify({ok:false});
+      var ctx = c.getContext('2d'), r = c.getBoundingClientRect();
+      var d = ctx.getImageData(0, 0, c.width, c.height).data, lit = 0;
+      for (var i = 3; i < d.length; i += 4) { if (d[i] > 8) lit++; }
+      return JSON.stringify({ok:true, w:Math.round(r.width), h:Math.round(r.height), lit:lit,
+        pe:getComputedStyle(c).pointerEvents});
+    })()`);
+    let fx = {}; try { fx = JSON.parse(FX || '{}'); } catch (e) {}
+    check('fx-canvas', fx.ok === true && fx.w > 1200 && fx.h > 700, FX);
+    check('fx-drawing', fx.ok === true && fx.lit > 200, FX);        /* 只建 canvas 不画也算失败 */
+    check('fx-click-through', fx.pe === 'none', FX);                 /* 铺满全屏的图层不许挡住按钮 */
+
+    await clickSel('#ob-lang', 'ob-lang');
+    await sleep(700);
+    const LGT = await evalJS(`JSON.stringify({
+      html: document.documentElement.getAttribute('lang'),
+      main: (document.getElementById('btn-lang') || {}).textContent,
+      ob: (document.getElementById('ob-lang') || {}).textContent,
+      crumb: (document.getElementById('ob-sec-name') || {}).textContent
+    })`);
+    let lg = {}; try { lg = JSON.parse(LGT || '{}'); } catch (e) {}
+    check('lang-switch-html', lg.html === 'en', LGT);
+    check('lang-switch-main-ui', lg.main === '中文', LGT);
+    /* 语言按钮上写的就是"点了会变成什么"，EN 模式下应是「中文」——它是 data-no-i18n 的，
+       所以中文残留扫描要跳过它（__obScan 的 skipped()） */
+    check('lang-switch-ob-btn', lg.ob === '中文', LGT);
+    check('lang-switch-onboard-text', !!lg.crumb && !/[\u4e00-\u9fa5]/.test(lg.crumb), LGT);
+
+    // 复原：暗色关掉、语言切回中文、引导关掉，后面的检查还按默认状态跑
+    await clickSel('#ob-theme', 'ob-theme-back');
+    await sleep(400);
+    await evalJS(`(function(){ try{ ekSetLang('zh', true); }catch(e){} EKOnboard.close(); return 'ok'; })()`);
+    await sleep(400);
+    const RS = await evalJS(`JSON.stringify({theme:document.body.dataset.theme||'', lang:document.documentElement.getAttribute('lang'),
+      show:document.getElementById('onboard').classList.contains('show')})`);
+    let rs = {}; try { rs = JSON.parse(RS || '{}'); } catch (e) {}
+    check('tools-restored', rs.theme === 'light' && rs.lang !== 'en' && rs.show === false, RS);
 
     // ===== F. 源码级红线：演示代码不得碰接口 / 任意执行 =====
     const src = fs.readFileSync(path.join(REPO, 'web', 'src', 'js', '90-onboard.js'), 'utf8');

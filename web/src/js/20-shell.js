@@ -443,6 +443,9 @@ function applyTheme(mode){   // 注意：参数不能叫 t，会遮蔽全局翻�
   document.body.dataset.theme = mode;
   try{ localStorage.setItem('ek-theme', mode); }catch(e){}
   const b = document.getElementById('btn-theme'); if(b) b.textContent = (mode==='dark') ? t('亮色') : t('暗色');
+  /* 广播：引导页的粒子层与顶栏开关要知道主题变了。20-shell 不认识它们，
+     所以只发事件，谁需要谁自己听。 */
+  try{ document.dispatchEvent(new CustomEvent('ek:theme', {detail:{theme:mode}})); }catch(e){}
 }
 (function(){ let t='light'; try{ t = localStorage.getItem('ek-theme') || 'light'; }catch(e){} applyTheme(t); })();
 (function(){

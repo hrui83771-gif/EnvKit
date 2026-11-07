@@ -60,6 +60,157 @@
     });
   }
 
+  /* ---------- 背景粒子层 ----------
+     一个 canvas 画几十个慢速漂移的点，近则连线，指针靠近会被推开。
+     没有引 tsParticles 那类库（≈90KB）：这一层只画点和线，引库换不来效果，
+     只换来一个要跟着升级、还得从 /vendor/ 同域加载的外部依赖。
+     减少动态偏好下只画一帧静态分布 —— 有画面，不动。 */
+  var FX = (function(){
+    var cv = q('#ob-fx');
+    if(!cv || !cv.getContext) return {start:function(){}, stop:function(){}, theme:function(){}};
+    var ctx = cv.getContext('2d');
+    var W = 0, H = 0, raf = 0, on = false, dots = [];
+    var cA = '#8CA6C6', cB = '#D9B2A0';
+    var ptr = {x:-9999, y:-9999};
+    var LINK = 132, LINK2 = LINK * LINK, PUSH = 150, PUSH2 = PUSH * PUSH;
+
+    function cssVar(name, fb){
+      var v = '';
+      try{ v = getComputedStyle(OB).getPropertyValue(name) || ''; }catch(e){}
+      return v.trim() || fb;
+    }
+    function theme(){
+      /* 不用 --brand2：那个值在浅色底上几乎看不见。这两个变量在 CSS 里
+         按主题各给了一套（浅色偏深、暗色偏亮）。 */
+      cA = cssVar('--ob-fx-a', '#6E86A8');
+      cB = cssVar('--ob-fx-b', '#C08B72');
+    }
+    function seed(){
+      var n = Math.round(W * H / 19000);
+      n = Math.max(22, Math.min(72, n));
+      dots = [];
+      for(var i = 0; i < n; i++){
+        dots.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - .5) * .26,
+          vy: (Math.random() - .5) * .26,
+          r: 1 + Math.random() * 1.7,
+          ph: Math.random() * Math.PI * 2,
+          sp: .6 + Math.random() * 1.1,
+          /* 少数点用暖色：全蓝就是星空壁纸，掺一点陶土色才和整页的水彩暖调对上 */
+          warm: Math.random() < .26
+        });
+      }
+    }
+    function resize(){
+      var r = cv.getBoundingClientRect();
+      W = Math.max(1, Math.round(r.width));
+      H = Math.max(1, Math.round(r.height));
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(W * dpr);
+      cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    }
+    function draw(ts){
+      if(!on) return;
+      var t = ts || 0, i, j, a, b, dx, dy, d2, d;
+      ctx.clearRect(0, 0, W, H);
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        a.x += a.vx; a.y += a.vy;
+        dx = a.x - ptr.x; dy = a.y - ptr.y;
+        d2 = dx * dx + dy * dy;
+        if(d2 < PUSH2 && d2 > .01){
+          d = Math.sqrt(d2);
+          var f = (1 - d / PUSH) * .9;
+          a.x += dx / d * f * 3;
+          a.y += dy / d * f * 3;
+        }
+        if(a.x < -24) a.x = W + 24; else if(a.x > W + 24) a.x = -24;
+        if(a.y < -24) a.y = H + 24; else if(a.y > H + 24) a.y = -24;
+      }
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = cA;
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        for(j = i + 1; j < dots.length; j++){
+          b = dots[j];
+          dx = a.x - b.x; dy = a.y - b.y;
+          d2 = dx * dx + dy * dy;
+          if(d2 > LINK2) continue;
+          ctx.globalAlpha = (1 - Math.sqrt(d2) / LINK) * .42;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        var tw = .55 + .45 * Math.sin(t / 900 * a.sp + a.ph);
+        ctx.globalAlpha = .34 + .5 * tw;
+        ctx.fillStyle = a.warm ? cB : cA;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, a.r * (.8 + .35 * tw), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if(!REDUCED) raf = requestAnimationFrame(draw);
+    }
+    function onMove(e){
+      var r = cv.getBoundingClientRect();
+      ptr.x = e.clientX - r.left;
+      ptr.y = e.clientY - r.top;
+    }
+    function onLeave(){ ptr.x = ptr.y = -9999; }
+    function start(){
+      if(on) return;
+      resize(); theme();
+      window.addEventListener('resize', resize);
+      OB.addEventListener('pointermove', onMove);
+      OB.addEventListener('pointerleave', onLeave);
+      on = true;
+      draw(0);
+    }
+    function stop(){
+      on = false;
+      if(raf) cancelAnimationFrame(raf);
+      raf = 0;
+      window.removeEventListener('resize', resize);
+      OB.removeEventListener('pointermove', onMove);
+      OB.removeEventListener('pointerleave', onLeave);
+      try{ ctx.clearRect(0, 0, W, H); }catch(e){}
+    }
+    return {start:start, stop:stop, theme:theme};
+  })();
+
+  /* ---------- 顶栏开关：中英 / 明暗 ----------
+     调的是主界面那两个函数本身（ekSetLang / applyTheme），所以"和软件内同步"
+     不是额外做一次同步，而是本来就只有一份状态。 */
+  var ICON_MOON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.4 1.9a6.3 6.3 0 0 0 7.7 7.7A6.6 6.6 0 1 1 6.4 1.9Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+  var ICON_SUN = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.3v1.5M8 13.2v1.5M1.3 8h1.5M13.2 8h1.5M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+  function isEN(){ return document.documentElement.getAttribute('lang') === 'en'; }
+  function isDark(){ return document.body.dataset.theme === 'dark'; }
+
+  function syncTools(){
+    var lb = q('#ob-lang'), tb = q('#ob-theme');
+    if(lb){
+      /* 按钮写"点了会变成什么"：EN 模式下写"中文"。与主界面 #btn-lang 同一套写法 */
+      lb.textContent = isEN() ? '中文' : 'EN';
+      var lt = t(isEN() ? '切换为中文' : '切换为英文');
+      lb.title = lt; lb.setAttribute('aria-label', lt);
+    }
+    if(tb){
+      tb.innerHTML = isDark() ? ICON_SUN : ICON_MOON;
+      var tt = t(isDark() ? '切换亮色' : '切换暗色');
+      tb.title = tt; tb.setAttribute('aria-label', tt);
+    }
+  }
+
+
   /* ---------- 静态演示数据（不来自接口，不写回任何地方） ---------- */
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
   var CHAPTER_SUM = [
@@ -825,7 +976,13 @@
 
   function setSlides(list){
     ALL_SLIDES.forEach(function(s){ if(s.parentNode) s.parentNode.removeChild(s); });
-    list.forEach(function(s){ WRAP.appendChild(s); });
+    list.forEach(function(s){
+      WRAP.appendChild(s);
+      /* 场景角上的大号章节号（CSS 用 attr(data-no) 渲染），按屏号补零 */
+      var sc = s.querySelector('.ob-scene');
+      var n = Number(s.getAttribute('data-idx'));
+      if(sc) sc.setAttribute('data-no', pad(n + 1));
+    });
   }
 
   function tourAvailable(){
@@ -853,6 +1010,8 @@
 
     OB.classList.add('show');
     document.body.classList.add('ob-active');
+    syncTools();                    /* 主题/语言可能在主界面被改过，开屏先对齐一次 */
+    FX.start();
     trCode();                       /* CODE/PRE 里是演示报错，全局翻译器不碰，这里补 */
     sw = buildSwiper();
     cur = 0;
@@ -872,6 +1031,7 @@
     endBrand();
     clearTimers();
     endType();
+    FX.stop();
     if(sw){ try{ sw.destroy(true, true); }catch(e){} sw = null; }
     OB.classList.remove('show');
     document.body.classList.remove('ob-active');
@@ -915,7 +1075,11 @@
 
   /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上 */
   document.addEventListener('ek:lang', function(){
-    if(OB.classList.contains('show')) trCode();
+    if(OB.classList.contains('show')){ trCode(); syncTools(); }
+  });
+  /* 主题改变（无论是这里的按钮还是主界面）→ 粒子颜色跟着换 */
+  document.addEventListener('ek:theme', function(){
+    if(OB.classList.contains('show')){ syncTools(); FX.theme(); }
   });
 
   /* ---------- 事件委托（跨 IIFE，一律 document + closest） ---------- */
@@ -939,6 +1103,19 @@
     if(!b || !OB.contains(b)) return;
     var id = b.id;
     var jump = b.getAttribute('data-jump');
+
+    /* 顶栏两个开关：直接调主界面的函数，关掉引导后软件本身也已经是切换后的状态 */
+    if(id === 'ob-lang'){
+      try{ ekSetLang(isEN() ? 'zh' : 'en', true); }catch(err){}
+      syncTools();
+      return;
+    }
+    if(id === 'ob-theme'){
+      try{ applyTheme(isDark() ? 'light' : 'dark'); }catch(err){}
+      syncTools();
+      FX.theme();
+      return;
+    }
 
     if(jump !== null){ if(sw) sw.slideTo(Number(jump)); return; }
 

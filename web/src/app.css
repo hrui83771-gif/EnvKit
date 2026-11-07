@@ -1130,23 +1130,35 @@
    不引入元素级选择器，所有规则以 .ob 开头。 */
 
   .ob{
-    --ob-glass:rgba(255,255,255,.62);
-    --ob-glass-2:rgba(255,255,255,.38);
-    --ob-edge:rgba(255,255,255,.80);
-    --ob-hair:rgba(62,60,58,.10);
+    /* v10：原来卡面是"白底 + 0.8 白描边"，叠在米白页面上 —— 两者只差 8 个色阶，
+       肉眼只剩一条 1px 线。现在把画布压深一档、卡面提亮、描边换成真的深发丝线。 */
+    --ob-page:#EFE8DD;
+    --ob-fx-a:#6E86A8;--ob-fx-b:#C08B72;
+    --ob-card:#FFFDFA;
+    --ob-ink:#1B2430;
+    --ob-weigh:rgba(82,110,150,.20);
+    --ob-glass:rgba(255,255,255,.88);
+    --ob-glass-2:rgba(255,255,255,.66);
+    --ob-edge:rgba(62,52,40,.13);
+    --ob-hair:rgba(62,60,58,.12);
     --ob-lift:0 1px 0 rgba(255,255,255,.92) inset,0 2px 3px rgba(62,60,58,.03),
              0 26px 52px -32px rgba(45,55,75,.34);
     --ob-lift-sm:0 1px 0 rgba(255,255,255,.84) inset,0 10px 24px -18px rgba(45,55,75,.30);
     --ob-term:#1E222A; --ob-term-hi:#2A2F39; --ob-term-tx:#C7CEDA;
     position:fixed;inset:0;z-index:100;display:none;flex-direction:column;
-    background:var(--bg);color:var(--text);overflow:hidden;
+    background:var(--ob-page);color:var(--text);overflow:hidden;
     -webkit-font-smoothing:antialiased;
   }
   body[data-theme="dark"] .ob{
-    --ob-glass:rgba(38,49,68,.56);
-    --ob-glass-2:rgba(38,49,68,.30);
-    --ob-edge:rgba(255,255,255,.10);
-    --ob-hair:rgba(255,255,255,.09);
+    --ob-page:#090D14;
+    --ob-fx-a:#93ADCD;--ob-fx-b:#D9B2A0;
+    --ob-card:#151D2A;
+    --ob-ink:#0C121B;
+    --ob-weigh:rgba(0,0,0,.45);
+    --ob-glass:rgba(32,43,60,.88);
+    --ob-glass-2:rgba(42,56,78,.66);
+    --ob-edge:rgba(255,255,255,.13);
+    --ob-hair:rgba(255,255,255,.10);
     --ob-lift:0 1px 0 rgba(255,255,255,.07) inset,0 26px 52px -32px rgba(0,0,0,.68);
     --ob-lift-sm:0 1px 0 rgba(255,255,255,.06) inset,0 10px 24px -18px rgba(0,0,0,.55);
     --ob-term:#0E131C; --ob-term-hi:#19212F; --ob-term-tx:#C2CBD9;
@@ -1183,6 +1195,12 @@
     0%,100%{transform:translate3d(0,0,0) scale(1)}
     50%{transform:translate3d(3vw,-2vh,0) scale(1.08)}
   }
+  /* 粒子层：几十个慢速漂移的节点，近则连线，指针靠近会被推开。
+     放在光斑之上、内容之下；边缘用径向遮罩收掉，免得四个角出现硬边的点。 */
+  .ob-fx{position:absolute;inset:0;z-index:3;display:block;width:100%;height:100%;
+    pointer-events:none;
+    -webkit-mask-image:radial-gradient(ellipse 82% 74% at 50% 42%,#000 24%,transparent 84%);
+    mask-image:radial-gradient(ellipse 82% 74% at 50% 42%,#000 24%,transparent 84%)}
 
   /* ---------- 顶栏：章节 + 细进度条 + 演示标识 ---------- */
   .ob-top{position:relative;z-index:4;flex:none;display:flex;align-items:center;gap:18px;
@@ -1198,10 +1216,17 @@
   .ob-progress i{position:absolute;inset:0 auto 0 0;width:0;border-radius:2px;
     background:linear-gradient(90deg,var(--brand2),var(--brand));
     transition:width .45s cubic-bezier(.22,1,.36,1)}
-  .ob-demo-tag{display:flex;align-items:center;gap:6px;flex:none;font-size:11px;color:var(--muted);
-    border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--ob-glass-2)}
-  .ob-demo-tag i{width:5px;height:5px;border-radius:50%;background:var(--ob-accent);flex:none;
-    box-shadow:0 0 0 3px color-mix(in srgb,var(--ob-accent) 22%,transparent)}
+  /* 顶栏右端两个开关：中英 / 明暗。点的是主界面那两个同名函数，
+     所以两边状态天然一致（不是各存一份）。 */
+  .ob-tools{display:flex;align-items:center;gap:6px;flex:none}
+  /* 宽度跟着内容走：语言按钮里是「EN / 中文」两个汉字，定宽 30px 会贴边 */
+  .ob-tool{min-width:30px;height:30px;padding:0 8px!important;border-radius:9px!important;
+    display:flex;align-items:center;justify-content:center;
+    font:500 11px/1 ui-monospace,Consolas,monospace!important;
+    color:var(--muted)!important;background:var(--ob-glass-2)!important}
+  .ob-tool:hover{color:var(--brand)!important;border-color:var(--brand2)!important;
+    background:var(--ob-card)!important}
+  .ob-tool svg{display:block;width:14px;height:14px}
   .ob-skip{margin-left:auto!important;font-size:12px!important;padding:7px 14px!important;color:var(--muted)!important}
   .ob-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
@@ -1834,6 +1859,111 @@
   .driver-active-element{z-index:101!important}
   .driver-popover{border-radius:12px;font-family:inherit}
 
+  /* ================= v10 造型系统 =================
+     问题不是"参数没调好"，而是八屏只有一种造型语言：12–18px 圆角矩形 + 同一条淡阴影，
+     分不出内容卡 / 操作卡 / 告警卡。这一版先做两件可复用的零件，再按屏分配，
+     每屏最多两件 —— 全上满就变成仪表盘堆料。 */
+
+  /* 每屏左上角一枚极淡的大号章节号：绝对定位，不进 flex 流，也不吃点击。
+     八屏的正文都在中间 1080px 里，两侧留白很大 —— 这枚数字给版面一个锚点。 */
+  .ob-scene{position:relative}
+  .ob-scene::before{content:attr(data-no);position:absolute;left:-.04em;top:-.24em;
+    font:600 clamp(124px,15vw,204px)/1 -apple-system,"Segoe UI",sans-serif;
+    letter-spacing:-.07em;color:var(--text);opacity:.034;pointer-events:none;
+    user-select:none;z-index:0}
+  .ob-scene>*{position:relative;z-index:1}
+
+  /* 件 A：浅色内容板 —— 1px 真发丝边 + 左色条 + 底边 3px 厚度。
+     厚度用 inset 阴影画在卡内侧，所以切角/圆角都不会把它裁掉。 */
+  .ob-panel{position:relative;background:var(--ob-card);
+    border:1px solid var(--ob-edge);border-radius:13px;
+    box-shadow:inset 0 -3px 0 var(--ob-weigh),var(--ob-lift-sm)}
+  .ob-bar::before{content:'';position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;
+    border-radius:13px 0 0 13px;background:var(--ob-bar,var(--brand2));z-index:1}
+
+  /* 件 B：切角板 —— 右上切 26px，沿切边压一道强调高光。
+     clip-path 会把 box-shadow / backdrop-filter 一起裁掉，所以切角卡必须用实色底，
+     靠 inset 高光表达"厚度"，不能靠外阴影。 */
+  .ob-cut{--ob-cutw:26px;position:relative;
+    clip-path:polygon(0 0,calc(100% - var(--ob-cutw)) 0,100% var(--ob-cutw),100% 100%,0 100%)}
+  .ob-cut::after{content:'';position:absolute;top:2px;left:0;
+    margin-left:calc(100% - var(--ob-cutw));
+    width:calc(var(--ob-cutw) * 1.4142);height:2px;
+    background:linear-gradient(90deg,transparent,var(--ob-accent) 46%);
+    transform-origin:0 0;transform:rotate(45deg);pointer-events:none;opacity:.9}
+
+  /* ---------- 01：主剖面改成深色实心（八屏里唯一一个"压住整页"的重物） ---------- */
+  .ob-slab.main{background:linear-gradient(152deg,#2E3A4A 0%,#1C242F 58%,#161D26 100%);
+    border-color:rgba(255,255,255,.16);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.20),inset 0 -3px 0 rgba(0,0,0,.30)}
+  .ob-slab.main b{color:#F4F8FE}
+  .ob-slab.main span{color:rgba(214,226,242,.64)}
+  .ob-slab.main .ob-sheen{background:linear-gradient(100deg,transparent,rgba(255,255,255,.18),transparent)}
+  .ob-slab.main em{color:#DCE8F7}
+  /* 暗色下卡片本来就是深色，主剖面用"更亮一档 + 更亮的边"往前推，
+     否则四张叠片会糊成一片 */
+  body[data-theme="dark"] .ob-slab.main{
+    background:linear-gradient(152deg,#40506A 0%,#29354A 58%,#212B3C 100%);
+    border-color:rgba(163,186,216,.36)}
+
+  /* ---------- 02：状态线左侧加一条实心渐变轴 ---------- */
+  .ob-line{padding:12px 14px 12px 0;border-radius:12px;
+    background:linear-gradient(90deg,
+      color-mix(in srgb,var(--brand-weak) 62%,transparent) 0%,
+      transparent 66%)}
+  .ob-line-list::before{width:2px;background:linear-gradient(180deg,var(--brand2),var(--brand))}
+  .ob-line-node>i{left:-18px;width:10px;height:10px}
+
+  /* ---------- 03：详情卡升为内容板；标题进 17px 这一档 ---------- */
+  .ob-detail{--ob-bar:var(--brand2);background:var(--ob-card)}
+  .ob-detail b{font-size:17px;letter-spacing:-.012em;margin-bottom:7px}
+  .ob-detail p{font-size:12.5px;color:var(--text);opacity:.78}
+
+  /* ---------- 04：结论条切角 + 记分冲大；三组明细各带自己的色条 ---------- */
+  .ob-verdict{--ob-cutw:22px;
+    background:linear-gradient(118deg,
+      color-mix(in srgb,var(--brand-weak) 96%,var(--ob-card)),var(--ob-card) 74%);
+    box-shadow:inset 0 -3px 0 var(--ob-weigh)}
+  .ob-vd-num b{font-size:58px;min-width:1.06em}
+  .ob-vd-msg{font-size:14px}
+  .ob-grp{position:relative;overflow:hidden;background:var(--ob-card);
+    border-color:var(--ob-edge)}
+  .ob-grp::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--brand2);opacity:.55}
+  .ob-grp:nth-child(2)::before{background:var(--ob-accent);opacity:.8}
+  .ob-grp:nth-child(3)::before{background:var(--ob-lilac);opacity:.8}
+
+  /* ---------- 05：控制台切角 + 四角准星（深色块上唯一需要"精度感"的地方） ---------- */
+  .ob-console{--ob-cutw:30px}
+  /* 切角把右上角挖掉了，操作条右端的 LIVE 正好在那儿 → 给它让出切角宽度 */
+  .ob-console .ob-console-bar{padding-right:38px}
+  .ob-xhair{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .ob-xhair i{position:absolute;width:9px;height:9px;opacity:.42}
+  .ob-xhair i::before,.ob-xhair i::after{content:'';position:absolute;background:var(--ob-term-tx)}
+  .ob-xhair i::before{left:0;top:4px;width:9px;height:1px}
+  .ob-xhair i::after{left:4px;top:0;width:1px;height:9px}
+  .ob-xhair .bl{left:9px;bottom:9px}
+  .ob-xhair .br{right:9px;bottom:9px}
+
+  /* ---------- 06：对话面板升为内容板；确认卡沿用同一套但换成告警色 ---------- */
+  .ob-chat{--ob-bar:var(--brand2);background:var(--ob-card);box-shadow:var(--ob-lift-sm)}
+  .ob-confirm{--ob-bar:var(--err);background:var(--ob-card)}
+
+  /* ---------- 07：四档变真阶梯（左侧渐变轴 + 右侧缩进） ---------- */
+  .ob-perms{position:relative;padding-left:16px}
+  .ob-perms::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;
+    border-radius:3px;
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--brand2) 40%,transparent),var(--brand) 88%)}
+  .ob-perm-desc{--ob-bar:var(--brand2);background:var(--ob-card)}
+  .ob-perm-desc b{font-size:14.5px}
+
+  /* ---------- 08：章节卡变目录页（序号进 17px，顶部压一条色线） ---------- */
+  .ob-chapter-grid button{background:var(--ob-card)!important;border-top:2px solid var(--brand2)!important}
+  .ob-ch-no{font:300 17px/1 ui-monospace,Consolas,monospace;letter-spacing:-.02em;opacity:.9}
+  .ob-chapter-grid button.on{border-top-color:var(--brand)!important}
+  .ob-end-stats b{font-size:13px}
+
   /* ---------- 响应式 ---------- */
   @media (max-width:1000px){
     .ob-split,.ob-split-wide,.ob-split-grow{grid-template-columns:1fr;gap:22px}
@@ -1852,8 +1982,8 @@
     .ob-h{font-size:24px}
     .ob-lead{font-size:13px;line-height:1.8}
     .ob-scene{padding:18px 18px 22px}
-    .ob-top{padding:11px 16px;gap:12px}
-    .ob-demo-tag{display:none}
+    .ob-top{padding:11px 16px;gap:10px}
+    .ob-tool{height:28px;min-width:28px;padding:0 6px!important;border-radius:8px!important}
     .ob-keys{display:none}
     .ob-row{grid-template-columns:7px minmax(0,1fr) auto}
     .ob-console-body{grid-template-columns:1fr}

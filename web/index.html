@@ -1136,23 +1136,35 @@
    不引入元素级选择器，所有规则以 .ob 开头。 */
 
   .ob{
-    --ob-glass:rgba(255,255,255,.62);
-    --ob-glass-2:rgba(255,255,255,.38);
-    --ob-edge:rgba(255,255,255,.80);
-    --ob-hair:rgba(62,60,58,.10);
+    /* v10：原来卡面是"白底 + 0.8 白描边"，叠在米白页面上 —— 两者只差 8 个色阶，
+       肉眼只剩一条 1px 线。现在把画布压深一档、卡面提亮、描边换成真的深发丝线。 */
+    --ob-page:#EFE8DD;
+    --ob-fx-a:#6E86A8;--ob-fx-b:#C08B72;
+    --ob-card:#FFFDFA;
+    --ob-ink:#1B2430;
+    --ob-weigh:rgba(82,110,150,.20);
+    --ob-glass:rgba(255,255,255,.88);
+    --ob-glass-2:rgba(255,255,255,.66);
+    --ob-edge:rgba(62,52,40,.13);
+    --ob-hair:rgba(62,60,58,.12);
     --ob-lift:0 1px 0 rgba(255,255,255,.92) inset,0 2px 3px rgba(62,60,58,.03),
              0 26px 52px -32px rgba(45,55,75,.34);
     --ob-lift-sm:0 1px 0 rgba(255,255,255,.84) inset,0 10px 24px -18px rgba(45,55,75,.30);
     --ob-term:#1E222A; --ob-term-hi:#2A2F39; --ob-term-tx:#C7CEDA;
     position:fixed;inset:0;z-index:100;display:none;flex-direction:column;
-    background:var(--bg);color:var(--text);overflow:hidden;
+    background:var(--ob-page);color:var(--text);overflow:hidden;
     -webkit-font-smoothing:antialiased;
   }
   body[data-theme="dark"] .ob{
-    --ob-glass:rgba(38,49,68,.56);
-    --ob-glass-2:rgba(38,49,68,.30);
-    --ob-edge:rgba(255,255,255,.10);
-    --ob-hair:rgba(255,255,255,.09);
+    --ob-page:#090D14;
+    --ob-fx-a:#93ADCD;--ob-fx-b:#D9B2A0;
+    --ob-card:#151D2A;
+    --ob-ink:#0C121B;
+    --ob-weigh:rgba(0,0,0,.45);
+    --ob-glass:rgba(32,43,60,.88);
+    --ob-glass-2:rgba(42,56,78,.66);
+    --ob-edge:rgba(255,255,255,.13);
+    --ob-hair:rgba(255,255,255,.10);
     --ob-lift:0 1px 0 rgba(255,255,255,.07) inset,0 26px 52px -32px rgba(0,0,0,.68);
     --ob-lift-sm:0 1px 0 rgba(255,255,255,.06) inset,0 10px 24px -18px rgba(0,0,0,.55);
     --ob-term:#0E131C; --ob-term-hi:#19212F; --ob-term-tx:#C2CBD9;
@@ -1189,6 +1201,12 @@
     0%,100%{transform:translate3d(0,0,0) scale(1)}
     50%{transform:translate3d(3vw,-2vh,0) scale(1.08)}
   }
+  /* 粒子层：几十个慢速漂移的节点，近则连线，指针靠近会被推开。
+     放在光斑之上、内容之下；边缘用径向遮罩收掉，免得四个角出现硬边的点。 */
+  .ob-fx{position:absolute;inset:0;z-index:3;display:block;width:100%;height:100%;
+    pointer-events:none;
+    -webkit-mask-image:radial-gradient(ellipse 82% 74% at 50% 42%,#000 24%,transparent 84%);
+    mask-image:radial-gradient(ellipse 82% 74% at 50% 42%,#000 24%,transparent 84%)}
 
   /* ---------- 顶栏：章节 + 细进度条 + 演示标识 ---------- */
   .ob-top{position:relative;z-index:4;flex:none;display:flex;align-items:center;gap:18px;
@@ -1204,10 +1222,17 @@
   .ob-progress i{position:absolute;inset:0 auto 0 0;width:0;border-radius:2px;
     background:linear-gradient(90deg,var(--brand2),var(--brand));
     transition:width .45s cubic-bezier(.22,1,.36,1)}
-  .ob-demo-tag{display:flex;align-items:center;gap:6px;flex:none;font-size:11px;color:var(--muted);
-    border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--ob-glass-2)}
-  .ob-demo-tag i{width:5px;height:5px;border-radius:50%;background:var(--ob-accent);flex:none;
-    box-shadow:0 0 0 3px color-mix(in srgb,var(--ob-accent) 22%,transparent)}
+  /* 顶栏右端两个开关：中英 / 明暗。点的是主界面那两个同名函数，
+     所以两边状态天然一致（不是各存一份）。 */
+  .ob-tools{display:flex;align-items:center;gap:6px;flex:none}
+  /* 宽度跟着内容走：语言按钮里是「EN / 中文」两个汉字，定宽 30px 会贴边 */
+  .ob-tool{min-width:30px;height:30px;padding:0 8px!important;border-radius:9px!important;
+    display:flex;align-items:center;justify-content:center;
+    font:500 11px/1 ui-monospace,Consolas,monospace!important;
+    color:var(--muted)!important;background:var(--ob-glass-2)!important}
+  .ob-tool:hover{color:var(--brand)!important;border-color:var(--brand2)!important;
+    background:var(--ob-card)!important}
+  .ob-tool svg{display:block;width:14px;height:14px}
   .ob-skip{margin-left:auto!important;font-size:12px!important;padding:7px 14px!important;color:var(--muted)!important}
   .ob-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
@@ -1840,6 +1865,111 @@
   .driver-active-element{z-index:101!important}
   .driver-popover{border-radius:12px;font-family:inherit}
 
+  /* ================= v10 造型系统 =================
+     问题不是"参数没调好"，而是八屏只有一种造型语言：12–18px 圆角矩形 + 同一条淡阴影，
+     分不出内容卡 / 操作卡 / 告警卡。这一版先做两件可复用的零件，再按屏分配，
+     每屏最多两件 —— 全上满就变成仪表盘堆料。 */
+
+  /* 每屏左上角一枚极淡的大号章节号：绝对定位，不进 flex 流，也不吃点击。
+     八屏的正文都在中间 1080px 里，两侧留白很大 —— 这枚数字给版面一个锚点。 */
+  .ob-scene{position:relative}
+  .ob-scene::before{content:attr(data-no);position:absolute;left:-.04em;top:-.24em;
+    font:600 clamp(124px,15vw,204px)/1 -apple-system,"Segoe UI",sans-serif;
+    letter-spacing:-.07em;color:var(--text);opacity:.034;pointer-events:none;
+    user-select:none;z-index:0}
+  .ob-scene>*{position:relative;z-index:1}
+
+  /* 件 A：浅色内容板 —— 1px 真发丝边 + 左色条 + 底边 3px 厚度。
+     厚度用 inset 阴影画在卡内侧，所以切角/圆角都不会把它裁掉。 */
+  .ob-panel{position:relative;background:var(--ob-card);
+    border:1px solid var(--ob-edge);border-radius:13px;
+    box-shadow:inset 0 -3px 0 var(--ob-weigh),var(--ob-lift-sm)}
+  .ob-bar::before{content:'';position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;
+    border-radius:13px 0 0 13px;background:var(--ob-bar,var(--brand2));z-index:1}
+
+  /* 件 B：切角板 —— 右上切 26px，沿切边压一道强调高光。
+     clip-path 会把 box-shadow / backdrop-filter 一起裁掉，所以切角卡必须用实色底，
+     靠 inset 高光表达"厚度"，不能靠外阴影。 */
+  .ob-cut{--ob-cutw:26px;position:relative;
+    clip-path:polygon(0 0,calc(100% - var(--ob-cutw)) 0,100% var(--ob-cutw),100% 100%,0 100%)}
+  .ob-cut::after{content:'';position:absolute;top:2px;left:0;
+    margin-left:calc(100% - var(--ob-cutw));
+    width:calc(var(--ob-cutw) * 1.4142);height:2px;
+    background:linear-gradient(90deg,transparent,var(--ob-accent) 46%);
+    transform-origin:0 0;transform:rotate(45deg);pointer-events:none;opacity:.9}
+
+  /* ---------- 01：主剖面改成深色实心（八屏里唯一一个"压住整页"的重物） ---------- */
+  .ob-slab.main{background:linear-gradient(152deg,#2E3A4A 0%,#1C242F 58%,#161D26 100%);
+    border-color:rgba(255,255,255,.16);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.20),inset 0 -3px 0 rgba(0,0,0,.30)}
+  .ob-slab.main b{color:#F4F8FE}
+  .ob-slab.main span{color:rgba(214,226,242,.64)}
+  .ob-slab.main .ob-sheen{background:linear-gradient(100deg,transparent,rgba(255,255,255,.18),transparent)}
+  .ob-slab.main em{color:#DCE8F7}
+  /* 暗色下卡片本来就是深色，主剖面用"更亮一档 + 更亮的边"往前推，
+     否则四张叠片会糊成一片 */
+  body[data-theme="dark"] .ob-slab.main{
+    background:linear-gradient(152deg,#40506A 0%,#29354A 58%,#212B3C 100%);
+    border-color:rgba(163,186,216,.36)}
+
+  /* ---------- 02：状态线左侧加一条实心渐变轴 ---------- */
+  .ob-line{padding:12px 14px 12px 0;border-radius:12px;
+    background:linear-gradient(90deg,
+      color-mix(in srgb,var(--brand-weak) 62%,transparent) 0%,
+      transparent 66%)}
+  .ob-line-list::before{width:2px;background:linear-gradient(180deg,var(--brand2),var(--brand))}
+  .ob-line-node>i{left:-18px;width:10px;height:10px}
+
+  /* ---------- 03：详情卡升为内容板；标题进 17px 这一档 ---------- */
+  .ob-detail{--ob-bar:var(--brand2);background:var(--ob-card)}
+  .ob-detail b{font-size:17px;letter-spacing:-.012em;margin-bottom:7px}
+  .ob-detail p{font-size:12.5px;color:var(--text);opacity:.78}
+
+  /* ---------- 04：结论条切角 + 记分冲大；三组明细各带自己的色条 ---------- */
+  .ob-verdict{--ob-cutw:22px;
+    background:linear-gradient(118deg,
+      color-mix(in srgb,var(--brand-weak) 96%,var(--ob-card)),var(--ob-card) 74%);
+    box-shadow:inset 0 -3px 0 var(--ob-weigh)}
+  .ob-vd-num b{font-size:58px;min-width:1.06em}
+  .ob-vd-msg{font-size:14px}
+  .ob-grp{position:relative;overflow:hidden;background:var(--ob-card);
+    border-color:var(--ob-edge)}
+  .ob-grp::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--brand2);opacity:.55}
+  .ob-grp:nth-child(2)::before{background:var(--ob-accent);opacity:.8}
+  .ob-grp:nth-child(3)::before{background:var(--ob-lilac);opacity:.8}
+
+  /* ---------- 05：控制台切角 + 四角准星（深色块上唯一需要"精度感"的地方） ---------- */
+  .ob-console{--ob-cutw:30px}
+  /* 切角把右上角挖掉了，操作条右端的 LIVE 正好在那儿 → 给它让出切角宽度 */
+  .ob-console .ob-console-bar{padding-right:38px}
+  .ob-xhair{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .ob-xhair i{position:absolute;width:9px;height:9px;opacity:.42}
+  .ob-xhair i::before,.ob-xhair i::after{content:'';position:absolute;background:var(--ob-term-tx)}
+  .ob-xhair i::before{left:0;top:4px;width:9px;height:1px}
+  .ob-xhair i::after{left:4px;top:0;width:1px;height:9px}
+  .ob-xhair .bl{left:9px;bottom:9px}
+  .ob-xhair .br{right:9px;bottom:9px}
+
+  /* ---------- 06：对话面板升为内容板；确认卡沿用同一套但换成告警色 ---------- */
+  .ob-chat{--ob-bar:var(--brand2);background:var(--ob-card);box-shadow:var(--ob-lift-sm)}
+  .ob-confirm{--ob-bar:var(--err);background:var(--ob-card)}
+
+  /* ---------- 07：四档变真阶梯（左侧渐变轴 + 右侧缩进） ---------- */
+  .ob-perms{position:relative;padding-left:16px}
+  .ob-perms::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;
+    border-radius:3px;
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--brand2) 40%,transparent),var(--brand) 88%)}
+  .ob-perm-desc{--ob-bar:var(--brand2);background:var(--ob-card)}
+  .ob-perm-desc b{font-size:14.5px}
+
+  /* ---------- 08：章节卡变目录页（序号进 17px，顶部压一条色线） ---------- */
+  .ob-chapter-grid button{background:var(--ob-card)!important;border-top:2px solid var(--brand2)!important}
+  .ob-ch-no{font:300 17px/1 ui-monospace,Consolas,monospace;letter-spacing:-.02em;opacity:.9}
+  .ob-chapter-grid button.on{border-top-color:var(--brand)!important}
+  .ob-end-stats b{font-size:13px}
+
   /* ---------- 响应式 ---------- */
   @media (max-width:1000px){
     .ob-split,.ob-split-wide,.ob-split-grow{grid-template-columns:1fr;gap:22px}
@@ -1858,8 +1988,8 @@
     .ob-h{font-size:24px}
     .ob-lead{font-size:13px;line-height:1.8}
     .ob-scene{padding:18px 18px 22px}
-    .ob-top{padding:11px 16px;gap:12px}
-    .ob-demo-tag{display:none}
+    .ob-top{padding:11px 16px;gap:10px}
+    .ob-tool{height:28px;min-width:28px;padding:0 6px!important;border-radius:8px!important}
     .ob-keys{display:none}
     .ob-row{grid-template-columns:7px minmax(0,1fr) auto}
     .ob-console-body{grid-template-columns:1fr}
@@ -3370,7 +3500,7 @@
      所有演示数据写死在 90-onboard.js，不 fetch 任何 /api/*、不写配置、
      不触发真实确认卡/权限逻辑。 -->
 <div id="onboard" class="ob" role="dialog" aria-modal="true" aria-labelledby="ob-title">
-  <div class="ob-atmos" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i><b class="grid"></b></div>
+  <div class="ob-atmos" aria-hidden="true"><canvas class="ob-fx" id="ob-fx"></canvas><i class="a"></i><i class="b"></i><i class="c"></i><b class="grid"></b></div>
 
   <div id="ob-brand" aria-hidden="true">
     <div class="ob-brand-glow"></div>
@@ -3390,7 +3520,12 @@
       <span class="ob-crumb-name" id="ob-sec-name">开场</span>
     </div>
     <div class="ob-progress" aria-hidden="true"><i id="ob-progress-bar"></i></div>
-    <span class="ob-demo-tag"><i></i>演示模式</span>
+    <!-- 这两个开关调主界面同一套函数（ekSetLang / applyTheme），
+         不是各存一份状态：在这儿切完，关掉引导，软件本身也已经切好了。 -->
+    <div class="ob-tools">
+      <button class="ob-tool" id="ob-lang" data-no-i18n title="Switch to English">EN</button>
+      <button class="ob-tool" id="ob-theme" aria-label="切换暗色" title="切换暗色"></button>
+    </div>
     <button class="ob-skip" id="ob-skip">跳过</button>
   </header>
 
@@ -3418,7 +3553,7 @@
               <div class="ob-slab s1"><em>01</em><b>环境安装</b><span>Go · Node.js · MySQL</span></div>
               <div class="ob-slab s2"><em>02</em><b>程序配置</b><span>连接 · 建库 · 导入导出</span></div>
               <div class="ob-slab s3"><em>03</em><b>链端校验</b><span>FISCO 节点 · WeBASE</span></div>
-              <div class="ob-slab s4 main"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
+              <div class="ob-slab s4 main ob-cut"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
             </div>
             <div class="ob-art-note" id="ob-art-note">同一个入口，同一份状态</div>
             <div class="ob-hud">
@@ -3522,7 +3657,7 @@
               <span class="ob-step-name">程序启动</span>
             </button>
           </div>
-          <div class="ob-detail" id="ob-step-desc"></div>
+          <div class="ob-detail ob-panel ob-bar" id="ob-step-desc"></div>
           <div class="ob-tip ob-tip-c"><i></i>点任一段切换说明 · 上一步的产出就是这一步的输入</div>
         </div>
       </div>
@@ -3543,7 +3678,7 @@
               <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
-            <div class="ob-verdict" id="ob-verdict">
+            <div class="ob-verdict ob-cut" id="ob-verdict">
               <div class="ob-vd-num"><b id="ob-vd-score">–</b><s>/ 6</s></div>
               <div class="ob-vd-body">
                 <div class="ob-segs" id="ob-segs"></div>
@@ -3564,7 +3699,8 @@
             <h2 class="ob-h">出问题，先看来源</h2>
             <p class="ob-lead">安装、配置、链端、启动、系统各走一条分区；最近错误单独收一栏，不用在几千行里翻。</p>
           </div>
-          <div class="ob-console">
+          <div class="ob-console ob-cut">
+            <i class="ob-xhair" aria-hidden="true"><i class="bl"></i><i class="br"></i></i>
             <div class="ob-console-bar">
               <div class="ob-lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
               <div class="ob-scopes" id="ob-scopes">
@@ -3611,12 +3747,12 @@
             <div class="ob-kicker"><i></i>AI 助手</div>
             <h2 class="ob-h">说人话就能运维</h2>
             <p class="ob-lead">问状态、读日志、解报告都可以直接说。真要动手，它会先停下来问你。</p>
-            <div class="ob-chat">
+            <div class="ob-chat ob-panel ob-bar">
               <div class="ob-chat-head"><i></i><b>AI 助手</b><span>演示 · 不会真的执行</span></div>
               <div class="ob-chat-log" id="ob-chat-log">
                 <div class="ob-bubble" id="ob-bubble">今天想看点什么？<em>读日志、看状态、重启服务——都会先问你。</em></div>
               </div>
-              <div class="ob-confirm" id="ob-demo-confirm" hidden>
+              <div class="ob-confirm ob-bar" id="ob-demo-confirm" hidden>
                 <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
                 <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
                 <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
@@ -3648,7 +3784,7 @@
               <button data-perm="2"><span class="ob-perm-no">03</span><span class="ob-perm-nm">受限写</span><span class="ob-perm-tag">一次确认</span></button>
               <button data-perm="3"><span class="ob-perm-no">04</span><span class="ob-perm-nm">审批后动作</span><span class="ob-perm-tag hot">428 + 红框</span></button>
             </div>
-            <div class="ob-perm-desc" id="ob-perm-desc"></div>
+            <div class="ob-perm-desc ob-panel ob-bar" id="ob-perm-desc"></div>
             <div class="ob-perm-acts" id="ob-perm-acts"></div>
           </div>
         </div>
@@ -4136,6 +4272,10 @@ const I18N_EN = {
   "分析最近错误": "Analyze recent errors",
   "分钟前": "min ago",
   "切分区看看联动": "Switch scopes to see how they link up",
+  "切换为中文": "Switch to Chinese",
+  "切换为英文": "Switch to English",
+  "切换亮色": "Switch to light",
+  "切换暗色": "Switch to dark",
   "刚停止，等 {0} 秒让端口释放后自动启动…": "Just stopped — waiting {0}s for ports to free up, will auto-start…",
   "刚刚": "just now",
   "初始化数据库": "Initialize database",
@@ -5032,7 +5172,6 @@ const I18N_EN = {
   "滚屏中": "scrolling",
   "演示 · 不会改动你的配置": "Demo · your config is never changed",
   "演示 · 不会真的执行": "demo · nothing really runs",
-  "演示模式": "demo mode",
   "演示结束：真实操作仍会走原来的权限闸门，这里不会执行任何动作。": "Demo complete: real actions still go through the permission gate. Nothing was executed here.",
   "演练安装": "Dry-run install",
   "点「放行防火墙」按钮，在弹出的 UAC 窗口点「是」": "Click “Allow through firewall” and choose Yes in the UAC prompt",
@@ -6172,6 +6311,9 @@ function applyTheme(mode){   // 注意：参数不能叫 t，会遮蔽全局翻�
   document.body.dataset.theme = mode;
   try{ localStorage.setItem('ek-theme', mode); }catch(e){}
   const b = document.getElementById('btn-theme'); if(b) b.textContent = (mode==='dark') ? t('亮色') : t('暗色');
+  /* 广播：引导页的粒子层与顶栏开关要知道主题变了。20-shell 不认识它们，
+     所以只发事件，谁需要谁自己听。 */
+  try{ document.dispatchEvent(new CustomEvent('ek:theme', {detail:{theme:mode}})); }catch(e){}
 }
 (function(){ let t='light'; try{ t = localStorage.getItem('ek-theme') || 'light'; }catch(e){} applyTheme(t); })();
 (function(){
@@ -13873,6 +14015,157 @@ async function ekSetSaveUpdate(recheck){
     });
   }
 
+  /* ---------- 背景粒子层 ----------
+     一个 canvas 画几十个慢速漂移的点，近则连线，指针靠近会被推开。
+     没有引 tsParticles 那类库（≈90KB）：这一层只画点和线，引库换不来效果，
+     只换来一个要跟着升级、还得从 /vendor/ 同域加载的外部依赖。
+     减少动态偏好下只画一帧静态分布 —— 有画面，不动。 */
+  var FX = (function(){
+    var cv = q('#ob-fx');
+    if(!cv || !cv.getContext) return {start:function(){}, stop:function(){}, theme:function(){}};
+    var ctx = cv.getContext('2d');
+    var W = 0, H = 0, raf = 0, on = false, dots = [];
+    var cA = '#8CA6C6', cB = '#D9B2A0';
+    var ptr = {x:-9999, y:-9999};
+    var LINK = 132, LINK2 = LINK * LINK, PUSH = 150, PUSH2 = PUSH * PUSH;
+
+    function cssVar(name, fb){
+      var v = '';
+      try{ v = getComputedStyle(OB).getPropertyValue(name) || ''; }catch(e){}
+      return v.trim() || fb;
+    }
+    function theme(){
+      /* 不用 --brand2：那个值在浅色底上几乎看不见。这两个变量在 CSS 里
+         按主题各给了一套（浅色偏深、暗色偏亮）。 */
+      cA = cssVar('--ob-fx-a', '#6E86A8');
+      cB = cssVar('--ob-fx-b', '#C08B72');
+    }
+    function seed(){
+      var n = Math.round(W * H / 19000);
+      n = Math.max(22, Math.min(72, n));
+      dots = [];
+      for(var i = 0; i < n; i++){
+        dots.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - .5) * .26,
+          vy: (Math.random() - .5) * .26,
+          r: 1 + Math.random() * 1.7,
+          ph: Math.random() * Math.PI * 2,
+          sp: .6 + Math.random() * 1.1,
+          /* 少数点用暖色：全蓝就是星空壁纸，掺一点陶土色才和整页的水彩暖调对上 */
+          warm: Math.random() < .26
+        });
+      }
+    }
+    function resize(){
+      var r = cv.getBoundingClientRect();
+      W = Math.max(1, Math.round(r.width));
+      H = Math.max(1, Math.round(r.height));
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(W * dpr);
+      cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    }
+    function draw(ts){
+      if(!on) return;
+      var t = ts || 0, i, j, a, b, dx, dy, d2, d;
+      ctx.clearRect(0, 0, W, H);
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        a.x += a.vx; a.y += a.vy;
+        dx = a.x - ptr.x; dy = a.y - ptr.y;
+        d2 = dx * dx + dy * dy;
+        if(d2 < PUSH2 && d2 > .01){
+          d = Math.sqrt(d2);
+          var f = (1 - d / PUSH) * .9;
+          a.x += dx / d * f * 3;
+          a.y += dy / d * f * 3;
+        }
+        if(a.x < -24) a.x = W + 24; else if(a.x > W + 24) a.x = -24;
+        if(a.y < -24) a.y = H + 24; else if(a.y > H + 24) a.y = -24;
+      }
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = cA;
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        for(j = i + 1; j < dots.length; j++){
+          b = dots[j];
+          dx = a.x - b.x; dy = a.y - b.y;
+          d2 = dx * dx + dy * dy;
+          if(d2 > LINK2) continue;
+          ctx.globalAlpha = (1 - Math.sqrt(d2) / LINK) * .42;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+      for(i = 0; i < dots.length; i++){
+        a = dots[i];
+        var tw = .55 + .45 * Math.sin(t / 900 * a.sp + a.ph);
+        ctx.globalAlpha = .34 + .5 * tw;
+        ctx.fillStyle = a.warm ? cB : cA;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, a.r * (.8 + .35 * tw), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if(!REDUCED) raf = requestAnimationFrame(draw);
+    }
+    function onMove(e){
+      var r = cv.getBoundingClientRect();
+      ptr.x = e.clientX - r.left;
+      ptr.y = e.clientY - r.top;
+    }
+    function onLeave(){ ptr.x = ptr.y = -9999; }
+    function start(){
+      if(on) return;
+      resize(); theme();
+      window.addEventListener('resize', resize);
+      OB.addEventListener('pointermove', onMove);
+      OB.addEventListener('pointerleave', onLeave);
+      on = true;
+      draw(0);
+    }
+    function stop(){
+      on = false;
+      if(raf) cancelAnimationFrame(raf);
+      raf = 0;
+      window.removeEventListener('resize', resize);
+      OB.removeEventListener('pointermove', onMove);
+      OB.removeEventListener('pointerleave', onLeave);
+      try{ ctx.clearRect(0, 0, W, H); }catch(e){}
+    }
+    return {start:start, stop:stop, theme:theme};
+  })();
+
+  /* ---------- 顶栏开关：中英 / 明暗 ----------
+     调的是主界面那两个函数本身（ekSetLang / applyTheme），所以"和软件内同步"
+     不是额外做一次同步，而是本来就只有一份状态。 */
+  var ICON_MOON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.4 1.9a6.3 6.3 0 0 0 7.7 7.7A6.6 6.6 0 1 1 6.4 1.9Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+  var ICON_SUN = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.3v1.5M8 13.2v1.5M1.3 8h1.5M13.2 8h1.5M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+  function isEN(){ return document.documentElement.getAttribute('lang') === 'en'; }
+  function isDark(){ return document.body.dataset.theme === 'dark'; }
+
+  function syncTools(){
+    var lb = q('#ob-lang'), tb = q('#ob-theme');
+    if(lb){
+      /* 按钮写"点了会变成什么"：EN 模式下写"中文"。与主界面 #btn-lang 同一套写法 */
+      lb.textContent = isEN() ? '中文' : 'EN';
+      var lt = t(isEN() ? '切换为中文' : '切换为英文');
+      lb.title = lt; lb.setAttribute('aria-label', lt);
+    }
+    if(tb){
+      tb.innerHTML = isDark() ? ICON_SUN : ICON_MOON;
+      var tt = t(isDark() ? '切换亮色' : '切换暗色');
+      tb.title = tt; tb.setAttribute('aria-label', tt);
+    }
+  }
+
+
   /* ---------- 静态演示数据（不来自接口，不写回任何地方） ---------- */
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
   var CHAPTER_SUM = [
@@ -14638,7 +14931,13 @@ async function ekSetSaveUpdate(recheck){
 
   function setSlides(list){
     ALL_SLIDES.forEach(function(s){ if(s.parentNode) s.parentNode.removeChild(s); });
-    list.forEach(function(s){ WRAP.appendChild(s); });
+    list.forEach(function(s){
+      WRAP.appendChild(s);
+      /* 场景角上的大号章节号（CSS 用 attr(data-no) 渲染），按屏号补零 */
+      var sc = s.querySelector('.ob-scene');
+      var n = Number(s.getAttribute('data-idx'));
+      if(sc) sc.setAttribute('data-no', pad(n + 1));
+    });
   }
 
   function tourAvailable(){
@@ -14666,6 +14965,8 @@ async function ekSetSaveUpdate(recheck){
 
     OB.classList.add('show');
     document.body.classList.add('ob-active');
+    syncTools();                    /* 主题/语言可能在主界面被改过，开屏先对齐一次 */
+    FX.start();
     trCode();                       /* CODE/PRE 里是演示报错，全局翻译器不碰，这里补 */
     sw = buildSwiper();
     cur = 0;
@@ -14685,6 +14986,7 @@ async function ekSetSaveUpdate(recheck){
     endBrand();
     clearTimers();
     endType();
+    FX.stop();
     if(sw){ try{ sw.destroy(true, true); }catch(e){} sw = null; }
     OB.classList.remove('show');
     document.body.classList.remove('ob-active');
@@ -14728,7 +15030,11 @@ async function ekSetSaveUpdate(recheck){
 
   /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上 */
   document.addEventListener('ek:lang', function(){
-    if(OB.classList.contains('show')) trCode();
+    if(OB.classList.contains('show')){ trCode(); syncTools(); }
+  });
+  /* 主题改变（无论是这里的按钮还是主界面）→ 粒子颜色跟着换 */
+  document.addEventListener('ek:theme', function(){
+    if(OB.classList.contains('show')){ syncTools(); FX.theme(); }
   });
 
   /* ---------- 事件委托（跨 IIFE，一律 document + closest） ---------- */
@@ -14752,6 +15058,19 @@ async function ekSetSaveUpdate(recheck){
     if(!b || !OB.contains(b)) return;
     var id = b.id;
     var jump = b.getAttribute('data-jump');
+
+    /* 顶栏两个开关：直接调主界面的函数，关掉引导后软件本身也已经是切换后的状态 */
+    if(id === 'ob-lang'){
+      try{ ekSetLang(isEN() ? 'zh' : 'en', true); }catch(err){}
+      syncTools();
+      return;
+    }
+    if(id === 'ob-theme'){
+      try{ applyTheme(isDark() ? 'light' : 'dark'); }catch(err){}
+      syncTools();
+      FX.theme();
+      return;
+    }
 
     if(jump !== null){ if(sw) sw.slideTo(Number(jump)); return; }
 

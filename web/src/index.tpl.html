@@ -1412,7 +1412,7 @@
      所有演示数据写死在 90-onboard.js，不 fetch 任何 /api/*、不写配置、
      不触发真实确认卡/权限逻辑。 -->
 <div id="onboard" class="ob" role="dialog" aria-modal="true" aria-labelledby="ob-title">
-  <div class="ob-atmos" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i><b class="grid"></b></div>
+  <div class="ob-atmos" aria-hidden="true"><canvas class="ob-fx" id="ob-fx"></canvas><i class="a"></i><i class="b"></i><i class="c"></i><b class="grid"></b></div>
 
   <div id="ob-brand" aria-hidden="true">
     <div class="ob-brand-glow"></div>
@@ -1432,7 +1432,12 @@
       <span class="ob-crumb-name" id="ob-sec-name">开场</span>
     </div>
     <div class="ob-progress" aria-hidden="true"><i id="ob-progress-bar"></i></div>
-    <span class="ob-demo-tag"><i></i>演示模式</span>
+    <!-- 这两个开关调主界面同一套函数（ekSetLang / applyTheme），
+         不是各存一份状态：在这儿切完，关掉引导，软件本身也已经切好了。 -->
+    <div class="ob-tools">
+      <button class="ob-tool" id="ob-lang" data-no-i18n title="Switch to English">EN</button>
+      <button class="ob-tool" id="ob-theme" aria-label="切换暗色" title="切换暗色"></button>
+    </div>
     <button class="ob-skip" id="ob-skip">跳过</button>
   </header>
 
@@ -1460,7 +1465,7 @@
               <div class="ob-slab s1"><em>01</em><b>环境安装</b><span>Go · Node.js · MySQL</span></div>
               <div class="ob-slab s2"><em>02</em><b>程序配置</b><span>连接 · 建库 · 导入导出</span></div>
               <div class="ob-slab s3"><em>03</em><b>链端校验</b><span>FISCO 节点 · WeBASE</span></div>
-              <div class="ob-slab s4 main"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
+              <div class="ob-slab s4 main ob-cut"><b>EnvKit</b><span>一条状态线 · 检测 · 配置 · 链端 · 启动 · AI</span><i class="ob-sheen"></i></div>
             </div>
             <div class="ob-art-note" id="ob-art-note">同一个入口，同一份状态</div>
             <div class="ob-hud">
@@ -1564,7 +1569,7 @@
               <span class="ob-step-name">程序启动</span>
             </button>
           </div>
-          <div class="ob-detail" id="ob-step-desc"></div>
+          <div class="ob-detail ob-panel ob-bar" id="ob-step-desc"></div>
           <div class="ob-tip ob-tip-c"><i></i>点任一段切换说明 · 上一步的产出就是这一步的输入</div>
         </div>
       </div>
@@ -1585,7 +1590,7 @@
               <div class="ob-term-prog" id="ob-term-prog"><i></i></div>
               <div class="ob-term-body" id="ob-detect-cmd"></div>
             </div>
-            <div class="ob-verdict" id="ob-verdict">
+            <div class="ob-verdict ob-cut" id="ob-verdict">
               <div class="ob-vd-num"><b id="ob-vd-score">–</b><s>/ 6</s></div>
               <div class="ob-vd-body">
                 <div class="ob-segs" id="ob-segs"></div>
@@ -1606,7 +1611,8 @@
             <h2 class="ob-h">出问题，先看来源</h2>
             <p class="ob-lead">安装、配置、链端、启动、系统各走一条分区；最近错误单独收一栏，不用在几千行里翻。</p>
           </div>
-          <div class="ob-console">
+          <div class="ob-console ob-cut">
+            <i class="ob-xhair" aria-hidden="true"><i class="bl"></i><i class="br"></i></i>
             <div class="ob-console-bar">
               <div class="ob-lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
               <div class="ob-scopes" id="ob-scopes">
@@ -1653,12 +1659,12 @@
             <div class="ob-kicker"><i></i>AI 助手</div>
             <h2 class="ob-h">说人话就能运维</h2>
             <p class="ob-lead">问状态、读日志、解报告都可以直接说。真要动手，它会先停下来问你。</p>
-            <div class="ob-chat">
+            <div class="ob-chat ob-panel ob-bar">
               <div class="ob-chat-head"><i></i><b>AI 助手</b><span>演示 · 不会真的执行</span></div>
               <div class="ob-chat-log" id="ob-chat-log">
                 <div class="ob-bubble" id="ob-bubble">今天想看点什么？<em>读日志、看状态、重启服务——都会先问你。</em></div>
               </div>
-              <div class="ob-confirm" id="ob-demo-confirm" hidden>
+              <div class="ob-confirm ob-bar" id="ob-demo-confirm" hidden>
                 <div class="ob-confirm-bar"><i></i><b>需要你确认</b></div>
                 <p>「重启后端」属于写操作，会先弹这张卡。真实界面里，确认后才执行。</p>
                 <div class="ob-confirm-btns"><button id="ob-demo-ok">知道了（演示）</button><button id="ob-demo-cancel">取消</button></div>
@@ -1690,7 +1696,7 @@
               <button data-perm="2"><span class="ob-perm-no">03</span><span class="ob-perm-nm">受限写</span><span class="ob-perm-tag">一次确认</span></button>
               <button data-perm="3"><span class="ob-perm-no">04</span><span class="ob-perm-nm">审批后动作</span><span class="ob-perm-tag hot">428 + 红框</span></button>
             </div>
-            <div class="ob-perm-desc" id="ob-perm-desc"></div>
+            <div class="ob-perm-desc ob-panel ob-bar" id="ob-perm-desc"></div>
             <div class="ob-perm-acts" id="ob-perm-acts"></div>
           </div>
         </div>
