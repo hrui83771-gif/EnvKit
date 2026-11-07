@@ -1644,8 +1644,6 @@
   .ob-pet-state.hot{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,var(--ob-edge))}
   .ob-pet-state.hot i{background:var(--warn);animation:none}
   .ob-pet-state.done i{background:var(--brand);animation:none}
-  .ob-pet-tag{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
-    text-align:center;line-height:1.6}
   /* 桌宠气泡：位置和真实气泡一样——贴在头顶往上长，尾巴朝下。
      里面放的是主界面同一批内置台词（思考中 / 点我确认！/ 出错了…点我看日志）。
      59% 不是随手写的：#petSvg 里三张视角图并排、只显示正面那张，

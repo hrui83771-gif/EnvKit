@@ -171,10 +171,10 @@
 
   /* 桌宠的内置台词，逐句照抄主界面（50-pet.js 的 FISH_LINES / FISH_FOOD 与 say()）。
      演示页不另编台词 —— 另编了就只是"看起来像"，接过来才叫同一个角色。
-     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。 */
+     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。
+     d 是可选的补充说明，没有就只显示台词本身。 */
   var PET_ACT = {
-    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住'],
-              d:'右键「说句话」抽一条，一轮之内不会重复'},
+    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住']},
     feed:    {l:['小鱼干！我的最爱！'], d:'双击它投喂，给的东西不同台词也不同'},
     weather: {l:['我瞅瞅天…', '合肥今天 19° · 湿度 42° · 体感 17°'],
               d:'只有天气会出网，开关默认是关的'},
@@ -589,6 +589,11 @@
     if(b) b.classList.remove('show');
   }
 
+  /* 气泡内容：台词本体加粗，补充说明放 <em>；没有补充说明就只留台词 */
+  function petHTML(line, d){
+    return '<b>' + t(line) + '</b>' + (d ? '<em>' + t(d) + '</em>' : '');
+  }
+
   /* 内置动作：说的这句就是主界面会说的那句，没有为演示另写文案 */
   var petRot = 0;
 
@@ -596,17 +601,17 @@
     var A = PET_ACT[k];
     if(!A) return;
     if(k === 'say'){
-      petSay('<b>' + t(A.l[petRot++ % A.l.length]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      petSay(petHTML(A.l[petRot++ % A.l.length], A.d), false, 3400);
       return;
     }
     if(k === 'feed'){
-      petSay('<b>' + t(A.l[0]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      petSay(petHTML(A.l[0], A.d), false, 3400);
       return;
     }
     /* 天气和看错误都是两步：先出声，再给结果 */
-    petSay('<b>' + t(A.l[0]) + '</b>', true);
+    petSay(petHTML(A.l[0]), true);
     later(function(){
-      petSay('<b>' + t(A.l[1]) + '</b><em>' + t(A.d) + '</em>', false, 3800);
+      petSay(petHTML(A.l[1], A.d), false, 3800);
     }, 900);
   }
 

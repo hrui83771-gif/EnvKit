@@ -497,8 +497,6 @@ const I18N_EN = {
   "可达": "Reachable",
   "可达 · {0}ms": "Reachable · {0}ms",
   "可选": "Optional",
-  "台词都是内置的，主界面上右键就能点": "Every line is built in — right-click it on the main screen",
-  "右键「说句话」抽一条，一轮之内不会重复": "Right-click “Say something” for a line — no repeats in a round",
   "右键可以让我藏起来": "Right-click lets me hide",
   "右键菜单 · 节选": "RIGHT-CLICK MENU · SELECTION",
   "各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。": "How many days / copies of records and backups stay on this machine before automatic cleanup. Higher values use more disk (10 copies of a 1GB DB = 10GB); lower values discard troubleshooting history sooner.",
@@ -1947,6 +1945,10 @@ function applyI18n(root){
 }
 /* t(key, ...args)：拼接式文案用（key 用中文原文/模板，如 t('{0} 行', n)） */
 function t(key, ...args){
+  /* 调用方漏传文案时返回空串，而不是让 out.replace 抛 TypeError。
+     抛错会顺着调用栈把整块交互打哑（06 屏的桌宠气泡就因此不刷新），
+     少一句话远好过整屏不动。 */
+  if(key === undefined || key === null) return '';
   let out = key;
   if(EK_LANG === 'en'){ if(I18N_EN[key] !== undefined) out = I18N_EN[key]; }
   else { if(EK_ZH_OF[key] !== undefined) out = EK_ZH_OF[key]; }

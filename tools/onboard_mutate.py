@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """首次引导的变异门禁：改坏必红、复原必绿、源码字节级还原。
 
-用法：python tools/onboard_mutate.py
+用法：python tools/onboard_mutate.py            # 全跑
+      python tools/onboard_mutate.py M9 M15     # 只跑指定编号（调试用）
 
 每组变异走完整链路 web_build.py -> go build -> cdp_onboard_test.js。
 必须走 go build：前端是 embed 进 exe 的，只跑 web_build.py 会全绿（在测旧二进制）。
@@ -91,6 +92,14 @@ MUTATIONS = [
      "  for(const a of ['placeholder','title','aria-label']){",
      "  for(const a of ['placeholder','title']){",
      'i18n-en-aria-label'),
+    # 06 屏「说句话」只留台词：d 缺失时若仍拼 <em>，气泡里会冒出 undefined。
+    # 这里刻意用 t(String(d)) 而不是 t(d)：直接传 undefined 会让 t() 里的
+    # out.replace 抛 TypeError，气泡压根不更新，断言反而因为「空内容」变绿 ——
+    # 变异要模拟的是「看起来只多了两个字」的隐蔽回归，不是整屏崩。
+    ('M15 拼出 undefined',   'web/src/js/90-onboard.js',
+     "    return '<b>' + t(line) + '</b>' + (d ? '<em>' + t(d) + '</em>' : '');",
+     "    return '<b>' + t(line) + '</b>' + '<em>' + t(String(d)) + '</em>';",
+     'detail-pet-say-only'),
 ]
 
 TARGETS = sorted(set(m[1] for m in MUTATIONS))
@@ -122,6 +131,7 @@ def digest(path):
 
 def main():
     os.chdir(REPO)
+    only = [a for a in sys.argv[1:] if not a.startswith('-')]
     originals = {p: open(os.path.join(REPO, p), 'rb').read() for p in TARGETS}
     before = {p: digest(p) for p in TARGETS}
     report = []
@@ -129,6 +139,8 @@ def main():
 
     try:
         for tag, path, old, new, expect_red in MUTATIONS:
+            if only and not any(tag.startswith(o + ' ') for o in only):
+                continue
             raw = originals[path]
             text = raw.decode('utf-8')
             n = text.count(old)

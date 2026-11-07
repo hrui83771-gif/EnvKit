@@ -563,6 +563,9 @@ function seed() {
     let SR = {}; try { SR = JSON.parse(sayRes || '{}'); } catch (e) {}
     check('detail-pet-say-line', SR.shown === true &&
       /我不思考了|我先去吃饭啦|大肥鱼坐的住/.test(SR.txt || ''), sayRes);
+    // 这句只有台词、没有补充说明：d 缺失时不能拼出 undefined，也不能多出旁白
+    check('detail-pet-say-only', !/undefined|抽一条|台词都是内置的/.test(SR.txt || ''), sayRes);
+    check('detail-pet-no-tagline', (await evalJS(`!document.querySelector('.ob-pet-tag')`)) === true);
     // 查天气是两步：先「我瞅瞅天…」，再给实况。一步到位反而假。
     await clickSel('#ob-pet-menu button[data-pact="weather"]', 'pet-weather');
     await sleep(260);
@@ -715,6 +718,9 @@ function seed() {
     check('src-no-api-path', !/['"`]\/api\//.test(src));
     check('src-no-eval', !/\beval\s*\(|new Function|document\.write/.test(src));
     check('src-only-seen-write', (src.match(/localStorage\.setItem/g) || []).length === 1);
+    // 06 屏那两句解释性旁白已按需求删掉，别再被顺手加回来
+    const tpl = fs.readFileSync(path.join(REPO, 'web', 'src', 'index.tpl.html'), 'utf8');
+    check('src-no-pet-tagline', !/台词都是内置的|抽一条/.test(src + tpl));
 
     // ===== G. 全站柔和配色落地（换色后无绿、docx 格式色仍在） =====
     const brandVal = await evalJS(`getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()`);

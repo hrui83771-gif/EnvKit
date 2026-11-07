@@ -1650,8 +1650,6 @@
   .ob-pet-state.hot{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,var(--ob-edge))}
   .ob-pet-state.hot i{background:var(--warn);animation:none}
   .ob-pet-state.done i{background:var(--brand);animation:none}
-  .ob-pet-tag{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
-    text-align:center;line-height:1.6}
   /* 桌宠气泡：位置和真实气泡一样——贴在头顶往上长，尾巴朝下。
      里面放的是主界面同一批内置台词（思考中 / 点我确认！/ 出错了…点我看日志）。
      59% 不是随手写的：#petSvg 里三张视角图并排、只显示正面那张，
@@ -3608,7 +3606,6 @@
               <button data-pact="weather">查天气</button>
               <button data-pact="err">看错误</button>
             </div>
-            <div class="ob-pet-tag">台词都是内置的，主界面上右键就能点</div>
           </div>
           <div class="ob-ai-chat">
             <div class="ob-kicker"><i></i>AI 助手</div>
@@ -4239,8 +4236,6 @@ const I18N_EN = {
   "可达": "Reachable",
   "可达 · {0}ms": "Reachable · {0}ms",
   "可选": "Optional",
-  "台词都是内置的，主界面上右键就能点": "Every line is built in — right-click it on the main screen",
-  "右键「说句话」抽一条，一轮之内不会重复": "Right-click “Say something” for a line — no repeats in a round",
   "右键可以让我藏起来": "Right-click lets me hide",
   "右键菜单 · 节选": "RIGHT-CLICK MENU · SELECTION",
   "各类记录与备份在本机保留的天数 / 份数，到期自动清理。调大更占磁盘（1GB 的库留 10 份就是 10GB），调小会更快丢掉排障要用的历史。": "How many days / copies of records and backups stay on this machine before automatic cleanup. Higher values use more disk (10 copies of a 1GB DB = 10GB); lower values discard troubleshooting history sooner.",
@@ -5689,6 +5684,10 @@ function applyI18n(root){
 }
 /* t(key, ...args)：拼接式文案用（key 用中文原文/模板，如 t('{0} 行', n)） */
 function t(key, ...args){
+  /* 调用方漏传文案时返回空串，而不是让 out.replace 抛 TypeError。
+     抛错会顺着调用栈把整块交互打哑（06 屏的桌宠气泡就因此不刷新），
+     少一句话远好过整屏不动。 */
+  if(key === undefined || key === null) return '';
   let out = key;
   if(EK_LANG === 'en'){ if(I18N_EN[key] !== undefined) out = I18N_EN[key]; }
   else { if(EK_ZH_OF[key] !== undefined) out = EK_ZH_OF[key]; }
@@ -13985,10 +13984,10 @@ async function ekSetSaveUpdate(recheck){
 
   /* 桌宠的内置台词，逐句照抄主界面（50-pet.js 的 FISH_LINES / FISH_FOOD 与 say()）。
      演示页不另编台词 —— 另编了就只是"看起来像"，接过来才叫同一个角色。
-     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。 */
+     每个动作两句话：先出声，再补一句它同时会说的内容（天气是查之前/查到后）。
+     d 是可选的补充说明，没有就只显示台词本身。 */
   var PET_ACT = {
-    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住'],
-              d:'右键「说句话」抽一条，一轮之内不会重复'},
+    say:     {l:['我不思考了', '我先去吃饭啦！这个你测一下~', '大肥鱼坐的住']},
     feed:    {l:['小鱼干！我的最爱！'], d:'双击它投喂，给的东西不同台词也不同'},
     weather: {l:['我瞅瞅天…', '合肥今天 19° · 湿度 42° · 体感 17°'],
               d:'只有天气会出网，开关默认是关的'},
@@ -14403,6 +14402,11 @@ async function ekSetSaveUpdate(recheck){
     if(b) b.classList.remove('show');
   }
 
+  /* 气泡内容：台词本体加粗，补充说明放 <em>；没有补充说明就只留台词 */
+  function petHTML(line, d){
+    return '<b>' + t(line) + '</b>' + (d ? '<em>' + t(d) + '</em>' : '');
+  }
+
   /* 内置动作：说的这句就是主界面会说的那句，没有为演示另写文案 */
   var petRot = 0;
 
@@ -14410,17 +14414,17 @@ async function ekSetSaveUpdate(recheck){
     var A = PET_ACT[k];
     if(!A) return;
     if(k === 'say'){
-      petSay('<b>' + t(A.l[petRot++ % A.l.length]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      petSay(petHTML(A.l[petRot++ % A.l.length], A.d), false, 3400);
       return;
     }
     if(k === 'feed'){
-      petSay('<b>' + t(A.l[0]) + '</b><em>' + t(A.d) + '</em>', false, 3400);
+      petSay(petHTML(A.l[0], A.d), false, 3400);
       return;
     }
     /* 天气和看错误都是两步：先出声，再给结果 */
-    petSay('<b>' + t(A.l[0]) + '</b>', true);
+    petSay(petHTML(A.l[0]), true);
     later(function(){
-      petSay('<b>' + t(A.l[1]) + '</b><em>' + t(A.d) + '</em>', false, 3800);
+      petSay(petHTML(A.l[1], A.d), false, 3800);
     }, 900);
   }
 
