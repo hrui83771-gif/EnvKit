@@ -273,7 +273,10 @@ async function pollState(){
    都走这里，这样"配置已改"的标记只在一个地方清。 */
 function runCheck(){
   markCfgStale(false);
-  return fetch('/api/check',{method:'POST'});
+  // recheck:true = 用户主动复检，后端才会把「待复检」落盘清掉。
+  // 启动期自动检测与桌宠的顺手一查不带这个标记，不许洗掉旧结论的时效性。
+  return fetch('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({recheck:true})});
 }
 $('#btn-check').onclick = ()=>runCheck();
 const recheckBtn = $('#btn-recheck');

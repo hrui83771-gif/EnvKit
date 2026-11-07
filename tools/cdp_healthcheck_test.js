@@ -120,10 +120,17 @@ const ok = (name, cond, detail) => {
        'status=' + (rep && rep.status) + ' done=' + (rep && rep.done));
 
     // ---- 4. 前端真的轮询，且渲染出结论 ----
-    await sleep(1200);
+    // 后端 done ≠ 界面立刻画好：前端会按真实阶段留痕逐条回放（总补时 ≤2.6s），
+    // 结论卡要等回放播完才出现。用显式观测点等，不睡固定毫秒。
+    let shown = {visible:false, text:''};
+    for (let i = 0; i < 48; i++) {
+      shown = await ev(`(()=>{const v=document.getElementById('hc-verdict');
+        return {visible: !!v && v.offsetHeight>0, text: v ? v.textContent.trim() : ''};})()`);
+      const ready = await ev(`!!document.querySelector('#hc-items .hc-group')`);
+      if (shown.visible && shown.text && ready) break;
+      await sleep(250);
+    }
     const gets = reqs.filter(r => /\/api\/healthcheck\?/.test(r.url) || (/\/api\/healthcheck$/.test(r.url) && r.method === 'GET'));
-    const shown = await ev(`(()=>{const v=document.getElementById('hc-verdict');
-      return {visible: !!v && v.offsetHeight>0, text: v ? v.textContent.trim() : ''};})()`);
     ok('4  前端轮询并把结论显示出来', gets.length >= 2 && shown.visible &&
        (rep.deliverable ? /可以交付/.test(shown.text) : /不能交付/.test(shown.text)),
        'gets=' + gets.length + ' verdict=' + shown.text.slice(0, 60));

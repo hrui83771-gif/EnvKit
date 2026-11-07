@@ -74,12 +74,27 @@ type HCReport struct {
 	Skip        int      `json:"skip"`
 	Deliverable bool     `json:"deliverable"`
 	Conclusion  string   `json:"conclusion"`
+	// Steps 是每项完成的真实留痕（不是动画编出来的）。前端按它回放阶段名，
+	// 让几毫秒就跑完的本地项也看得见；Done 永不超过后端真实完成数。
+	Steps []HCStep `json:"steps,omitempty"`
+	// Restored：这份报告是从上次运行的历史里恢复的，不是刚跑完的。
+	Restored bool `json:"restored,omitempty"`
+}
+
+// HCStep 一项完成时的留痕。AtMs 用绝对毫秒，前端只拿它算相邻两项的真实间隔。
+type HCStep struct {
+	Done  int    `json:"done"`
+	Title string `json:"title"`
+	AtMs  int64  `json:"at_ms"`
 }
 
 var (
-	hcMu  sync.RWMutex
-	hcCur = HCReport{Status: "idle"}
+	hcMu      sync.RWMutex
+	hcCur     = HCReport{Status: "idle"}
+	hcHistory []HCReport // 最近 3 份完整报告（最新在前），随 state.json 落盘
 )
+
+const hcHistoryMax = 3
 
 // 总项数。编排与进度条共用，改项时只改这里。
 const hcTotalItems = 22
@@ -102,19 +117,22 @@ func hcBegin() HCReport {
 	r := HCReport{
 		Status: "running", Progress: "环境组件", Done: 0, Total: hcTotalItems,
 		StartedAt: time.Now().Format("2006-01-02 15:04:05"),
-		Version:   appVersion, Items: []HCItem{},
+		Version:   appVersion, Items: []HCItem{}, Steps: []HCStep{},
 	}
 	hcPublish(r)
 	return r
 }
 
 // hcStep 每项跑完立刻更新进度：前端轮询 GET 就能显示阶段，不用改 SSE 管道。
+// 留痕是给展示层用的：前 8 项都是本地文件检查，几毫秒就过完，
+// 800ms 的轮询会把它们全跨过去，用户只看到进度条从 0 跳到 8。
 func hcStep(r *HCReport, phase string) {
 	r.Done++
 	r.Progress = phase
 	if r.Done > r.Total {
 		r.Total = r.Done
 	}
+	r.Steps = append(r.Steps, HCStep{Done: r.Done, Title: phase, AtMs: time.Now().UnixMilli()})
 	info(scSys, "体检", "[%d/%d] %s", r.Done, r.Total, phase)
 	hcPublish(*r)
 }
@@ -179,6 +197,25 @@ func hcFinish(r *HCReport) {
 	} else {
 		warn(scSys, "体检", "全链路体检完成：%s", r.Conclusion)
 	}
+	// 留最近 3 份完整报告并立刻落盘。存完整报告而不是只存计数：
+	// 重启后界面要能把上一轮证据原样摆出来（标 Restored），还要能对比「少了哪几项」。
+	hcMu.Lock()
+	cp := *r
+	cp.Steps = append([]HCStep(nil), r.Steps...)
+	cp.Items = append([]HCItem(nil), r.Items...)
+	hist := append([]HCReport{cp}, hcHistory...)
+	if len(hist) > hcHistoryMax {
+		hist = hist[:hcHistoryMax]
+	}
+	hcHistory = hist
+	hcMu.Unlock()
+	// 体检把环境/项目/库/链端/服务全量跑过一遍，本身就是一次复检；
+	// 复用 setCfgStale 会多存一次盘，这里改状态后统一存一次。
+	uiMu.Lock()
+	cfgStaleState = false
+	cfgStaleAt = ""
+	uiMu.Unlock()
+	savePersistedState()
 }
 
 // ===== 编排：全部只读 =====
@@ -573,6 +610,47 @@ func nonEmptyStr(s, fallback string) string {
 }
 
 // ===== HTTP =====
+
+// hcHistoryView 是给界面看的历史摘要：只给计数与失败项标题，不重复整份报告。
+type hcHistoryView struct {
+	FinishedAt  string   `json:"finished_at"`
+	Pass        int      `json:"pass"`
+	Fail        int      `json:"fail"`
+	Skip        int      `json:"skip"`
+	Deliverable bool     `json:"deliverable"`
+	FailIDs     []string `json:"fail_ids"`
+	FailTitles  []string `json:"fail_titles"`
+}
+
+// handleUIState 把「结论的时效性」交给前端：刷新/重启后照样知道
+// 配置改过没复检、上一轮体检是什么结果。只读端点。
+func handleUIState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	stale, staleAt := getCfgStale()
+	hcMu.RLock()
+	views := make([]hcHistoryView, 0, len(hcHistory))
+	for _, h := range hcHistory {
+		v := hcHistoryView{
+			FinishedAt: h.FinishedAt, Pass: h.Pass, Fail: h.Fail,
+			Skip: h.Skip, Deliverable: h.Deliverable,
+			FailIDs: []string{}, FailTitles: []string{},
+		}
+		for _, it := range h.Items {
+			if it.Status == hcFail {
+				v.FailIDs = append(v.FailIDs, it.ID)
+				v.FailTitles = append(v.FailTitles, it.Title)
+			}
+		}
+		views = append(views, v)
+	}
+	hcMu.RUnlock()
+	writeJSON(w, map[string]any{
+		"cfg_stale": stale, "cfg_stale_at": staleAt, "hc_history": views,
+	})
+}
 
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {

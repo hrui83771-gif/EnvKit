@@ -2136,3 +2136,20 @@
   .hc-empty{font-size:12.5px;color:var(--muted);line-height:1.8;padding:14px 2px}
   #hc .mfoot{flex:none}
   @media (prefers-reduced-motion: reduce){ .hc-track i{transition:none} }
+
+  /* v3.9：进度阶段逐条可见 + 历史对比 / 恢复报告的身份标注 */
+  #hc-prog-text.hc-swap{animation:hc-swap .26s ease-out}
+  @keyframes hc-swap{from{opacity:.25;transform:translateY(3px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){ #hc-prog-text.hc-swap{animation:none} }
+  .hc-hist,.hc-restored{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    font-size:12px;line-height:1.7;padding:7px 10px;border-radius:8px;margin-bottom:10px;
+    background:var(--soft);color:var(--text);border:1px solid var(--line)}
+  .hc-hist span{color:var(--muted);font-size:11px;margin-left:auto}
+  .hc-restored{background:var(--warnbg,var(--soft));color:var(--warn,var(--text))}
+
+  /* 配置备份卡片：信息区吃掉剩余宽度，按钮不许被 100% 宽撑开 */
+  .bk-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+    background:var(--soft);margin-bottom:6px}
+  .bk-info{flex:1;min-width:0}
+  .bk-info .hint{margin-top:2px;word-break:break-word}
+  .bk-row button.mini{flex:none;width:auto}

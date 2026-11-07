@@ -381,7 +381,29 @@ $('#bm-native').onclick = async ()=>{
   const d = await r.json();
   if(d.path){ bm.onPick && bm.onPick(d.path); closeBrowser(); }
 };
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeBrowser(); closeConfirm(false); $('#about').classList.remove('show'); } });
+/* 捕获阶段记下最近点过的按钮：它先于各 onclick 执行，所以打开弹窗的那一下
+ * 一定已经记下来了。ESC 关掉弹窗后把焦点还回去，键盘操作不会掉进背景页面。 */
+document.addEventListener('click', e=>{
+  const b = e.target && e.target.closest && e.target.closest('button,[role="button"]');
+  if(b) window.__ekLastBtn = b;
+}, true);
+/* ESC 统一关「最上层」弹窗。原来只写死关 browser/confirm/about 三个，
+ * 后来加的 hc / syslog / exit-app / lanpair 全漏了——按 ESC 没反应，
+ * 用户只能去找右上角那个 X。确认卡必须走 closeConfirm(false)，
+ * 直接 remove('show') 会让等待中的 Promise 永远不 resolve。 */
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape') return;
+  const all = document.querySelectorAll('.modal.show');
+  const top = all.length ? all[all.length-1] : null;   // DOM 顺序在后的覆盖在前的
+  if(!top){
+    closeBrowser(); closeConfirm(false); $('#about').classList.remove('show');
+    return;
+  }
+  if(top.id === 'confirm') closeConfirm(false);
+  else top.classList.remove('show');
+  const b = window.__ekLastBtn;
+  if(b && b.isConnected && top.id !== 'confirm'){ try{ b.focus(); }catch(err){} }
+});
 
 /* ---------- 二次确认 ---------- */
 let cfResolveFn = null;

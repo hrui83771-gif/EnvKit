@@ -2142,6 +2142,23 @@
   .hc-empty{font-size:12.5px;color:var(--muted);line-height:1.8;padding:14px 2px}
   #hc .mfoot{flex:none}
   @media (prefers-reduced-motion: reduce){ .hc-track i{transition:none} }
+
+  /* v3.9：进度阶段逐条可见 + 历史对比 / 恢复报告的身份标注 */
+  #hc-prog-text.hc-swap{animation:hc-swap .26s ease-out}
+  @keyframes hc-swap{from{opacity:.25;transform:translateY(3px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){ #hc-prog-text.hc-swap{animation:none} }
+  .hc-hist,.hc-restored{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    font-size:12px;line-height:1.7;padding:7px 10px;border-radius:8px;margin-bottom:10px;
+    background:var(--soft);color:var(--text);border:1px solid var(--line)}
+  .hc-hist span{color:var(--muted);font-size:11px;margin-left:auto}
+  .hc-restored{background:var(--warnbg,var(--soft));color:var(--warn,var(--text))}
+
+  /* 配置备份卡片：信息区吃掉剩余宽度，按钮不许被 100% 宽撑开 */
+  .bk-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+    background:var(--soft);margin-bottom:6px}
+  .bk-info{flex:1;min-width:0}
+  .bk-info .hint{margin-top:2px;word-break:break-word}
+  .bk-row button.mini{flex:none;width:auto}
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -3004,6 +3021,13 @@
             <!-- 体检不能只报「N 个警告」：状态源为每条问题都算好了 action，
                  把它丢在接口里等于让用户自己去猜下一步。这里逐条列出「问题 + 建议」。 -->
             <ul class="h-issues" id="s_health_issues"></ul>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
+            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
+            <div class="ro-list" id="cfg_backups"></div>
+            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
           </div>
 
           <div class="set-card">
@@ -4169,6 +4193,8 @@ const I18N_EN = {
   "上传头像": "Upload avatar",
   "上次检查": "Last checked",
   "上次评测": "Last run",
+  "上次运行留下的报告": "Report from the previous run",
+  "上次：{0}": "Previous: {0}",
   "上海": "Shanghai",
   "上级目录": "Parent",
   "上限 {0} 轮": "max {0} turns",
@@ -4191,6 +4217,7 @@ const I18N_EN = {
   "不写任何东西：只读端口、证书与区块高度": "Nothing written: ports, cert and block height are read-only",
   "不发送 temperature（上游不接受）": "temperature omitted (rejected upstream)",
   "不发送温度": "Temperature is not sent",
+  "不可恢复": "Unavailable",
   "不同模型对请求参数的接受度不一样（有的只认 temperature=1、有的要 max_completion_tokens、有的不支持工具调用）。这里显示的是调用中自动探测出来的结果，不是配置项。": "Models differ in which request parameters they accept (some only allow temperature=1, some require max_completion_tokens, some reject tool calls). These are what the calls detected on their own, not settings.",
   "不含当前文件": "Excludes the current file",
   "不执行任意命令 · 只有天气会出网，新增外连默认关": "No arbitrary commands · only weather goes online; new egress is off by default",
@@ -4203,6 +4230,7 @@ const I18N_EN = {
   "不通过": "Fail",
   "与 EnvKit 的连接已断开（可能已重启），点击确定刷新页面。": "Connection to EnvKit was lost (it may have restarted). Click OK to refresh.",
   "与「程序配置」「链端校验」共用同一份": "Shares the same ",
+  "与上次持平：{0} 项不通过": "Same as last time: {0} failed",
   "业务单文件上限": "Service per-file limit",
   "业务归档份数": "Service archive count",
   "业务日志的排查价值衰减更快，默认更少": "Service logs lose diagnostic value faster, so fewer are kept",
@@ -4389,6 +4417,7 @@ const I18N_EN = {
   "判分器自检": "Judge self-test",
   "刷新": "Refresh",
   "刷新余额": "Refresh balance",
+  "刷新列表": "Refresh list",
   "前端": "Frontend",
   "前端 / 后端": "Frontend / backend",
   "前端 / 后端 / 备份": "Frontend / backend / backup",
@@ -4573,10 +4602,13 @@ const I18N_EN = {
   "基础设置已保存": "Basics saved",
   "基线": "Baseline",
   "填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。": "Fill in database settings, create the schema, import or export config; a failed connection names the exact item.",
+  "备份 {0}": "Backup {0}",
   "备份保留": "Backups kept",
+  "备份列表读取失败": "Could not read backup list",
   "备份复验": "backup re-verify",
   "备份数据库": "back up database",
   "备份文件写到：{0}": "Backups are written to: {0}",
+  "备份无法解析，不能用于恢复": "This backup cannot be read and cannot be restored",
   "备份目录": "Backup folder",
   "复位断路器": "Reset breaker",
   "复制": "Copy",
@@ -4860,7 +4892,10 @@ const I18N_EN = {
   "思考中": "Thinking",
   "思考中 · 读取状态": "thinking · reading status",
   "恢复原本大小": "Back to normal size",
+  "恢复此版本": "Restore this version",
   "恢复演练": "Restore drill",
+  "恢复配置": "Restore settings",
+  "恢复需确认": "Confirm to restore",
   "恢复预算与断路器": "Recovery budget & breaker",
   "恢复默认": "Reset",
   "悬停任一窗口，看它被哪个节点接管": "Hover any window to see which node took it over",
@@ -5136,6 +5171,7 @@ const I18N_EN = {
   "未配置主机": "Host not configured",
   "未配置密钥": "No API key",
   "未配置密钥：后两档不可用": "No API key: the last two tiers are unavailable",
+  "未配置项目路径": "No project paths configured",
   "未配置，只弹桌面气泡（不外连）": "Not configured; desktop bubble only (no outbound request)",
   "未配置，只弹气泡": "Not configured, balloons only",
   "本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）": "Don't ask again for the same kind of action in this task (max 2, service start/stop only)",
@@ -5248,9 +5284,12 @@ const I18N_EN = {
   "段，不碰其它配置。": " section and never touches the rest of the config.",
   "每一轮都有新信息，上限自动放宽到 {0} 轮": "every turn brought new information — limit raised to {0} turns",
   "每一项都给出版本、位置和结论；异常会直接告诉你该怎么办。": "Every item reports its version, location and verdict; problems come with a next step.",
+  "每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。": "Every save keeps the previous settings. Restoring overwrites the current settings, which are kept as .bak first.",
   "每行一条，支持": "One per line; supports ",
   "每行一条，支持「- 内容 | 标签」或 JSON 数组；重复内容自动更新而非新增": "One per line: `- text | tags` or a JSON array; duplicates are updated, not duplicated",
   "每轮都注入": "Always inject",
+  "比上次多了 {0} 项不通过": "{0} more failures than last time",
+  "比上次少了 {0} 项不通过": "{0} fewer failures than last time",
   "比预期久，仍在等 · 已等 {0}s": "Taking longer than expected, still waiting · waited {0}s",
   "沙箱内测得：无人值守场景下恒为 0，仅作对照": "Measured in the sandbox: always 0 in unattended runs, for reference only",
   "没拿到天气数据": "No weather data came back",
@@ -5639,6 +5678,7 @@ const I18N_EN = {
   "还原文件": "Restore file",
   "还有记忆条目": "No memory entries yet",
   "还没有历史轨迹（发一句话就会有了）": "No history yet (send a message to create one)",
+  "还没有备份，保存过一次配置后这里会出现历史版本。": "No backups yet. Saved versions appear here after your first change.",
   "还没有手机配对过": "No phone has paired yet",
   "还没有数据。发一条消息后这里会显示 token、步数与耗时。": "No data yet. Send a message and tokens, steps and elapsed time will show up here.",
   "还没有记忆条目": "No memory entries yet",
@@ -5655,10 +5695,12 @@ const I18N_EN = {
   "这也太虐了吧？！我心里堵得慌！！": "So brutal... my chest feels tight!!",
   "这些参数由程序写回本机 config.json；运行期间请在这里改，直接编辑文件会被程序覆写。改完点最下面的「保存开发者配置」，端口类改动需重启。": "These settings are written back to the local config.json by the app; change them here while it is running, since direct file edits get overwritten. Click \"Save developer settings\" at the bottom; port changes need a restart.",
   "这些家伙真粘人，赶都赶不走": "So clingy — can't even scare them off",
+  "这会覆盖当前配置。": "This will overwrite the current settings.",
   "这回我真不认怂了，反倒是被你带沟里好几次，差点真信了。😓": "Not backing down this time... though you led me astray a few times. 😓",
   "这张图我读不出来…": "I can't read this image…",
   "这张图读不出来，换一张试试": "Couldn't read that image — try another one",
   "这张确认卡已过期，请重新发起操作": "This confirmation has expired. Please start the action again.",
+  "这是上次运行留下的报告（{0}），点「全链路体检」重新跑一次才是当前状态。": "This report is from the previous run ({0}). Click Full health check to re-run it for the current state.",
   "这条我搞不定，帮我看看：": "I can't sort this one out — take a look:",
   "这次没有产生任何检查项。": "This run produced no check items.",
   "这段报错是什么意思？": "What does this error mean?",
@@ -5715,8 +5757,10 @@ const I18N_EN = {
   "配置": "Configure",
   "配置与链端都已就绪": "config and chain both ready",
   "配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。": "Changes are saved automatically, then the provider's /models endpoint is called to fetch available models (a successful fetch also proves the key and URL are correct; on failure you can still use the built-in list or type a model name). The API key is DPAPI-encrypted and only decryptable on this machine.",
+  "配置备份": "Settings backups",
   "配置已保存": "Config saved",
   "配置已保存。下面这些状态还是按旧配置算的，重新检测一次才准。": "Settings saved. These states still reflect the previous settings — run a check to confirm.",
+  "配置已恢复，正在重新加载…": "Settings restored — reloading…",
   "采用": "Used",
   "重启": "Restart",
   "重启后端": "restart backend",
@@ -6385,7 +6429,29 @@ $('#bm-native').onclick = async ()=>{
   const d = await r.json();
   if(d.path){ bm.onPick && bm.onPick(d.path); closeBrowser(); }
 };
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeBrowser(); closeConfirm(false); $('#about').classList.remove('show'); } });
+/* 捕获阶段记下最近点过的按钮：它先于各 onclick 执行，所以打开弹窗的那一下
+ * 一定已经记下来了。ESC 关掉弹窗后把焦点还回去，键盘操作不会掉进背景页面。 */
+document.addEventListener('click', e=>{
+  const b = e.target && e.target.closest && e.target.closest('button,[role="button"]');
+  if(b) window.__ekLastBtn = b;
+}, true);
+/* ESC 统一关「最上层」弹窗。原来只写死关 browser/confirm/about 三个，
+ * 后来加的 hc / syslog / exit-app / lanpair 全漏了——按 ESC 没反应，
+ * 用户只能去找右上角那个 X。确认卡必须走 closeConfirm(false)，
+ * 直接 remove('show') 会让等待中的 Promise 永远不 resolve。 */
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape') return;
+  const all = document.querySelectorAll('.modal.show');
+  const top = all.length ? all[all.length-1] : null;   // DOM 顺序在后的覆盖在前的
+  if(!top){
+    closeBrowser(); closeConfirm(false); $('#about').classList.remove('show');
+    return;
+  }
+  if(top.id === 'confirm') closeConfirm(false);
+  else top.classList.remove('show');
+  const b = window.__ekLastBtn;
+  if(b && b.isConnected && top.id !== 'confirm'){ try{ b.focus(); }catch(err){} }
+});
 
 /* ---------- 二次确认 ---------- */
 let cfResolveFn = null;
@@ -6963,7 +7029,10 @@ async function pollState(){
    都走这里，这样"配置已改"的标记只在一个地方清。 */
 function runCheck(){
   markCfgStale(false);
-  return fetch('/api/check',{method:'POST'});
+  // recheck:true = 用户主动复检，后端才会把「待复检」落盘清掉。
+  // 启动期自动检测与桌宠的顺手一查不带这个标记，不许洗掉旧结论的时效性。
+  return fetch('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({recheck:true})});
 }
 $('#btn-check').onclick = ()=>runCheck();
 const recheckBtn = $('#btn-recheck');
@@ -12759,16 +12828,25 @@ function ekRo(sel, rows){
   }).join('');
 }
 
-/* 65-healthcheck.js —— 全链路体检（v3.9 P0）
+/* 65-healthcheck.js —— 全链路体检（v3.9）
  *
  * 只读编排在后端 healthcheck.go 完成；这里只负责「发起 → 轮询进度 → 渲染一页结论」。
  * 失败项的按钮复用 40-ops.js 的 issueActInfo 白名单：只点页面上已有的控件，
  * 不新开执行路径，权限闸与 428 确认卡一行没动。
  *
  * 报告正文里的 Evidence 是后端拼好的中文原文，标 data-no-i18n 保护；
- * 界面标签走 t()，并在 ek:lang 时用当前语言整段重渲染。 */
+ * 界面标签走 t()，并在 ek:lang 时用当前语言整段重渲染。
+ *
+ * 进度回放：后端每项完成时留一条真实痕迹（steps，含 done/title/at_ms）。
+ * 前 8 项是本地文件检查，几毫秒跑完，800ms 的轮询会把它们一次跨过去。
+ * 展示层按最小驻留逐条回放这些**真实发生过**的阶段：不编项数、不提前报完成，
+ * 结论卡只在后端真 done 且队列播完后出现。补时有总上限，不会拖慢整体。 */
 
 let hcLast = null, hcTimer = null, hcTicks = 0;
+let hcHist = [];                 // /api/uistate 给的历史摘要（最新在前）
+const HC_STEP_MIN = 260;         // 每个阶段至少看得见这么久
+const HC_PLAY_BUDGET = 2600;     // 快速阶段的总补时上限，超过就跟真值
+let hcCursor = 0, hcPlayTimer = null, hcBudget = 0;
 
 const HC_GROUPS = [
   ['env',     ()=>t('环境与组件')],
@@ -12796,28 +12874,96 @@ function hcStatsText(rep){
   return t('{0} 项通过 / {1} 项不通过 / {2} 项跳过', rep.pass, rep.fail, rep.skip);
 }
 
+/* ---------- 进度：只画「真实发生过」的阶段 ---------- */
+function hcPaintProgress(step, total){
+  const prog = $('#hc-prog'), fill = $('#hc-fill'), txt = $('#hc-prog-text');
+  if(prog) prog.style.display = '';
+  // width 永不超过后端真值：step 来自 steps 留痕，不是编出来的
+  if(fill) fill.style.width = (total > 0 ? Math.min(100, Math.round(step.done * 100 / total)) : 0) + '%';
+  if(txt){
+    txt.textContent = t('正在检查：{0}（{1}/{2}）', step.title, step.done, total);
+    txt.classList.remove('hc-swap'); void txt.offsetWidth; txt.classList.add('hc-swap');
+  }
+  const v = $('#hc-verdict'), items = $('#hc-items'), meta = $('#hc-meta');
+  if(v) v.style.display = 'none';
+  if(meta) meta.textContent = '';
+  if(items) items.innerHTML = '<div class="hc-empty">' +
+    esc(t('按顺序重新跑一遍检测，日志会跟着更新；不会启动服务、不会建库、不会自动修复。')) + '</div>';
+}
+
+function hcStopPlay(){
+  if(hcPlayTimer){ clearTimeout(hcPlayTimer); hcPlayTimer = null; }
+}
+
+function hcOnDone(rep){
+  if(hcTimer){ clearInterval(hcTimer); hcTimer = null; }
+  toast(rep.deliverable ? t('体检完成：可以交付') : t('体检完成：有项目不通过'),
+        rep.deliverable ? 'ok' : 'err');
+  hcRefreshUIState();
+}
+
+/* 回放队列。后端可能一次给出十几条近乎同时完成的阶段，这里按真实顺序
+ * 逐条展示，每条至少驻留 HC_STEP_MIN 毫秒；预算耗尽就跳过剩余直接跟真值。 */
+function hcPlayNext(){
+  hcPlayTimer = null;
+  const rep = hcLast;
+  const steps = (rep && Array.isArray(rep.steps)) ? rep.steps : [];
+  if(hcCursor >= steps.length || hcBudget <= 0){
+    hcCursor = steps.length;                       // 剩余阶段不再重播
+    if(rep && rep.status === 'done'){ hcRender(rep); hcOnDone(rep); }
+    else if(rep && rep.status === 'running'){
+      hcPaintProgress({done: rep.done, title: rep.progress}, rep.total || 22);
+    }
+    return;
+  }
+  const s = steps[hcCursor++];
+  hcPaintProgress(s, rep.total || 22);
+  const nx = steps[hcCursor];
+  const gap = nx ? Math.max(0, Number(nx.at_ms) - Number(s.at_ms)) : 0;
+  const wait = Math.max(HC_STEP_MIN, Math.min(gap, 500));
+  hcBudget -= wait;
+  hcPlayTimer = setTimeout(hcPlayNext, wait);
+}
+
+/* hcFeed 是轮询与启动的统一入口：决定「现在画进度」还是「现在出结论」。 */
+function hcFeed(rep){
+  if(!rep){ return; }
+  hcLast = rep;
+  if(rep.status === 'idle'){ hcStopPlay(); hcRender(rep); return; }
+  const steps = Array.isArray(rep.steps) ? rep.steps : [];
+  if(steps.length > hcCursor && !hcPlayTimer && hcBudget > 0){
+    hcPlayNext();
+  } else if(!hcPlayTimer){
+    if(rep.status === 'running'){
+      hcPaintProgress({done: rep.done, title: rep.progress}, rep.total || 22);
+    }else{
+      hcRender(rep);
+    }
+  }
+  // done 但还在回放：结论卡交给 hcPlayNext 播完后再出，不提前报完成
+  if(rep.status === 'done' && !hcPlayTimer && hcCursor >= steps.length &&
+     !(hcLast && hcLast.__doneShown)){
+    hcRender(rep); hcOnDone(rep);
+  }
+}
+
+/* ---------- 最终报告 ---------- */
 function hcRender(rep){
   hcLast = rep || null;
   const prog = $('#hc-prog'), verdict = $('#hc-verdict'), items = $('#hc-items');
   const meta = $('#hc-meta'), summary = $('#hc-summary');
   if(!prog || !verdict || !items) return;
 
-  const running = rep && rep.status === 'running';
-  prog.style.display = running ? '' : 'none';
-  if(running){
-    const pct = rep.total > 0 ? Math.min(100, Math.round(rep.done * 100 / rep.total)) : 0;
-    $('#hc-fill').style.width = pct + '%';
-    $('#hc-prog-text').textContent = t('正在检查：{0}（{1}/{2}）', rep.progress, rep.done, rep.total);
-  }
-
-  if(!rep || rep.status === 'idle' || running){
+  if(!rep || rep.status === 'idle' || rep.status === 'running'){
+    prog.style.display = rep && rep.status === 'running' ? '' : 'none';
     verdict.style.display = 'none';
-    items.innerHTML = running
-      ? '<div class="hc-empty">' + esc(t('按顺序重新跑一遍检测，日志会跟着更新；不会启动服务、不会建库、不会自动修复。')) + '</div>'
-      : '<div class="hc-empty">' + esc(t('还没跑过体检。点「全链路体检」开始。')) + '</div>';
+    items.innerHTML = '<div class="hc-empty">' +
+      esc(t('还没跑过体检。点「全链路体检」开始。')) + '</div>';
     meta.textContent = '';
     return;
   }
+  hcLast.__doneShown = true;
+  prog.style.display = 'none';
 
   verdict.style.display = '';
   verdict.className = 'hc-verdict ' + (rep.deliverable ? 'ok' : 'bad');
@@ -12825,11 +12971,28 @@ function hcRender(rep){
     '<div class="hc-concl">' + esc(rep.conclusion || '') + '</div>';
   meta.textContent = t('{0} · v{1}', rep.finished_at || '', rep.version || '');
   if(summary) summary.textContent = hcVerdictText(rep) + ' · ' + hcStatsText(rep) +
-    (rep.finished_at ? ' · ' + rep.finished_at : '');
+    (rep.finished_at ? ' · ' + rep.finished_at : '') +
+    (rep.restored ? ' · ' + t('上次运行留下的报告') : '');
 
   // 证据是后端原文：标 data-no-i18n 防止自动翻译把「Access denied」之类翻坏
   items.setAttribute('data-no-i18n', '');
   let html = '';
+  // 恢复出来的旧报告必须自报身份，不能冒充刚跑完的结论
+  if(rep.restored){
+    html += '<div class="hc-restored">' +
+      esc(t('这是上次运行留下的报告（{0}），点「全链路体检」重新跑一次才是当前状态。', rep.finished_at || '')) +
+      '</div>';
+  }
+  const prev = hcHist.find(h => h && h.finished_at !== rep.finished_at) || null;
+  if(prev){
+    const d = Number(prev.fail || 0) - Number(rep.fail || 0);
+    const line = d > 0 ? t('比上次少了 {0} 项不通过', d)
+               : d < 0 ? t('比上次多了 {0} 项不通过', -d)
+                       : t('与上次持平：{0} 项不通过', rep.fail);
+    html += '<div class="hc-hist">' + esc(line) +
+      (prev.finished_at ? '<span>' + esc(t('上次：{0}', prev.finished_at)) + '</span>' : '') +
+      '</div>';
+  }
   for(const [key, label] of HC_GROUPS){
     const list = (rep.items || []).filter(i=>i.group === key);
     if(!list.length) continue;
@@ -12861,10 +13024,9 @@ async function hcPoll(){
     const r = await fetch('/api/healthcheck');
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const rep = await r.json();
-    hcRender(rep);
+    hcFeed(rep);
     if(rep.status === 'done'){
-      clearInterval(hcTimer); hcTimer = null;
-      toast(rep.deliverable ? t('体检完成：可以交付') : t('体检完成：有项目不通过'), rep.deliverable ? 'ok' : 'err');
+      // 结论与停止轮询统一由 hcFeed / hcPlayNext 收口，这里不再提前 return
       return;
     }
   }catch(e){
@@ -12872,8 +13034,8 @@ async function hcPoll(){
     toast(t('体检进度读取失败：') + e, 'err');
     return;
   }
-  // 3 分钟还没结束就是不对劲，别让进度条永远转
-  if(hcTicks > 225){
+  // 3 分钟还没结束就是不对劲，别让进度条永远转（200ms 一次 = 900 tick）
+  if(hcTicks > 900){
     clearInterval(hcTimer); hcTimer = null;
     toast(t('体检超时，请查看系统日志'), 'err');
   }
@@ -12882,25 +13044,26 @@ async function hcPoll(){
 async function hcStart(){
   if(hcTimer) return;
   hcOpen();
-  hcTicks = 0;
-  hcRender({status:'running', progress:t('准备中'), done:0, total:22});
+  hcTicks = 0; hcCursor = 0; hcBudget = HC_PLAY_BUDGET;
+  hcStopPlay();
+  hcFeed({status:'running', progress:t('准备中'), done:0, total:22, steps:[]});
   try{
     const r = await fetch('/api/healthcheck', {method:'POST'});
     if(r.status === 409){
       const msg = await r.text();
       toast(t('暂时不能开始：') + msg, 'err');
       const cur = await (await fetch('/api/healthcheck')).json();
-      hcRender(cur);
+      hcFeed(cur);
       return;
     }
     if(!r.ok) throw new Error('HTTP ' + r.status);
   }catch(e){
     toast(t('体检启动失败：') + e, 'err');
-    hcRender(hcLast || {status:'idle'});
+    hcFeed(hcLast || {status:'idle'});
     return;
   }
   clearInterval(hcTimer);
-  hcTimer = setInterval(hcPoll, 800);
+  hcTimer = setInterval(hcPoll, 200);
   hcPoll();
 }
 
@@ -12927,6 +13090,17 @@ function hcCopyFallback(text, done){
   ta.remove();
 }
 
+/* 刷新/重启后照样知道「配置改过没复检」和上一轮体检结果。
+ * 后端是唯一真相源，前端那个 let 只做展示。 */
+async function hcRefreshUIState(){
+  try{
+    const u = await (await fetch('/api/uistate')).json();
+    hcHist = Array.isArray(u.hc_history) ? u.hc_history : [];
+    if(typeof markCfgStale === 'function') markCfgStale(!!u.cfg_stale);
+    if(hcLast && hcLast.status === 'done' && $('#hc-items')) hcRender(hcLast);
+  }catch(e){}
+}
+
 $('#btn-healthcheck').onclick = hcStart;
 $('#hc-close').onclick = hcClose;
 $('#hc').addEventListener('click', e=>{ if(e.target.id === 'hc') hcClose(); });
@@ -12945,9 +13119,20 @@ document.addEventListener('click', e=>{
   try{ inf.run(null); }catch(err){ toast(t('操作失败：') + err, 'err'); }
 });
 // 切语言时报告整段重渲染（段名/徽标/按钮都走 t()，证据原文保持后端给的形态）
-document.addEventListener('ek:lang', ()=>{ if(hcLast) hcRender(hcLast); });
+document.addEventListener('ek:lang', ()=>{
+  if(!hcLast) return;
+  if(hcLast.status === 'running'){
+    const steps = hcLast.steps || [];
+    const s = steps[Math.max(0, hcCursor - 1)];
+    hcPaintProgress(s || {done:hcLast.done, title:hcLast.progress}, hcLast.total || 22);
+  }else hcRender(hcLast);
+});
+// 不挂 focus 同步：检测是后端 goroutine，中途切窗口回读会把「待复检」
+// 又亮回来（明明用户已经点了复检）。只在页面加载与体检完成时对齐真值，
+// 刷新页面自然拿到后端结果，状态不会来回跳。
 // 打开面板时把最近一次结论读回来，不用每次重跑
 (async ()=>{
+  await hcRefreshUIState();
   try{
     const rep = await (await fetch('/api/healthcheck')).json();
     if(rep && rep.status === 'done') hcRender(rep);
@@ -13752,9 +13937,58 @@ async function ekSetBreakerReset(){
 const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups()]);
   ekSetLanFWIdle();
 }
+
+/* ==================== 配置备份 / 恢复（v3.9） ====================
+   备份文件由后端轮转，界面只认 slot=1|2|3，不接收路径。
+   恢复是破坏性写操作：postConfirm 先吃服务端 428，弹真实风险说明，
+   确认后才带 confirm 重发——前端自己弹一个提示框绕过不了服务端闸门。 */
+async function ekSetLoadBackups(){
+  const box = $('#cfg_backups');
+  if(!box) return;
+  try{
+    const j = await (await fetch('/api/config/backups')).json();
+    const arr = Array.isArray(j.backups) ? j.backups : [];
+    if(!arr.length){
+      box.innerHTML = '<div class="hint">' + esc(t('还没有备份，保存过一次配置后这里会出现历史版本。')) + '</div>';
+      return;
+    }
+    box.innerHTML = arr.map(b=>{
+      const desc = b.readable ? (b.summary || t('未配置项目路径')) : t('备份无法解析，不能用于恢复');
+      return '<div class="bk-row"><div class="bk-info">' +
+        '<b>' + esc(t('备份 {0}', b.slot)) + '</b> <span class="muted">' + esc(b.at) + '</span>' +
+        '<div class="hint">' + esc(desc) + '</div></div>' +
+        (b.readable
+          ? '<button class="mini" data-bk-slot="' + Number(b.slot) + '">' + esc(t('恢复此版本')) + '</button>'
+          : '<span class="muted">' + esc(t('不可恢复')) + '</span>') +
+      '</div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<div class="hint">' + esc(t('备份列表读取失败')) + '</div>';
+  }
+}
+
+document.addEventListener('click', async e=>{
+  if(e.target.closest && e.target.closest('#cfg-backup-reload')){ ekSetLoadBackups(); return; }
+  const b = e.target.closest && e.target.closest('[data-bk-slot]');
+  if(!b) return;
+  const slot = Number(b.getAttribute('data-bk-slot'));
+  const r = await postConfirm('/api/config/restore', {slot},
+    t('恢复配置'), t('这会覆盖当前配置。'));
+  if(!r) return;
+  let j = {}; try{ j = await r.json(); }catch(err){}
+  if(r.ok && j.ok){
+    toast(t('配置已恢复，正在重新加载…'), 'ok');
+    setTimeout(()=>location.reload(), 700);
+  }else if(j.problems && j.problems.length){
+    toast(t('操作失败：') + j.problems.join('；'), 'err');
+  }else{
+    toast(t('操作失败：') + (j.reason || ('HTTP ' + r.status)), 'err');
+  }
+});
+
 
 /* ---------- 全局通知 ---------- */
 

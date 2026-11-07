@@ -869,6 +869,13 @@
           </div>
 
           <div class="set-card">
+            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
+            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
+            <div class="ro-list" id="cfg_backups"></div>
+            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
+          </div>
+
+          <div class="set-card">
             <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
             <div class="ckrow" style="margin-top:0">
               <label class="switch"><input type="checkbox" id="s_upd_on"><span class="sl"></span></label>

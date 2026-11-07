@@ -25,11 +25,46 @@ type persistedState struct {
 	DB      DBHealth               `json:"db"`
 	// 上次退出时仍在运行的服务（用于启动提示：它们已随 EnvKit 退出被终止）
 	LastServices map[string]bool `json:"last_services"`
+
+	// v3.9：结论的时效性必须跨刷新/重启。「改过配置但没复检」不是一次页面会话内的
+	// 临时状态——刷新就抹掉，等于让旧结论重新以「已通过」的面貌出现。
+	// 体检报告同理：重启后回 idle 会写「还没跑过体检」，把上一轮的证据弄丢。
+	CfgStale   bool       `json:"cfg_stale"`
+	CfgStaleAt string     `json:"cfg_stale_at,omitempty"`
+	HCHistory  []HCReport `json:"hc_history,omitempty"`
 }
 
 const stateVersion = "1"
 
-func statePath() string { return filepath.Join(exeDir(), "state.json") }
+// UI 状态单独一把锁：setCfgStale 会在配置保存的热路径上调用，
+// 不能顺手拿 cfgMu，更不能和 savePersistedState 的锁嵌套。
+var (
+	uiMu          sync.RWMutex
+	cfgStaleState bool
+	cfgStaleAt    string
+)
+
+func getCfgStale() (bool, string) {
+	uiMu.RLock()
+	defer uiMu.RUnlock()
+	return cfgStaleState, cfgStaleAt
+}
+
+// setCfgStale 改完立刻落盘：30 秒的定时落盘太慢，用户保存后随手一刷新就丢了。
+func setCfgStale(on bool) {
+	uiMu.Lock()
+	cfgStaleState = on
+	if on {
+		cfgStaleAt = time.Now().Format("2006-01-02 15:04:05")
+	} else {
+		cfgStaleAt = ""
+	}
+	uiMu.Unlock()
+	savePersistedState()
+}
+
+// 抽成变量供单测替换：任何碰状态的测试都不该写坏用户真实的 state.json。
+var statePath = func() string { return filepath.Join(exeDir(), "state.json") }
 
 var stateSaveMu sync.Mutex
 
@@ -64,6 +99,13 @@ func savePersistedState() {
 	}
 	svcMu.Unlock()
 
+	uiMu.RLock()
+	stale, staleAt := cfgStaleState, cfgStaleAt
+	uiMu.RUnlock()
+	hcMu.RLock()
+	hist := append([]HCReport(nil), hcHistory...)
+	hcMu.RUnlock()
+
 	st := persistedState{
 		Version:      stateVersion,
 		SavedAt:      time.Now().Format("2006-01-02 15:04:05"),
@@ -72,6 +114,9 @@ func savePersistedState() {
 		Chain:        ci,
 		DB:           dh,
 		LastServices: last,
+		CfgStale:     stale,
+		CfgStaleAt:   staleAt,
+		HCHistory:    hist,
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
@@ -115,6 +160,19 @@ func loadPersistedState() {
 		dbHealth = st.DB
 	}
 	dbMu.Unlock()
+
+	uiMu.Lock()
+	cfgStaleState, cfgStaleAt = st.CfgStale, st.CfgStaleAt
+	uiMu.Unlock()
+	if len(st.HCHistory) > 0 {
+		hcMu.Lock()
+		hcHistory = append([]HCReport(nil), st.HCHistory...)
+		// 恢复的报告必须标明它不是刚跑出来的：界面要写清「上次体检（时间）」，
+		// 不能用一份旧证据冒充本次结论。
+		hcCur = st.HCHistory[0]
+		hcCur.Restored = true
+		hcMu.Unlock()
+	}
 	// 服务状态不恢复为"运行中"：EnvKit 退出时 Job Object 已把它们带走，
 	// 若照搬上次的 running 会显示一个并不存在的进程。
 	running := map[string]bool{}

@@ -797,7 +797,56 @@ async function ekSetBreakerReset(){
 const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups()]);
   ekSetLanFWIdle();
 }
+
+/* ==================== 配置备份 / 恢复（v3.9） ====================
+   备份文件由后端轮转，界面只认 slot=1|2|3，不接收路径。
+   恢复是破坏性写操作：postConfirm 先吃服务端 428，弹真实风险说明，
+   确认后才带 confirm 重发——前端自己弹一个提示框绕过不了服务端闸门。 */
+async function ekSetLoadBackups(){
+  const box = $('#cfg_backups');
+  if(!box) return;
+  try{
+    const j = await (await fetch('/api/config/backups')).json();
+    const arr = Array.isArray(j.backups) ? j.backups : [];
+    if(!arr.length){
+      box.innerHTML = '<div class="hint">' + esc(t('还没有备份，保存过一次配置后这里会出现历史版本。')) + '</div>';
+      return;
+    }
+    box.innerHTML = arr.map(b=>{
+      const desc = b.readable ? (b.summary || t('未配置项目路径')) : t('备份无法解析，不能用于恢复');
+      return '<div class="bk-row"><div class="bk-info">' +
+        '<b>' + esc(t('备份 {0}', b.slot)) + '</b> <span class="muted">' + esc(b.at) + '</span>' +
+        '<div class="hint">' + esc(desc) + '</div></div>' +
+        (b.readable
+          ? '<button class="mini" data-bk-slot="' + Number(b.slot) + '">' + esc(t('恢复此版本')) + '</button>'
+          : '<span class="muted">' + esc(t('不可恢复')) + '</span>') +
+      '</div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<div class="hint">' + esc(t('备份列表读取失败')) + '</div>';
+  }
+}
+
+document.addEventListener('click', async e=>{
+  if(e.target.closest && e.target.closest('#cfg-backup-reload')){ ekSetLoadBackups(); return; }
+  const b = e.target.closest && e.target.closest('[data-bk-slot]');
+  if(!b) return;
+  const slot = Number(b.getAttribute('data-bk-slot'));
+  const r = await postConfirm('/api/config/restore', {slot},
+    t('恢复配置'), t('这会覆盖当前配置。'));
+  if(!r) return;
+  let j = {}; try{ j = await r.json(); }catch(err){}
+  if(r.ok && j.ok){
+    toast(t('配置已恢复，正在重新加载…'), 'ok');
+    setTimeout(()=>location.reload(), 700);
+  }else if(j.problems && j.problems.length){
+    toast(t('操作失败：') + j.problems.join('；'), 'err');
+  }else{
+    toast(t('操作失败：') + (j.reason || ('HTTP ' + r.status)), 'err');
+  }
+});
+
 

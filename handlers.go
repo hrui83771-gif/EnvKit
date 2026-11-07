@@ -125,6 +125,9 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 		cfg = c
 		cfgMu.Unlock()
 		saveExternalConfig(c)
+		// 这次是「改配置」，立刻把「按旧配置算的」标记落盘。
+		// 放在后端而不是前端：刷新页面 / 重启程序都读得回来，前端那个 let 活不过一次刷新。
+		setCfgStale(true)
 		// 配置变了，所有基于配置派生的事实都得重算：启动方式、依赖状态、
 		// 状态源的慢变部分。不清的话用户改完配置，状态中心还显示旧结论——
 		// 这类"改了不生效"最难查。
@@ -142,6 +145,13 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	// 只有「用户主动点重新检测」才算复检。启动期自动检测、桌宠顺手查一下
+	// 都走同一个端点但不带这个标记——环境检测只查组件，用户改的可能是
+	// MySQL 密码或链端 IP，拿它清掉「待复检」等于把旧结论洗成新的。
+	var body struct {
+		Recheck bool `json:"recheck"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body) // 空 body 是合法的老调用
 	// 只读任务：可与其它只读任务并发，但有写任务在跑时拒绝（避免检测结果读到半安装状态）
 	h, granted := beginTaskH("环境检测", false)
 	if !granted {
@@ -153,6 +163,10 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 		fin := auditStart(actUser, "env_check", "components", "")
 		runCheck()
 		fin(resOK, "")
+		if body.Recheck {
+			// 用户明确点了「重新检测」，这才把待复检清掉（落盘）
+			setCfgStale(false)
+		}
 	}()
 	_, _ = w.Write([]byte(`{"started":true}`))
 }
