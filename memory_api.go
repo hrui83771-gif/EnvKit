@@ -64,8 +64,8 @@ func handleLessons(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"ok":                true,
 		"task":              task,
-		"lessons":           ls,     // 恒为数组，前端不必判空
-		"memories":          views,  // 带 injected / reason / stale，界面直接展示
+		"lessons":           ls,    // 恒为数组，前端不必判空
+		"memories":          views, // 带 injected / reason / stale，界面直接展示
 		"injected_memories": nMem,
 		"injected_lessons":  len(inj),
 	})
