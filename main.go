@@ -232,6 +232,9 @@ func main() {
 	http.HandleFunc("/api/component-upgrade", handleComponentUpgrade)
 	http.HandleFunc("/api/install-dryrun", handleInstallDryRun)
 	http.HandleFunc("/api/report", handleReport)
+	// v3.9 P0：全链路体检（只读编排 + 一句交付结论 + Markdown 导出）
+	http.HandleFunc("/api/healthcheck", handleHealthCheck)
+	http.HandleFunc("/api/healthcheck/export", handleHealthCheckExport)
 	http.HandleFunc("/api/metrics", handleMetrics)
 	http.HandleFunc("/api/diag", handleDiag)
 	http.HandleFunc("/api/audit", handleAudit)

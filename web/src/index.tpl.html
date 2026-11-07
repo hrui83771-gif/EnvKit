@@ -123,6 +123,11 @@
       <span class="gstep" data-goto="chain" id="gs-3">③ 链端校验</span><span class="garrow">→</span>
       <span class="gstep" data-goto="start" id="gs-4">④ 程序启动</span>
     </div>
+    <!-- v3.9 P0：全链路体检。按钮放首页，跑完的结论也留在这行，不另开一个"报告页"。 -->
+    <div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin:0 0 12px">
+      <button id="btn-healthcheck">全链路体检</button>
+      <span class="hint" id="hc-summary" style="margin-left:auto"></span>
+    </div>
 
     <!-- 环境安装 -->
     <section class="panel show" id="panel-install">
@@ -1235,6 +1240,26 @@
     <div class="mfoot">
       <button class="ghost" id="exit-cancel">取消</button>
       <button id="exit-confirm" style="background:#c0392b;color:#fff">退出</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="hc">
+  <div class="mbox" style="width:min(760px,94vw)">
+    <div class="mhead">全链路体检</div>
+    <div class="hc-body" id="hc-body">
+      <div class="hc-prog" id="hc-prog" style="display:none">
+        <div class="hc-track"><i id="hc-fill"></i></div>
+        <span class="hint" id="hc-prog-text"></span>
+      </div>
+      <div class="hc-verdict" id="hc-verdict" style="display:none"></div>
+      <div id="hc-items"></div>
+    </div>
+    <div class="mfoot">
+      <span class="muted" id="hc-meta" style="margin-right:auto;font-size:11.5px"></span>
+      <button class="ghost" id="hc-copy">复制结论</button>
+      <button class="ghost" id="hc-export">导出 Markdown</button>
+      <button id="hc-close">关闭</button>
     </div>
   </div>
 </div>

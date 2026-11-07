@@ -2100,3 +2100,39 @@
     font-size:11px;color:var(--muted);margin:-6px 0 18px}
   .ob-end-stats b{font:500 12px/1 ui-monospace,Consolas,monospace;color:var(--brand)}
   .ob-end-stats i{width:3px;height:3px;border-radius:50%;background:var(--dotoff);flex:none}
+
+  /* ===== v3.9 P0 全链路体检面板 =====
+     正文 flex:1 + min-height:0 才能滚动；页脚 flex:none。
+     颜色全走 CSS 变量，暗色主题下不会变成白底白字。 */
+  #hc .mbox{max-height:86vh}
+  .hc-body{flex:1;min-height:0;overflow:auto;overflow-anchor:none;padding:14px 16px}
+  .hc-prog{margin-bottom:14px}
+  .hc-track{height:7px;border-radius:999px;background:var(--soft);overflow:hidden;margin-bottom:6px}
+  .hc-track i{display:block;height:100%;width:0;border-radius:999px;background:var(--brand);
+    transition:width .35s ease}
+  .hc-verdict{border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--line)}
+  .hc-verdict.ok{background:var(--okbg);color:var(--ok)}
+  .hc-verdict.bad{background:var(--errbg);color:var(--err)}
+  .hc-verdict b{font-size:14px}
+  .hc-concl{font-size:12.5px;line-height:1.7;margin-top:5px;color:var(--text);opacity:.9}
+  .hc-group{display:flex;align-items:baseline;gap:8px;margin:14px 0 6px;padding-bottom:5px;
+    border-bottom:1px solid var(--line);font-weight:600;font-size:12.5px}
+  .hc-gmeta{margin-left:auto;font-weight:400;font-size:11px;color:var(--muted)}
+  .hc-bad{color:var(--err);font-weight:600}
+  .hc-item{padding:7px 10px;border-left:2px solid var(--line);margin-bottom:5px;
+    background:var(--soft);border-radius:0 7px 7px 0}
+  .hc-item.fail{border-left-color:var(--err)}
+  .hc-item.pass{border-left-color:var(--ok)}
+  .hc-item.skip{border-left-color:var(--muted)}
+  .hc-line{display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .hc-badge{font-size:10.5px;padding:1px 7px;border-radius:999px;flex:none;
+    border:1px solid var(--line);color:var(--muted);background:var(--card)}
+  .hc-badge.fail{color:var(--err);background:var(--errbg)}
+  .hc-badge.pass{color:var(--ok);background:var(--okbg)}
+  .hc-badge.skip{color:var(--muted)}
+  .hc-detail{font-size:11.5px;line-height:1.6;color:var(--muted);margin:3px 0 0 2px;
+    word-break:break-word}
+  .hc-acts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 2px}
+  .hc-empty{font-size:12.5px;color:var(--muted);line-height:1.8;padding:14px 2px}
+  #hc .mfoot{flex:none}
+  @media (prefers-reduced-motion: reduce){ .hc-track i{transition:none} }
