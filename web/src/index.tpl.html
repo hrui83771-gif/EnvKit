@@ -1539,7 +1539,7 @@
                  需要"文字行"的位置用 bpTxt pattern 画短横线阵列（远看即排版，
                  且不会因为横向压缩变成怪字）；真实字符只留少量英文与数字。
                  整层 pointer-events:none，不承载任何语义，也不发请求。 -->
-                        <svg class="ob-rc-sheet" viewBox="0 0 1200 600" preserveAspectRatio="none"
+                        <svg class="ob-rc-sheet ob-sheet" viewBox="0 0 1200 600" preserveAspectRatio="none"
                  aria-hidden="true" focusable="false">
               <defs>
                 <pattern id="bpG1" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12"/></pattern>
@@ -1882,7 +1882,8 @@
 
       <!-- 03 主流程：横向时间轴 + 详情 -->
       <div class="swiper-slide ob-slide" data-idx="2">
-        <div class="ob-scene ob-flow">
+        <div class="ob-scene ob-sheet-frame ob-flow">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-03"></i>
           <div class="ob-head">
             <div class="ob-kicker"><i></i>主流程</div>
             <h2 class="ob-h">四步，每一步都有输入和产出</h2>
@@ -1948,7 +1949,8 @@
 
       <!-- 05 日志：全幅深色控制台 -->
       <div class="swiper-slide ob-slide" data-idx="4">
-        <div class="ob-scene ob-console-scene">
+        <div class="ob-scene ob-sheet-frame ob-console-scene">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-05"></i>
           <div class="ob-head ob-head-tight">
             <div class="ob-kicker"><i></i>日志分区</div>
             <h2 class="ob-h">出问题，先看来源</h2>
@@ -2025,7 +2027,8 @@
 
       <!-- 07 安全：阶梯 + 说明 -->
       <div class="swiper-slide ob-slide" data-idx="6">
-        <div class="ob-scene ob-split">
+        <div class="ob-scene ob-sheet-frame ob-split">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-07"></i>
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>安全边界</div>
             <h2 class="ob-h">权限闸门<br />是特性，不是限制</h2>
@@ -2033,6 +2036,39 @@
             <div class="ob-redline"><i></i><span>不执行任意命令 · 只有天气会出网，新增外连默认关</span></div>
           </div>
           <div class="ob-permwrap">
+            <svg class="ob-sheet ob-ilock" viewBox="0 0 520 120" preserveAspectRatio="none" aria-hidden="true">
+            <!-- PERMIT BUS 分四路：P1/P2 闭合触点，P3 串一次确认的常开触点 + 菱形，
+                 P4 = 428 跳闸（断路器 + 红虚框）。四路间距 24，符号不打架、文字不贴线。
+                 只留极短工程代号：非等比缩放会把长串英文压成一团。 -->
+            <path class="bp-f2" d="M24 14V110M460 14V110"/>
+            <circle cx="24" cy="14" r="2.5"/>
+            <text class="il-lbl" x="6" y="10">PERMIT BUS</text>
+            <text class="il-lbl" x="440" y="10">EXEC</text>
+            <g class="il-b" data-i="0">
+            <path class="bp-n" d="M24 30H68M68 22V38M96 22V38M68 30H96M96 30H460"/>
+            <circle cx="460" cy="30" r="2.6"/>
+            <text class="il-lbl" x="108" y="26">P1 / OK</text>
+            </g>
+            <g class="il-b" data-i="1">
+            <path class="bp-n" d="M24 54H68M68 46V62M96 46V62M68 54H96M96 54H460"/>
+            <circle cx="460" cy="54" r="2.6"/>
+            <text class="il-lbl" x="108" y="50">P2 / OK</text>
+            </g>
+            <g class="il-b" data-i="2">
+            <path class="bp-n" d="M24 78H68M68 70V86M96 70V86M68 86L90 71M96 78H460"/>
+            <path class="bp-n" d="M76 74L82 78L76 82L70 78Z"/>
+            <circle cx="460" cy="78" r="2.6"/>
+            <text class="il-lbl" x="108" y="74">P3 / ACK</text>
+            </g>
+            <g class="il-b" data-i="3">
+            <path class="bp-n il-hot" d="M24 102H64M90 102H460"/>
+            <path class="bp-n il-hot" d="M64 94H90V110H64Z M64 110L90 94"/>
+            <rect class="bp-d il-hot" x="58" y="90" width="42" height="24"/>
+            <circle class="il-hot" cx="460" cy="102" r="2.6"/>
+            <text class="il-lbl" x="108" y="98">P4 /</text>
+            <text class="il-lbl il-hot" x="142" y="98">428</text>
+            </g>
+            </svg>
             <div class="ob-perms" id="ob-perms">
               <button class="on" data-perm="0"><span class="ob-perm-no">01</span><span class="ob-perm-nm">只读</span><span class="ob-perm-tag">免确认</span></button>
               <button data-perm="1"><span class="ob-perm-no">02</span><span class="ob-perm-nm">诊断</span><span class="ob-perm-tag">免确认</span></button>
@@ -2047,7 +2083,8 @@
 
       <!-- 08 收尾：章节地图 -->
       <div class="swiper-slide ob-slide" data-idx="7">
-        <div class="ob-scene ob-end">
+        <div class="ob-scene ob-sheet-frame ob-end">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-08"></i>
           <div class="ob-head">
             <div class="ob-kicker"><i></i>准备好了</div>
             <h2 class="ob-h">从安装页开始</h2>

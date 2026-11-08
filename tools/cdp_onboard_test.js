@@ -697,6 +697,28 @@ function seed() {
     check('detail-perm-acts', PA.n === 3 && /直接做/.test(PA.ok || '') &&
       /任意 shell/.test(PA.no || ''), acts);
 
+    // 07 屏联锁图：四路并联，点最高档后只有 P4 点亮；428 与危险色必须在图里。
+    // perm 属性只在 showPerm() 里写 —— 抓的正是「改了逻辑忘了同步图」。
+    await sleep(400);   /* .il-b 的 opacity 有 .28s 过渡，不等收敛会把过渡中间值误判成缺陷 */
+    const ilock = await evalJS(`(function(){
+      var w=document.querySelector('.ob-permwrap'), s=document.querySelector('.ob-ilock');
+      if(!s) return '{}';
+      var gs=[].slice.call(s.querySelectorAll('.il-b'));
+      var op=gs.map(function(g){return parseFloat(getComputedStyle(g).opacity);});
+      return JSON.stringify({
+        perm:w?w.getAttribute('data-perm'):null,
+        n:gs.length, hot:op.length===4?op[3]:-1, rest:op.slice(0,3),
+        t428:/428/.test(s.textContent||''),
+        hotStroke:(function(){var p=s.querySelector('.bp-n.il-hot');
+          return p?getComputedStyle(p).stroke:'';})(),
+        pe:getComputedStyle(s).pointerEvents
+      });
+    })()`);
+    let IL = {}; try { IL = JSON.parse(ilock || '{}'); } catch (e) {}
+    check('detail-ilock-gate', IL.perm === '3' && IL.n === 4 && IL.hot === 1 &&
+      Array.isArray(IL.rest) && IL.rest.every(x => x > 0.2 && x < 0.6) &&
+      IL.t428 === true && /rgb/.test(IL.hotStroke || '') && IL.pe === 'none', ilock);
+
     // 屏 8（收尾）：8 个章节点
     await arrowRight();
     const chapters = await evalJS(`document.querySelectorAll('#ob-chapter-grid button').length`);
@@ -956,6 +978,31 @@ function seed() {
     const manual = await evalJS(`(function(){ try{ EKOnboard.open('first'); }catch(e){ return 'EXC:'+e.message; } return document.getElementById('onboard').classList.contains('show'); })()`);
     check('automation-manual-open-works', manual === true, 'open=' + manual);
     await evalJS(`(function(){ try{ EKOnboard.close(); }catch(e){} return 'ok'; })()`);
+
+    // 共用图纸语汇：四屏各有一层底框，且 .bp-* 笔触挂在共用类上（不是只认 02）。
+    // CSSOM 那两项守的是 A1 的核心 —— 谁把 .ob-sheet 改回 .ob-rc-sheet，联锁图会先掉线宽。
+    const sheet = await evalJS(`(function(){
+      var ds=[].slice.call(document.querySelectorAll('.swiper-slide .ob-sheet-deco'));
+      var ok=ds.length===4 && ds.every(function(d){
+        var c=getComputedStyle(d);
+        return d.getAttribute('aria-hidden')==='true' && /^DWG-0[3578]$/.test(d.getAttribute('data-dwg')||'')
+          && c.pointerEvents==='none' && c.zIndex==='0';
+      });
+      var sh=0, o2=0;
+      [].slice.call(document.styleSheets).forEach(function(ss){
+        var rs; try{ rs=ss.cssRules; }catch(e){ return; }
+        [].slice.call(rs).forEach(function(r){
+          var t=r.cssText||'';
+          if(t.indexOf('.ob-sheet .bp-n')>=0) sh++;
+          if(t.indexOf('.ob-rc-sheet .bp-n')>=0) o2++;
+        });
+      });
+      return JSON.stringify({deco:ds.length, ok:ok, shared:sh, only02:o2,
+        svgShared:!!document.querySelector('svg.ob-rc-sheet.ob-sheet')});
+    })()`);
+    let SH = {}; try { SH = JSON.parse(sheet || '{}'); } catch (e) {}
+    check('detail-sheet-deco-shared', SH.deco === 4 && SH.ok === true &&
+      SH.shared >= 1 && SH.only02 === 0 && SH.svgShared === true, sheet);
 
     ws.close();
   } catch (e) {

@@ -875,6 +875,9 @@
   var PERM_COLS = [['ok','直接做'], ['ask','要确认'], ['no','不做']];
 
   function showPerm(i){
+    /* 联锁图只认这一处写入口：选中的那一路点亮，其余保持淡线 */
+    var pw = q('.ob-permwrap');
+    if(pw) pw.setAttribute('data-perm', String(i));
     qa('#ob-perms button').forEach(function(b){
       b.classList.toggle('on', Number(b.getAttribute('data-perm')) === i);
     });

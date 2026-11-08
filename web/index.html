@@ -1389,34 +1389,105 @@
     justify-content:center;
     /* 不铺底色：白块会在图纸上切出硬边。改用纸色描边晕圈把字从网格里拎出来 */
     text-shadow:0 0 3px var(--ob-card),0 0 6px var(--ob-card),0 0 9px var(--ob-card)}
+  /* ---------- 共用图纸语汇（v14）----------
+     02 的图框 / 刻度尺 / 网格 / 线宽分级不再独占：03·05·07·08 挂同一层底框，
+     07 的联锁图也用同一套 .bp-* 笔触。改一处，五屏一起走。
+     装饰层只画留白区，aria-hidden + pointer-events:none，不承载语义、不发请求。 */
+  .ob-sheet-frame{
+    --bp-c1:color-mix(in srgb,var(--brand) 52%,transparent);
+    --bp-c2:color-mix(in srgb,var(--brand) 96%,transparent);
+    --bp-c3:color-mix(in srgb,var(--text) 46%,transparent);
+    position:relative}
+  /* z-index:0 的绝对定位层会盖住非定位内容，正文必须显式抬到 1 */
+  .ob-sheet-frame > *:not(.ob-sheet-deco){position:relative;z-index:1}
+  .ob-sheet-frame > .ob-sheet-deco{
+    --sf:color-mix(in srgb,var(--bp-c1) 66%,transparent);
+    --sm:color-mix(in srgb,var(--bp-c1) 22%,transparent);
+    position:absolute;inset:10px 14px;width:auto;max-width:none;
+    z-index:0;pointer-events:none;border:1px solid var(--sm);
+    background:
+      /* 四角 L 角：每角一横一竖 */
+      linear-gradient(var(--sf),var(--sf)) 0 0/18px 2px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 0 0/2px 18px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 100% 0/18px 2px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 100% 0/2px 18px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 0 100%/18px 2px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 0 100%/2px 18px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 100% 100%/18px 2px no-repeat,
+      linear-gradient(var(--sf),var(--sf)) 100% 100%/2px 18px no-repeat}
+  .ob-sheet-frame > .ob-sheet-deco::before{
+    content:'';position:absolute;inset:5px;
+    border:1px solid color-mix(in srgb,var(--bp-c1) 13%,transparent);
+    background:
+      /* 上下刻度：12px 短齿 + 60px 长齿 */
+      repeating-linear-gradient(to right,var(--sf) 0 1px,transparent 1px 12px) 0 0/100% 4px no-repeat,
+      repeating-linear-gradient(to right,var(--sf) 0 1px,transparent 1px 60px) 0 0/100% 8px no-repeat,
+      repeating-linear-gradient(to right,var(--sf) 0 1px,transparent 1px 12px) 0 100%/100% 4px no-repeat,
+      repeating-linear-gradient(to right,var(--sf) 0 1px,transparent 1px 60px) 0 100%/100% 8px no-repeat,
+      /* 左右刻度 */
+      repeating-linear-gradient(to bottom,var(--sf) 0 1px,transparent 1px 12px) 0 0/4px 100% no-repeat,
+      repeating-linear-gradient(to bottom,var(--sf) 0 1px,transparent 1px 12px) 100% 0/4px 100% no-repeat,
+      /* 60px 主格 + 12px 次格，压到很淡，只当纸纹 */
+      repeating-linear-gradient(to right,var(--sm) 0 1px,transparent 1px 60px) 0 0/100% 100% no-repeat,
+      repeating-linear-gradient(to bottom,var(--sm) 0 1px,transparent 1px 60px) 0 0/100% 100% no-repeat,
+      repeating-linear-gradient(to right,color-mix(in srgb,var(--bp-c1) 5%,transparent) 0 1px,transparent 1px 12px) 0 0/100% 100% no-repeat,
+      repeating-linear-gradient(to bottom,color-mix(in srgb,var(--bp-c1) 5%,transparent) 0 1px,transparent 1px 12px) 0 0/100% 100% no-repeat;
+    opacity:.72}
+  .ob-sheet-frame > .ob-sheet-deco::after{
+    content:'ENVKIT  /  ' attr(data-dwg) '  /  REV C  /  NTS';
+    position:absolute;right:12px;bottom:9px;
+    font:500 9px/1 ui-monospace,Consolas,monospace;letter-spacing:.14em;
+    color:var(--bp-c3);opacity:.6;white-space:nowrap}
+
   .ob-rc-sheet{position:absolute;inset:0;width:100%;height:100%;z-index:0;
     pointer-events:none;color:var(--bp-c1);display:block}
-  .ob-rc-sheet path,.ob-rc-sheet line,.ob-rc-sheet polyline,
-  .ob-rc-sheet circle{
+  .ob-sheet path,.ob-sheet line,.ob-sheet polyline,
+  .ob-sheet circle{
     fill:none;stroke:currentColor;stroke-width:1.5;vector-effect:non-scaling-stroke}
   /* 只给「没写 fill 属性」的元素兜底为无填充：带 fill="url(#…)" 的 pattern 块要保留 */
-  .ob-rc-sheet path:not([fill]),.ob-rc-sheet rect:not([fill]){fill:none}
-  .ob-rc-sheet rect{stroke:none;vector-effect:non-scaling-stroke}
-  .ob-rc-sheet rect.bp-b{stroke:var(--bp-c2);stroke-width:2.2;fill:none}
-  .ob-rc-sheet .bp-f{stroke:var(--bp-c2);stroke-width:3}
-  .ob-rc-sheet .bp-f2{stroke:var(--bp-c3);stroke-width:1.4}
-  .ob-rc-sheet .bp-b{stroke:var(--bp-c2);stroke-width:2.2}
+  .ob-sheet path:not([fill]),.ob-sheet rect:not([fill]){fill:none}
+  .ob-sheet rect{stroke:none;vector-effect:non-scaling-stroke}
+  .ob-sheet rect.bp-b{stroke:var(--bp-c2);stroke-width:2.2;fill:none}
+  .ob-sheet .bp-f{stroke:var(--bp-c2);stroke-width:3}
+  .ob-sheet .bp-f2{stroke:var(--bp-c3);stroke-width:1.4}
+  .ob-sheet .bp-b{stroke:var(--bp-c2);stroke-width:2.2}
   /* 主造型轮廓最重一档，次级构件依次退让，避免细节和小方框抢主线 */
-  .ob-rc-sheet .bp-bo{stroke:var(--bp-c2);stroke-width:3}
-  .ob-rc-sheet .bp-n{stroke:var(--bp-c2);stroke-width:1.5}
-  .ob-rc-sheet .bp-m{stroke:var(--bp-c3);stroke-width:1}
-  .ob-rc-sheet .bp-d{stroke:var(--bp-c3);stroke-width:1.2;stroke-dasharray:6 4}
+  .ob-sheet .bp-bo{stroke:var(--bp-c2);stroke-width:3}
+  .ob-sheet .bp-n{stroke:var(--bp-c2);stroke-width:1.5}
+  .ob-sheet .bp-m{stroke:var(--bp-c3);stroke-width:1}
+  .ob-sheet .bp-d{stroke:var(--bp-c3);stroke-width:1.2;stroke-dasharray:6 4}
   /* 剖切位置线：长划 + 双短划，工程图纸的标准链线 */
-  .ob-rc-sheet .bp-cl{stroke:var(--bp-c2);stroke-width:1.2;stroke-dasharray:14 3 3 3}
-  .ob-rc-sheet .bp-ar{fill:var(--bp-c2);stroke:none}
-  .ob-rc-sheet .bp-g1{opacity:.55}
-  .ob-rc-sheet .bp-g2{opacity:.9}
-  .ob-rc-sheet .bp-g3{opacity:1}
-  .ob-rc-sheet use{fill:none;stroke:currentColor;stroke-width:1.5}
-  .ob-rc-sheet text{fill:var(--bp-c3);font:9.5px/1 ui-monospace,Consolas,monospace;
+  .ob-sheet .bp-cl{stroke:var(--bp-c2);stroke-width:1.2;stroke-dasharray:14 3 3 3}
+  .ob-sheet .bp-ar{fill:var(--bp-c2);stroke:none}
+  .ob-sheet .bp-g1{opacity:.55}
+  .ob-sheet .bp-g2{opacity:.9}
+  .ob-sheet .bp-g3{opacity:1}
+  .ob-sheet use{fill:none;stroke:currentColor;stroke-width:1.5}
+  .ob-sheet text{fill:var(--bp-c3);font:9.5px/1 ui-monospace,Consolas,monospace;
     letter-spacing:.04em}
-  .ob-rc-sheet .bp-th{fill:var(--bp-c2);font-size:11px;font-weight:600;letter-spacing:.1em}
-  .ob-rc-sheet .bp-tb{fill:var(--bp-c2);font-size:10px;letter-spacing:.12em}
+  .ob-sheet .bp-th{fill:var(--bp-c2);font-size:11px;font-weight:600;letter-spacing:.1em}
+  .ob-sheet .bp-tb{fill:var(--bp-c2);font-size:10px;letter-spacing:.12em}
+
+  /* 07 屏权限联锁图：一条 PERMIT BUS 分四路，选中的那一路点亮。
+     档 4 是 428 跳闸支路，用危险色 + 虚线框，和真实 aiExecTool 的 428 对应。 */
+  .ob-ilock{display:block;width:100%;height:120px;flex:none;
+    color:var(--bp-c1);pointer-events:none}
+  /* 未选中的三路要「看得见但退后」：.3 在网格里会整条消失，四路并联就读不出来了 */
+  .ob-ilock .il-b{opacity:.48;transition:opacity .28s ease}
+  .ob-ilock .il-b path{stroke-width:1.4}
+  .ob-permwrap[data-perm="0"] .il-b[data-i="0"],
+  .ob-permwrap[data-perm="1"] .il-b[data-i="1"],
+  .ob-permwrap[data-perm="2"] .il-b[data-i="2"],
+  .ob-permwrap[data-perm="3"] .il-b[data-i="3"]{opacity:1}
+  .ob-permwrap[data-perm="0"] .il-b[data-i="0"] path,
+  .ob-permwrap[data-perm="1"] .il-b[data-i="1"] path,
+  .ob-permwrap[data-perm="2"] .il-b[data-i="2"] path,
+  .ob-permwrap[data-perm="3"] .il-b[data-i="3"] path{stroke-width:2.6}
+  .ob-ilock .il-hot,.ob-ilock .bp-d.il-hot{stroke:var(--bad,#c9503f)}
+  .ob-ilock .bp-n.il-hot{stroke:var(--bad,#c9503f);stroke-width:2}
+  .ob-ilock text.il-hot{fill:var(--bad,#c9503f)}
+  .ob-ilock .il-lbl{fill:var(--bp-c3);font:9px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.1em}
 
   .ob-rc-head{display:flex;align-items:flex-start;gap:16px;padding-bottom:14px}
   .ob-rc-stamp{display:flex;align-items:baseline;gap:12px;flex:none}
@@ -1706,6 +1777,11 @@
   body[data-theme="dark"] #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand2)}
   /* 暗色下图纸线改用浅蓝：--brand 是深蓝，画在深底上几乎看不见 */
   body[data-theme="dark"] .ob-recheck{
+    --bp-c1:color-mix(in srgb,var(--brand2) 30%,transparent);
+    --bp-c2:color-mix(in srgb,var(--brand2) 66%,transparent);
+    --bp-c3:color-mix(in srgb,#cfe0f5 22%,transparent)}
+  /* 共用底框 / 联锁图也要跟着换浅蓝，深底上 --brand 几乎看不见 */
+  body[data-theme="dark"] .ob-sheet-frame{
     --bp-c1:color-mix(in srgb,var(--brand2) 30%,transparent);
     --bp-c2:color-mix(in srgb,var(--brand2) 66%,transparent);
     --bp-c3:color-mix(in srgb,#cfe0f5 22%,transparent)}
@@ -2148,7 +2224,7 @@
      其余用中性的——它不是警告，只是事实。 */
   .ob-writes{display:flex;align-items:baseline;gap:9px;margin-top:11px;padding-top:10px;
     border-top:1px solid var(--ob-hair);font-size:11.5px;line-height:1.65;color:var(--text);
-    opacity:.8}
+    opacity:.72}
   .ob-writes em{flex:none;font-style:normal;font-size:9.5px;letter-spacing:.13em;
     color:var(--muted);padding:2px 7px;border-radius:5px;background:var(--ob-glass-2);
     border:1px solid var(--ob-hair)}
@@ -2261,6 +2337,13 @@
   .bk-info{flex:1;min-width:0}
   .bk-info .hint{margin-top:2px;word-break:break-word}
   .bk-row button.mini{flex:none;width:auto}
+
+  /* 窄屏：共用图纸底框退成淡纸纹，联锁图压矮 */
+  @media (max-width:760px){
+    .ob-sheet-frame > .ob-sheet-deco{opacity:.3}
+    .ob-sheet-frame > .ob-sheet-deco::after{display:none}
+    .ob-ilock{height:96px}
+  }
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -3796,7 +3879,7 @@
                  需要"文字行"的位置用 bpTxt pattern 画短横线阵列（远看即排版，
                  且不会因为横向压缩变成怪字）；真实字符只留少量英文与数字。
                  整层 pointer-events:none，不承载任何语义，也不发请求。 -->
-                        <svg class="ob-rc-sheet" viewBox="0 0 1200 600" preserveAspectRatio="none"
+                        <svg class="ob-rc-sheet ob-sheet" viewBox="0 0 1200 600" preserveAspectRatio="none"
                  aria-hidden="true" focusable="false">
               <defs>
                 <pattern id="bpG1" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12"/></pattern>
@@ -4139,7 +4222,8 @@
 
       <!-- 03 主流程：横向时间轴 + 详情 -->
       <div class="swiper-slide ob-slide" data-idx="2">
-        <div class="ob-scene ob-flow">
+        <div class="ob-scene ob-sheet-frame ob-flow">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-03"></i>
           <div class="ob-head">
             <div class="ob-kicker"><i></i>主流程</div>
             <h2 class="ob-h">四步，每一步都有输入和产出</h2>
@@ -4205,7 +4289,8 @@
 
       <!-- 05 日志：全幅深色控制台 -->
       <div class="swiper-slide ob-slide" data-idx="4">
-        <div class="ob-scene ob-console-scene">
+        <div class="ob-scene ob-sheet-frame ob-console-scene">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-05"></i>
           <div class="ob-head ob-head-tight">
             <div class="ob-kicker"><i></i>日志分区</div>
             <h2 class="ob-h">出问题，先看来源</h2>
@@ -4282,7 +4367,8 @@
 
       <!-- 07 安全：阶梯 + 说明 -->
       <div class="swiper-slide ob-slide" data-idx="6">
-        <div class="ob-scene ob-split">
+        <div class="ob-scene ob-sheet-frame ob-split">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-07"></i>
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>安全边界</div>
             <h2 class="ob-h">权限闸门<br />是特性，不是限制</h2>
@@ -4290,6 +4376,39 @@
             <div class="ob-redline"><i></i><span>不执行任意命令 · 只有天气会出网，新增外连默认关</span></div>
           </div>
           <div class="ob-permwrap">
+            <svg class="ob-sheet ob-ilock" viewBox="0 0 520 120" preserveAspectRatio="none" aria-hidden="true">
+            <!-- PERMIT BUS 分四路：P1/P2 闭合触点，P3 串一次确认的常开触点 + 菱形，
+                 P4 = 428 跳闸（断路器 + 红虚框）。四路间距 24，符号不打架、文字不贴线。
+                 只留极短工程代号：非等比缩放会把长串英文压成一团。 -->
+            <path class="bp-f2" d="M24 14V110M460 14V110"/>
+            <circle cx="24" cy="14" r="2.5"/>
+            <text class="il-lbl" x="6" y="10">PERMIT BUS</text>
+            <text class="il-lbl" x="440" y="10">EXEC</text>
+            <g class="il-b" data-i="0">
+            <path class="bp-n" d="M24 30H68M68 22V38M96 22V38M68 30H96M96 30H460"/>
+            <circle cx="460" cy="30" r="2.6"/>
+            <text class="il-lbl" x="108" y="26">P1 / OK</text>
+            </g>
+            <g class="il-b" data-i="1">
+            <path class="bp-n" d="M24 54H68M68 46V62M96 46V62M68 54H96M96 54H460"/>
+            <circle cx="460" cy="54" r="2.6"/>
+            <text class="il-lbl" x="108" y="50">P2 / OK</text>
+            </g>
+            <g class="il-b" data-i="2">
+            <path class="bp-n" d="M24 78H68M68 70V86M96 70V86M68 86L90 71M96 78H460"/>
+            <path class="bp-n" d="M76 74L82 78L76 82L70 78Z"/>
+            <circle cx="460" cy="78" r="2.6"/>
+            <text class="il-lbl" x="108" y="74">P3 / ACK</text>
+            </g>
+            <g class="il-b" data-i="3">
+            <path class="bp-n il-hot" d="M24 102H64M90 102H460"/>
+            <path class="bp-n il-hot" d="M64 94H90V110H64Z M64 110L90 94"/>
+            <rect class="bp-d il-hot" x="58" y="90" width="42" height="24"/>
+            <circle class="il-hot" cx="460" cy="102" r="2.6"/>
+            <text class="il-lbl" x="108" y="98">P4 /</text>
+            <text class="il-lbl il-hot" x="142" y="98">428</text>
+            </g>
+            </svg>
             <div class="ob-perms" id="ob-perms">
               <button class="on" data-perm="0"><span class="ob-perm-no">01</span><span class="ob-perm-nm">只读</span><span class="ob-perm-tag">免确认</span></button>
               <button data-perm="1"><span class="ob-perm-no">02</span><span class="ob-perm-nm">诊断</span><span class="ob-perm-tag">免确认</span></button>
@@ -4304,7 +4423,8 @@
 
       <!-- 08 收尾：章节地图 -->
       <div class="swiper-slide ob-slide" data-idx="7">
-        <div class="ob-scene ob-end">
+        <div class="ob-scene ob-sheet-frame ob-end">
+          <i class="ob-sheet-deco" aria-hidden="true" data-dwg="DWG-08"></i>
           <div class="ob-head">
             <div class="ob-kicker"><i></i>准备好了</div>
             <h2 class="ob-h">从安装页开始</h2>
@@ -16033,6 +16153,9 @@ async function ekSetSaveUpdate(recheck){
   var PERM_COLS = [['ok','直接做'], ['ask','要确认'], ['no','不做']];
 
   function showPerm(i){
+    /* 联锁图只认这一处写入口：选中的那一路点亮，其余保持淡线 */
+    var pw = q('.ob-permwrap');
+    if(pw) pw.setAttribute('data-perm', String(i));
     qa('#ob-perms button').forEach(function(b){
       b.classList.toggle('on', Number(b.getAttribute('data-perm')) === i);
     });
