@@ -1351,106 +1351,68 @@
   @keyframes obSheen{0%,64%{left:-46%}86%,100%{left:118%}}
   .ob-art-note{font-size:11.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
 
-  /* ---------- 02 五个窗口 → 一条状态线 ---------- */
-  /* 这一屏的演示体量比别的屏大，所以单独放宽右列（.ob-split-grow 见场景骨架段） */
-  /* 三列紧密相接（gap 0）：最右一条 path 的终点必须正好落在状态线的竖线上，
-     中间留 gap 会让连线在视觉上"断在空气里"。列宽 292 / 90 / 1fr 是算出来的：
-     窗口区 240 + 4×13 = 292，卡片右边缘正好是 SVG 的 x=0。 */
-  .ob-merge{display:grid;grid-template-columns:290px 140px minmax(0,1fr);
-    column-gap:0;row-gap:14px;align-items:center;min-width:0}
-
-  /* 五个旧窗口：左边缘错位、右边缘统一对齐到 290。
-     右边缘必须齐，否则"每个窗口各拉一条线出去"的起点就对不上卡片的边。
-     不加旋转：v6 给每张卡配了 ±1.2°，五张一起看就是"没对齐"，
-     错位要靠**规律的位移**做出来，不能靠随机角度。20px 的台阶足够读成
-     "五个窗口先后打开"，又不至于像排版事故。 */
-  .ob-win{position:relative;width:290px;height:314px;flex:none}
-  .ob-win-card{position:absolute;left:calc(var(--i) * 20px);top:calc(var(--i) * 64px);
-    width:calc(290px - var(--i) * 20px);height:58px;overflow:hidden;text-align:left;
-    background:var(--card);border:1px solid var(--line);border-radius:10px;
-    box-shadow:0 10px 22px -16px rgba(30,38,54,.62);
-    transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s,
-      border-color .25s,opacity .3s}
-  .ob-win-card:hover,.ob-win-card.picked{transform:translateX(7px) scale(1.03);z-index:4;
-    border-color:var(--brand2);box-shadow:0 18px 30px -18px rgba(30,38,54,.78)}
-  .ob-win-bar{display:flex;align-items:center;gap:4px;height:20px;padding:0 9px;
-    background:var(--ob-glass-2);border-bottom:1px solid var(--ob-hair)}
-  .ob-win-bar i{width:4.5px;height:4.5px;border-radius:50%;background:var(--dotoff);flex:none}
-  .ob-win-bar span{margin-left:4px;font-size:10px;color:var(--text);opacity:.78;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ob-win-bar em{margin-left:auto;font-style:normal;font-size:9px;color:var(--muted);
-    opacity:.72;white-space:nowrap;flex:none}
-  .ob-win-body{padding:4px 9px 5px;font:10px/1.6 ui-monospace,Consolas,monospace}
-  .ob-win-body code{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    font:inherit;color:var(--muted)}
-  .ob-win-body .pr{color:color-mix(in srgb,var(--brand) 82%,var(--muted))}
-  .ob-win-body .bad{color:color-mix(in srgb,var(--err) 72%,var(--muted))}
-  /* 终端那扇窗保持深色：五个窗口里有一个"就是终端"，比五张同款纸片容易认 */
-  .ob-win-card.dark{background:linear-gradient(180deg,#2A2F39,#1E222A);
-    border-color:rgba(255,255,255,.12);box-shadow:0 12px 24px -14px rgba(12,16,24,.7)}
-  .ob-win-card.dark .ob-win-bar{background:rgba(255,255,255,.05);
-    border-bottom-color:rgba(255,255,255,.08)}
-  .ob-win-card.dark .ob-win-bar span{color:rgba(199,206,218,.88);opacity:1}
-  .ob-win-card.dark .ob-win-bar em{color:rgba(199,206,218,.48)}
-  .ob-win-card.dark .ob-win-body code{color:rgba(199,206,218,.7)}
-  .ob-win-card.dark .ob-win-body .pr{color:#9FC0E0}
-  .ob-win-card.dark .ob-win-body .bad{color:#E4A09A}
-  /* 只压一点透明度：压太多会把"五个窗口"这个主体也一起淡掉 */
-  .ob-merge.flow .ob-win-card{opacity:.82}
-
-  /* 五条线：起点跟着窗口走（间距 64），终点被压到 48（整）。
-     这就是"收拢"的几何证据，不靠一个写着"收拢"的箭头 */
-  .ob-wires{width:140px;height:314px;flex:none}
-  .ob-wires svg{display:block;width:100%;height:100%;overflow:visible}
-  .ob-wires path{fill:none;stroke:color-mix(in srgb,var(--brand2) 58%,var(--line));
-    stroke-width:1.5;vector-effect:non-scaling-stroke;
-    stroke-dasharray:260;stroke-dashoffset:0;opacity:.9;
-    transition:stroke .25s,stroke-width .25s,opacity .25s}
-  .ob-merge.flow .ob-wires path{animation:obWire .62s cubic-bezier(.22,1,.36,1) both}
-  .ob-merge.flow .ob-wires path:nth-child(1){animation-delay:0s}
-  .ob-merge.flow .ob-wires path:nth-child(2){animation-delay:.08s}
-  .ob-merge.flow .ob-wires path:nth-child(3){animation-delay:.16s}
-  .ob-merge.flow .ob-wires path:nth-child(4){animation-delay:.24s}
-  .ob-merge.flow .ob-wires path:nth-child(5){animation-delay:.32s}
-  @keyframes obWire{from{stroke-dashoffset:260;opacity:.15}
-    to{stroke-dashoffset:0;opacity:.9}}
-  .ob-wires path.on{stroke:var(--brand2);stroke-width:2.2;opacity:1}
-
-  /* 右边：一条真的状态线。竖线贯穿全高，所以五条线的终点落在哪儿都接得住。
-     撑满整行高（align-self:stretch + space-between），五条线才不会挤在左侧一小段里 */
-  .ob-line{min-width:0;width:100%;text-align:left;align-self:stretch;
-    display:flex;flex-direction:column}
-  .ob-line-tag{display:flex;align-items:center;gap:7px;margin-bottom:10px;
-    font:500 10px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em;color:var(--muted)}
-  .ob-line-tag i{width:16px;height:1px;background:var(--brand2);flex:none}
-  .ob-line-list{position:relative;flex:1;padding-left:19px;
-    display:flex;flex-direction:column;justify-content:space-between}
-  .ob-line-list::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:1px;
-    background:var(--line)}
-  /* 名称与值之间用一条淡引导线连起来。少了它，两端对齐会把一行拉成
-     "名字 ……… 一大片空白 ……… 值"，看着像两列不相干的东西 */
-  .ob-line-node{position:relative;display:flex;align-items:baseline;
-    justify-content:flex-start;gap:10px;padding:6px 0;cursor:pointer;
-    border-radius:6px;transition:background .2s}
-  .ob-line-node:hover{background:color-mix(in srgb,var(--brand-weak) 42%,transparent)}
-  .ob-line-node>i{position:absolute;left:-18.5px;top:11px;width:9px;height:9px;border-radius:50%;
-    background:var(--bg);border:1.5px solid var(--brand2);box-sizing:border-box;
-    transition:transform .3s,box-shadow .3s,background .3s,border-color .3s}
-  .ob-line-node b{order:1;flex:none;font-size:13px;font-weight:500;color:var(--text);line-height:1.45}
-  .ob-line-node::after{content:'';order:2;flex:1;min-width:14px;height:1px;align-self:center;
-    background:repeating-linear-gradient(90deg,
-      color-mix(in srgb,var(--muted) 50%,transparent) 0 2px,transparent 2px 7px);
-    transform:translateY(3px);transition:background .25s}
-  .ob-line-node em{order:3;flex:none;font-style:normal;font-size:11px;line-height:1.55;
-    text-align:right;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78%}
-  /* 悬停旧窗口 → 对应节点亮起＋连线加粗。"被谁接管"用联动回答，比 tooltip 直接得多 */
-  .ob-line-node.own>i{background:var(--brand);border-color:var(--brand);transform:scale(1.3);
-    box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 16%,transparent)}
-  .ob-line-node.own b{color:var(--brand)}
-  .ob-line-node.own::after{background:repeating-linear-gradient(90deg,
-    color-mix(in srgb,var(--brand2) 55%,transparent) 0 2px,transparent 2px 7px)}
-  .ob-line-node.own em{color:var(--text);opacity:.86}
+  /* ---------- 02 同一判据，测两次：判定面板 / diff 轨道 ----------
+     v9 换掉 v8 的「复验印章 + 红绿双色票据框 + 五个标签贴纸」。那一版是
+     拟物凭据单：框套框、装饰多、等宽小字密集。这里改成现代数据面板——
+     一个大号 ×2 作视觉锚点，三条 -/+ diff 轨道靠细线与留白分组，不靠边框；
+     状态色只落在符号上，不铺大色块。所有 class/id 沿用 v8，CDP 门禁契约不变。
+     不播动画、不声称发生过：数值是结构示意，字段名来自真实判定链
+     （ai_confirm.go / runtime.go）。 */
+  .ob-recheck{display:flex;flex-direction:column;min-width:0;
+    background:var(--ob-card);border:1px solid var(--ob-hair);border-radius:16px;
+    padding:26px 30px 20px;box-shadow:0 22px 52px -42px rgba(30,38,54,.55)}
+  .ob-rc-head{display:flex;align-items:baseline;gap:22px;padding-bottom:20px}
+  .ob-rc-stamp{display:flex;align-items:baseline;gap:17px;flex:none}
+  .ob-rc-stamp b{font-size:46px;font-weight:300;line-height:1;
+    letter-spacing:-.03em;color:var(--brand)}
+  .ob-rc-stamp em{font:500 10px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.22em;color:var(--muted);font-style:normal;opacity:.7}
+  .ob-rc-title{margin-left:auto;text-align:right;
+    font-size:12px;line-height:1.5;color:var(--muted);opacity:.88}
+  .ob-rc-rows{display:flex;flex-direction:column}
+  .ob-rc-row{display:grid;grid-template-columns:148px minmax(0,1fr);
+    column-gap:20px;align-content:center;padding:15px 0;
+    border-top:1px solid var(--ob-hair)}
+  /* 引导层全局 .ob button 是 (0,1,1)，比单个 class 高：不带 #ob-recheck 就会被
+     套回蓝底胶囊框 + hover 变蓝（v9 首版截图实测踩到）。键盘焦点 outline 保留。 */
+  #ob-recheck .ob-rc-crit{grid-row:1 / 3;align-self:center;justify-self:start;
+    display:flex;align-items:center;gap:9px;padding:0;border:0;border-radius:0;
+    background:none;box-shadow:none;cursor:pointer;color:var(--text);
+    font-size:14.5px;font-weight:600;letter-spacing:-.01em;
+    text-align:left;white-space:nowrap;transition:color .2s}
+  #ob-recheck .ob-rc-crit i{width:7px;height:7px;border-radius:2px;flex:none;
+    background:var(--brand2);transition:background .2s,transform .2s}
+  #ob-recheck .ob-rc-crit:hover{color:var(--brand);background:none;border-color:transparent}
+  #ob-recheck .ob-rc-crit:hover i{transform:scale(1.3)}
+  #ob-recheck .ob-rc-crit:active{transform:none}
+  #ob-recheck .ob-rc-row.on .ob-rc-crit{color:var(--brand);background:none}
+  #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand)}
+  .ob-rc-obs{display:flex;align-items:baseline;gap:12px;min-width:0;padding:2px 0}
+  .ob-rc-obs i{width:16px;flex:none;text-align:center;font-style:normal;
+    font:700 15px/1.7 ui-monospace,Consolas,monospace}
+  .ob-rc-obs.before i::before{content:'-';color:var(--err)}
+  .ob-rc-obs.after i::before{content:'+';color:var(--ok)}
+  .ob-rc-obs code{display:block;min-width:0;
+    font:13px/1.7 ui-monospace,Consolas,monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+  /* 现代 diff 不加删除线：靠 - 符号 + 灰字就能读，删除线只让小字发糊 */
+  .ob-rc-obs.before code{color:var(--muted);opacity:.72}
+  .ob-rc-obs.after code{color:var(--brand);font-weight:600}
+  .ob-rc-detail{margin-top:14px;padding-top:14px;min-height:46px;
+    border-top:1px solid var(--ob-hair)}
+  .ob-rc-detail-empty{font-size:12px;line-height:1.7;color:var(--muted);opacity:.72}
+  .ob-rc-dlist{display:flex;flex-wrap:wrap;gap:8px 26px}
+  .ob-rc-ditem{display:flex;align-items:baseline;gap:9px;min-width:0}
+  .ob-rc-ditem u{font:500 10px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.08em;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .ob-rc-ditem span{font-size:12.5px;line-height:1.6;color:var(--text)}
+  #onboard .ob-slide[data-idx="1"] .ob-lead{font-size:13.5px;
+    line-height:1.75;opacity:.72}
+  .ob-rc-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--ob-hair)}
+  .ob-rc-audit{display:flex;flex-wrap:wrap;gap:0 12px}
+  .ob-rc-audit span{font:10px/1.6 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.75}
+  .ob-rc-audit span+span::before{content:'/';margin-right:12px;opacity:.45}
 
   /* ---------- 03 时间轴 ---------- */
   .ob-flow{text-align:center}
@@ -1601,13 +1563,14 @@
   body[data-theme="dark"] .ob-vd-num b,
   body[data-theme="dark"] .ob-verdict.hot .ob-vd-num b,
   body[data-theme="dark"] .ob-report-foot b,
-  body[data-theme="dark"] .ob-merge-foot em,
-  body[data-theme="dark"] .ob-line-node.own b,
+  body[data-theme="dark"] .ob-rc-stamp b,
+  body[data-theme="dark"] #ob-recheck .ob-rc-crit,
+  body[data-theme="dark"] #ob-recheck .ob-rc-row.on .ob-rc-crit,
+  body[data-theme="dark"] .ob-rc-obs.after code,
   body[data-theme="dark"] .ob-writes.ro em{color:var(--brand2)}
   body[data-theme="dark"] .ob-report-foot b{
     background:color-mix(in srgb,var(--brand2) 18%,transparent)}
-  body[data-theme="dark"] .ob-win-body .pr{
-    color:color-mix(in srgb,var(--brand2) 78%,var(--muted))}
+  body[data-theme="dark"] #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand2)}
 
   /* ---------- 05 控制台 ---------- */
   .ob-console-scene{max-width:1000px;text-align:center}
@@ -1920,13 +1883,11 @@
     background:linear-gradient(152deg,#40506A 0%,#29354A 58%,#212B3C 100%);
     border-color:rgba(163,186,216,.36)}
 
-  /* ---------- 02：状态线左侧加一条实心渐变轴 ---------- */
-  .ob-line{padding:12px 14px 12px 0;border-radius:12px;
-    background:linear-gradient(90deg,
-      color-mix(in srgb,var(--brand-weak) 62%,transparent) 0%,
-      transparent 66%)}
-  .ob-line-list::before{width:2px;background:linear-gradient(180deg,var(--brand2),var(--brand))}
-  .ob-line-node>i{left:-18px;width:10px;height:10px}
+  /* ---------- 02：宽屏下数字锚点与 diff 值再放大一档 ---------- */
+  .ob-recheck{padding:28px 34px 22px}
+  .ob-rc-stamp b{font-size:52px}
+  .ob-rc-obs code{font-size:13.5px}
+  .ob-rc-ditem span{font-size:13px}
 
   /* ---------- 03：详情卡升为内容板；标题进 17px 这一档 ---------- */
   .ob-detail{--ob-bar:var(--brand2);background:var(--ob-card)}
@@ -2003,12 +1964,13 @@
     .ob-console-body{grid-template-columns:1fr}
     .ob-recent{border-left:0;border-top:1px solid rgba(255,255,255,.07)}
     .ob-chapter-grid{grid-template-columns:repeat(2,1fr)}
-    /* 窄屏放不下三列阶梯：窗口改成两列平铺，连线没有意义了直接拿掉 */
-    .ob-merge{grid-template-columns:1fr;row-gap:14px}
-    .ob-wires{display:none}
-    .ob-win{width:100%;height:auto;display:grid;grid-template-columns:1fr 1fr;gap:7px}
-    .ob-win-card{position:static;width:auto;height:auto;transform:none}
-    .ob-win-card:hover{transform:none}
+    .ob-recheck{padding:20px 18px 16px}
+    .ob-rc-stamp b{font-size:38px}
+    .ob-rc-row{grid-template-columns:108px minmax(0,1fr);column-gap:12px}
+    #ob-recheck .ob-rc-crit{font-size:12.5px;gap:7px}
+    .ob-rc-obs{gap:8px}
+    .ob-rc-obs code{font-size:10.5px}
+    .ob-rc-dlist{flex-direction:column;gap:6px}
     .ob-groups{grid-template-columns:1fr}
     .ob-verdict{grid-template-columns:1fr;gap:9px}
     .ob-vd-num{border-right:0;border-bottom:1px solid var(--ob-hair);
@@ -2050,15 +2012,6 @@
     border-color:color-mix(in srgb,var(--brand2) 62%,var(--ob-edge))!important;
     box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-weak) 72%,transparent),var(--ob-lift)!important}
   .ob-art-note{transition:opacity .3s,color .3s}
-
-  /* 02 收拢结果：一行"5 → 1"，把这一屏的论点数字化 */
-  .ob-merge-foot{grid-column:1 / -1;display:flex;align-items:center;justify-content:center;
-    gap:9px;margin-top:4px;font-size:11px;color:var(--muted);
-    opacity:0;transform:translateY(4px);transition:opacity .45s,transform .45s}
-  .ob-merge-foot.on{opacity:1;transform:none}
-  .ob-merge-foot s{text-decoration-color:color-mix(in srgb,var(--err) 38%,transparent)}
-  .ob-merge-foot em{font-style:normal;color:var(--brand)}
-  .ob-merge-foot em::before{content:'\2192';margin-right:7px;color:var(--muted);opacity:.7}
 
   /* 05 日志侧栏：分区计数 + 轮转，让 186px 不空着 */
   .ob-stats{display:flex;flex-direction:column;gap:4px;margin-top:auto;padding-top:12px;

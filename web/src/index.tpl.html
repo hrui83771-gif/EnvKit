@@ -1522,60 +1522,42 @@
         </div>
       </div>
 
-      <!-- 02 为什么存在：散落 → 汇聚 -->
+      <!-- 02 为什么存在：同一判据，测两次 -->
       <div class="swiper-slide ob-slide" data-idx="1">
         <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
-            <h2 class="ob-h">五个窗口，<br />一条状态线</h2>
-            <p class="ob-lead">终端、数据库客户端、SSH、浏览器标签、日志窗口——出错时你得挨个翻，还不知道哪个才是最新的。</p>
-            <p class="ob-quiet">现在入口只有一个，状态也只有一份。</p>
-            <div class="ob-tip"><i></i>悬停窗口看归属，点节点看它顶替了谁</div>
+            <h2 class="ob-h">同一判据，<br />测两次</h2>
+            <p class="ob-lead">执行完不算完成，同一判据要再过一遍。</p>
+            <p class="ob-hint">结构示意 · 数值不是本次运行结果</p>
           </div>
-          <div class="ob-merge" id="ob-merge">
-            <div class="ob-win" id="ob-old-list">
-              <div class="ob-win-card dark" style="--i:0" data-own="0">
-                <div class="ob-win-bar"><i></i><i></i><i></i><span>终端</span><em>2 分钟前</em></div>
-                <div class="ob-win-body"><code class="pr">$ go run ./server</code><code class="bad">panic: dial tcp :3306</code></div>
+          <div class="ob-recheck" id="ob-recheck">
+            <div class="ob-rc-head">
+              <div class="ob-rc-stamp"><b>×2</b><em>RECHECK</em></div>
+              <div class="ob-rc-title">同一判据 · 两次观测</div>
+            </div>
+            <div class="ob-rc-rows" id="ob-rc-rows">
+              <div class="ob-rc-row" data-crit="0">
+                <button class="ob-rc-crit" data-crit="0" type="button"><i></i><span>端口 :8888</span></button>
+                <div class="ob-rc-obs before"><i></i><code>connection refused</code></div>
+                <div class="ob-rc-obs after"><i></i><code>LISTEN · HTTP 200</code></div>
               </div>
-              <div class="ob-win-card" style="--i:1" data-own="1">
-                <div class="ob-win-bar"><i></i><i></i><i></i><span>数据库客户端</span><em>未刷新</em></div>
-                <div class="ob-win-body"><code class="pr">SELECT * FROM batch</code><code class="bad">ERROR 2003 (HY000)</code></div>
+              <div class="ob-rc-row" data-crit="1">
+                <button class="ob-rc-crit" data-crit="1" type="button"><i></i><span>数据库 :3306</span></button>
+                <div class="ob-rc-obs before"><i></i><code>ERROR 2003 (HY000)</code></div>
+                <div class="ob-rc-obs after"><i></i><code>握手成功 · 12ms</code></div>
               </div>
-              <div class="ob-win-card" style="--i:2" data-own="2">
-                <div class="ob-win-bar"><i></i><i></i><i></i><span>SSH 工具</span><em>断线</em></div>
-                <div class="ob-win-body"><code class="pr">ssh root@10.0.0.21</code><code class="bad">Connection timed out</code></div>
-              </div>
-              <div class="ob-win-card" style="--i:3" data-own="3">
-                <div class="ob-win-bar"><i></i><i></i><i></i><span>浏览器标签</span><em>3 个标签</em></div>
-                <div class="ob-win-body"><code>:5173　:8888　:5002</code><code class="bad">看不出哪个是新的</code></div>
-              </div>
-              <div class="ob-win-card" style="--i:4" data-own="4">
-                <div class="ob-win-bar"><i></i><i></i><i></i><span>日志窗口</span><em>滚屏中</em></div>
-                <div class="ob-win-body"><code class="bad">[WARN] 区块高度为 0</code><code class="bad">[ERROR] read timeout</code></div>
+              <div class="ob-rc-row" data-crit="2">
+                <button class="ob-rc-crit" data-crit="2" type="button"><i></i><span>链端 :20200</span></button>
+                <div class="ob-rc-obs before"><i></i><code>区块高度 0</code></div>
+                <div class="ob-rc-obs after"><i></i><code>height 182 · syncing</code></div>
               </div>
             </div>
-            <div class="ob-wires" aria-hidden="true">
-              <svg viewBox="0 0 140 314" preserveAspectRatio="none">
-                <path data-wire="0" d="M0 29C40 29 94 38 148 38" />
-                <path data-wire="1" d="M0 93C40 93 94 103 148 103" />
-                <path data-wire="2" d="M0 157C40 157 94 168 148 168" />
-                <path data-wire="3" d="M0 221C40 221 94 233 148 233" />
-                <path data-wire="4" d="M0 285C40 285 94 298 148 298" />
-              </svg>
+            <div class="ob-rc-detail" id="ob-rc-detail">
+              <div class="ob-rc-detail-empty">点判据，看它按什么规则测</div>
             </div>
-            <div class="ob-line" id="ob-state">
-              <div class="ob-line-tag"><i></i>ONE STATE</div>
-              <div class="ob-line-list">
-                <div class="ob-line-node" data-node="0"><i></i><b>运行状态</b><em>后端 :8888 · 前端 :5173</em></div>
-                <div class="ob-line-node" data-node="1"><i></i><b>数据库</b><em>localhost:3306 · farm</em></div>
-                <div class="ob-line-node" data-node="2"><i></i><b>链端</b><em>2.11.0 · 区块高度 182</em></div>
-                <div class="ob-line-node" data-node="3"><i></i><b>页面入口</b><em>127.0.0.1:5173 · 可打开</em></div>
-                <div class="ob-line-node" data-node="4"><i></i><b>日志</b><em>5 分区 · 最近错误 0</em></div>
-              </div>
-            </div>
-            <div class="ob-merge-foot" id="ob-merge-foot">
-              <s>5 个窗口 · 3 套工具链</s><em>收拢成 1 条状态线</em>
+            <div class="ob-rc-foot">
+              <div class="ob-rc-audit"><span>policy</span><span>rule</span><span>approver=user</span><span>decision</span><span>args_sha</span></div>
             </div>
           </div>
         </div>

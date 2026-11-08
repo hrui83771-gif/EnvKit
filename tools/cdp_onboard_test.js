@@ -311,78 +311,91 @@ function seed() {
       return 'ok';
     })()`);
 
-    // 屏 2（为什么存在）：汇聚跑完后"5 → 1"那行才出现
+    // 屏 2（为什么存在）：v8 复验凭据单。静态呈现，不播汇聚动画、不声称刚发生过。
     await arrowRight();
-    await sleep(900);
-    const mf = await evalJS(`JSON.stringify({
-      on: document.getElementById('ob-merge-foot').classList.contains('on'),
-      txt: (document.getElementById('ob-merge-foot')||{}).innerText||'',
-      flow: document.getElementById('ob-merge').classList.contains('flow')
+    await sleep(500);
+    const rcFetchBase = await evalJS(`(window.__obFetch||[]).length`);
+    const rcShape = await evalJS(`JSON.stringify({
+      rows: document.querySelectorAll('#ob-recheck .ob-rc-row').length,
+      crit: document.querySelectorAll('#ob-recheck .ob-rc-crit').length,
+      code: document.querySelectorAll('#ob-recheck .ob-rc-obs code').length,
+      audit: document.querySelectorAll('#ob-recheck .ob-rc-audit span').length,
+      stamp: document.querySelectorAll('#ob-recheck .ob-rc-stamp').length,
+      empty: document.querySelectorAll('#ob-rc-detail .ob-rc-detail-empty').length,
+      axis: !!document.getElementById('ob-rc-rows')
     })`);
-    let MF = {}; try { MF = JSON.parse(mf || '{}'); } catch (e) {}
-    check('detail-merge-foot', MF.on === true && MF.flow === true && /1 条状态线/.test(MF.txt || ''), mf);
+    let RCV_SHAPE = {}; try { RCV_SHAPE = JSON.parse(rcShape || '{}'); } catch (e) {}
+    check('detail-recheck-shape', RCV_SHAPE.rows === 3 && RCV_SHAPE.crit === 3 && RCV_SHAPE.code === 6 &&
+      RCV_SHAPE.audit === 5 && RCV_SHAPE.stamp === 1 && RCV_SHAPE.empty === 1 && RCV_SHAPE.axis === true, rcShape);
 
-    // 02 屏结构：5 个窗口 / 5 条连线 / 5 个节点，且只有一条是深色终端窗口
-    const mw = await evalJS(`JSON.stringify({
-      win: document.querySelectorAll('#ob-old-list .ob-win-card').length,
-      dark: document.querySelectorAll('#ob-old-list .ob-win-card.dark').length,
+    // 旧造型必须真删干净；进屏也不允许自动展开/自动播（v3.8 删假进度那条红线）
+    const rcOldShape = await evalJS(`JSON.stringify({
+      win: document.querySelectorAll('.ob-win-card').length,
       wire: document.querySelectorAll('.ob-wires path').length,
-      node: document.querySelectorAll('#ob-state .ob-line-node').length,
-      lead: document.querySelectorAll('#ob-old-list .ob-win-body code').length
+      foot: document.querySelectorAll('.ob-merge-foot').length,
+      flow: document.querySelectorAll('.ob-merge.flow').length,
+      replay: document.querySelectorAll('#ob-merge-replay').length,
+      autoOn: document.querySelectorAll('#ob-recheck .ob-rc-row.on').length
     })`);
-    let MW = {}; try { MW = JSON.parse(mw || '{}'); } catch (e) {}
-    check('detail-merge-shape', MW.win === 5 && MW.wire === 5 && MW.node === 5 &&
-      MW.dark === 1 && MW.lead === 10, mw);
+    let RCV_OLD = {}; try { RCV_OLD = JSON.parse(rcOldShape || '{}'); } catch (e) {}
+    check('detail-recheck-no-fake', RCV_OLD.win === 0 && RCV_OLD.wire === 0 && RCV_OLD.foot === 0 &&
+      RCV_OLD.flow === 0 && RCV_OLD.replay === 0 && RCV_OLD.autoOn === 0, rcOldShape);
 
-    // 悬停第 3 个窗口 → 第 3 个节点和第 3 条线一起亮。这条断言防的是
-    // "只写了个 tooltip、联动其实没接上"——联动是这一屏唯一的交互承诺
-    await hoverSel('#ob-old-list .ob-win-card[data-own="2"]', 'win3');
-    await sleep(200);
-    const hov = await evalJS(`JSON.stringify({
-      own: document.querySelectorAll('#ob-state .ob-line-node.own').length,
-      ownIdx: (document.querySelector('#ob-state .ob-line-node.own')||{getAttribute:function(){return null}}).getAttribute('data-node'),
-      on: document.querySelectorAll('.ob-wires path.on').length,
-      onIdx: (document.querySelector('.ob-wires path.on')||{getAttribute:function(){return null}}).getAttribute('data-wire')
+    // 真鼠标点第 2 个判据 → 展开它的探测方式/阈值/来源，且只有第 2 行点亮
+    await clickSel('#ob-recheck .ob-rc-crit[data-crit="1"]', 'crit2');
+    await sleep(180);
+    const rcOpen = await evalJS(`JSON.stringify({
+      items: document.querySelectorAll('#ob-rc-detail .ob-rc-ditem').length,
+      on: document.querySelectorAll('#ob-recheck .ob-rc-row.on').length,
+      onIdx: (document.querySelector('#ob-recheck .ob-rc-row.on')||{getAttribute:function(){return null}}).getAttribute('data-crit'),
+      txt: (document.getElementById('ob-rc-detail')||{}).innerText||'',
+      empty: document.querySelectorAll('#ob-rc-detail .ob-rc-detail-empty').length
     })`);
-    let HV = {}; try { HV = JSON.parse(hov || '{}'); } catch (e) {}
-    check('detail-merge-hover', HV.own === 1 && HV.ownIdx === '2' && HV.on === 1 && HV.onIdx === '2', hov);
+    let RCV_OPEN = {}; try { RCV_OPEN = JSON.parse(rcOpen || '{}'); } catch (e) {}
+    check('detail-recheck-open', RCV_OPEN.items === 3 && RCV_OPEN.on === 1 && RCV_OPEN.onIdx === '1' &&
+      RCV_OPEN.empty === 0 && /farm/.test(RCV_OPEN.txt||''), rcOpen);
+
+    // 换一个判据 → 展开内容必须跟着换。防「永远渲染第一项」这种最容易被放过的回归
+    await clickSel('#ob-recheck .ob-rc-crit[data-crit="2"]', 'crit3');
+    await sleep(180);
+    const rcSwitch = await evalJS(`JSON.stringify({
+      on: document.querySelectorAll('#ob-recheck .ob-rc-row.on').length,
+      onIdx: (document.querySelector('#ob-recheck .ob-rc-row.on')||{getAttribute:function(){return null}}).getAttribute('data-crit'),
+      txt: (document.getElementById('ob-rc-detail')||{}).innerText||''
+    })`);
+    let RCV_SW = {}; try { RCV_SW = JSON.parse(rcSwitch || '{}'); } catch (e) {}
+    check('detail-recheck-switch', RCV_SW.on === 1 && RCV_SW.onIdx === '2' &&
+      /区块高度/.test(RCV_SW.txt||'') && !/farm/.test(RCV_SW.txt||''), rcSwitch);
+
+    // 移开鼠标，点住态不能被 hover 清掉
     await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4 });
     await sleep(150);
-    const hov0 = await evalJS(`document.querySelectorAll('#ob-state .ob-line-node.own').length`);
-    check('detail-merge-hover-reset', hov0 === 0, 'own=' + hov0);
+    const rcSticky = await evalJS(`document.querySelectorAll('#ob-recheck .ob-rc-row.on').length`);
+    check('detail-recheck-sticky', rcSticky === 1, 'on after leaving=' + rcSticky);
 
-    // 反向联动：点第 4 个节点 → 第 4 个窗口被挑出来（.picked）+ 第 4 条线亮；
-    // 再点一次取消。没有这条，02 屏就只剩"悬停看看"，按钮删掉后等于没有交互。
-    await clickSel('#ob-state .ob-line-node[data-node="3"]', 'node4');
-    await sleep(220);
-    const pick = await evalJS(`JSON.stringify({
-      node: (document.querySelector('#ob-state .ob-line-node.own')||{getAttribute:function(){return null}}).getAttribute('data-node'),
-      win: (document.querySelector('#ob-old-list .ob-win-card.picked')||{getAttribute:function(){return null}}).getAttribute('data-own'),
-      wires: document.querySelectorAll('.ob-wires path.on').length
-    })`);
-    let PK = {}; try { PK = JSON.parse(pick || '{}'); } catch (e) {}
-    check('detail-merge-pick', PK.node === '3' && PK.win === '3' && PK.wires === 1, pick);
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4 });
+    // 再点一次同一个判据 → 收起，回到空态
+    await clickSel('#ob-recheck .ob-rc-crit[data-crit="2"]', 'crit3-off');
     await sleep(160);
-    const pickStays = await evalJS(`document.querySelectorAll('#ob-state .ob-line-node.own').length`);
-    check('detail-merge-pick-sticky', pickStays === 1, 'own after leaving=' + pickStays);
-    await clickSel('#ob-state .ob-line-node[data-node="3"]', 'node4-again');
-    await sleep(180);
-    const pickOff = await evalJS(`JSON.stringify({
-      own: document.querySelectorAll('#ob-state .ob-line-node.own').length,
-      picked: document.querySelectorAll('#ob-old-list .ob-win-card.picked').length
+    const rcOff = await evalJS(`JSON.stringify({
+      on: document.querySelectorAll('#ob-recheck .ob-rc-row.on').length,
+      empty: document.querySelectorAll('#ob-rc-detail .ob-rc-detail-empty').length,
+      items: document.querySelectorAll('#ob-rc-detail .ob-rc-ditem').length
     })`);
-    let PO = {}; try { PO = JSON.parse(pickOff || '{}'); } catch (e) {}
-    check('detail-merge-pick-off', PO.own === 0 && PO.picked === 0, pickOff);
+    let RCV_OFF = {}; try { RCV_OFF = JSON.parse(rcOff || '{}'); } catch (e) {}
+    check('detail-recheck-toggle-off', RCV_OFF.on === 0 && RCV_OFF.empty === 1 && RCV_OFF.items === 0, rcOff);
 
-    // 两个"没意义"的按钮已经被删掉了：重播汇聚 / 依次打勾。
-    // 这条断言防的是有人把假进度按钮加回来。
+    // 两个"没意义"的按钮仍然不能回来：重播汇聚 / 依次打勾
     const deadBtn = await evalJS(`JSON.stringify({
       replay: !!document.getElementById('ob-merge-replay'),
       run: !!document.getElementById('ob-track-run')
     })`);
     let DB = {}; try { DB = JSON.parse(deadBtn || '{}'); } catch (e) {}
     check('no-fake-buttons', DB.replay === false && DB.run === false, deadBtn);
+
+    // 02 屏不许发任何请求：凭据单是静态结构示意，不假装在跑
+    const rcFetchAfter = await evalJS(`(window.__obFetch||[]).length`);
+    check('detail-recheck-zero-write', Number(rcFetchAfter) === Number(rcFetchBase),
+      'before=' + rcFetchBase + ' after=' + rcFetchAfter);
 
     // 屏 3（四步走）：点步骤看说明卡切换（自动前进已在此前 2.3s 内走了一格）
     await arrowRight();
@@ -702,10 +715,10 @@ function seed() {
     await evalJS(`(function(){ var el=document.getElementById('ob-swiper'); if(el&&el.swiper) el.swiper.slideTo(5,0); return 'ok'; })()`);
     await i18nDeep(['read', 'write', 'explain'].map(k => '.ob-questions [data-q="' + k + '"]'), 'ask');
     await i18nDeep(['say', 'feed', 'weather', 'err'].map(k => '#ob-pet-menu [data-pact="' + k + '"]'), 'pet');
-    // 02 屏的演示报错在 <code> 里：全局翻译器跳过 CODE（真实日志要原文），必须由 trCode() 补
-    const codeTxt = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-old-list .ob-win-body code')).map(function(c){return c.textContent.trim();}))`);
+    // 02 屏两次观测值在 <code> 里：全局翻译器跳过 CODE（真实日志要原文），必须由 trCode() 补
+    const codeTxt = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-recheck .ob-rc-obs code')).map(function(c){return c.textContent.trim();}))`);
     let CT = []; try { CT = JSON.parse(codeTxt || '[]'); } catch (e) {}
-    check('i18n-en-code-nodes', CT.length === 10 && CT.every(s => !/[\u4e00-\u9fa5]/.test(s)), codeTxt);
+    check('i18n-en-code-nodes', CT.length === 6 && CT.every(s => !/[\u4e00-\u9fa5]/.test(s)), codeTxt);
     const ariaTxt = await evalJS(`JSON.stringify({
       prev: document.getElementById('ob-prev').getAttribute('aria-label'),
       next: document.getElementById('ob-next').getAttribute('aria-label')
@@ -715,7 +728,7 @@ function seed() {
     // 挨着切回来：CODE 里的英文要能原路反查到中文（否则切回中文会停在英文）
     await evalJS(`(function(){ try{ ekSetLang('zh', true); }catch(e){} return 'ok'; })()`);
     await sleep(500);
-    const backZh = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-old-list .ob-win-body code')).map(function(c){return c.textContent.trim();}).filter(function(s){return /[\\u4e00-\\u9fa5]/.test(s);}))`);
+    const backZh = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-recheck .ob-rc-obs code')).map(function(c){return c.textContent.trim();}).filter(function(s){return /[\\u4e00-\\u9fa5]/.test(s);}))`);
     let BZ = []; try { BZ = JSON.parse(backZh || '[]'); } catch (e) {}
     check('i18n-zh-restore-code', BZ.length === 2, backZh);
     await evalJS(`(function(){ try{ EKOnboard.close(); }catch(e){} return 'ok'; })()`);

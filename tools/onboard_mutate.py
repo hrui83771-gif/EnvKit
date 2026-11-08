@@ -35,11 +35,17 @@ MUTATIONS = [
      "if(id === 'ob-detect-run'){",
      "if(id === 'ob-detect-run'){ fetch('/api/check',{method:'POST'});",
      'demo-zero-write-api'),
-    # 02 屏的 hover 联动是这一屏唯一的交互承诺，"只亮节点不亮线"必须被抓到
-    ('M5 悬停只亮一半',      'web/src/js/90-onboard.js',
-     "      p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);",
-     "      p.classList.toggle('on', false);",
-     'detail-merge-hover'),
+    # 02 屏「点判据展开依据」是这一屏唯一的交互承诺：永远渲染第一项必须被抓到
+    ('M5 展开永远第一项',    'web/src/js/90-onboard.js',
+     '    var d = RC_CRIT[k] || RC_CRIT[0];',
+     '    var d = RC_CRIT[0];',
+     'detail-recheck-switch'),
+    # 只高亮、不渲染依据：这一屏就退化成"看着能点、其实没内容"。
+    # 改 if 条件而不是截断 innerHTML 拼接 —— 后者是语法错误，编译不过不算验证。
+    ('M16 点判据不展开',      'web/src/js/90-onboard.js',
+     '    if(k === null){',
+     '    if(true){',
+     'detail-recheck-open'),
     # 04 屏的分组是"结论先行"的骨架，少一组就该红
     ('M6 检测少一组',        'web/src/js/90-onboard.js',
      "var GROUPS = ['运行时', '数据与磁盘', '网络与链端'];",

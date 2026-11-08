@@ -215,7 +215,7 @@
   var CHAPTERS = ['开场','为什么存在','四步走','状态','日志','AI 与桌宠','安全边界','收尾'];
   var CHAPTER_SUM = [
     '五件事，一个入口',
-    '为什么不再开五个窗口',
+    '凭什么说修好了',
     '四步各有输入与产出',
     '检测给结论，不给猜测',
     '日志按来源分区',
@@ -471,7 +471,7 @@
     if(REDUCED || !slide) return;
     var els = slide.querySelectorAll(
       '.ob-kicker,.ob-h,.ob-display,.ob-tagline,.ob-lead,.ob-quiet,.ob-actions,' +
-      '.ob-hero-art,.ob-merge,.ob-timeline,.ob-detail,.ob-detect,.ob-console,.ob-chat,.ob-perms,.ob-chapter-grid');
+      '.ob-hero-art,.ob-recheck,.ob-timeline,.ob-detail,.ob-detect,.ob-console,.ob-chat,.ob-perms,.ob-chapter-grid');
     if(!els.length) return;
     fx(els, {opacity:[0,1], y:[16,0], delay:stagger(62), duration:520, ease:'outQuad'});
   }
@@ -528,7 +528,7 @@
     if(idx === 5) mountPet();
     if(idx === 6) showPerm(0);
     if(idx === 7) renderChapters();
-    if(idx === 1) later(mergeFlow, 420);
+    if(idx === 1) renderCrit(rcPin);
   }
 
   /* 03 时间轴：进度线 + 详情（做什么 / 输入 / 产出 / 前置 / 耗时）
@@ -913,50 +913,41 @@
     setProgress();
   }
 
-  /* 02 汇聚：五条线依次"被拉直"接上状态线，再出现 5 → 1 的计数 */
-  function mergeFlow(){
-    var m = q('#ob-merge');
-    var foot = q('#ob-merge-foot');
-    if(!m) return;
-    m.classList.remove('flow');
-    if(foot) foot.classList.remove('on');
-    void m.offsetWidth;                    /* 强制回流，否则 class 重加不会重播动画 */
-    later(function(){ m.classList.add('flow'); }, 60);
-    later(function(){ if(foot) foot.classList.add('on'); }, 760);
-  }
-
-  /* 悬停某个旧窗口：它自己被抬起、对应的状态节点亮、那条连线变粗。
-     "被谁接管"用联动回答，比一个 tooltip 直接得多。
-     反向也成立：点（或悬停）状态线上的节点，反向把那个窗口挑出来。
-     这是这一屏唯一的交互承诺，两个方向都得通，不然就只有"看"没有"对"。 */
-  var pinK = null;                       /* 点住的窗口序号，null = 没点 */
-
-  function ownFocus(k){
-    qa('#ob-state .ob-line-node').forEach(function(n){
-      n.classList.toggle('own', k !== null && n.getAttribute('data-node') === k);
+  /* 02 判定面板：点任一判据 → 展开它的探测方式 / 通过阈值 / 来源。
+     v9 把 v8 的「印章 + 票据框」换成 diff 轨道，造型更轻、文案更短，但
+     交互与字段不变：欢迎页首次打开并没有真实故障数据，播一段"修复过程"
+     就是编的（v3.8 删「重播汇聚」是同一个理由）。这里只做静态结构示意
+     + 可点开的依据，字段名全部来自真实判定链，不声称刚发生过。 */
+  var RC_CRIT = [
+    { probe: function(){ return t('向 127.0.0.1:8888 发起 TCP 连接'); },
+      pass:  function(){ return t('连接建立，且 /api/health 返回 200'); },
+      from:  function(){ return t('runtime/state（唯一计算源）'); } },
+    { probe: function(){ return t('用配置里的账号连一次 farm 库'); },
+      pass:  function(){ return t('握手成功，并能读到表结构'); },
+      from:  function(){ return t('配置 · 数据库'); } },
+    { probe: function(){ return t('读取节点当前区块高度'); },
+      pass:  function(){ return t('高度比上一次大，且持续增长'); },
+      from:  function(){ return t('日志 · scChain'); } }
+  ];
+  var rcPin = null;                      /* 展开中的判据序号，null = 收起 */
+  function renderCrit(k){
+    var box = q('#ob-rc-detail');
+    if(!box) return;
+    qa('#ob-recheck .ob-rc-row').forEach(function(r){
+      r.classList.toggle('on', k !== null && r.getAttribute('data-crit') === String(k));
     });
-    qa('.ob-wires path').forEach(function(p){
-      p.classList.toggle('on', k !== null && p.getAttribute('data-wire') === k);
-    });
-    qa('#ob-old-list .ob-win-card').forEach(function(c){
-      c.classList.toggle('picked', k !== null && c.getAttribute('data-own') === k);
-    });
+    if(k === null){
+      box.innerHTML = '<div class="ob-rc-detail-empty">' +
+        t('点判据，看它按什么规则测') + '</div>';
+      return;
+    }
+    var d = RC_CRIT[k] || RC_CRIT[0];
+    box.innerHTML = '<div class="ob-rc-dlist">' +
+      '<div class="ob-rc-ditem"><u>' + t('探测方式') + '</u><span>' + d.probe() + '</span></div>' +
+      '<div class="ob-rc-ditem"><u>' + t('通过阈值') + '</u><span>' + d.pass() + '</span></div>' +
+      '<div class="ob-rc-ditem"><u>' + t('来源') + '</u><span>' + d.from() + '</span></div>' +
+      '</div>';
   }
-  /* 鼠标离开时若已点住，就回到点住的那一项，别把用户的选择擦掉 */
-  function ownRelease(){
-    if(pinK === null) ownFocus(null);
-    else ownFocus(pinK);
-  }
-  qa('.ob-win-card').forEach(function(c){
-    var k = c.getAttribute('data-own');
-    c.addEventListener('mouseenter', function(){ ownFocus(k); });
-    c.addEventListener('mouseleave', ownRelease);
-  });
-  qa('#ob-state .ob-line-node').forEach(function(n){
-    var k = n.getAttribute('data-node');
-    n.addEventListener('mouseenter', function(){ ownFocus(k); });
-    n.addEventListener('mouseleave', ownRelease);
-  });
 
   /* ---------- Swiper ---------- */
   function buildSwiper(){
@@ -1073,9 +1064,10 @@
 
   document.addEventListener('ek:tour-start', function(){ EKTour.start(); });
 
-  /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上 */
+  /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上。
+     02 的展开区是 JS 拼的，切语言必须按当前语言重新生成，否则会停在旧语言。 */
   document.addEventListener('ek:lang', function(){
-    if(OB.classList.contains('show')){ trCode(); syncTools(); }
+    if(OB.classList.contains('show')){ trCode(); renderCrit(rcPin); syncTools(); }
   });
   /* 主题改变（无论是这里的按钮还是主界面）→ 粒子颜色跟着换 */
   document.addEventListener('ek:theme', function(){
@@ -1094,12 +1086,13 @@
     if(!OB.classList.contains('show')) return;
     if(brandArmed && OB.contains(e.target)){ endBrand(); return; }
 
-    /* 02 反向联动：点状态节点 → 挑出它顶替的那个窗口；再点一次取消 */
-    var node = e.target.closest ? e.target.closest('#ob-state .ob-line-node') : null;
-    if(node){
-      var nk = node.getAttribute('data-node');
-      pinK = (pinK === nk) ? null : nk;
-      ownFocus(pinK);
+    /* 02 复验凭据单：点判据展开依据，再点一次收起。
+       必须在通用 button 分支之前 return，否则空 id 会掉进 switch 里空转。 */
+    var crit = e.target.closest ? e.target.closest('#ob-recheck .ob-rc-crit') : null;
+    if(crit){
+      var ck = Number(crit.getAttribute('data-crit'));
+      rcPin = (rcPin === ck) ? null : ck;
+      renderCrit(rcPin);
       return;
     }
 
