@@ -439,8 +439,25 @@ function seed() {
       stop: document.getElementById('ob-rc-train').style.getPropertyValue('--stop')
     })`);
     let RCV_SW = {}; try { RCV_SW = JSON.parse(rcSwitch || '{}'); } catch (e) {}
+    // 链端判据＝共识视图推进，不是块高（verify.go:617 verifyChain）。
+    // 必须含「共识」，且禁止出现被推翻的旧口径「区块高度」——谁把旧判据写回来这里就红。
     check('detail-recheck-switch', RCV_SW.on === 1 && RCV_SW.onIdx === '2' &&
-      /区块高度/.test(RCV_SW.txt||'') && !/farm/.test(RCV_SW.txt||''), rcSwitch);
+      /共识/.test(RCV_SW.txt||'') && !/区块高度/.test(RCV_SW.txt||'') &&
+      !/farm/.test(RCV_SW.txt||''), rcSwitch);
+    // 两行观测值也必须是同一把尺子：首测视图停住、复验视图推进，且起点相同。
+    // 抓「把块高读数写回演示」和「编一组对不上的数字」。
+    const rcView = await evalJS(`(function(){
+      var r=document.querySelector('#ob-recheck .ob-rc-row[data-crit="2"]'); if(!r) return '{}';
+      var b=r.querySelector('.ob-rc-obs.before code'), a=r.querySelector('.ob-rc-obs.after code');
+      return JSON.stringify({before:b?b.textContent:'', after:a?a.textContent:''});
+    })()`);
+    let RCV_VIEW = {}; try { RCV_VIEW = JSON.parse(rcView || '{}'); } catch (e) {}
+    const rcNums = function(s){ return (String(s||'').match(/\d+/g)||[]).map(Number); };
+    const vb = rcNums(RCV_VIEW.before), va = rcNums(RCV_VIEW.after);
+    check('detail-recheck-chain-view', /^view /.test(RCV_VIEW.before||'') &&
+      /^view /.test(RCV_VIEW.after||'') &&
+      !/height|区块高度/.test((RCV_VIEW.before||'')+(RCV_VIEW.after||'')) &&
+      vb.length === 2 && vb[0] === vb[1] && va.length === 2 && va[1] > va[0] && va[0] === vb[0], rcView);
     // 换站时车头必须换落点，不能停在上一站装作"已经到过"
     check('detail-recheck-train-retarget', parseFloat(RCV_SW.stop) - parseFloat(RCV_MV.stop) > 30,
       'crit1=' + RCV_MV.stop + ' crit2=' + RCV_SW.stop);
@@ -845,7 +862,10 @@ function seed() {
     await sleep(500);
     const backZh = await evalJS(`JSON.stringify(Array.from(document.querySelectorAll('#ob-recheck .ob-rc-obs code')).map(function(c){return c.textContent.trim();}).filter(function(s){return /[\\u4e00-\\u9fa5]/.test(s);}))`);
     let BZ = []; try { BZ = JSON.parse(backZh || '[]'); } catch (e) {}
-    check('i18n-zh-restore-code', BZ.length === 2, backZh);
+    // 6 个 code 里现在只有「握手成功 · 12ms」是中文原文（其余是日志/读数，
+    // 链端观测值改成 view 号后本来就全是英文与数字）。切回中文时它必须能
+    // 从英文原路反查回来——只数数量太松，连文本一起钉住。
+    check('i18n-zh-restore-code', BZ.length === 1 && /握手成功/.test(BZ[0] || ''), backZh);
     await evalJS(`(function(){ try{ EKOnboard.close(); }catch(e){} return 'ok'; })()`);
     await sleep(300);
 

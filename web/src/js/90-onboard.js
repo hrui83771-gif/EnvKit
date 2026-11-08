@@ -929,9 +929,12 @@
     { probe: function(){ return t('用配置里的账号连一次 farm 库'); },
       pass:  function(){ return t('握手成功，并能读到表结构'); },
       from:  function(){ return t('配置 · 数据库'); } },
-    { probe: function(){ return t('读取节点当前区块高度'); },
-      pass:  function(){ return t('高度比上一次大，且持续增长'); },
-      from:  function(){ return t('日志 · scChain'); } }
+    /* 链端判据与 verify.go:617 verifyChain 同源：主判据是共识视图在 6s 窗口内推进，
+       块高刻意不作为判据（PBFT 空闲链只共识空块、不落盘，块高静止是正常态）。
+       别把这里改回「块高增长」——那会把健康链永久判成未复验（verify_test.go:443）。 */
+    { probe: function(){ return t('间隔 6s 读两次共识视图 currentView'); },
+      pass:  function(){ return t('视图推进即通过；块高静止不算故障'); },
+      from:  function(){ return t('WeBASE · consensusStatus'); } }
   ];
   var rcPin = null;                      /* 展开中的判据序号，null = 收起 */
   var rcMoveTimer = null;

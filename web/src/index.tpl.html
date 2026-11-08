@@ -1865,8 +1865,10 @@
               </div>
               <div class="ob-rc-row" data-crit="2">
                 <button class="ob-rc-crit" data-crit="2" type="button"><i></i><span>链端 :20200</span></button>
-                <div class="ob-rc-obs before"><i></i><code>区块高度 0</code></div>
-                <div class="ob-rc-obs after"><i></i><code>height 182 · syncing</code></div>
+                <!-- 观测值取自 verify.go 复验结论的真实样例（视图 869695 → 869701）：
+                     首测视图停住＝共识卡死；复验视图 +6＝共识在转。块高不是判据。 -->
+                <div class="ob-rc-obs before"><i></i><code>view 869695 → 869695</code></div>
+                <div class="ob-rc-obs after"><i></i><code>view 869695 → 869701</code></div>
               </div>
             </div>
             <div class="ob-rc-detail" id="ob-rc-detail">

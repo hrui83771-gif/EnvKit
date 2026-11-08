@@ -4205,8 +4205,10 @@
               </div>
               <div class="ob-rc-row" data-crit="2">
                 <button class="ob-rc-crit" data-crit="2" type="button"><i></i><span>链端 :20200</span></button>
-                <div class="ob-rc-obs before"><i></i><code>区块高度 0</code></div>
-                <div class="ob-rc-obs after"><i></i><code>height 182 · syncing</code></div>
+                <!-- 观测值取自 verify.go 复验结论的真实样例（视图 869695 → 869701）：
+                     首测视图停住＝共识卡死；复验视图 +6＝共识在转。块高不是判据。 -->
+                <div class="ob-rc-obs before"><i></i><code>view 869695 → 869695</code></div>
+                <div class="ob-rc-obs after"><i></i><code>view 869695 → 869701</code></div>
               </div>
             </div>
             <div class="ob-rc-detail" id="ob-rc-detail">
@@ -4585,6 +4587,7 @@ const I18N_EN = {
   "W 目录": "W dir",
   "W 端口": "W port",
   "W 脚本": "W script",
+  "WeBASE · consensusStatus": "WeBASE · consensusStatus",
   "WeBASE-Front 地址": "WeBASE-Front URL",
   "WeBASE-Front 未响应（5002）": "WeBASE-Front not responding (5002)",
   "Webhook 地址": "Webhook URL",
@@ -4982,7 +4985,6 @@ const I18N_EN = {
   "区块链 :": "Blockchain :",
   "区块链上链数据具有不可篡改性，但仅供参考，不构成任何投资、法律、财务或商业建议；据此操作产生的风险由使用者自行承担。": "On-chain data is immutable but for reference only; it constitutes no investment, legal, financial, or business advice. You bear the risk of acting on it.",
   "区块高度": "Block height",
-  "区块高度 0": "block height 0",
   "区间内没有可统计的数据": "Nothing to chart in this range",
   "区间内没有带复验结论的记录": "No verification records in this range",
   "升级": "Upgrade",
@@ -5624,7 +5626,6 @@ const I18N_EN = {
   "无结论": "No verdict",
   "日均 {0} 次": "{0} per day",
   "日志": "Logs",
-  "日志 · scChain": "Logs · scChain",
   "日志分区": "Log scopes",
   "日志按来源分区": "Logs split by source",
   "日志窗口": "Log window",
@@ -6161,6 +6162,7 @@ const I18N_EN = {
   "要不直接骂他一句？！": "Or just tell them off?!",
   "要确认": "Confirm first",
   "覆盖率（可判）": "Coverage (judgeable)",
+  "视图推进即通过；块高静止不算故障": "The view advancing passes; a flat block height is not a fault",
   "解析意图 · 命中白名单动作": "Parsing intent · whitelisted action matched",
   "解除鼠标穿透": "Disable click-through",
   "誓死捍卫深度求索！": "Defend DeepSeek with my life!",
@@ -6215,7 +6217,6 @@ const I18N_EN = {
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
   "读取统计失败：{0}": "Failed to load stats: {0}",
-  "读取节点当前区块高度": "Read the node's current block height",
   "读取行动…": "Loading missions…",
   "读取轨迹…": "Reading traces…",
   "读取运行状态 · 3 项检查": "Reading runtime status · 3 checks",
@@ -6403,6 +6404,7 @@ const I18N_EN = {
   "问我任何环境问题…": "Ask me anything about your environment…",
   "问状态、读日志、解报告都可以直接说。真要动手，它会先停下来问你。": "Ask about status, read logs, explain a report — plainly. Before it acts, it stops and asks.",
   "问状态、读日志、解报告都可以直接说；真要动手时，会先问你一句。": "Ask about status, logs or reports in plain language; anything that changes state asks you first.",
+  "间隔 6s 读两次共识视图 currentView": "Read currentView twice, 6s apart",
   "防火墙": "Firewall",
   "防火墙已放行": "Firewall now allows the port",
   "防火墙已放行、服务端也在监听 —— 如果手机仍连不上，多半是手机不在同一个 WiFi，或路由器开了「AP 隔离」": "Firewall is open and the server is listening — if the phone still cannot connect, it is most likely on another Wi-Fi or the router has AP isolation on",
@@ -6441,7 +6443,6 @@ const I18N_EN = {
   "驱动器": "Drives",
   "高": "High",
   "高危 SQL 要二次确认": "Risky SQL needs a second confirmation",
-  "高度比上一次大，且持续增长": "Height is greater than the last reading and keeps growing",
   "高级选项（目录 · 自定义启动命令）": "Advanced (directories · custom start command)",
   "高频动作": "Top actions",
   "鲸鱼": "Whale",
@@ -16207,9 +16208,12 @@ async function ekSetSaveUpdate(recheck){
     { probe: function(){ return t('用配置里的账号连一次 farm 库'); },
       pass:  function(){ return t('握手成功，并能读到表结构'); },
       from:  function(){ return t('配置 · 数据库'); } },
-    { probe: function(){ return t('读取节点当前区块高度'); },
-      pass:  function(){ return t('高度比上一次大，且持续增长'); },
-      from:  function(){ return t('日志 · scChain'); } }
+    /* 链端判据与 verify.go:617 verifyChain 同源：主判据是共识视图在 6s 窗口内推进，
+       块高刻意不作为判据（PBFT 空闲链只共识空块、不落盘，块高静止是正常态）。
+       别把这里改回「块高增长」——那会把健康链永久判成未复验（verify_test.go:443）。 */
+    { probe: function(){ return t('间隔 6s 读两次共识视图 currentView'); },
+      pass:  function(){ return t('视图推进即通过；块高静止不算故障'); },
+      from:  function(){ return t('WeBASE · consensusStatus'); } }
   ];
   var rcPin = null;                      /* 展开中的判据序号，null = 收起 */
   var rcMoveTimer = null;
