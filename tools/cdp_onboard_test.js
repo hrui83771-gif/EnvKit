@@ -330,6 +330,40 @@ function seed() {
     check('detail-recheck-shape', RCV_SHAPE.rows === 3 && RCV_SHAPE.crit === 3 && RCV_SHAPE.code === 6 &&
       RCV_SHAPE.audit === 5 && RCV_SHAPE.stamp === 1 && RCV_SHAPE.empty === 1 && RCV_SHAPE.axis === true, rcShape);
 
+    /* 图纸描线动画两条判据：
+       ① 进屏时必须真的在画（SVG 子元素上挂着 >20 条动画），否则就是"看起来有动画其实没跑"；
+       ② 画完必须自己收干净——onfinish 不 cancel 会把 dasharray 留在元素上，虚线被抹成实线；
+          卡在 backwards 填充则元素永久透明，比不画更糟。 */
+    const rcInkLive = await evalJS(`(function(){
+      var svg=document.querySelector('#ob-recheck .ob-rc-sheet'); if(!svg) return -1;
+      var list=document.getAnimations?document.getAnimations():[], n=0;
+      for(var i=0;i<list.length;i++){
+        var t=list[i].effect&&list[i].effect.target;
+        if(t&&t.ownerSVGElement===svg) n++;
+      }
+      return n;
+    })()`);
+    check('detail-bp-ink-running', rcInkLive > 20, 'anims=' + rcInkLive);
+
+    await sleep(3200);
+    const rcInkSettled = await evalJS(`(function(){
+      var svg=document.querySelector('#ob-recheck .ob-rc-sheet'); if(!svg) return 'null';
+      var list=document.getAnimations?document.getAnimations():[], left=0;
+      for(var i=0;i<list.length;i++){
+        var t=list[i].effect&&list[i].effect.target;
+        if(t&&t.ownerSVGElement===svg) left++;
+      }
+      var kids=svg.children, hidden=0;
+      for(var k=0;k<kids.length;k++){
+        var el=kids[k]; if(el.tagName==='defs') continue;
+        /* 只抓「卡在 0」：网格层本来就故意 .55/.9，用 <0.99 判会把设计值误判成缺陷 */
+        if(parseFloat(getComputedStyle(el).opacity)<0.05) hidden++;
+      }
+      return JSON.stringify({left:left,hidden:hidden});
+    })()`);
+    let RC_INK = {}; try { RC_INK = JSON.parse(rcInkSettled || '{}'); } catch (e) {}
+    check('detail-bp-ink-settled', RC_INK.left === 0 && RC_INK.hidden === 0, rcInkSettled);
+
     // 旧造型必须真删干净；进屏也不允许自动展开/自动播（v3.8 删假进度那条红线）
     const rcOldShape = await evalJS(`JSON.stringify({
       win: document.querySelectorAll('.ob-win-card').length,

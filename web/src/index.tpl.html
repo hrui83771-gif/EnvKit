@@ -1603,10 +1603,16 @@
               <text class="bp-t" x="380" y="107">L 19 520</text>
               <text class="bp-t" x="692" y="100">PROFILE 2 800</text>
 
-              <!-- 窗距尺寸 -->
-              <path class="bp-m" d="M80 150V176M688 150V176"/>
-              <path class="bp-d" marker-start="url(#bpAr)" marker-end="url(#bpAr)" d="M80 158H688"/>
-              <text class="bp-t" x="322" y="152">7 &#215; 1 200 PITCH</text>
+              <!-- 连续标注链：每 880 一段，与窗位/门袋对齐 -->
+              <path class="bp-m" d="M168 128V176M256 128V176M344 128V176M432 128V176M520 128V176M608 128V176M700 128V176M780 128V176M820 128V176"/>
+              <path class="bp-m" d="M168 139H820"/>
+              <text class="bp-t" x="186" y="136">880</text>
+              <text class="bp-t" x="272" y="136">880</text>
+              <text class="bp-t" x="360" y="136">880</text>
+              <text class="bp-t" x="446" y="136">880</text>
+              <text class="bp-t" x="534" y="136">880</text>
+              <text class="bp-t" x="622" y="136">880</text>
+              <text class="bp-t" x="716" y="136">880</text>
 
               <!-- 受电弓 -->
               <path class="bp-b" d="M598 176L610 108H650L662 176"/>
@@ -1668,6 +1674,10 @@
               <rect class="bp-b" x="700" y="320" width="80" height="6"/>
               <path d="M706 323H774"/>
 
+              <path class="bp-m" d="M694 208V302M697 208V302M783 208V302M786 208V302"/>
+              <circle class="bp-b" cx="740" cy="197" r="2.5"/>
+              <path class="bp-m" d="M712 322H768"/>
+
               <!-- 下部裙板 / 通风百叶 -->
               <rect class="bp-m" x="196" y="272" width="52" height="30"/>
               <rect class="bp-fill" x="198" y="274" width="48" height="26" fill="url(#bpLv)"/>
@@ -1682,6 +1692,9 @@
               <path d="M102 308V320M114 308V320M126 308V320M138 308V320"/>
               <rect class="bp-fill" x="56" y="268" width="74" height="58" fill="url(#bpHz)"/>
               <path class="bp-b" d="M56 268H130V326H56Z"/>
+
+              <rect class="bp-fill" x="240" y="308" width="150" height="10" fill="url(#bpHz)"/>
+              <path class="bp-m" d="M240 308H390V318H240Z"/>
 
               <!-- 枕梁 / 底架 -->
               <path class="bp-b" d="M56 326H820V334H56Z"/>
@@ -1700,10 +1713,26 @@
               <rect class="bp-m" x="742" y="338" width="64" height="22"/>
               <path d="M750 338V360M798 338V360"/>
 
+              <path class="bp-m" d="M262 370H550M262 375H550"/>
+              <path d="M282 368V377M322 368V377M362 368V377M402 368V377M442 368V377M482 368V377M522 368V377"/>
+              <path class="bp-b" d="M330 370V366H342V370"/>
+              <path class="bp-m" d="M474 370H486V364"/>
+
               <!-- 转向架架体 -->
               <path class="bp-b" d="M86 362V344H102V336H238V344H254V362Z"/>
               <path class="bp-b" d="M558 362V344H574V336H710V344H726V362Z"/>
               <path class="bp-m" d="M86 352H254M558 352H726"/>
+
+              <circle class="bp-b" cx="142" cy="370" r="10"/>
+              <circle cx="142" cy="370" r="4"/>
+              <circle class="bp-b" cx="614" cy="370" r="10"/>
+              <circle cx="614" cy="370" r="4"/>
+              <path class="bp-b" d="M196 364H208V378H196Z"/>
+              <path class="bp-b" d="M668 364H680V378H668Z"/>
+              <path class="bp-m" d="M208 371H222M668 371H654"/>
+              <path class="bp-m" d="M168 360L150 346M640 360L658 346"/>
+              <rect class="bp-fill" x="104" y="337" width="130" height="6" fill="url(#bpHz)"/>
+              <rect class="bp-fill" x="576" y="337" width="130" height="6" fill="url(#bpHz)"/>
 
               <!-- 一系悬挂 -->
               <use href="#bpSpring" transform="translate(90,352) scale(.5,.85)"/>
@@ -1749,6 +1778,12 @@
               <path class="bp-ar" d="M294 424L300 434L306 424Z"/>
               <text class="bp-t bp-th" x="308" y="66">A</text>
               <text class="bp-t bp-th" x="308" y="432">A</text>
+
+              <path class="bp-cl" d="M172 336V434"/>
+              <path class="bp-ar" d="M166 340L172 330L178 340Z"/>
+              <path class="bp-ar" d="M166 430L172 440L178 430Z"/>
+              <text class="bp-t bp-th" x="182" y="340">B</text>
+              <text class="bp-t bp-th" x="182" y="440">B</text>
 
               <!-- 引线标注 -->
               <path class="bp-d" d="M260 342H288V326H316"/>

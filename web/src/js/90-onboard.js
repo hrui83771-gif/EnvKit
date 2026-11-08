@@ -508,6 +508,7 @@
     var s = slides[i];
     setProgress();
     enterAnim(s);
+    if(i === 1) bpDraw();          /* 每次进 02 屏都把图纸重画一遍（真实逐条描线） */
     if(s) initDemo(Number(s.getAttribute('data-idx')));
     if(s) autoplay(Number(s.getAttribute('data-idx')));
   }
@@ -974,6 +975,54 @@
       '<div class="ob-rc-ditem"><u>' + t('通过阈值') + '</u><span>' + d.pass() + '</span></div>' +
       '<div class="ob-rc-ditem"><u>' + t('来源') + '</u><span>' + d.from() + '</span></div>' +
       '</div>';
+  }
+
+  /* 02 屏：进屏时把图纸"画"一遍。实线按真实长度描边（dashoffset 从 L 到 0），
+     虚线 / 链线 / 填充 / 文字只淡入——给虚线再叠一层 dasharray 会把它的段长抹平，
+     那几类就不参与描线。顺序＝SVG 里的书写顺序（图框→网格→接触网→车体→
+     转向架→钢轨→尺寸→标注），所以看起来就是"先打框、再上主体、最后标注"。
+     画完 cancel() 让元素回到 CSS 原样式，不留内联残留；不报完成、不改任何状态。 */
+  var bpAnims = [];
+  function bpDraw(){
+    var svg = q('#ob-recheck .ob-rc-sheet');
+    if(!svg || !svg.children) return;
+    bpAnims.forEach(function(a){ try{ a.cancel(); }catch(e){} });
+    bpAnims = [];
+    if(REDUCED) return;
+    var t0 = 0;
+    Array.prototype.forEach.call(svg.children, function(el){
+      var tag = el.tagName;
+      if(tag === 'defs') return;
+      if(!/^(path|rect|circle|line|polyline|text|use)$/.test(tag)) return;
+      var cs = window.getComputedStyle(el);
+      var delay = t0;
+      var isText = tag === 'text';
+      t0 += isText ? 2 : 6;
+      if(isText){
+        bpAnims.push(el.animate([{ opacity: 0 }, { opacity: 1 }],
+          { duration: 300, delay: delay + 620, easing: 'linear', fill: 'backwards' }));
+        return;
+      }
+      /* 实线才描边：虚线（.bp-d/.bp-cl）、pattern 填充块、<use> 弹簧组都只淡入 */
+      var solid = cs.strokeDasharray === 'none' && cs.stroke !== 'none' &&
+        !el.getAttribute('fill') && tag !== 'use';
+      var len = 0;
+      if(solid){
+        try{ len = el.getTotalLength ? el.getTotalLength() : 0; }catch(e){ len = 0; }
+      }
+      if(!(len > 0)){
+        bpAnims.push(el.animate([{ opacity: 0 }, { opacity: 1 }],
+          { duration: 260, delay: delay, easing: 'linear', fill: 'backwards' }));
+        return;
+      }
+      var a = el.animate(
+        [{ strokeDasharray: len + ' ' + len, strokeDashoffset: len },
+         { strokeDasharray: len + ' ' + len, strokeDashoffset: 0 }],
+        { duration: Math.max(150, Math.min(900, len * 3)), delay: delay,
+          easing: 'linear', fill: 'backwards' });
+      a.onfinish = function(){ try{ a.cancel(); }catch(e){} };
+      bpAnims.push(a);
+    });
   }
 
   /* ---------- Swiper ---------- */
