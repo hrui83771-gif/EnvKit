@@ -1398,3 +1398,90 @@ CDP 的 `demo-perm-428` / `detail-perm-acts` 断言零改动。
 门禁：CDP onboard **165/165** + uistate 11 + issues 10 + healthcheck 10、
 i18n 缺口 0（`_onboard_i18n_dump.js` 复验英文态 0 条中文可见文本）、
 web_build --check / dist / version / ci(13 步) / vet / `go test`(51.2s) / systray / gofmt 全绿。
+
+## 27. v16（2026-11-08）：主界面导览从 4 步扩到 11 步，并修掉浮层定位
+
+### 27.1 用户给了一张截图，两句话
+
+**「内部的 driver 不够多。以及这个位置不对」**。截图是主界面的 driver.js 控件高亮导览：
+气泡标题 `Log scopes`、正文「Install output is split by source…」，落在**页面左上角 (20,10)**
+盖住顶栏，页面只有一层均匀灰遮罩、**没有任何高亮框**。
+
+两件事都成立：`EKTour` 的 `TOUR_STEPS` 只有 4 步（且全挤在检测区），
+以及第 4 步的定位确实坏了。
+
+### 27.2 根因：目标元素默认隐藏，driver.js 放弃定位
+
+用真实浏览器逐步量盒模型（`.gotmp/_probe_tour.js`）：
+
+| 步 | 目标 | 真实盒子 | 气泡 |
+| --- | --- | --- | --- |
+| 1 | `#guide` | 858×26 | [152,612] 贴着 |
+| 2 | `#pg-detect` | 269×26 | [171,796] 贴着 |
+| 3 | `#btn-check` | 88×33 | [185,668] 贴着 |
+| 4 | `#log-install` | **`display:none`，0×0** | **[20,10] 左上角** |
+
+`#log-install` 的父容器是 `<div class="logwrap collapsed" id="lw-install">`，
+`.log` 默认折叠。driver.js 量不到盒子就退回默认坐标，高亮框也画不出来，
+正好就是截图那样。**旧门禁抓不到**：`tour-popover-inside` 只判
+「left≥0 && top≥0 && right≤vw && top<vh」，`(20,10)` 完全满足。
+又一次「断言没落在出问题的那一层」。
+
+### 27.3 扩容：先盘可见性，再挑控件
+
+先把候选控件全量量一遍，结果很关键——**顶栏多数按钮、配置/链端 panel 的控件、
+`#log-install` 全是 0×0 或 `display:none`**。给这些加步骤只会复制同一个 bug。
+可用的集中在安装 panel 内（只是滚动位置不同）与右侧导航，于是定 11 步：
+
+| # | 控件 | 讲什么 |
+| --- | --- | --- |
+| 1 | `#guide` | 四步导航（原有） |
+| 2 | `#btn-healthcheck` | 全链路体检，结论留在同一行 |
+| 3 | `#pg-detect` | 检测 / 配置 / 安装三段（原有） |
+| 4 | `#btn-check` | 手动复检，引导不代跑（原有） |
+| 5 | `#btn-dryrun` | 演练安装，先看会做什么 |
+| 6 | `#btn-ver-check` | 对比已装 / 配置目标 / 官方最新 |
+| 7 | `#install_dir` | 配置改完自动保存 |
+| 8 | `#btn-install` | 已装组件自动跳过 |
+| 9 | **`#lw-install .logbar`** | 日志分区（**从隐藏的 `#log-install` 改过来**） |
+| 10 | `#next-install` | 进入下一步，四步导航跟着走 |
+| 11 | `.nav[data-panel="chain"]` | 侧栏可随时跳转 |
+
+文案全部对着 `index.tpl.html` 的真实按钮与 hint 写，不编功能；
+导览仍然**只指不点**，不触发任何动作或请求。
+
+再加一层 `tourTarget(sel)`：把每步解析成「确实有盒子的 DOM 元素」
+（`driver.js` 的 `step.element` 直接接受 Element），隐藏元素沿祖先上溯到
+可见的那层。以后谁又指到折叠区，宁可高亮整片区域，也不会让浮层飘走。
+`EKTour.lastSteps` 把解析结果暴露出来供门禁量。
+
+### 27.4 扩容暴露的第二个真实缺陷：滚动后浮层漂移
+
+11 步会跨出首屏，于是 `smoothScroll:true` 开始起作用。稳定复现（等待 1.3s
+排除动画后数据不变）：第 6 步气泡 `[283,142]`、目标 `[195,454]`；
+第 8 步气泡 `[185,106]`、目标 `[195,712]`——**分离几百像素**。
+driver.js 在平滑滚动落定前就量了坐标，之后没有重算。
+
+改成 `smoothScroll: false` 后 11 步全部贴合，气泡与目标间隙 ≤20px。
+这一条值得记：**别把真实缺陷写成「动画偏移 / 夹具限制」再绕过**。
+
+### 27.5 门禁：两条新断言 + 双向变异
+
+- `tour-steps-dense`：`STEPS.length >= 10`、`lastSteps` 数量相等，
+  且每个目标盒子 `w>0 && h>0`。
+- `tour-popover-anchored`：重新起一次导览，逐步点 Next 量 11 帧，
+  每帧要求气泡与目标矩形间隙 ≤60px，且**不许落在 `(<40,<40)` 左上角默认区**。
+
+| 变异 | 结果 |
+| --- | --- |
+| `smoothScroll` 改回 `true` | `tour-popover-anchored` **红**（第 8 步 pop `[380,10]`），dense 仍绿 |
+| 去掉可见性守卫 + 日志步改回 `#log-install` | **两条都红**：boxes 第 9 项 `[0,0]`，第 9 帧 `pop=[20,10,320,154]` / `tgt=[0,0,0,0]` —— 精确复现用户截图 |
+| 全部复原 | **167/167 PASS** |
+
+i18n 补 10 条（3 个标题 + 7 条描述），字典 1984 条、缺口 0，
+`_onboard_i18n_dump.js` 复验英文态 0 条中文可见文本。
+
+门禁：CDP onboard **167/167** + uistate 11 + issues 10 + healthcheck 10、
+web_build --check / dist / version / ci(13 步) / vet / `go test`(52.5s) /
+systray / gofmt 全绿。截图留档 `docs/shot-tour-step1|9|11.png`。
+不发行，版本仍 3.8.0。

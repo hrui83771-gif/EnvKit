@@ -770,6 +770,48 @@ function seed() {
     await sleep(300);
     check('tour-closed', (await evalJS(`!!document.querySelector('.driver-popover')`)) === false);
 
+    // 重新起一次，把整条导览走完：步骤要够多，且每一步的目标必须真有盒子。
+    // 原来日志那步指 #log-install（.collapsed → display:none），driver.js 量不到
+    // 盒子就把浮层扔回 (20,10) 左上角，旧的「在视口内」断言根本抓不住。
+    await evalJS(`(function(){ window.EKTour.start(); return 1; })()`);
+    await sleep(350);
+    const td = await evalJS(`JSON.stringify((function(){
+      var st=(window.EKTour&&EKTour.STEPS)||[], live=(window.EKTour&&EKTour.lastSteps)||[];
+      return {total:st.length, live:live.length,
+        boxes:live.map(function(s){var r=s.element.getBoundingClientRect();
+          return [Math.round(r.width),Math.round(r.height)];})};
+    })())`);
+    let TD = {}; try { TD = JSON.parse(td || '{}'); } catch (e) {}
+    check('tour-steps-dense', TD.total >= 10 && TD.live === TD.total &&
+      Array.isArray(TD.boxes) && TD.boxes.length === TD.total &&
+      TD.boxes.every(b => b[0] > 0 && b[1] > 0), td);
+
+    // 逐帧量浮层与目标盒子的几何关系：贴着（含 driver.js 的 20px 间隙）、
+    // 不落在左上角默认坐标。抓「隐藏目标」和「smoothScroll 让滚动后浮层漂移」。
+    const frames = [];
+    for (let i = 0; i < 12; i++) {
+      const g = await evalJS(`JSON.stringify((function(){
+        var p=document.querySelector('.driver-popover'); if(!p) return null;
+        var r=p.getBoundingClientRect();
+        var s=(window.EKTour.lastSteps||[])[${i}];
+        var t=s?s.element.getBoundingClientRect():null;
+        return {pop:[Math.round(r.left),Math.round(r.top),Math.round(r.right),Math.round(r.bottom)],
+          tgt:t?[Math.round(t.left),Math.round(t.top),Math.round(t.right),Math.round(t.bottom)]:null};
+      })())`);
+      if (!g || g === 'null') break;
+      frames.push(g);
+      const more = await evalJS(`(function(){var b=document.querySelector('.driver-popover-next-btn');if(!b)return 0;b.click();return 1;})()`);
+      if (!more) break;
+      await sleep(400);
+    }
+    let FR = []; try { FR = frames.map(f => JSON.parse(f)); } catch (e) {}
+    const popGap = (p, t) => Math.max(0, t[0] - p[2], p[0] - t[2], t[1] - p[3], p[1] - t[3]);
+    check('tour-popover-anchored', FR.length === TD.total &&
+      FR.every(f => f.tgt && f.pop[0] >= 0 && f.pop[1] >= 0 &&
+        !(f.pop[0] < 40 && f.pop[1] < 40) && popGap(f.pop, f.tgt) <= 60), JSON.stringify(FR));
+    await evalJS(`(function(){ var b=document.querySelector('.driver-popover-close-btn'); if(b) b.click(); return 1; })()`);
+    await sleep(200);
+
     const fetches = await evalJS(`JSON.stringify(window.__obFetch||[])`);
     let FL = []; try { FL = JSON.parse(fetches || '[]'); } catch (e) {}
     const writes = FL.filter(x => /\|(POST|PUT|DELETE|PATCH)/i.test(x));

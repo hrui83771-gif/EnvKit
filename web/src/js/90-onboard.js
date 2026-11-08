@@ -1117,26 +1117,59 @@
     close();
   }
 
-  /* ---------- P1-4：4 步高亮教学，只指不点 ---------- */
+  /* ---------- P1-4：主界面控件高亮教学，只指不点 ----------
+     每一步的 element 必须指向「默认就有盒子」的控件。原来第 4 步指 #log-install，
+     而日志容器默认 .collapsed → display:none，driver.js 量不到盒子就把浮层扔到
+     (20,10) 左上角、高亮框也画不出来。现在改指始终可见的 .logbar，并在下面加
+     tourTarget() 兜底：万一哪步又指到隐藏元素，就沿祖先找到可见的那层区域。 */
   var TOUR_STEPS = [
-    {element:'#guide',     popover:{title:t('四步导航'), description:t('主流程就是这四步：安装、配置、链端、启动。点任一段可以直接跳过去。'), side:'bottom'}},
-    {element:'#pg-detect', popover:{title:t('先看检测'), description:t('第一步是检测本机组件，结果会直接显示在这里。'), side:'bottom'}},
-    {element:'#btn-check', popover:{title:t('手动复检'), description:t('装完或改完配置，点这里重新检测。这一步留给你自己点，引导不会代跑。'), side:'top'}},
-    {element:'#log-install',popover:{title:t('日志分区'), description:t('安装过程的输出按来源分栏，出错时先来这里看。'), side:'top'}}
+    {element:'#guide',          popover:{title:t('四步导航'), description:t('主流程就是这四步：安装、配置、链端、启动。点任一段可以直接跳过去。'), side:'bottom'}},
+    {element:'#btn-healthcheck',popover:{title:t('全链路体检'), description:t('全链路体检从这里起跑，结论就留在这行，不另开报告页。'), side:'bottom'}},
+    {element:'#pg-detect',      popover:{title:t('先看检测'), description:t('第一步是检测本机组件，结果会直接显示在这里。'), side:'bottom'}},
+    {element:'#btn-check',      popover:{title:t('手动复检'), description:t('装完或改完配置，点这里重新检测。这一步留给你自己点，引导不会代跑。'), side:'top'}},
+    {element:'#btn-dryrun',     popover:{title:t('演练安装'), description:t('想先看一遍这步会做哪些动作，再决定要不要真装，就点这个。'), side:'top'}},
+    {element:'#btn-ver-check',  popover:{title:t('组件版本管理'), description:t('检查更新会对比「已安装 / 配置目标 / 官方最新」，可一键升级。'), side:'top'}},
+    {element:'#install_dir',    popover:{title:t('配置自动保存'), description:t('这些配置改完会自动保存，状态显示在这一节的下方。'), side:'top'}},
+    {element:'#btn-install',    popover:{title:t('开始安装'), description:t('已经装好的组件会自动跳过，不会重复装。'), side:'top'}},
+    {element:'#lw-install .logbar', popover:{title:t('日志分区'), description:t('安装过程的输出按来源分栏，出错时先来这里看。'), side:'top'}},
+    {element:'#next-install',   popover:{title:t('进入下一步'), description:t('装完点这里进程序配置，顶部四步导航也会跟着走。'), side:'top'}},
+    {element:'.nav[data-panel="chain"]', popover:{title:t('随时跳转'), description:t('右侧导航能直接跳到任意一步，不必按顺序逐个走。'), side:'left'}}
   ];
+
+  /* 把选择器解析成「确实有盒子的元素」。driver.js 对 display:none / 0×0 的目标
+     会放弃定位（浮层落回左上角默认坐标），所以隐藏元素沿祖先上溯到可见的那层，
+     宁可高亮整片区域，也不让浮层飘走。返回的 DOM 元素 driver.js 直接接受。 */
+  function tourTarget(sel){
+    var e = document.querySelector(sel);
+    if(!e) return null;
+    function boxed(n){
+      if(!n || n === document.body) return false;
+      var r = n.getBoundingClientRect(), c = getComputedStyle(n);
+      return r.width > 0 && r.height > 0 && c.display !== 'none' && c.visibility !== 'hidden';
+    }
+    if(boxed(e)) return e;
+    var p = e.parentElement;
+    while(p && p !== document.body){ if(boxed(p)) return p; p = p.parentElement; }
+    return null;
+  }
 
   var EKTour = {
     STEPS: TOUR_STEPS,
+    lastSteps: [],
     start: function(){
       if(!tourAvailable()) return false;
-      var steps = TOUR_STEPS.filter(function(s){ return !!document.querySelector(s.element); });
+      var steps = TOUR_STEPS.map(function(s){
+        var el = tourTarget(s.element);
+        return el ? {element: el, popover: s.popover} : null;
+      }).filter(Boolean);
+      EKTour.lastSteps = steps;
       if(!steps.length) return false;
       /* 教学高亮的是主界面控件，任何还开着的弹窗都会把浮层顶偏 —— 先收掉 */
       closeModals();
       try{
         var d = window.driver.js.driver({steps: steps, showProgress: true, showButtons: ['next','previous','close'],
           nextBtnText: t('下一步'), prevBtnText: t('上一步'), doneBtnText: t('完成'),
-          overlayOpacity: .55, smoothScroll: true});
+          overlayOpacity: .55, smoothScroll: false});
         d.drive();
         return true;
       }catch(e){ return false; }

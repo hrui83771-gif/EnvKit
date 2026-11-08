@@ -1972,5 +1972,15 @@
   "（项目类型：": " (project type: ",
   "；%d 秒后放行一次探针重启": "; a probe restart is allowed in %d s",
   "秒后放行一次探针重启": " s until a probe restart is allowed",
-  "同一判据，测两次": "Same criterion, verified twice"
+  "同一判据，测两次": "Same criterion, verified twice",
+  "配置自动保存": "Config auto-save",
+  "进入下一步": "Go to the next step",
+  "随时跳转": "Jump anywhere",
+  "全链路体检从这里起跑，结论就留在这行，不另开报告页。": "The full health check starts here; its verdict stays on this row instead of opening a report page.",
+  "想先看一遍这步会做哪些动作，再决定要不要真装，就点这个。": "Use this to preview what the install would do before deciding to run it for real.",
+  "检查更新会对比「已安装 / 配置目标 / 官方最新」，可一键升级。": "Version check compares installed / configured target / latest upstream, with one-click upgrade.",
+  "这些配置改完会自动保存，状态显示在这一节的下方。": "These settings are saved automatically; the save status appears at the bottom of this section.",
+  "已经装好的组件会自动跳过，不会重复装。": "Components that are already installed are skipped, not reinstalled.",
+  "装完点这里进程序配置，顶部四步导航也会跟着走。": "After installing, continue to program setup here; the four-step guide above follows along.",
+  "右侧导航能直接跳到任意一步，不必按顺序逐个走。": "The sidebar jumps straight to any step; you do not have to go through them in order."
 }
