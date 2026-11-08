@@ -545,6 +545,7 @@ const I18N_EN = {
   "同一判据": "Same criterion",
   "同一判据 · 两次观测": "One criterion · two readings",
   "同一判据，": "One criterion,",
+  "同一判据，测两次": "Same criterion, verified twice",
   "同一把尺子，": "The same ruler,",
   "同一标题的冷却（秒）": "Cooldown per title (seconds)",
   "同时停止由本程序启动的前端 / 后端服务": "Also stop the frontend / backend services started by EnvKit",

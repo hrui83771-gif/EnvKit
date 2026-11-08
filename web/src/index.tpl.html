@@ -1522,16 +1522,292 @@
         </div>
       </div>
 
-      <!-- 02 为什么存在：同一判据，测两次（复线轨道 / 车头进站） -->
+      <!-- 02 为什么存在：同一判据，测两次（工业图纸 / 复线轨道） -->
       <div class="swiper-slide ob-slide" data-idx="1">
-        <div class="ob-scene ob-split ob-split-grow">
-          <div class="ob-copy">
+        <div class="ob-scene ob-bp">
+          <div class="ob-copy ob-bp-copy">
             <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
-            <h2 class="ob-h">同一判据，<br />测两次</h2>
+            <h2 class="ob-h">同一判据，测两次</h2>
             <p class="ob-lead">执行完不算完成，同一判据要再过一遍。</p>
             <p class="ob-hint">车头 = 当前查看的判据 · 读数为结构示意</p>
           </div>
           <div class="ob-recheck" id="ob-recheck">
+            <!-- 图纸底：图框 / 四边刻度尺 / 双层网格 / 列车主视图（接触网·车体·
+                 转向架·轮对·钢轨）/ 尺寸链 / 剖面填充 / 引线标注 / 图签栏。
+                 全部用直线与多边形，不用圆——非等比缩放下圆会变椭圆，而齿轮状
+                 多边形反而更像正投影。线宽靠 vector-effect:non-scaling-stroke 固定。
+                 需要"文字行"的位置用 bpTxt pattern 画短横线阵列（远看即排版，
+                 且不会因为横向压缩变成怪字）；真实字符只留少量英文与数字。
+                 整层 pointer-events:none，不承载任何语义，也不发请求。 -->
+                        <svg class="ob-rc-sheet" viewBox="0 0 1200 600" preserveAspectRatio="none"
+                 aria-hidden="true" focusable="false">
+              <defs>
+                <pattern id="bpG1" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12"/></pattern>
+                <pattern id="bpG2" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60"/></pattern>
+                <pattern id="bpG3" width="300" height="300" patternUnits="userSpaceOnUse"><path d="M300 0H0V300"/></pattern>
+                <pattern id="bpTx" width="20" height="12" patternUnits="userSpaceOnUse"><path d="M0 12V8"/></pattern>
+                <pattern id="bpTx5" width="100" height="12" patternUnits="userSpaceOnUse"><path d="M0 12V1"/></pattern>
+                <pattern id="bpTy" width="20" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(90)"><path d="M0 12V8"/></pattern>
+                <pattern id="bpTy5" width="100" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(90)"><path d="M0 12V1"/></pattern>
+                <pattern id="bpHz" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V6"/></pattern>
+                <pattern id="bpSlp" width="24" height="16" patternUnits="userSpaceOnUse"><path d="M0 0V16"/></pattern>
+                <pattern id="bpLv" width="7" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(90)"><path d="M0 8V0"/></pattern>
+                <marker id="bpAr" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="5" orient="auto-start-reverse"><path class="bp-ar" d="M0 0L10 3L0 6Z"/></marker>
+                <!-- 一系悬挂：折线弹簧 + 上下压板 -->
+                <g id="bpSpring">
+                  <path d="M0 0L7 4L-7 12L7 20L-7 28L7 36L0 40"/>
+                  <path class="bp-b" d="M-9 0H9M-9 40H9"/>
+                </g>
+              </defs>
+
+              <!-- ===== 图框 · 三级网格 · 四边刻度尺 ===== -->
+              <rect class="bp-fill bp-g1" x="14" y="14" width="1172" height="572" fill="url(#bpG1)"/>
+              <rect class="bp-fill bp-g2" x="14" y="14" width="1172" height="572" fill="url(#bpG2)"/>
+              <rect class="bp-fill bp-g3" x="14" y="14" width="1172" height="572" fill="url(#bpG3)"/>
+              <path class="bp-f" d="M4 4H1196V596H4Z"/>
+              <path class="bp-f2" d="M14 14H1186V586H14Z"/>
+              <rect class="bp-fill" x="14" y="14" width="1172" height="12" fill="url(#bpTx)"/>
+              <rect class="bp-fill" x="14" y="14" width="1172" height="12" fill="url(#bpTx5)"/>
+              <rect class="bp-fill" x="14" y="574" width="1172" height="12" fill="url(#bpTx)"/>
+              <rect class="bp-fill" x="14" y="14" width="12" height="572" fill="url(#bpTy)"/>
+              <rect class="bp-fill" x="14" y="14" width="12" height="572" fill="url(#bpTy5)"/>
+              <rect class="bp-fill" x="1174" y="14" width="12" height="572" fill="url(#bpTy)"/>
+              <path class="bp-b" d="M28 28H74M28 28V74M1172 28H1126M1172 28V74M28 572H74M28 572V526M1172 572H1126M1172 572V526"/>
+
+              <!-- ===== 接触网 ===== -->
+              <path class="bp-m" d="M20 34Q150 41 280 34T540 34T796 34"/>
+              <path class="bp-b" d="M20 52H836"/>
+              <path d="M110 37V52M210 39V52M310 38V52M410 40V52M510 39V52M610 38V52M710 39V52M810 38V52"/>
+              <path class="bp-b" d="M20 26V66M20 34H36M20 52H36"/>
+              <rect class="bp-b" x="36" y="29" width="8" height="9"/>
+              <rect class="bp-b" x="36" y="47" width="8" height="9"/>
+
+              <!-- ===== 侧视 ELEVATION（左 70%） ===== -->
+              <!-- 技术参数表 -->
+              <path class="bp-b" d="M30 60H250V116H30Z"/>
+              <path class="bp-m" d="M30 72H250M30 86H250M30 100H250M150 72V116"/>
+              <text class="bp-tb" x="34" y="70">TECHNICAL DATA</text>
+              <text class="bp-t" x="34" y="84">TARE</text>
+              <text class="bp-t" x="154" y="84">32.4 t</text>
+              <text class="bp-t" x="34" y="98">LENGTH</text>
+              <text class="bp-t" x="154" y="98">19 520</text>
+              <text class="bp-t" x="34" y="112">TRACK</text>
+              <text class="bp-t" x="154" y="112">1 435</text>
+              <text class="bp-t bp-th" x="30" y="132">SEC. A-A</text>
+              <text class="bp-t" x="30" y="144">ELEVATION 1:2</text>
+
+              <!-- 全长尺寸（避开受电弓，断线画法） -->
+              <path class="bp-m" d="M56 86V120M820 86V120"/>
+              <path class="bp-d" marker-start="url(#bpAr)" d="M56 112H578"/>
+              <path class="bp-d" marker-end="url(#bpAr)" d="M674 112H820"/>
+              <text class="bp-t" x="380" y="107">L 19 520</text>
+              <text class="bp-t" x="692" y="100">PROFILE 2 800</text>
+
+              <!-- 窗距尺寸 -->
+              <path class="bp-m" d="M80 150V176M688 150V176"/>
+              <path class="bp-d" marker-start="url(#bpAr)" marker-end="url(#bpAr)" d="M80 158H688"/>
+              <text class="bp-t" x="322" y="152">7 &#215; 1 200 PITCH</text>
+
+              <!-- 受电弓 -->
+              <path class="bp-b" d="M598 176L610 108H650L662 176"/>
+              <path d="M610 108L626 152H634L650 108"/>
+              <path class="bp-b" d="M604 164H656"/>
+              <path class="bp-b" d="M614 56H646"/>
+              <path d="M616 51H644"/>
+              <path class="bp-b" d="M621 56V62H639V56"/>
+              <path d="M626 62L631 108M634 62L629 108"/>
+              <rect class="bp-b" x="604" y="166" width="11" height="9"/>
+              <rect class="bp-b" x="645" y="166" width="11" height="9"/>
+              <path class="bp-d" d="M646 60H700V44H730"/>
+              <text class="bp-t" x="734" y="42">PANTOGRAPH</text>
+
+              <!-- 车顶设备 -->
+              <rect class="bp-m" x="150" y="162" width="64" height="14"/>
+              <rect class="bp-m" x="388" y="162" width="64" height="14"/>
+              <rect class="bp-m" x="702" y="162" width="58" height="14"/>
+              <path d="M158 166V172M170 166V172M182 166V172M194 166V172M206 166V172"/>
+              <path d="M396 166V172M408 166V172M420 166V172M432 166V172M444 166V172"/>
+              <path d="M710 166V172M722 166V172M734 166V172M746 166V172"/>
+              <path d="M80 176V184M120 176V184M160 176V184M200 176V184M240 176V184M280 176V184M320 176V184M360 176V184M400 176V184M440 176V184M480 176V184M520 176V184M560 176V184M600 176V184M640 176V184M680 176V184M720 176V184M760 176V184M800 176V184"/>
+
+              <!-- 车体轮廓 -->
+              <path class="bp-bo" d="M56 190L70 176H806L820 190V326H56Z"/>
+              <path class="bp-m" d="M66 184H810"/>
+              <path class="bp-m" d="M56 268H820"/>
+              <path class="bp-m" d="M56 316H820"/>
+
+              <!-- 司机室前窗 / 前照灯 -->
+              <path class="bp-b" d="M58 196H78V240L62 232Z"/>
+              <path class="bp-m" d="M56 244H80"/>
+              <circle class="bp-b" cx="66" cy="292" r="7"/>
+              <circle cx="66" cy="292" r="3"/>
+              <circle class="bp-b" cx="66" cy="310" r="5"/>
+
+              <!-- 侧窗（双层胶条） -->
+              <rect class="bp-n" x="80" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="85" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="168" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="173" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="256" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="261" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="344" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="349" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="432" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="437" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="520" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="525" y="203" width="66" height="38"/>
+              <rect class="bp-n" x="608" y="198" width="76" height="48"/>
+              <rect class="bp-m" x="613" y="203" width="66" height="38"/>
+
+              <!-- 客室门（双开 · 门袋 · 门槛） -->
+              <rect class="bp-n" x="700" y="190" width="80" height="130"/>
+              <path class="bp-b" d="M740 190V320"/>
+              <rect class="bp-m" x="706" y="200" width="28" height="112"/>
+              <rect class="bp-m" x="746" y="200" width="28" height="112"/>
+              <path class="bp-m" d="M728 238H734V244H728ZM746 238H752V244H746Z"/>
+              <rect class="bp-b" x="700" y="320" width="80" height="6"/>
+              <path d="M706 323H774"/>
+
+              <!-- 下部裙板 / 通风百叶 -->
+              <rect class="bp-m" x="196" y="272" width="52" height="30"/>
+              <rect class="bp-fill" x="198" y="274" width="48" height="26" fill="url(#bpLv)"/>
+              <rect class="bp-m" x="292" y="272" width="52" height="30"/>
+              <rect class="bp-fill" x="294" y="274" width="48" height="26" fill="url(#bpLv)"/>
+              <rect class="bp-m" x="472" y="272" width="52" height="30"/>
+              <rect class="bp-fill" x="474" y="274" width="48" height="26" fill="url(#bpLv)"/>
+              <rect class="bp-m" x="96" y="304" width="52" height="22"/>
+              <rect class="bp-m" x="180" y="304" width="42" height="22"/>
+              <rect class="bp-m" x="430" y="304" width="46" height="22"/>
+              <rect class="bp-m" x="700" y="304" width="58" height="22"/>
+              <path d="M102 308V320M114 308V320M126 308V320M138 308V320"/>
+              <rect class="bp-fill" x="56" y="268" width="74" height="58" fill="url(#bpHz)"/>
+              <path class="bp-b" d="M56 268H130V326H56Z"/>
+
+              <!-- 枕梁 / 底架 -->
+              <path class="bp-b" d="M56 326H820V334H56Z"/>
+              <rect class="bp-fill" x="56" y="326" width="764" height="8" fill="url(#bpHz)"/>
+              <path d="M140 326V334M260 326V334M380 326V334M500 326V334M620 326V334M740 326V334"/>
+
+              <!-- 车下设备 -->
+              <rect class="bp-m" x="272" y="336" width="80" height="26"/>
+              <rect class="bp-fill" x="274" y="338" width="76" height="22" fill="url(#bpLv)"/>
+              <path class="bp-m" d="M272 349H352"/>
+              <rect class="bp-m" x="362" y="338" width="76" height="24"/>
+              <path d="M372 342V358M384 342V358M396 342V358M408 342V358M420 342V358"/>
+              <path class="bp-b" d="M450 340H540V360H450Z"/>
+              <path d="M456 340V360M534 340V360"/>
+              <path class="bp-m" d="M470 334V340M520 334V340"/>
+              <rect class="bp-m" x="742" y="338" width="64" height="22"/>
+              <path d="M750 338V360M798 338V360"/>
+
+              <!-- 转向架架体 -->
+              <path class="bp-b" d="M86 362V344H102V336H238V344H254V362Z"/>
+              <path class="bp-b" d="M558 362V344H574V336H710V344H726V362Z"/>
+              <path class="bp-m" d="M86 352H254M558 352H726"/>
+
+              <!-- 一系悬挂 -->
+              <use href="#bpSpring" transform="translate(90,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(130,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(206,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(246,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(562,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(602,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(678,352) scale(.5,.85)"/>
+              <use href="#bpSpring" transform="translate(718,352) scale(.5,.85)"/>
+              <path d="M92 370L108 396M248 370L232 396M564 370L580 396M724 370L708 396"/>
+              <path class="bp-b" d="M106 362H120V392H106ZM166 362H180V392H166ZM578 362H592V392H578ZM638 362H652V392H638Z"/>
+              <path class="bp-m" d="M150 352L146 372M210 352L214 372"/>
+
+              <!-- 轮对（用圆：非等比缩放下椭圆仍像轮子） -->
+              <circle class="bp-b" cx="112" cy="380" r="24"/><circle cx="112" cy="380" r="14"/>
+              <circle class="bp-b" cx="172" cy="380" r="24"/><circle cx="172" cy="380" r="14"/>
+              <circle class="bp-b" cx="584" cy="380" r="24"/><circle cx="584" cy="380" r="14"/>
+              <circle class="bp-b" cx="644" cy="380" r="24"/><circle cx="644" cy="380" r="14"/>
+              <path d="M112 356V404M88 380H136M112 366V394M98 380H126M584 356V404M560 380H608M584 366V394M570 380H598"/>
+              <path class="bp-b" d="M108 376H116V384H108ZM168 376H176V384H168ZM580 376H588V384H580ZM640 376H648V384H640Z"/>
+
+              <!-- 钢轨与轨枕 -->
+              <rect class="bp-fill" x="30" y="398" width="800" height="18" fill="url(#bpSlp)"/>
+              <path class="bp-b" d="M30 398H830V416H30Z"/>
+              <path class="bp-m" d="M30 409H830"/>
+              <path class="bp-m" d="M30 416L34 422M54 416L58 422M78 416L82 422M102 416L106 422M126 416L130 422M150 416L154 422M174 416L178 422M198 416L202 422M222 416L226 422M246 416L250 422M270 416L274 422M294 416L298 422M318 416L322 422M342 416L346 422M366 416L370 422M390 416L394 422M414 416L418 422M438 416L442 422M462 416L466 422M486 416L490 422M510 416L514 422M534 416L538 422M558 416L562 422M582 416L586 422M606 416L610 422M630 416L634 422M654 416L658 422M678 416L682 422M702 416L706 422M726 416L730 422M750 416L754 422M774 416L778 422M798 416L802 422"/>
+
+              <!-- 尺寸链 -->
+              <path class="bp-m" d="M112 408V444M172 408V444"/>
+              <path class="bp-d" marker-start="url(#bpAr)" marker-end="url(#bpAr)" d="M112 436H172"/>
+              <text class="bp-t" x="176" y="434">1 435</text>
+              <path class="bp-m" d="M142 436V474M642 436V474"/>
+              <path class="bp-d" marker-start="url(#bpAr)" marker-end="url(#bpAr)" d="M142 470H642"/>
+              <text class="bp-t" x="330" y="464">BOGIE PITCH 2 500</text>
+              <path class="bp-m" d="M24 176H56M24 402H56"/>
+              <path class="bp-d" marker-start="url(#bpAr)" marker-end="url(#bpAr)" d="M32 176V402"/>
+              <text class="bp-t" x="36" y="170">H 3 800</text>
+
+              <!-- 剖面切线 A-A -->
+              <path class="bp-cl" d="M300 62V430"/>
+              <path class="bp-ar" d="M294 68L300 58L306 68Z"/>
+              <path class="bp-ar" d="M294 424L300 434L306 424Z"/>
+              <text class="bp-t bp-th" x="308" y="66">A</text>
+              <text class="bp-t bp-th" x="308" y="432">A</text>
+
+              <!-- 引线标注 -->
+              <path class="bp-d" d="M260 342H288V326H316"/>
+              <text class="bp-t" x="320" y="324">PRIMARY SUSP.</text>
+              <path class="bp-d" d="M644 404H700V426H736"/>
+              <text class="bp-t" x="740" y="428">WHEELSET &#216; 840</text>
+              <path class="bp-d" d="M780 250H802V232"/>
+              <text class="bp-t" x="754" y="228">DOOR</text>
+
+              <!-- ===== 俯视 PLAN（左下） ===== -->
+              <text class="bp-t" x="30" y="480">PLAN VIEW  1:50</text>
+              <path class="bp-b" d="M30 486H340V584H30Z"/>
+              <path class="bp-m" d="M44 500H326V572H44Z"/>
+              <path class="bp-cl" d="M30 536H340"/>
+              <rect class="bp-n" x="70" y="506" width="58" height="18"/>
+              <rect class="bp-n" x="140" y="506" width="58" height="18"/>
+              <rect class="bp-n" x="210" y="506" width="58" height="18"/>
+              <path d="M99 506V524M169 506V524M239 506V524"/>
+              <path class="bp-m" d="M116 500V572M186 500V572M256 500V572"/>
+              <rect class="bp-d" x="46" y="502" width="82" height="72"/>
+              <rect class="bp-n" x="286" y="502" width="38" height="72"/>
+              <path d="M296 502V574M306 502V574M316 502V574"/>
+
+              <!-- ===== 细节 A（中下） ===== -->
+              <text class="bp-t" x="360" y="480">DETAIL A  2:1</text>
+              <path class="bp-b" d="M360 486H500V584H360Z"/>
+              <rect class="bp-fill" x="374" y="506" width="72" height="66" fill="url(#bpHz)"/>
+              <path class="bp-b" d="M374 506H414L432 524V568L414 580H374Z"/>
+              <path class="bp-m" d="M386 518H408L420 530V562L408 572H386Z"/>
+              <path class="bp-b" d="M394 530H406V562H394Z"/>
+              <circle class="bp-b" cx="400" cy="526" r="6"/>
+              <path class="bp-m" d="M394 526H406M400 520V532"/>
+              <path class="bp-m" d="M366 578V568H374"/>
+              <path class="bp-d" d="M432 524H462V512"/>
+              <text class="bp-t" x="466" y="510">TIRE</text>
+              <text class="bp-t" x="466" y="524">R14</text>
+
+              <!-- ===== 注释栏 ===== -->
+              <path class="bp-b" d="M660 420H830V482H660Z"/>
+              <path class="bp-m" d="M660 430H830"/>
+              <text class="bp-tb" x="666" y="428">NOTES</text>
+              <text class="bp-t" x="666" y="444">1 ALL DIMS IN mm</text>
+              <text class="bp-t" x="666" y="456">2 DO NOT SCALE DWG</text>
+              <text class="bp-t" x="666" y="468">3 TORQUE M24 210 Nm</text>
+              <text class="bp-t" x="666" y="478">4 REV C SUPERSEDES B</text>
+
+              <!-- ===== 图签栏（右下） ===== -->
+              <path class="bp-b" d="M520 486H830V584H520Z"/>
+              <path d="M520 510H830M520 532H830M520 554H830M520 570H830M640 510V554"/>
+              <text class="bp-tb" x="528" y="504">ENVKIT / DWG-02</text>
+              <text class="bp-t" x="528" y="528">SCALE 1:2</text>
+              <text class="bp-t" x="648" y="528">SHEET 2 / 8</text>
+              <text class="bp-t" x="528" y="550">REV C</text>
+              <text class="bp-t" x="648" y="550">2026-11-08</text>
+              <text class="bp-t" x="528" y="566">TOL &#177;0.5</text>
+              <text class="bp-t" x="648" y="566">UNIT mm</text>
+              <text class="bp-t" x="528" y="580">6061-T6 ANODIZED</text>
+            </svg>
+            <div class="ob-rc-side">
             <div class="ob-rc-head">
               <div class="ob-rc-stamp"><b>×2</b><em>LOOP LINE</em></div>
               <div class="ob-rc-title">上 首测 · 下 复验</div>
@@ -1563,6 +1839,7 @@
             </div>
             <div class="ob-rc-foot">
               <div class="ob-rc-audit"><span>policy</span><span>rule</span><span>approver=user</span><span>decision</span><span>args_sha</span></div>
+            </div>
             </div>
           </div>
         </div>

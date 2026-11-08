@@ -1972,5 +1972,6 @@
   "（连续": " (",
   "（项目类型：": " (project type: ",
   "；%d 秒后放行一次探针重启": "; a probe restart is allowed in %d s",
-  "秒后放行一次探针重启": " s until a probe restart is allowed"
+  "秒后放行一次探针重启": " s until a probe restart is allowed",
+  "同一判据，测两次": "Same criterion, verified twice"
 }
