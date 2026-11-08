@@ -49,7 +49,9 @@ const ok = (name, cond, detail) => {
   }
   if (occupied.size) console.log('已占用端口（跳过）:', [...occupied].join(','));
 
-  let exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
+  // 用户自己开着 EnvKit 时，不给互斥体加后缀会让新实例判定"已在运行"直接退出
+  const SPAWN_ENV = Object.assign({}, process.env, { ENVKIT_INSTANCE_TAG: 'uistate' });
+  let exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore', env: SPAWN_ENV });
   const boot = async () => {
     for (let i = 0; i < 60; i++) {
       for (let p = 18765; p <= 18815; p++) {
@@ -235,7 +237,7 @@ const ok = (name, cond, detail) => {
     // ---- 9. 重启进程：报告还在，且自报「上次运行留下的」----
     try { spawnSync('taskkill', ['/F', '/T', '/PID', String(exe.pid)], { stdio: 'ignore' }); } catch (e) {}
     await sleep(1200);
-    exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
+    exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore', env: SPAWN_ENV });
     // 旧端口可能处在 TIME_WAIT，新实例会顺延一位；重新发现，别写死端口
     base = (await boot()) || base;
     let alive = false;

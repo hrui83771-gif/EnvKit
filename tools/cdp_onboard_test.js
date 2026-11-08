@@ -311,10 +311,12 @@ function seed() {
       return 'ok';
     })()`);
 
-    // 屏 2（为什么存在）：v8 复验凭据单。静态呈现，不播汇聚动画、不声称刚发生过。
+    // 屏 2（为什么存在）：v10 复线轨道。车头只在点击后移动，不是执行进度。
     await arrowRight();
     await sleep(500);
-    const rcFetchBase = await evalJS(`(window.__obFetch||[]).length`);
+    // 存完整请求字节，不存数量：后台有周期轮询，窗口一长 count 必然涨，
+    // 只比数量会把「全局轮询」误判成「02 屏发了请求」。
+    const rcFetchBase = await evalJS(`JSON.stringify(window.__obFetch||[])`);
     const rcShape = await evalJS(`JSON.stringify({
       rows: document.querySelectorAll('#ob-recheck .ob-rc-row').length,
       crit: document.querySelectorAll('#ob-recheck .ob-rc-crit').length,
@@ -341,8 +343,31 @@ function seed() {
     check('detail-recheck-no-fake', RCV_OLD.win === 0 && RCV_OLD.wire === 0 && RCV_OLD.foot === 0 &&
       RCV_OLD.flow === 0 && RCV_OLD.replay === 0 && RCV_OLD.autoOn === 0, rcOldShape);
 
+    // 进屏时车头必须停在车库，且轨道/车头不能截获指针（装饰层挡住按钮是老坑）
+    const rcPark = await evalJS(`JSON.stringify({
+      stop: document.getElementById('ob-rc-train').style.getPropertyValue('--stop'),
+      moving: document.getElementById('ob-rc-rows').classList.contains('moving'),
+      routed: document.getElementById('ob-rc-rows').classList.contains('routed'),
+      railPE: getComputedStyle(document.querySelector('#ob-recheck .ob-rc-rail')).pointerEvents,
+      trainPE: getComputedStyle(document.getElementById('ob-rc-train')).pointerEvents
+    })`);
+    let RCV_PARK = {}; try { RCV_PARK = JSON.parse(rcPark || '{}'); } catch (e) {}
+    // 车库态允许两种写法：从未写过 --stop（CSS 默认 0px），或已被 rcDrive(null) 显式归零
+    check('detail-recheck-train-park', RCV_PARK.moving === false && RCV_PARK.routed === false &&
+      (RCV_PARK.stop === '' || RCV_PARK.stop === '0px') &&
+      RCV_PARK.railPE === 'none' && RCV_PARK.trainPE === 'none', rcPark);
+
     // 真鼠标点第 2 个判据 → 展开它的探测方式/阈值/来源，且只有第 2 行点亮
     await clickSel('#ob-recheck .ob-rc-crit[data-crit="1"]', 'crit2');
+    // 行进态是短时的（700ms 后自动摘掉），必须紧跟点击读，晚一步就恒假
+    const rcMoving = await evalJS(`JSON.stringify({
+      moving: document.getElementById('ob-rc-rows').classList.contains('moving'),
+      routed: document.getElementById('ob-rc-rows').classList.contains('routed'),
+      stop: document.getElementById('ob-rc-train').style.getPropertyValue('--stop')
+    })`);
+    let RCV_MV = {}; try { RCV_MV = JSON.parse(rcMoving || '{}'); } catch (e) {}
+    check('detail-recheck-train-moving', RCV_MV.moving === true && RCV_MV.routed === true &&
+      /^\d+px$/.test(RCV_MV.stop || '') && parseFloat(RCV_MV.stop) > 20, rcMoving);
     await sleep(180);
     const rcOpen = await evalJS(`JSON.stringify({
       items: document.querySelectorAll('#ob-rc-detail .ob-rc-ditem').length,
@@ -355,17 +380,36 @@ function seed() {
     check('detail-recheck-open', RCV_OPEN.items === 3 && RCV_OPEN.on === 1 && RCV_OPEN.onIdx === '1' &&
       RCV_OPEN.empty === 0 && /farm/.test(RCV_OPEN.txt||''), rcOpen);
 
+    // 等过渡跑完，量真实盒子：车头中心必须落在被点那一站的中心（不读 --stop，
+    // 那只是我们自己写的目标值；这里用 DOM 盒子做独立事实源）
+    await sleep(620);
+    const rcArrive = await evalJS(`(function(){
+      var t=document.getElementById('ob-rc-train');
+      var r=document.querySelector('#ob-recheck .ob-rc-row[data-crit="1"]');
+      if(!t||!r) return 'null';
+      var a=t.getBoundingClientRect(), b=r.getBoundingClientRect();
+      return JSON.stringify({d:Math.abs((a.top+a.height/2)-(b.top+b.height/2)),
+        moving:document.getElementById('ob-rc-rows').classList.contains('moving')});
+    })()`);
+    let RCV_AR = {}; try { RCV_AR = JSON.parse(rcArrive || '{}'); } catch (e) {}
+    check('detail-recheck-train-arrive', typeof RCV_AR.d === 'number' && RCV_AR.d <= 3 &&
+      RCV_AR.moving === false, rcArrive);
+
     // 换一个判据 → 展开内容必须跟着换。防「永远渲染第一项」这种最容易被放过的回归
     await clickSel('#ob-recheck .ob-rc-crit[data-crit="2"]', 'crit3');
     await sleep(180);
     const rcSwitch = await evalJS(`JSON.stringify({
       on: document.querySelectorAll('#ob-recheck .ob-rc-row.on').length,
       onIdx: (document.querySelector('#ob-recheck .ob-rc-row.on')||{getAttribute:function(){return null}}).getAttribute('data-crit'),
-      txt: (document.getElementById('ob-rc-detail')||{}).innerText||''
+      txt: (document.getElementById('ob-rc-detail')||{}).innerText||'',
+      stop: document.getElementById('ob-rc-train').style.getPropertyValue('--stop')
     })`);
     let RCV_SW = {}; try { RCV_SW = JSON.parse(rcSwitch || '{}'); } catch (e) {}
     check('detail-recheck-switch', RCV_SW.on === 1 && RCV_SW.onIdx === '2' &&
       /区块高度/.test(RCV_SW.txt||'') && !/farm/.test(RCV_SW.txt||''), rcSwitch);
+    // 换站时车头必须换落点，不能停在上一站装作"已经到过"
+    check('detail-recheck-train-retarget', parseFloat(RCV_SW.stop) - parseFloat(RCV_MV.stop) > 30,
+      'crit1=' + RCV_MV.stop + ' crit2=' + RCV_SW.stop);
 
     // 移开鼠标，点住态不能被 hover 清掉
     await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4 });
@@ -383,6 +427,13 @@ function seed() {
     })`);
     let RCV_OFF = {}; try { RCV_OFF = JSON.parse(rcOff || '{}'); } catch (e) {}
     check('detail-recheck-toggle-off', RCV_OFF.on === 0 && RCV_OFF.empty === 1 && RCV_OFF.items === 0, rcOff);
+    // 收起 = 回车库：车头回到起点且不再高亮，不能留在最后一站冒充结果
+    const rcGarage = await evalJS(`JSON.stringify({
+      stop: document.getElementById('ob-rc-train').style.getPropertyValue('--stop'),
+      routed: document.getElementById('ob-rc-rows').classList.contains('routed')
+    })`);
+    let RCV_GR = {}; try { RCV_GR = JSON.parse(rcGarage || '{}'); } catch (e) {}
+    check('detail-recheck-train-garage', RCV_GR.stop === '0px' && RCV_GR.routed === false, rcGarage);
 
     // 两个"没意义"的按钮仍然不能回来：重播汇聚 / 依次打勾
     const deadBtn = await evalJS(`JSON.stringify({
@@ -392,10 +443,18 @@ function seed() {
     let DB = {}; try { DB = JSON.parse(deadBtn || '{}'); } catch (e) {}
     check('no-fake-buttons', DB.replay === false && DB.run === false, deadBtn);
 
-    // 02 屏不许发任何请求：凭据单是静态结构示意，不假装在跑
-    const rcFetchAfter = await evalJS(`(window.__obFetch||[]).length`);
-    check('detail-recheck-zero-write', Number(rcFetchAfter) === Number(rcFetchBase),
-      'before=' + rcFetchBase + ' after=' + rcFetchAfter);
+    // 02 屏不许引入新请求：轨道是静态结构示意，车头移动只是选中态而不是在跑检测。
+    // 判据用请求字节本身（独立于实现）：新增项必须全是 GET，且 URL 在进屏前就
+    // 出现过（已知全局轮询）。任何新端点、任何写方法都会红，不受停留时长影响。
+    const rcFetchAfter = await evalJS(`JSON.stringify(window.__obFetch||[])`);
+    let RC_BEFORE = [], RC_AFTER = [];
+    try { RC_BEFORE = JSON.parse(rcFetchBase || '[]'); RC_AFTER = JSON.parse(rcFetchAfter || '[]'); } catch (e) {}
+    const rcAdded = RC_AFTER.slice(RC_BEFORE.length);
+    const rcKnown = new Set(RC_BEFORE.map(s => String(s).split('|')[0]));
+    check('detail-recheck-zero-write',
+      rcAdded.every(s => /\|GET$/.test(String(s)) && rcKnown.has(String(s).split('|')[0])),
+      'before=' + RC_BEFORE.length + ' after=' + RC_AFTER.length +
+      ' added=' + JSON.stringify(rcAdded));
 
     // 屏 3（四步走）：点步骤看说明卡切换（自动前进已在此前 2.3s 内走了一格）
     await arrowRight();

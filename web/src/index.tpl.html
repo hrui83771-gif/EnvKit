@@ -1522,21 +1522,26 @@
         </div>
       </div>
 
-      <!-- 02 为什么存在：同一判据，测两次 -->
+      <!-- 02 为什么存在：同一判据，测两次（复线轨道 / 车头进站） -->
       <div class="swiper-slide ob-slide" data-idx="1">
         <div class="ob-scene ob-split ob-split-grow">
           <div class="ob-copy">
             <div class="ob-kicker"><i></i>为什么不继续用旧办法</div>
             <h2 class="ob-h">同一判据，<br />测两次</h2>
             <p class="ob-lead">执行完不算完成，同一判据要再过一遍。</p>
-            <p class="ob-hint">结构示意 · 数值不是本次运行结果</p>
+            <p class="ob-hint">车头 = 当前查看的判据 · 读数为结构示意</p>
           </div>
           <div class="ob-recheck" id="ob-recheck">
             <div class="ob-rc-head">
-              <div class="ob-rc-stamp"><b>×2</b><em>RECHECK</em></div>
-              <div class="ob-rc-title">同一判据 · 两次观测</div>
+              <div class="ob-rc-stamp"><b>×2</b><em>LOOP LINE</em></div>
+              <div class="ob-rc-title">上 首测 · 下 复验</div>
             </div>
             <div class="ob-rc-rows" id="ob-rc-rows">
+              <!-- 轨道与车头都是纯装饰：必须 pointer-events:none，否则真鼠标点不到站台 -->
+              <div class="ob-rc-rail" aria-hidden="true"></div>
+              <div class="ob-rc-train" id="ob-rc-train" aria-hidden="true">
+                <i class="ob-rc-cab"></i><i class="ob-rc-wh a"></i><i class="ob-rc-wh b"></i>
+              </div>
               <div class="ob-rc-row" data-crit="0">
                 <button class="ob-rc-crit" data-crit="0" type="button"><i></i><span>端口 :8888</span></button>
                 <div class="ob-rc-obs before"><i></i><code>connection refused</code></div>
@@ -1554,7 +1559,7 @@
               </div>
             </div>
             <div class="ob-rc-detail" id="ob-rc-detail">
-              <div class="ob-rc-detail-empty">点判据，看它按什么规则测</div>
+              <div class="ob-rc-detail-empty">点站台，看它按什么规则测</div>
             </div>
             <div class="ob-rc-foot">
               <div class="ob-rc-audit"><span>policy</span><span>rule</span><span>approver=user</span><span>decision</span><span>args_sha</span></div>

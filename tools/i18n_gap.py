@@ -10,6 +10,11 @@ JS 注释与代码片段（MISS 列表里能直接看到 `if(ev.usage){`）—�
     ① `t('…')` / `t("…")` 调用里的字面量（前端运行时翻译）
     ② index.tpl.html 里 `>文本<` 之间的中文（构建期/运行时替换）
     ③ index.tpl.html 里的 `placeholder=` / `title=` / `aria-label=` 值
+    ④ runtime.go 里返回给界面的中文字符串字面量（issues 的 what/action 等）
+
+④ 是 11/8 实测补上的：英文模式下「Needs attention」卡片和清理进程弹窗
+仍是中文，而缺口检查报 0 —— 因为那些文案是 Go 后端拼好发给前端的，
+从来没出现在任何 t() 调用里。只扫前端 = 这类缺口永远查不出来。
 
 用法：
     python tools/i18n_gap.py            # 列出缺口（按出现次数降序）
@@ -32,6 +37,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JSDIR = os.path.join(ROOT, "web", "src", "js")   # v3.7.2 起前端按面板拆成多个片段
 TPL = os.path.join(ROOT, "web", "src", "index.tpl.html")
 TABLE = os.path.join(ROOT, "tools", "i18n_en.json")
+GO_RUNTIME = os.path.join(ROOT, "runtime.go")
 
 CJK = re.compile(r"[\u4e00-\u9fa5]")
 
@@ -121,21 +127,40 @@ def tpl_keys():
     return keys
 
 
+def go_keys():
+    """④ 后端返回给界面的中文：Go 源码里所有非注释的中文字符串字面量。
+
+    只取字符串，不取注释（strip_comments 会保住字符串里的 // 与中文）。
+    动态拼接的片段（如 "缺少组件：" + m）也是文案的一部分：前端 ekTrData()
+    用字典做短语级替换，所以这些前缀同样必须有译文，否则英文界面会留半句中文。
+    """
+    if not os.path.exists(GO_RUNTIME):
+        return []
+    src = strip_comments(io.open(GO_RUNTIME, encoding="utf-8").read())
+    keys = []
+    for m in re.finditer(r'"((?:[^"\\\n]|\\.)*)"', src):
+        s = unescape_js(m.group(1))
+        if CJK.search(s):
+            keys.append(s)
+    return keys
+
+
 def main():
     table = json.loads(io.open(TABLE, encoding="utf-8").read())
     have = {k.strip() for k in table}
 
     js = js_keys()
     tp = tpl_keys()
-    cnt = collections.Counter([s.strip() for s in js + tp])
+    go = go_keys()
+    cnt = collections.Counter([s.strip() for s in js + tp + go])
     missing = {k: v for k, v in cnt.items() if k not in have}
 
     if "--json" in sys.argv:
         print(json.dumps(missing, ensure_ascii=False, indent=1))
         return 0
 
-    print("界面文案（去重后）: %d 条 —— 其中 JS t() %d 处 / 模板 %d 处"
-          % (len(cnt), len(js), len(tp)))
+    print("界面文案（去重后）: %d 条 —— 其中 JS t() %d 处 / 模板 %d 处 / Go %d 处"
+          % (len(cnt), len(js), len(tp), len(go)))
     print("EN 字典 %d 条，缺口 %d 条" % (len(have), len(missing)))
     if "--check" in sys.argv:
         if missing:

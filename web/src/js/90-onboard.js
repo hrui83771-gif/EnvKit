@@ -913,11 +913,11 @@
     setProgress();
   }
 
-  /* 02 判定面板：点任一判据 → 展开它的探测方式 / 通过阈值 / 来源。
-     v9 把 v8 的「印章 + 票据框」换成 diff 轨道，造型更轻、文案更短，但
-     交互与字段不变：欢迎页首次打开并没有真实故障数据，播一段"修复过程"
-     就是编的（v3.8 删「重播汇聚」是同一个理由）。这里只做静态结构示意
-     + 可点开的依据，字段名全部来自真实判定链，不声称刚发生过。 */
+  /* 02 复线轨道：点任一站台 → 车头开过去，展开探测方式 / 通过阈值 / 来源。
+     v10 把 v9 的「白卡片 + diff 表格」换成轨道 + 站台 + 车头，交互与字段不变。
+     欢迎页首次打开并没有真实故障数据，播一段"修复过程"就是编的（v3.8 删
+     「重播汇聚」是同一个理由）：车头是选中态的物理化，不是执行进度；它只在
+     用户点击后移动，不自动巡游、不报通过、不发请求。字段名来自真实判定链。 */
   var RC_CRIT = [
     { probe: function(){ return t('向 127.0.0.1:8888 发起 TCP 连接'); },
       pass:  function(){ return t('连接建立，且 /api/health 返回 200'); },
@@ -930,12 +930,39 @@
       from:  function(){ return t('日志 · scChain'); } }
   ];
   var rcPin = null;                      /* 展开中的判据序号，null = 收起 */
-  function renderCrit(k){
+  var rcMoveTimer = null;
+  /* 车头只跟随「当前查看的判据」：落点从真实盒模型量，不写死三站偏移。
+     它不是进度条——不自动巡游、不亮完成灯、不发请求；quiet 供切语言重绘，
+     只定位不重播行进。REDUCED 下也只定位。 */
+  function rcDrive(k, quiet){
+    var rows = q('#ob-rc-rows');
+    var train = q('#ob-rc-train');
+    if(!rows || !train) return;
+    clearTimeout(rcMoveTimer);
+    rows.classList.remove('moving');
+    if(k === null){
+      train.style.setProperty('--stop', '0px');
+      rows.classList.remove('routed');
+      return;
+    }
+    var stop = q('#ob-recheck .ob-rc-row[data-crit="' + k + '"]');
+    if(!stop) return;
+    var r = rows.getBoundingClientRect();
+    var s = stop.getBoundingClientRect();
+    train.style.setProperty('--stop', Math.round(s.top + s.height / 2 - r.top) + 'px');
+    rows.classList.add('routed');
+    if(quiet || REDUCED) return;
+    void rows.offsetWidth;            /* 强制重排：连点同一站也能重新开一次 */
+    rows.classList.add('moving');
+    rcMoveTimer = setTimeout(function(){ rows.classList.remove('moving'); }, 700);
+  }
+  function renderCrit(k, quiet){
     var box = q('#ob-rc-detail');
     if(!box) return;
     qa('#ob-recheck .ob-rc-row').forEach(function(r){
       r.classList.toggle('on', k !== null && r.getAttribute('data-crit') === String(k));
     });
+    rcDrive(k, quiet);
     if(k === null){
       box.innerHTML = '<div class="ob-rc-detail-empty">' +
         t('点判据，看它按什么规则测') + '</div>';
@@ -1067,7 +1094,7 @@
   /* 引导开着的时候切语言：正文由 applyI18n 处理，CODE/PRE 只有这里补得上。
      02 的展开区是 JS 拼的，切语言必须按当前语言重新生成，否则会停在旧语言。 */
   document.addEventListener('ek:lang', function(){
-    if(OB.classList.contains('show')){ trCode(); renderCrit(rcPin); syncTools(); }
+    if(OB.classList.contains('show')){ trCode(); renderCrit(rcPin, true); syncTools(); }
   });
   /* 主题改变（无论是这里的按钮还是主界面）→ 粒子颜色跟着换 */
   document.addEventListener('ek:theme', function(){
@@ -1086,7 +1113,7 @@
     if(!OB.classList.contains('show')) return;
     if(brandArmed && OB.contains(e.target)){ endBrand(); return; }
 
-    /* 02 复验凭据单：点判据展开依据，再点一次收起。
+    /* 02 站台：点站台让车头进站并展开依据，再点一次收起回车库。
        必须在通用 button 分支之前 return，否则空 id 会掉进 switch 里空转。 */
     var crit = e.target.closest ? e.target.closest('#ob-recheck .ob-rc-crit') : null;
     if(crit){

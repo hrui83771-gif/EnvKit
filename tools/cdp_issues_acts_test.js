@@ -21,6 +21,9 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const ROOT = 'D:\\BCGD\\FarmTrace\\envkit';
 const SANDBOX = path.join(ROOT, '.gotmp', 'cdp-issues');
 const DBG = 9345;
+// 沙箱固定端口，不跟用户自己开着的 18765 抢；只认这个端口 = 只认自己 spawn 的实例
+const PORT = 18798;
+const URL_ = 'http://127.0.0.1:' + PORT + '/';
 
 const results = [];
 function ok(name, cond, detail) {
@@ -41,27 +44,38 @@ function getJSON(url) {
     try { fs.rmSync(path.join(SANDBOX, f), { recursive: true, force: true }); } catch (e) {}
   }
   fs.copyFileSync(path.join(ROOT, 'EnvKit.exe'), path.join(SANDBOX, 'EnvKit.exe'));
+  // 只写 dev.server_port，其余全空 —— 仍然是「空配置」，issues 该报的照报，
+  // 但端口固定且不与用户开着的实例冲突。以前脚本扫 18765~18815 并跳过"已占用"，
+  // 结果新实例恰好绑到被跳过的那个端口，脚本永远连不上自己（11/8 实测）。
+  fs.writeFileSync(path.join(SANDBOX, 'config.json'), JSON.stringify({
+    app_name: 'EnvKit', app_title: '统一开发环境助手',
+    projects: { frontend_dir: '', backend_dir: '', mysql_host: '127.0.0.1', mysql_port: 3306,
+      mysql_user: 'root', db_name: 'farm', sql_file: '', backup_dir: '', scan_ports: [8080, 8888], web_scripts: [] },
+    chain: { ssh_host: '', ssh_user: 'root', chain_host: '', chain_port: 20200,
+      chain_dir: '', group_id: 1, chain_guard: false, chain_autorecover: false, chain_notify: true },
+    dev: { server_port: PORT },
+    ai: { enabled: false, provider: 'deepseek', base_url: 'https://replay.invalid/v1',
+      api_key: 'not-a-real-key', model: 'demo', memory_enabled: false },
+    missions: { enabled: false, inbound_hook: false, briefing_at: 'off' },
+    lan: { enabled: false }, update: { enabled: false, interval_hours: 72 },
+    alerts: { webhook: '', cooldown_secs: 300 }, notify: { muted: false }
+  }, null, 2), 'utf8');
 
-  // 控制台端口默认 18765，被占用会顺延到 port_scan_limit（18815）。
-  // 不写死单个端口：沙箱里没有 config.json，正常就是默认值，但别的前提不该让脚本假红。
-  // ★ 启动前先记下已被占用的端口：用户自己开着的 EnvKit 常常就挂在 18765，
-  //   不排除的话会连到那个旧实例，跑出来的全是旧代码的结果（假绿）。
-  const occupied = new Set();
-  for (let p = 18765; p <= 18815; p++) {
-    try { await getJSON('http://127.0.0.1:' + p + '/api/health'); occupied.add(p); } catch (e) {}
-  }
-  if (occupied.size) console.log('已占用端口（跳过）:', [...occupied].join(','));
+  let portBusy = false;
+  try { await getJSON(URL_); portBusy = true; } catch (e) {}
+  if (portBusy) { console.log('沙箱端口 ' + PORT + ' 已被占用，先关残留实例'); process.exit(2); }
 
-  const envkit = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
-  let base = '';
-  for (let i = 0; i < 60 && !base; i++) {
-    for (let p = 18765; p <= 18815; p++) {
-      if (occupied.has(p)) continue;
-      try { await getJSON('http://127.0.0.1:' + p + '/api/health'); base = 'http://127.0.0.1:' + p + '/'; break; } catch (e) {}
-    }
-    if (!base) await sleep(500);
+  // ENVKIT_INSTANCE_TAG 给单实例互斥体加后缀。不加的话，只要用户自己开着
+  // EnvKit（常在 18765），新实例会判定"已在运行"直接 exit(0)。
+  const envkit = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], {
+    cwd: SANDBOX, stdio: 'ignore',
+    env: Object.assign({}, process.env, { ENVKIT_INSTANCE_TAG: 'issues' })
+  });
+  let ready = false;
+  for (let i = 0; i < 60 && !ready; i++) {
+    try { await getJSON(URL_); ready = true; } catch (e) { await sleep(500); }
   }
-  const ready = !!base;
+  const base = ready ? URL_ : '';
   console.log('envkit ready:', ready, base);
   if (!ready) { try { envkit.kill(); } catch (e) {} process.exit(2); }
 
@@ -243,6 +257,54 @@ function getJSON(url) {
     })()`);
     const aiOK = aiVal && aiVal.v.indexOf('前端依赖未安装') >= 0 && aiVal.v.indexOf('npm install') >= 0 && aiVal.open;
     ok('7b 「问 AI」把问题与建议填进输入框（不自动发送）', aiOK, JSON.stringify(aiVal).slice(0, 160));
+
+    // ---- 7c/7d 英文模式：后端 issues + 清理进程弹窗不能留中文 ----
+    // 11/8 用户截图实测：字典缺口报 0，但这两处整片是中文 —— 那些文案是 Go
+    // 后端拼好 / JS 硬编码长串，从没进过 t()。只查「字典缺口」查不出来，
+    // 必须在真实界面上按汉字扫描。
+    await evalJS(`(function(){
+      var d=document.getElementById('ai-drawer'); if(d) d.classList.remove('open');
+      // 断言 6 打开过引导层，它是全屏遮罩；不关掉的话真鼠标点主界面按钮
+      // 会被 .ob-hero-art 接走，弹窗根本没开，只读"无中文"就是假绿。
+      try{ EKOnboard.close(); }catch(e){}
+      try{ goto('start'); }catch(e){}
+      try{ ekSetLang('en', true); }catch(e){}
+      return 1; })()`);
+    await sleep(1400);   // ekSetLang 会重拉 pollHealth → renderIssues 重绘
+    const enIssues = await evalJS(`(()=>{
+      const el=document.getElementById('issues-list');
+      const txt=el?el.innerText:'';
+      return {n:(el?el.querySelectorAll('li').length:0), zh:(txt.match(/[\\u4e00-\\u9fa5]/g)||[]).length,
+              sample:txt.slice(0,160)};
+    })()`);
+    ok('7c 英文模式「Needs attention」无中文', enIssues && enIssues.n > 0 && enIssues.zh === 0,
+       JSON.stringify(enIssues));
+
+    const cleanHitInfo = await evalJS(`(()=>{
+      const e=document.getElementById('btn-clean-proc'); if(!e) return {err:'no btn'};
+      const r=e.getBoundingClientRect();
+      const t=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
+      return {w:r.width, h:r.height, hit:!!(t&&(t===e||e.contains(t))),
+              top:t?(t.tagName+'#'+t.id+'.'+t.className):'',
+              panel:(e.closest('section.panel')||{}).id||''};
+    })()`);
+    console.log('clean-hit', JSON.stringify(cleanHitInfo));
+    const cleanHit = await realClick('#btn-clean-proc');
+    await sleep(400);
+    const enConfirm = await evalJS(`(()=>{
+      const g=id=>(document.getElementById(id)||{}).textContent||'';
+      const t=g('cf-title'), m=g('cf-msg'), o=g('cf-ok'), c=g('cf-cancel');
+      const all=t+m+o+c;
+      return {t, m:m.slice(0,140), o, c, zh:(all.match(/[\\u4e00-\\u9fa5]/g)||[]).length};
+    })()`);
+    // 必须确认「这就是清理进程弹窗」再判中文：只读 zh===0 的话，弹窗没打开
+    // （空正文）也恒绿 —— 11/8 第一次跑就撞到这个假绿。
+    ok('7d 英文模式清理进程弹窗无中文', cleanHitInfo && cleanHitInfo.hit === true &&
+       cleanHit && enConfirm && enConfirm.zh === 0 &&
+       /Clean background processes/.test(enConfirm.t || '') && /This will:/.test(enConfirm.m || ''),
+       JSON.stringify(enConfirm));
+    await realClick('#cf-cancel');
+    await evalJS(`(function(){ try{ ekSetLang('zh', true); }catch(e){} return 1; })()`);
 
   } catch (e) {
     console.log('ERROR', e && e.message ? e.message : String(e));

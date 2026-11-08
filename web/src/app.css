@@ -1351,67 +1351,131 @@
   @keyframes obSheen{0%,64%{left:-46%}86%,100%{left:118%}}
   .ob-art-note{font-size:11.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
 
-  /* ---------- 02 同一判据，测两次：判定面板 / diff 轨道 ----------
-     v9 换掉 v8 的「复验印章 + 红绿双色票据框 + 五个标签贴纸」。那一版是
-     拟物凭据单：框套框、装饰多、等宽小字密集。这里改成现代数据面板——
-     一个大号 ×2 作视觉锚点，三条 -/+ diff 轨道靠细线与留白分组，不靠边框；
-     状态色只落在符号上，不铺大色块。所有 class/id 沿用 v8，CDP 门禁契约不变。
-     不播动画、不声称发生过：数值是结构示意，字段名来自真实判定链
-     （ai_confirm.go / runtime.go）。 */
+  /* ---------- 02 同一判据测两次：复线轨道 / 车头进站 ----------
+     v10 拆掉 v9 的「白卡片 + 四条发丝分隔线」：整屏不再用任何矩形框，骨架是
+     一条纵向双轨 + 三座圆形站台 + 一个会沿轨开的车头。线条本身当结构，
+     状态色只落在符号、圆点与车头上。
+     车头只表示「当前在看哪个判据」：由用户点击驱动，不自动巡游、不亮完成灯、
+     不发请求、不出现通过/完成结论（v3.8 删假进度是同一条红线）。
+     轨道 / 车头 / 光带全是指针穿透的装饰，否则真鼠标会被挡住。 */
   .ob-recheck{display:flex;flex-direction:column;min-width:0;
-    background:var(--ob-card);border:1px solid var(--ob-hair);border-radius:16px;
-    padding:26px 30px 20px;box-shadow:0 22px 52px -42px rgba(30,38,54,.55)}
-  .ob-rc-head{display:flex;align-items:baseline;gap:22px;padding-bottom:20px}
-  .ob-rc-stamp{display:flex;align-items:baseline;gap:17px;flex:none}
+    background:none;border:0;border-radius:0;box-shadow:none;padding:0}
+  .ob-rc-head{display:flex;align-items:baseline;gap:20px;padding-bottom:8px}
+  .ob-rc-stamp{display:flex;align-items:baseline;gap:15px;flex:none}
   .ob-rc-stamp b{font-size:46px;font-weight:300;line-height:1;
-    letter-spacing:-.03em;color:var(--brand)}
-  .ob-rc-stamp em{font:500 10px/1 ui-monospace,Consolas,monospace;
-    letter-spacing:.22em;color:var(--muted);font-style:normal;opacity:.7}
+    letter-spacing:-.04em;color:var(--brand)}
+  .ob-rc-stamp em{font:500 9.5px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.2em;color:var(--muted);font-style:normal;opacity:.62}
   .ob-rc-title{margin-left:auto;text-align:right;
-    font-size:12px;line-height:1.5;color:var(--muted);opacity:.88}
-  .ob-rc-rows{display:flex;flex-direction:column}
-  .ob-rc-row{display:grid;grid-template-columns:148px minmax(0,1fr);
-    column-gap:20px;align-content:center;padding:15px 0;
-    border-top:1px solid var(--ob-hair)}
-  /* 引导层全局 .ob button 是 (0,1,1)，比单个 class 高：不带 #ob-recheck 就会被
-     套回蓝底胶囊框 + hover 变蓝（v9 首版截图实测踩到）。键盘焦点 outline 保留。 */
-  #ob-recheck .ob-rc-crit{grid-row:1 / 3;align-self:center;justify-self:start;
-    display:flex;align-items:center;gap:9px;padding:0;border:0;border-radius:0;
-    background:none;box-shadow:none;cursor:pointer;color:var(--text);
-    font-size:14.5px;font-weight:600;letter-spacing:-.01em;
+    font:10px/1.6 ui-monospace,Consolas,monospace;color:var(--muted);opacity:.62}
+
+  .ob-rc-rows{position:relative;display:flex;flex-direction:column;padding:4px 0 2px}
+  /* 纵向双轨：两条竖线 + 等距枕木。进屏时才铺开，纯入场不是进度 */
+  .ob-rc-rail{position:absolute;left:12px;top:8px;bottom:8px;width:12px;pointer-events:none;
+    --ob-rail-c:color-mix(in srgb,var(--brand2) 58%,transparent);
+    background:
+      repeating-linear-gradient(to bottom,var(--ob-hair) 0 2px,transparent 2px 16px) 2px 0/8px 100% no-repeat,
+      linear-gradient(var(--ob-rail-c),var(--ob-rail-c)) 0 0/2px 100% no-repeat,
+      linear-gradient(var(--ob-rail-c),var(--ob-rail-c)) 10px 0/2px 100% no-repeat;
+    transform-origin:top}
+  #onboard .swiper-slide-active[data-idx="1"] .ob-rc-rail{
+    animation:obRailGrow .8s cubic-bezier(.22,1,.36,1) both}
+  @keyframes obRailGrow{from{transform:scaleY(0);opacity:0}to{transform:scaleY(1);opacity:1}}
+  .ob-rc-rail::after{content:'';position:absolute;inset:0;opacity:0;
+    background:repeating-linear-gradient(to bottom,transparent 0 24px,
+      color-mix(in srgb,var(--brand2) 72%,transparent) 24px 32px,transparent 32px 56px);
+    background-size:100% 56px}
+  #ob-rc-rows.moving .ob-rc-rail::after{opacity:.75;animation:obRailFlow .52s linear infinite}
+  @keyframes obRailFlow{to{background-position:0 56px}}
+
+  /* 车头：CSS 画的机车。--stop 由 renderCrit() 按真实盒模型写入 */
+  .ob-rc-train{position:absolute;left:3px;top:0;z-index:3;width:30px;height:24px;
+    margin-top:-12px;pointer-events:none;opacity:.3;
+    transform:translateY(var(--stop,0px));
+    transition:transform .62s cubic-bezier(.22,1,.36,1),opacity .3s ease}
+  #ob-rc-rows.routed .ob-rc-train{opacity:1}
+  .ob-rc-cab{position:absolute;left:3px;top:1px;width:24px;height:15px;
+    border-radius:9px 6px 3px 3px;
+    background:linear-gradient(160deg,var(--brand2),var(--brand));
+    box-shadow:0 2px 8px -2px color-mix(in srgb,var(--brand) 70%,transparent)}
+  .ob-rc-cab::before{content:'';position:absolute;left:5px;top:3px;width:9px;height:5px;
+    border-radius:2px;background:rgba(255,255,255,.82)}
+  .ob-rc-cab::after{content:'';position:absolute;right:-4px;bottom:-2px;width:6px;height:5px;
+    border-radius:0 0 3px 0;background:var(--brand)}
+  .ob-rc-wh{position:absolute;bottom:1px;width:7px;height:7px;border-radius:50%;
+    background:var(--ob-ink);box-shadow:0 0 0 1.5px var(--brand2) inset}
+  .ob-rc-wh.a{left:5px}
+  .ob-rc-wh.b{right:5px}
+  #ob-rc-rows.moving .ob-rc-wh{animation:obWheel .26s linear infinite}
+  #ob-rc-rows.moving .ob-rc-cab{animation:obCabBob .26s ease-in-out infinite alternate}
+  @keyframes obWheel{to{transform:rotate(360deg)}}
+  @keyframes obCabBob{to{transform:translateY(-1.5px)}}
+
+  .ob-rc-row{position:relative;display:flex;flex-direction:column;gap:5px;
+    padding:17px 0 17px 46px}
+  #onboard .swiper-slide-active[data-idx="1"] .ob-rc-row{
+    animation:obStationIn .55s cubic-bezier(.22,1,.36,1) both}
+  @keyframes obStationIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+
+  /* 站牌按钮：全局 .ob button 是 (0,1,1)，不带 #ob-recheck 会被套回蓝底胶囊 */
+  #ob-recheck .ob-rc-crit{position:relative;display:flex;align-items:center;padding:0;
+    border:0;border-radius:0;background:none;box-shadow:none;cursor:pointer;
+    color:var(--text);font-size:15px;font-weight:600;letter-spacing:-.01em;
     text-align:left;white-space:nowrap;transition:color .2s}
-  #ob-recheck .ob-rc-crit i{width:7px;height:7px;border-radius:2px;flex:none;
-    background:var(--brand2);transition:background .2s,transform .2s}
+  #ob-recheck .ob-rc-crit i{position:absolute;left:-36px;top:calc(50% - 7px);
+    width:14px;height:14px;border-radius:50%;flex:none;background:var(--ob-card);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--brand2) 30%,transparent),
+               0 0 0 5px var(--ob-page);
+    transition:background .2s,box-shadow .25s,transform .25s}
   #ob-recheck .ob-rc-crit:hover{color:var(--brand);background:none;border-color:transparent}
-  #ob-recheck .ob-rc-crit:hover i{transform:scale(1.3)}
+  #ob-recheck .ob-rc-crit:hover i{transform:scale(1.18)}
   #ob-recheck .ob-rc-crit:active{transform:none}
   #ob-recheck .ob-rc-row.on .ob-rc-crit{color:var(--brand);background:none}
-  #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand)}
-  .ob-rc-obs{display:flex;align-items:baseline;gap:12px;min-width:0;padding:2px 0}
-  .ob-rc-obs i{width:16px;flex:none;text-align:center;font-style:normal;
-    font:700 15px/1.7 ui-monospace,Consolas,monospace}
+  #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand2);
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--brand2) 34%,transparent),
+               0 0 0 7px var(--ob-page),0 0 20px 3px color-mix(in srgb,var(--brand2) 60%,transparent);
+    animation:obStopGlow 1.3s ease-in-out infinite}
+  @keyframes obStopGlow{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--brand2) 26%,transparent),
+               0 0 0 9px var(--ob-page),0 0 26px 6px color-mix(in srgb,var(--brand2) 45%,transparent)}}
+
+  /* 两节「月台读数」：靠从主轨伸出的短线分组，不靠框 */
+  .ob-rc-obs{position:relative;display:flex;align-items:baseline;gap:10px;min-width:0;padding:1px 0}
+  .ob-rc-obs::before{content:'';position:absolute;left:-34px;top:50%;width:24px;height:1px;
+    background:var(--ob-hair)}
+  .ob-rc-obs.after::before{background:color-mix(in srgb,var(--brand2) 55%,transparent)}
+  .ob-rc-obs i{width:13px;flex:none;text-align:center;font-style:normal;
+    font:700 14px/1.6 ui-monospace,Consolas,monospace}
   .ob-rc-obs.before i::before{content:'-';color:var(--err)}
   .ob-rc-obs.after i::before{content:'+';color:var(--ok)}
   .ob-rc-obs code{display:block;min-width:0;
-    font:13px/1.7 ui-monospace,Consolas,monospace;
+    font:12.5px/1.65 ui-monospace,Consolas,monospace;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-  /* 现代 diff 不加删除线：靠 - 符号 + 灰字就能读，删除线只让小字发糊 */
-  .ob-rc-obs.before code{color:var(--muted);opacity:.72}
+  .ob-rc-obs.before code{color:var(--muted);opacity:.7}
   .ob-rc-obs.after code{color:var(--brand);font-weight:600}
-  .ob-rc-detail{margin-top:14px;padding-top:14px;min-height:46px;
-    border-top:1px solid var(--ob-hair)}
-  .ob-rc-detail-empty{font-size:12px;line-height:1.7;color:var(--muted);opacity:.72}
-  .ob-rc-dlist{display:flex;flex-wrap:wrap;gap:8px 26px}
-  .ob-rc-ditem{display:flex;align-items:baseline;gap:9px;min-width:0}
-  .ob-rc-ditem u{font:500 10px/1 ui-monospace,Consolas,monospace;
-    letter-spacing:.08em;color:var(--muted);text-decoration:none;white-space:nowrap}
+
+  /* 进站时滑出的依据牌：渐变底 + 一道色条，不用描边 */
+  .ob-rc-detail{margin:4px 0 0 46px;min-height:48px}
+  .ob-rc-detail-empty{font-size:12px;line-height:1.8;color:var(--muted);opacity:.62}
+  .ob-rc-dlist{position:relative;display:flex;flex-direction:column;gap:7px;
+    padding:13px 16px 13px 20px;border-radius:12px;
+    background:linear-gradient(100deg,
+      color-mix(in srgb,var(--brand2) 15%,transparent),transparent 82%);
+    animation:obDock .38s cubic-bezier(.22,1,.36,1) both}
+  .ob-rc-dlist::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:3px;
+    border-radius:3px;background:var(--brand2)}
+  @keyframes obDock{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+  .ob-rc-ditem{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .ob-rc-ditem u{font:500 9.5px/1 ui-monospace,Consolas,monospace;
+    letter-spacing:.08em;color:var(--muted);text-decoration:none;white-space:nowrap;min-width:52px}
   .ob-rc-ditem span{font-size:12.5px;line-height:1.6;color:var(--text)}
   #onboard .ob-slide[data-idx="1"] .ob-lead{font-size:13.5px;
     line-height:1.75;opacity:.72}
-  .ob-rc-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--ob-hair)}
+  .ob-rc-foot{margin:12px 0 0 46px;padding:0}
   .ob-rc-audit{display:flex;flex-wrap:wrap;gap:0 12px}
-  .ob-rc-audit span{font:10px/1.6 ui-monospace,Consolas,monospace;
-    color:var(--muted);opacity:.75}
+  .ob-rc-audit::before{content:'KM';font:9px/1.6 ui-monospace,Consolas,monospace;
+    letter-spacing:.14em;color:var(--brand2);opacity:.75;margin-right:2px}
+  .ob-rc-audit span{font:9.5px/1.6 ui-monospace,Consolas,monospace;
+    color:var(--muted);opacity:.7}
   .ob-rc-audit span+span::before{content:'/';margin-right:12px;opacity:.45}
 
   /* ---------- 03 时间轴 ---------- */
@@ -1571,6 +1635,10 @@
   body[data-theme="dark"] .ob-report-foot b{
     background:color-mix(in srgb,var(--brand2) 18%,transparent)}
   body[data-theme="dark"] #ob-recheck .ob-rc-row.on .ob-rc-crit i{background:var(--brand2)}
+  /* 暗色下未选中的站台圆点靠页面底色挖空会糊掉，把环提亮一档 */
+  body[data-theme="dark"] #ob-recheck .ob-rc-crit i{
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--brand2) 55%,transparent),
+               0 0 0 5px var(--ob-page)}
 
   /* ---------- 05 控制台 ---------- */
   .ob-console-scene{max-width:1000px;text-align:center}
@@ -1883,8 +1951,7 @@
     background:linear-gradient(152deg,#40506A 0%,#29354A 58%,#212B3C 100%);
     border-color:rgba(163,186,216,.36)}
 
-  /* ---------- 02：宽屏下数字锚点与 diff 值再放大一档 ---------- */
-  .ob-recheck{padding:28px 34px 22px}
+  /* ---------- 02：宽屏下数字锚点与站台读数再放大一档 ---------- */
   .ob-rc-stamp b{font-size:52px}
   .ob-rc-obs code{font-size:13.5px}
   .ob-rc-ditem span{font-size:13px}
@@ -1964,12 +2031,14 @@
     .ob-console-body{grid-template-columns:1fr}
     .ob-recent{border-left:0;border-top:1px solid rgba(255,255,255,.07)}
     .ob-chapter-grid{grid-template-columns:repeat(2,1fr)}
-    .ob-recheck{padding:20px 18px 16px}
     .ob-rc-stamp b{font-size:38px}
-    .ob-rc-row{grid-template-columns:108px minmax(0,1fr);column-gap:12px}
-    #ob-recheck .ob-rc-crit{font-size:12.5px;gap:7px}
+    .ob-rc-row{padding:14px 0 14px 38px}
+    #ob-recheck .ob-rc-crit{font-size:12.5px}
+    #ob-recheck .ob-rc-crit i{left:-28px}
     .ob-rc-obs{gap:8px}
+    .ob-rc-obs::before{left:-26px;width:18px}
     .ob-rc-obs code{font-size:10.5px}
+    .ob-rc-detail,.ob-rc-foot{margin-left:38px}
     .ob-rc-dlist{flex-direction:column;gap:6px}
     .ob-groups{grid-template-columns:1fr}
     .ob-verdict{grid-template-columns:1fr;gap:9px}

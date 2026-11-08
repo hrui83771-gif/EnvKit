@@ -98,8 +98,8 @@ function ekSetHealth(h){
   if(hb){
     hb.innerHTML = iss.map(i=>{
       const cls = i.level==='error' ? 'err' : (i.level==='warn' ? 'warn' : 'info');
-      return '<li class="'+cls+'"><b>'+esc(i.what)+'</b>'+
-             (i.action ? '<span class="act">'+esc(t('建议：{0}', i.action))+'</span>' : '')+'</li>';
+      return '<li class="'+cls+'"><b>'+esc(ekTrData(i.what))+'</b>'+
+             (i.action ? '<span class="act">'+esc(t('建议：{0}', ekTrData(i.action)))+'</span>' : '')+'</li>';
     }).join('');
   }
 }

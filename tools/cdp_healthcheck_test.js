@@ -39,7 +39,9 @@ const ok = (name, cond, detail) => {
   }
   if (occupied.size) console.log('已占用端口（跳过）:', [...occupied].join(','));
 
-  const exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore' });
+  // 同 cdp_issues_acts：互斥体加后缀，否则用户开着的实例会挡掉沙箱实例
+  const exe = spawn(path.join(SANDBOX, 'EnvKit.exe'), [], { cwd: SANDBOX, stdio: 'ignore',
+    env: Object.assign({}, process.env, { ENVKIT_INSTANCE_TAG: 'healthcheck' }) });
   let base = '';
   for (let i = 0; i < 60 && !base; i++) {
     for (let p = 18765; p <= 18815; p++) {

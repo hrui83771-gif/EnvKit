@@ -1123,8 +1123,8 @@ function renderIssues(issues){
       if(!info) return '';
       return '<button class="mini" data-issue-act="'+esc(a)+'">'+esc(info.label)+'</button>';
     }).join('');
-    return '<li class="'+cls+'"><b>'+esc(i.what)+'</b>'+
-           (i.action ? '<span class="act">'+esc(t('建议：{0}', i.action))+'</span>' : '')+
+    return '<li class="'+cls+'"><b>'+esc(ekTrData(i.what))+'</b>'+
+           (i.action ? '<span class="act">'+esc(t('建议：{0}', ekTrData(i.action)))+'</span>' : '')+
            (btns ? '<span class="issue-acts">'+btns+'</span>' : '')+'</li>';
   }).join('');
   /* 「问 AI」需要整条 issue 的正文与建议，从数据里取而不是从 DOM 反解 */
@@ -1514,9 +1514,11 @@ $('#dbv-size').onchange = function(){ dbv.size = parseInt(this.value,10) || 50; 
 
 /* 清理后台进程：停止 EnvKit 管理的服务 + 报告端口占用（v3.0 T1.9：不再结束第三方进程） */
 $('#btn-clean-proc').onclick = async ()=>{
-  const go = await askConfirm('清理后台进程',
-    '将执行：\n· 停止 EnvKit 管理的前端 / 后端服务（只停 EnvKit 自己派生的进程树）\n· 等待端口真正释放，并报告仍被占用的端口与占用进程（PID）\n\n' +
-    '第三方进程只报告、不自动结束——误杀比杀不掉严重得多。确需结束，请在「端口诊断」里人工确认后处理。\n完成后可重新启动服务。', '开始');
+  /* 整段做一条字典 key：askConfirm 只写 textContent，以前这段中文
+     在英文模式下永远是中文（MutationObserver 也只认整段精确匹配）。
+     包进 t() 后，静态缺口检查也能扫到它，不会再绕过。 */
+  const go = await askConfirm(t('清理后台进程'),
+    t('将执行：\n· 停止 EnvKit 管理的前端 / 后端服务（只停 EnvKit 自己派生的进程树）\n· 等待端口真正释放，并报告仍被占用的端口与占用进程（PID）\n\n第三方进程只报告、不自动结束——误杀比杀不掉严重得多。确需结束，请在「端口诊断」里人工确认后处理。\n完成后可重新启动服务。'), t('开始'));
   if(!go) return;
   try{ await post('/api/program/cleanup'); }catch(e){}
   setTimeout(()=>{ try{ pollState(); pollHealth(); pollProg(); }catch(e){} }, 2000);

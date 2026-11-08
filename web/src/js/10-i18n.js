@@ -79,6 +79,7 @@ const I18N_EN = {
   "W 端口": "W port",
   "W 脚本": "W script",
   "WeBASE-Front 地址": "WeBASE-Front URL",
+  "WeBASE-Front 未响应（5002）": "WeBASE-Front not responding (5002)",
   "Webhook 地址": "Webhook URL",
   "Windows 10 / 11 · 有管理员权限": "Windows 10 / 11 · admin rights",
   "Windows 防火墙没放行这个端口，手机的请求到不了 EnvKit": "Windows Firewall is not allowing this port, so the phone's requests never reach EnvKit",
@@ -203,6 +204,7 @@ const I18N_EN = {
   "一键检测": "Quick check",
   "七月中出ds正式版！": "The DS official version drops in mid-July!",
   "三色团子！软乎乎～": "Tricolor dango! So fluffy~",
+  "上 首测 · 下 复验": "upper first pass · lower re-check",
   "上一屏": "Previous slide",
   "上一步": "Previous",
   "上一级": "Up",
@@ -257,6 +259,7 @@ const I18N_EN = {
   "严重": "Critical",
   "个人中心": "Profile",
   "个入口": " entry",
+  "个待处理问题：": "open issues:",
   "中": "Med",
   "中午好": "Good noon",
   "中断 {0}": "{0} aborted",
@@ -360,7 +363,9 @@ const I18N_EN = {
   "允许查询天气": "Allow weather lookups",
   "先做「程序配置」，链端连通第 3 步再复核": "Set up program config first; chain connectivity is rechecked in step 3",
   "先后端再前端一键拉起，日志按来源分栏，进程树由 EnvKit 统一回收。": "Start backend then frontend with one click; logs split by source and the process tree is cleaned up by EnvKit.",
+  "先在「环境安装」跑一次检测": "Run a check in Environment Setup first",
   "先备份，再生效…": "Backup first, then apply…",
+  "先执行 npm install，否则 npm run 必然失败": "Run npm install first, or npm run will fail",
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "先看检测": "Start with detection",
   "先跑「程序配置」，再复核链端": "Run program config first, then recheck the chain",
@@ -447,6 +452,7 @@ const I18N_EN = {
   "前端 未执行": "Frontend not run",
   "前端产物 + 后端二进制": "frontend bundle + backend binary",
   "前端依赖安装": "Frontend deps install",
+  "前端依赖未安装（node_modules 缺失）": "Frontend dependencies not installed (node_modules missing)",
   "前端启动脚本": "Frontend start script",
   "前端日志": "Frontend log",
   "前端服务": "Frontend service",
@@ -571,6 +577,7 @@ const I18N_EN = {
   "启动区块链节点": "Start blockchain node",
   "启动后复验按这份清单找服务；留空时由项目画像与内置默认推断。": "After start, verification looks for the service on these ports; empty = infer from the project profile and the built-in defaults.",
   "启动后端": "Start backend",
+  "启动失败": " failed to start",
   "启动失败：": "Failed to start: ",
   "启动方式": "Launch method",
   "启动服务": "start services",
@@ -612,6 +619,13 @@ const I18N_EN = {
   "图片已过期": "Image expired",
   "图片载入失败：{0}": "Image failed to load: {0}",
   "图片都没载入成功，先别发；点缩略图上的 × 移除后再试": "No image loaded — don't send yet; remove them with × and try again",
+  "在「环境安装」里安装": "Install it in Environment Setup",
+  "在「程序配置 → 启动方式」手动填写前端启动脚本（dev / serve / start 这类）": "Set the frontend start script manually in Settings → Startup (dev / serve / start)",
+  "在「程序配置 → 启动方式」手动填写后端入口（相对后端目录，如 main.go）": "Set the backend entry manually in Settings → Startup (relative to the backend dir, e.g. main.go)",
+  "在「程序配置」执行建库": "Create the database in Settings",
+  "在「程序配置」选择前端目录": "Choose the frontend directory in Settings",
+  "在「程序配置」选择后端目录": "Choose the backend directory in Settings",
+  "在「链端校验」查看详情": "See details in Chain Check",
   "在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。": "On top of read-only: run checks, read schema and sample rows. No confirm, still no writes.",
   "在只读基础上能跑检测、读数据库结构与抽样数据；不需要确认，仍不写入。": "Adds checks and read-only database structure/sample queries; no confirmation needed, still no writes.",
   "在呢~": "Here~",
@@ -627,6 +641,7 @@ const I18N_EN = {
   "基础设置已保存": "Basics saved",
   "基线": "Baseline",
   "填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。": "Fill in database settings, create the schema, import or export config; a failed connection names the exact item.",
+  "处于熔断态：自动重启已被拒绝（连续失败达限）": " circuit breaker is tripped: automatic restart refused (failure limit reached)",
   "备份 {0}": "Backup {0}",
   "备份保留": "Backups kept",
   "备份列表读取失败": "Could not read backup list",
@@ -738,6 +753,7 @@ const I18N_EN = {
   "将对数据库执行拖入的 SQL 文件，可能覆盖已有数据。": "This will run the dropped SQL file against the database and may overwrite existing data.",
   "将强制结束进程 {0}（PID {1}，占用端口 {2}），未保存的数据可能丢失。请确认它不是系统关键进程。": "About to force-kill {0} (PID {1}, holding port {2}). Unsaved data may be lost. Make sure it is not a critical system process.",
   "将执行：\n· 停止 EnvKit 管理的前端 / 后端服务\n· 结束项目目录下遗留的 node / webpack / go run / main.exe 进程\n\n按项目目录精准匹配，不影响其它软件（如 Adobe、WorkBuddy）的 node 进程。\n完成后可重新启动服务。": "Will do:\n· Stop the frontend / backend services managed by EnvKit\n· Kill leftover node / webpack / go run / main.exe processes under the project directories\n\nMatched strictly by project directory, so node processes of other software (e.g. Adobe, WorkBuddy) are untouched.\nYou can start the services again afterwards.",
+  "将执行：\n· 停止 EnvKit 管理的前端 / 后端服务（只停 EnvKit 自己派生的进程树）\n· 等待端口真正释放，并报告仍被占用的端口与占用进程（PID）\n\n第三方进程只报告、不自动结束——误杀比杀不掉严重得多。确需结束，请在「端口诊断」里人工确认后处理。\n完成后可重新启动服务。": "This will:\n· Stop the frontend/backend services managed by EnvKit (only the process trees EnvKit itself spawned)\n· Wait for the ports to actually free up, and report any ports still occupied together with the owning process (PID)\n\nThird-party processes are only reported, never terminated — killing the wrong process is far worse than leaving one running. If you really need to end one, confirm it manually in Port Diagnostics.\nYou can start the services again when this finishes.",
   "将把 {0} 从 {1} 升级到 {2}：\n下载新版（数百 MB）→ 解压新目录 → 自动更新 PATH 与配置。\n旧版本目录会保留，可随时回滚。\n\n继续？": "This upgrades {0} from {1} to {2}:\ndownload the new build (hundreds of MB) → unpack into a new folder → update PATH and config automatically.\nThe old version's folder is kept, so you can roll back anytime.\n\nContinue?",
   "将生成新备份并恢复到临时库（如 {0}__drill_xxx）验证可恢复性，全程不改动业务库数据，结束后临时库自动删除。": "A new backup will be created and restored into a temporary database (e.g. {0}__drill_xxx) to verify recoverability. Business data is never touched, and the temp database is dropped afterwards.",
   "将用备份文件覆盖数据库 {0}：\n{1}\n\n当前库中的同表数据将被替换，且无法撤销！": "This will overwrite database {0} with the backup file:\n{1}\n\nExisting tables will be replaced and this cannot be undone!",
@@ -753,6 +769,7 @@ const I18N_EN = {
   "尚未冻结基线": "No baseline frozen yet",
   "尚未检查": "Not checked yet",
   "尚未检测": "Not checked yet",
+  "尚未检测环境": "Environment not checked yet",
   "就绪": "Ready",
   "尾部原样保留的估算上限": "Estimated cap on the verbatim tail kept after summarizing",
   "局域网": "LAN",
@@ -847,6 +864,7 @@ const I18N_EN = {
   "已读取（{0}）": "Loaded ({0})",
   "已载入 {0} 张图片，回车发送": "{0} images attached — press Enter to send",
   "已进行 {0} 分 {1} 秒": "{0}m {1}s elapsed",
+  "已连续失败": "Failed",
   "已退出": "Exited",
   "已配密钥但未启用": "Key set but disabled",
   "已配对的设备": "Paired devices",
@@ -889,7 +907,7 @@ const I18N_EN = {
   "开始导览": "Start the tour",
   "开始执行": "Start",
   "开始清理": "Clean",
-  "开始清除": "Purge",
+  "开始清除": "Start cleanup",
   "开始演练": "Start drill",
   "开始评测：{0}": "Start evaluation: {0}",
   "开始重装": "Reinstall",
@@ -902,6 +920,7 @@ const I18N_EN = {
   "当前实例在 :{0}，与设定 :{1} 不一致（被占用顺延，或改过未重启）；评测脚本硬编码 18765，后两档会拒绝启动。": "Running on :{0} but configured :{1} (port shifted, or changed without restart); eval scripts hardcode 18765, so the last two tiers will refuse to start.",
   "当前待处理": "Needs attention",
   "当前版本": "Current version",
+  "当前环境有": "Current environment has",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
   "待你确认 · 不会自己动手": "waiting for you · it will not act alone",
@@ -1067,11 +1086,13 @@ const I18N_EN = {
   "数据库 未建库": "DB missing",
   "数据库 未检测": "DB not checked",
   "数据库 连接失败": "DB connect failed",
+  "数据库不存在：": "Database does not exist: ",
   "数据库列表读取失败：{0}": "Failed to list databases: {0}",
   "数据库名": "Database name",
   "数据库地址与账号": "DB address and credentials",
   "数据库备份": "DB backup",
   "数据库客户端": "Database client",
+  "数据库未连接": "Database not connected",
   "数据库还原": "DB restore",
   "数据截至 {0}": "As of {0}",
   "数据浏览（只读）": "Data browser (read-only)",
@@ -1201,6 +1222,8 @@ const I18N_EN = {
   "未通过": "Failed",
   "未配置": "Not configured",
   "未配置主机": "Host not configured",
+  "未配置前端目录": "Frontend directory not configured",
+  "未配置后端目录": "Backend directory not configured",
   "未配置密钥": "No API key",
   "未配置密钥：后两档不可用": "No API key: the last two tiers are unavailable",
   "未配置项目路径": "No project paths configured",
@@ -1241,6 +1264,8 @@ const I18N_EN = {
   "构造请求失败": "Couldn't build the request",
   "查天气": "Weather",
   "查审计与轨迹": "read audit and traces",
+  "查看「程序启动」日志定位崩溃原因；处理后点服务卡片上的「复位断路器」，或等待冷静期自然解除": "Check the Program Launch log for the crash cause; then click Reset Breaker on the service card, or wait for the cooldown",
+  "查看「程序启动」日志最后几行": "Check the last lines of the Program Launch log",
   "查看天气": "Show weather",
   "查看报告": "View report",
   "查看日志": "View logs",
@@ -1264,6 +1289,7 @@ const I18N_EN = {
   "桌宠设置没保存成功": "Couldn't save the pet setting",
   "桌面助手": "Desktop assistant",
   "检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。": "Check that the FISCO-BCOS node and WeBASE-Front are up, and read block height and client version.",
+  "检查 MySQL 服务是否运行、账号密码是否正确": "Check that MySQL is running and the account/password are correct",
   "检查新版本": "Check for new versions",
   "检查更新": "Check for updates",
   "检查请求体是否能完整到达服务端（不调用模型，不花钱）": "Check whether the request body reaches the server intact (no model call, no cost)",
@@ -1295,6 +1321,8 @@ const I18N_EN = {
   "模型服务商 · 密钥 · 诊断解读 · 对话": "Provider · API key · Report analysis · Chat",
   "次": "tries",
   "次数": "Hits",
+  "次）": " times)",
+  "次，别再盲目重启——": " times in a row — stop restarting blindly — ",
   "正在压缩较早的对话历史": "Compressing older conversation history",
   "正在压缩较早的对话历史（约十几秒，只压这一轮）…": "Compacting earlier conversation history (~10s, this turn only)…",
   "正在启动{0}…": "Starting {0}…",
@@ -1342,7 +1370,7 @@ const I18N_EN = {
   "测试连接": "Test connection",
   "浏览器标签": "Browser tabs",
   "深度清除": "Deep clean",
-  "深度清除流氓软件残留": "Deep-clean PUP leftovers",
+  "深度清除流氓软件残留": "Deep-clean rogue software leftovers",
   "添加": "Add",
   "添加记忆": "Add memory",
   "清屏": "Clear screen",
@@ -1380,11 +1408,13 @@ const I18N_EN = {
   "点判据，看它按什么规则测": "Select a criterion to see how it is checked",
   "点开看本轮用量明细": "Click for this turn's token breakdown",
   "点我确认！": "Click me to confirm!",
+  "点站台，看它按什么规则测": "Select a stop to see how it is checked",
   "照着做一遍最快。以后想再看完整八屏，「关于」里随时能打开。": "Following along is fastest. The full eight slides stay available under About.",
   "熊猫": "Panda",
   "熔断冷静期": "Breaker cooldown",
   "版本": "Version",
   "版本、安装位置、可用性逐项核对；缺什么、去哪儿补，直接写在结论里。": "Version, install path and availability are checked item by item; what is missing and where to get it is written into the result.",
+  "版本不满足项目要求：": "does not meet the project requirement: ",
   "版本：": "Version: ",
   "状态": "Status",
   "状态看得见": "Status you can see",
@@ -1442,7 +1472,7 @@ const I18N_EN = {
   "目录与库": "Directories & DB",
   "目标": "Target",
   "目标主机与 SSH": "Target host & SSH",
-  "目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Target: PUA:Win32/Softcnapp family (WROberlay*.dll injecting adware).\nIt injects a DLL into newly started processes, making go / npm / mysqldump randomly exit with zero output.\n\nWill do:\n· Ask Defender to remove detected threats\n· Delete every WROberlay* file under C:\\Windows (renamed to .quarantine if locked)\n· Clean the related CLSID and icon-overlay registry entries\n· Restart Explorer to unload the injected DLL\n\nRunning EnvKit as administrator is recommended to avoid the UAC prompt. Reboot once afterwards.",
+  "目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。": "Target: the PUA:Win32/Softcnapp family (WROberlay*.dll DLL-injecting adware).\nIt injects a DLL into newly started processes, making go / npm / mysqldump randomly exit with zero output.\n\nThis will:\n· Ask Defender to remove detected threats\n· Delete all WROberlay* files under C:\\Windows (rename to .quarantine if locked)\n· Remove the related CLSID and icon-overlay registry entries\n· Restart Explorer to unload the injected DLL\n\nRun EnvKit as administrator to avoid the UAC prompt. Reboot once when it finishes.",
   "直接做": "No confirm",
   "直接进配对页": "Go straight to the pairing page",
   "相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
@@ -1460,13 +1490,16 @@ const I18N_EN = {
   "确定删除这条记忆？": "Delete this memory?",
   "确定要退出 EnvKit 吗？": "Are you sure you want to exit EnvKit?",
   "确认": "Confirm",
+  "确认 WeBASE-Front 已启动": "Make sure WeBASE-Front is running",
   "确认卡在这里：你点了才执行。真实操作仍走权限闸门。": "The confirm card lives here: nothing runs until you click. Real actions still pass the permission gate.",
   "确认后将真实执行该操作。": "It will really run after you confirm.",
   "确认手机连的是同一个 WiFi（不是移动数据、不是访客网络）；路由器的「AP 隔离/客户端隔离」要关掉": "Make sure the phone is on the same Wi-Fi (not cellular or a guest network); turn off AP/client isolation on the router",
   "确认执行": "Run it",
+  "确认链端已启动；本机虚拟机场景请确认端口转发与 chain_host 配置": "Make sure the chain is running; for a local VM, check port forwarding and chain_host",
   "磁盘剩余": "Free disk",
   "私钥": "Private key",
   "秒": "s",
+  "秒后放行一次探针重启": " s until a probe restart is allowed",
   "秒（最小 30）": "sec (min 30)",
   "秒；go build 已在启动阶段完成": "seconds; go build already finished during startup",
   "秒；vue/vite 首次编译常要 20s+": "seconds; the first vue/vite build often takes 20s+",
@@ -1553,6 +1586,7 @@ const I18N_EN = {
   "缓存命中率 {0}%": "cache hit rate {0}%",
   "缓存读取": "Cache read",
   "缺失": "Missing",
+  "缺少组件：": "Missing component: ",
   "缺少：前端目录": "Missing: frontend directory",
   "缺少：后端目录": "Missing: backend directory",
   "缺少：数据库名": "Missing: database name",
@@ -1639,6 +1673,8 @@ const I18N_EN = {
   "评测": "Evaluation",
   "评测只在开发仓库（含": "Evaluation only works inside the dev repository (with a ",
   "评测日志": "Evaluation log",
+  "识别不出前端启动脚本": "Cannot detect the frontend start script",
+  "识别不出后端入口": "Cannot detect the backend entry",
   "诊断": "Diagnose",
   "诊断失败：{0}": "Diagnostics failed: {0}",
   "诊断报告": "Diagnostic report",
@@ -1693,6 +1729,7 @@ const I18N_EN = {
   "跟着做一遍": "Follow along step by step",
   "跟随鼠标": "Follow cursor",
   "跳过": "Skipped",
+  "车头 = 当前查看的判据 · 读数为结构示意": "The train marks the criterion you are viewing · readings are illustrative",
   "轨迹": "Trace",
   "轨迹 / 审计 / 用量": "Trace / Audit / Usage",
   "轮转": "Rotation",
@@ -1751,6 +1788,7 @@ const I18N_EN = {
   "这用户发的啥啊，": "What is this user even sending,",
   "这里的参数调错了不至于坏：每一项都有内置默认，填 0 或留空 = 用默认。保存只写": "Wrong values here cannot break much: every field has a built-in default, and 0 or empty means “use the default”. Saving only writes the ",
   "进程名": "Process",
+  "进程在运行但未通过复验": " process is running but has not passed re-check",
   "远程主机 · 选择根目录": "Remote host · pick root",
   "远程执行命令": "Run remote command",
   "远程目录（Linux · 经 SSH）：": "Remote directory (Linux · over SSH):",
@@ -1809,6 +1847,7 @@ const I18N_EN = {
   "配置已恢复，正在重新加载…": "Settings restored — reloading…",
   "采用": "Used",
   "重启": "Restart",
+  "重启一次会重新走复验；未复验前不要当作已就绪": "Restart once to re-run the check; do not treat it as ready until it passes",
   "重启后端": "restart backend",
   "重启服务": "Restart service",
   "重播汇聚": "Replay the convergence",
@@ -1832,6 +1871,7 @@ const I18N_EN = {
   "链主机": "Chain host",
   "链端": "Chain",
   "链端 :20200": "Chain :20200",
+  "链端不可达（SSH 与 20200 端口均无响应）": "Chain unreachable (no response from SSH or port 20200)",
   "链端健康结论 + 区块高度": "chain verdict + block height",
   "链端参数（主机 / 端口 / 目录 / 启动脚本 / 群组 / 自动重启）": "Chain settings (host / port / dir / start script / group / auto-recover)",
   "链端口": "Chain port",
@@ -1843,6 +1883,7 @@ const I18N_EN = {
   "链端目录": "Chain directory",
   "链端配置": "Chain settings",
   "链节点": "Chain node",
+  "链节点端口未监听（20200）": "Chain node port not listening (20200)",
   "错误": "Error",
   "镜像与校验": "Mirrors & checksums",
   "长对话会把较早内容压成一条要点备忘。触发阈值调大 → 更少压缩，但每次请求更胖；「摘要后保留量」是尾部预算，调大反而压得更少、更快再次触发；「至少保留条数」保证最近几条原文不被压掉。": "Long chats compress older turns into one recap. Raising the trigger threshold means fewer compactions but heavier requests; \"Keep after summary\" is the tail budget, so raising it compresses less and re-triggers sooner; \"Min messages to keep\" protects the most recent verbatim turns.",
@@ -1915,7 +1956,9 @@ const I18N_EN = {
   "（空结果）": "(empty result)",
   "（该事件没有可读描述）": "(this event has no readable description)",
   "（还没有密钥，打开开关会自动生成）": "(no key yet — one is generated when you turn this on)",
+  "（连续": " (",
   "（需要内容时用 read_file 读取；沙箱外路径会被拒绝）": "(read them with read_file when needed; paths outside the sandbox are refused)",
+  "（项目类型：": " (project type: ",
   "（预演）": " (dry run)",
   "）下可用；分发版 exe 旁边没有脚本，会如实报「不可用」而不是硬跑。": " folder); the shipped exe has no scripts, so it reports “unavailable” instead of pretending to run.",
   "）；密码与 API Key 在入库前已脱敏。": "); passwords and API keys are sanitized before being written.",
@@ -1932,6 +1975,7 @@ const I18N_EN = {
   "：把脱敏诊断报告交给大模型，输出现状总结、问题定位与建议步骤": ": sends the sanitized diagnostic report to the LLM and returns a summary, likely causes and suggested steps",
   "：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告": ": connection test, one-step DB+table creation, one-click backup/restore (auto-retry), frontend npm install / backend go mod tidy, config import/export (sanitized sharing), environment diagnostic report",
   "：自然语言查询日志与环境状态，执行数据库备份、组件检测、前后端启停 / 重启、清理进程、加 Defender 白名单（共 26 个工具）": ": natural-language queries of logs and environment state, plus database backup, component checks, frontend/backend start/stop/restart, process cleanup, and Defender whitelisting (26 tools in total)",
+  "；%d 秒后放行一次探针重启": "; a probe restart is allowed in %d s",
   "；每次切到本页都会重新读取最新值，两边不会各存一份。": " with Configure and Chain Check; every visit re-reads the latest values, so neither page keeps its own copy.",
 };
 
@@ -2060,6 +2104,33 @@ function t(key, ...args){
   if(EK_LANG === 'en'){ if(I18N_EN[key] !== undefined) out = I18N_EN[key]; }
   else { if(EK_ZH_OF[key] !== undefined) out = EK_ZH_OF[key]; }
   return out.replace(/\{(\d+)\}/g, (m, i)=> (args[+i] !== undefined ? args[+i] : m));
+}
+/* 后端返回的中文（runtime.go 的 issues / 状态短语）不经过 t()，切英文也不会变。
+   11/8 实测：英文模式下「Needs attention」卡片整片还是中文，静态缺口却报 0。
+   ekTrData 先整段精确匹配，再按字典做短语级替换 —— "缺少组件："+name、
+   "（连续 3 次）" 这类后端拼好的半句也能翻。
+   只给后端数据字段用，绝不扫整个 DOM：CODE/PRE 里的真实日志必须保留原文。 */
+let EK_DATA_KEYS = null;
+function ekTrData(s){
+  const raw = String(s === undefined || s === null ? '' : s);
+  if(!raw || !/[\u4e00-\u9fa5]/.test(raw)) return raw;
+  const exact = ekTrText(raw);
+  if(exact !== raw) return exact;
+  if(EK_LANG !== 'en') return raw;          // 中文态原文就是中文，无需反查
+  if(!EK_DATA_KEYS){
+    EK_DATA_KEYS = Object.keys(I18N_EN)
+      .map(k => [String(k).trim(), I18N_EN[k]])
+      .filter(p => p[0].length >= 2 && p[0].length <= 60 &&
+                   /[\u4e00-\u9fa5]/.test(p[0]) &&
+                   p[0].indexOf('{') < 0 && String(p[1]).indexOf('{') < 0)
+      .sort((a, b) => b[0].length - a[0].length);
+  }
+  let out = raw;
+  for(const p of EK_DATA_KEYS){
+    if(out.indexOf(p[0]) < 0) continue;
+    out = out.split(p[0]).join(String(p[1]));
+  }
+  return out;
 }
 function ekSetLang(l, save){
   EK_LANG = (l === 'en') ? 'en' : 'zh';

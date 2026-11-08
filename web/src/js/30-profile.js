@@ -196,16 +196,10 @@ $('#btn-av').onclick = async ()=>{
 }catch(e){} })();
 /* --------------------------------------------------------------------- */
 $('#btn-avclean').onclick = async ()=>{
-  const okGo = await askConfirm('深度清除流氓软件残留',
-    '目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n' +
-    '它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n' +
-    '将执行：\n' +
-    '· 调用 Defender 清除已检测威胁\n' +
-    '· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n' +
-    '· 清除相关 CLSID 与图标覆盖注册项\n' +
-    '· 重启资源管理器以卸载已加载的 DLL\n\n' +
-    '建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。',
-    '开始清除');
+  /* 同 40-ops 的清理进程弹窗：整段走 t()，英文模式下才不会留一整片中文 */
+  const okGo = await askConfirm(t('深度清除流氓软件残留'),
+    t('目标：PUA:Win32/Softcnapp 家族（WROberlay*.dll 注入型广告软件）。\n它会向新启动的进程注入 DLL，导致 go / npm / mysqldump 随机「零输出秒退」。\n\n将执行：\n· 调用 Defender 清除已检测威胁\n· 删除 C:\\Windows 下所有 WROberlay* 文件（被占用则改名 .quarantine）\n· 清除相关 CLSID 与图标覆盖注册项\n· 重启资源管理器以卸载已加载的 DLL\n\n建议用「以管理员身份运行」的 EnvKit 执行，可免 UAC 弹窗。完成后重启一次电脑。'),
+    t('开始清除'));
   if(okGo){
     try{ await post('/api/av-clean'); }catch(e){}
     setTimeout(()=>{ try{ goto('start'); }catch(e){} }, 300);
