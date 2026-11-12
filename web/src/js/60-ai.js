@@ -526,7 +526,7 @@ function aiSide(tab){
   if(!dr.classList.contains('open')) aiOpen();
   if(!dr.classList.contains('big')){
     aiBigOn = true; dr.classList.add('big');
-    const b = $ai('ai-expand'); if(b){ b.textContent = '⤡'; b.title = t('还原'); }
+    const b = $ai('ai-expand'); if(b){ b.innerHTML = ekIcon('minimize-2', 16); b.title = t('还原'); }
   }
   aiSideTab = tab || 'trace';
   document.querySelectorAll('#ai-tabs button').forEach(x=>x.classList.toggle('on', x.dataset.tab === aiSideTab));
@@ -541,7 +541,7 @@ function aiBig(on){
   aiBigOn = !!on;
   dr.classList.toggle('big', aiBigOn);
   const b = $ai('ai-expand');
-  if(b){ b.textContent = aiBigOn ? '⤡' : '⤢'; b.title = t(aiBigOn ? '还原' : '放大'); }
+  if(b){ b.innerHTML = ekIcon(aiBigOn ? 'minimize-2' : 'maximize-2', 16); b.title = t(aiBigOn ? '还原' : '放大'); }
   if(aiBigOn) aiSide(aiSideTab); else aiPickClose();
 }
 

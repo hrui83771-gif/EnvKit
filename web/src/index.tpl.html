@@ -19,6 +19,12 @@
 <script src="/vendor/swiper-bundle.min.js"></script>
 <script src="/vendor/anime.umd.min.js"></script>
 <script src="/vendor/driver.js.iife.js"></script>
+<!-- 真实数据可视化：列表过渡 / 配置差异 / 快捷键。同域离线产物，不走 CDN。 -->
+<link rel="stylesheet" href="/vendor/diff2html.min.css" />
+<script src="/vendor/auto-animate.iife.js"></script>
+<script src="/vendor/diff.min.js"></script>
+<script src="/vendor/diff2html.min.js"></script>
+<script src="/vendor/hotkeys.min.js"></script>
 </head>
 <body>
 <header>
@@ -41,7 +47,7 @@
         <button class="profile-btn" id="btn-profile" title="个人中心">
           <span class="pavatar" id="profile-avatar">🐟</span>
           <span class="pname" id="profile-name">我</span>
-          <span class="pcaret">▾</span>
+          <span class="pcaret" data-ek-icon="chevron-down" data-ek-size="14"></span>
         </button>
         <div class="profile-pop" id="profile-pop" hidden>
           <div class="pp-title">个人中心</div>
@@ -408,7 +414,7 @@
         <div class="row">
           <button id="btn-chain-check">检测</button>
           <details class="split" id="start-menu">
-            <summary>启动<span class="caret">▾</span></summary>
+            <summary>启动<span class="caret" data-ek-icon="chevron-down" data-ek-size="14"></span></summary>
             <div class="splitmenu">
               <button id="btn-start-chain">启动区块链节点</button>
               <span class="hint" id="h-chain"></span>
@@ -543,7 +549,7 @@
                原生 select 保留在 DOM 里（隐藏）作为状态存储——所有既有 .value 读写点不用改。 -->
           <div class="prov-dd" id="ai_provider_dd">
             <button type="button" class="prov-btn" id="ai_provider_btn">
-              <span class="prov-ic" id="ai_provider_cur_ic"></span><span id="ai_provider_cur_name"></span><span class="prov-caret">▾</span>
+              <span class="prov-ic" id="ai_provider_cur_ic"></span><span id="ai_provider_cur_name"></span><span class="prov-caret" data-ek-icon="chevron-down" data-ek-size="14"></span>
             </button>
             <div class="prov-menu" id="ai_provider_menu" style="display:none"></div>
           </div>
@@ -1410,9 +1416,9 @@
     <span style="flex:1"></span>
     <button class="ai-stop" id="ai-stop" style="display:none">停止生成</button>
     <button class="tbtn" id="ai-trace-open" title="轨迹 / 审计 / 用量">轨迹</button>
-    <button class="tbtn" id="ai-expand" title="放大">⤢</button>
+    <button class="tbtn" id="ai-expand" title="放大" data-ek-icon="maximize-2" data-ek-size="16"></button>
     <button class="tbtn" id="ai-clear" title="清空整段对话（10 秒内可撤销）">清空</button>
-    <button class="tbtn" id="ai-close">×</button>
+    <button class="tbtn" id="ai-close" data-ek-icon="x" data-ek-size="16"></button>
   </div>
   <div class="ai-body">
     <div class="ai-main">

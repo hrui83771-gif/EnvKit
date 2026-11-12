@@ -79,6 +79,23 @@ var (
 	driverTourCSS []byte
 )
 
+// 让「真实发生的数据变化」看得见（v3.8.1）：auto-animate 给列表的真实增删重排
+// 加 FLIP 过渡，jsdiff + diff2html 渲染配置导入前的逐行差异，hotkeys-js 管快捷键。
+// 全部是同域 /vendor/ 路由，不经 CDN；版本 / 许可全文 / SHA256 见
+// THIRD-PARTY-NOTICE.md。auto-animate 上游只发 ESM，这里是本项目包过 IIFE 的版本。
+var (
+	//go:embed web/vendor/auto-animate.iife.js
+	autoAnimateJS []byte
+	//go:embed web/vendor/diff2html.min.js
+	diff2htmlJS []byte
+	//go:embed web/vendor/diff2html.min.css
+	diff2htmlCSS []byte
+	//go:embed web/vendor/diff.min.js
+	jsdiffJS []byte
+	//go:embed web/vendor/hotkeys.min.js
+	hotkeysJS []byte
+)
+
 func main() {
 	if !platform.AcquireSingleInstance() {
 		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）。
@@ -187,6 +204,11 @@ func main() {
 	http.HandleFunc("/vendor/anime.umd.min.js", staticBytes("application/javascript; charset=utf-8", animeJS))
 	http.HandleFunc("/vendor/driver.js.iife.js", staticBytes("application/javascript; charset=utf-8", driverTourJS))
 	http.HandleFunc("/vendor/driver.css", staticBytes("text/css; charset=utf-8", driverTourCSS))
+	http.HandleFunc("/vendor/auto-animate.iife.js", staticBytes("application/javascript; charset=utf-8", autoAnimateJS))
+	http.HandleFunc("/vendor/diff2html.min.js", staticBytes("application/javascript; charset=utf-8", diff2htmlJS))
+	http.HandleFunc("/vendor/diff2html.min.css", staticBytes("text/css; charset=utf-8", diff2htmlCSS))
+	http.HandleFunc("/vendor/diff.min.js", staticBytes("application/javascript; charset=utf-8", jsdiffJS))
+	http.HandleFunc("/vendor/hotkeys.min.js", staticBytes("application/javascript; charset=utf-8", hotkeysJS))
 	http.HandleFunc("/api/config/export", handleConfigExport)
 	http.HandleFunc("/api/config/import", handleConfigImport)
 	http.HandleFunc("/api/config/backups", handleConfigBackups)

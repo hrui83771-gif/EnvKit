@@ -91,7 +91,9 @@ try:
     # <a href> 里的作者主页是既有内容，不算外部资源。
     print("--- 引导依赖 / 零 CDN ---")
     for fn in ["swiper-bundle.min.js", "swiper-bundle.min.css",
-               "anime.umd.min.js", "driver.js.iife.js", "driver.css"]:
+               "anime.umd.min.js", "driver.js.iife.js", "driver.css",
+               "auto-animate.iife.js", "diff2html.min.js", "diff2html.min.css",
+               "diff.min.js", "hotkeys.min.js"]:
         try:
             r = urllib.request.urlopen("http://127.0.0.1:18765/vendor/" + fn, timeout=10)
             size = len(r.read())

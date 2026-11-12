@@ -544,7 +544,7 @@ function aiChipsRender(){
   aiFiles.forEach((f, i)=>{
     const c = document.createElement('span'); c.className = 'ai-chip';
     const b = document.createElement('b'); b.textContent = f.name; b.title = f.path;
-    const x = document.createElement('i'); x.textContent = '×'; x.title = t('移除');
+    const x = document.createElement('i'); x.innerHTML = ekIcon('x', 12); x.title = t('移除');
     x.onclick = ()=>{ aiFiles.splice(i, 1); aiChipsRender(); };
     c.appendChild(b); c.appendChild(x);
     box.appendChild(c);
@@ -682,7 +682,7 @@ function aiDocChip(it, onRemove){
        it.note || ''].filter(Boolean).join(' · ');
   if(onRemove){
     const rm = document.createElement('button');
-    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.className = 'rm'; rm.type = 'button'; rm.innerHTML = ekIcon('x', 14); rm.title = t('移除');
     rm.onclick = onRemove;
     d.appendChild(rm);
   }
@@ -703,7 +703,7 @@ function aiAttachRender(){
       d.appendChild(im);
     }
     const rm = document.createElement('button');
-    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.className = 'rm'; rm.type = 'button'; rm.innerHTML = ekIcon('x', 14); rm.title = t('移除');
     rm.onclick = ()=>{ aiImgs.splice(i, 1); aiAttachRender(); };
     d.appendChild(rm);
     box.appendChild(d);

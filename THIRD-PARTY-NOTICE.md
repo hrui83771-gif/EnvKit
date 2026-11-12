@@ -246,3 +246,78 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## 真实数据可视化：auto-animate / diff2html / jsdiff / hotkeys-js
+
+这四个库只做「把真实发生的数据变化显示出来」：列表增删重排的 FLIP 过渡、配置导入前的逐行差异、Ctrl+K 快捷键绑定。它们不读写任何数据、不发起任何新请求，页面 CSP `default-src 'self'` 保持不变。
+
+| 资源 | 版本 | 许可 | 在本项目中的位置 | SHA256 |
+|---|---|---|---|---|
+| auto-animate（IIFE 包装版） | 0.9.0 | MIT | `web/vendor/auto-animate.iife.js` | `3c57ef27c7ea3dbb1914ceb2af18a1c40d58843953aa7a819fa9e13eab40815a` |
+| diff2html core bundle | 3.4.48 | MIT | `web/vendor/diff2html.min.js` | `c59a1ab80bc913ae5db094d0a4274b56bf9a94245f30819be071075ae298580b` |
+| diff2html 样式 | 3.4.48 | MIT | `web/vendor/diff2html.min.css` | `20c04ae15359a748afc1e7d29f9d5bb3076cae19341e83132dcd86a851c50578` |
+| jsdiff UMD bundle | 8.0.2 | BSD-3-Clause | `web/vendor/diff.min.js` | `2e3facdfe5f153e030fb8e93069d8a50912e70fd56c7b60712ee5d936ff22317` |
+| hotkeys-js UMD bundle | 3.13.15 | MIT | `web/vendor/hotkeys.min.js` | `09fc336a3195d89052e65a46565b0cdb47aa1969c3093e9d639b8c7c25d09d40` |
+
+> **与原样内嵌的区别**：auto-animate 上游 npm 只发 ESM（`index.min.js`），不能直接当普通 `<script>` 用。本项目把其末尾的 `export{...}` 换成 `window.*` 赋值、并整体包一层 IIFE，**逻辑字节未改动**，但该文件不是上游原样产物。其余四个均为上游 UMD/IIFE 发布产物，原样内嵌未修改。
+>
+> diff2html 选用的是 68 KB 的 core bundle（只把 unified diff 文本转成 HTML），**未**使用 1 MB 的 `diff2html-ui` bundle（内含 highlight.js 等，本项目已有 highlight.js）；差异文本由 jsdiff 在浏览器本地生成，不上传任何配置内容。
+
+### MIT License（auto-animate）
+
+Copyright 2022 FormKit Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### MIT License（diff2html）
+
+Copyright 2014-2016 Rodrigo Fernandes https://rtfpessoa.github.io/
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### BSD-3-Clause License（jsdiff）
+
+Copyright (c) 2009-2015, Kevin Decker <kpdecker@gmail.com>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+### MIT License（hotkeys-js）
+
+Copyright (c) 2015-present, Kenny Wong.
+Copyright (c) 2011-2013 Thomas Fuchs (https://github.com/madrobby/keymaster)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## 图标资源：Lucide（ISC）
+
+界面的功能性图标（放大 / 还原 / 关闭 / 折叠箭头 / 勾叉 / 搜索 / 命令面板等 26 个）取自 `lucide-static` 0.468.0 的 SVG 图元，统一 24×24 网格、2px 描边、round 端点。**只取图元，不引入任何运行时依赖**；图元表在 `web/src/js/05-icons.js` 的 `EK_ICONS`，由 `ekIcon()` 包一层 `<svg>` 输出。桌宠形象与个人中心的头像预设是二创内容，不在替换范围内。
+
+- **来源**：<https://github.com/lucide-icons/lucide>
+- **许可**：ISC License（全文见下）
+
+### ISC License（Lucide）
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA, OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+

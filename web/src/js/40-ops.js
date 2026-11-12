@@ -100,6 +100,10 @@ $('#cfg-file').onchange = async e=>{
   try{
     const text=await f.text();
     JSON.parse(text); // 先本地校验，避免把坏文件发给后端
+    // 先看真实差异再提交（76-cfgdiff.js）。差异库没加载或读不到当前配置时，
+    // 函数内部会如实跳过预览并返回 true，不会拿猜出来的内容充当旧配置。
+    const proceed = await ekCfgConfirmImport(text, f.name);
+    if(!proceed){ $('#h-cfg-io').textContent=t('已取消导入'); e.target.value=''; return; }
     const r=await fetch('/api/config/import',{method:'POST',body:text});
     if(!r.ok){
       // 400 时后端返回 {ok:false, problems:[...]}，把问题逐条亮出来

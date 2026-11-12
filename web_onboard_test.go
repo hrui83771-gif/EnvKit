@@ -65,6 +65,8 @@ func TestOnboardVendorChain(t *testing.T) {
 	vendors := []string{
 		"swiper-bundle.min.js", "swiper-bundle.min.css",
 		"anime.umd.min.js", "driver.js.iife.js", "driver.css",
+		"auto-animate.iife.js", "diff2html.min.js", "diff2html.min.css",
+		"diff.min.js", "hotkeys.min.js",
 	}
 	mainGo := readSrc(t, "main.go")
 	tpl := readSrc(t, "web/src/index.tpl.html")
@@ -84,7 +86,8 @@ func TestOnboardVendorChain(t *testing.T) {
 			t.Errorf("index.tpl.html 没引用：%s", name)
 		}
 	}
-	for _, v := range []string{"12.2.0", "4.5.0", "1.10.2"} {
+	for _, v := range []string{"12.2.0", "4.5.0", "1.10.2",
+		"0.9.0", "3.4.48", "8.0.2", "3.13.15", "0.468.0"} {
 		if !strings.Contains(notice, v) {
 			t.Errorf("THIRD-PARTY-NOTICE.md 缺版本 %s（许可声明要能对上产物）", v)
 		}

@@ -1982,5 +1982,21 @@
   "这些配置改完会自动保存，状态显示在这一节的下方。": "These settings are saved automatically; the save status appears at the bottom of this section.",
   "已经装好的组件会自动跳过，不会重复装。": "Components that are already installed are skipped, not reinstalled.",
   "装完点这里进程序配置，顶部四步导航也会跟着走。": "After installing, continue to program setup here; the four-step guide above follows along.",
-  "右侧导航能直接跳到任意一步，不必按顺序逐个走。": "The sidebar jumps straight to any step; you do not have to go through them in order."
+  "右侧导航能直接跳到任意一步，不必按顺序逐个走。": "The sidebar jumps straight to any step; you do not have to go through them in order.",
+  "已取消导入": "Import cancelled",
+  "页面": "Pages",
+  "所在页面：{0}": "In: {0}",
+  "章节": "Sections",
+  "导览": "Tour",
+  "跟着做一遍：{0} 步控件教学": "Walk through {0} control steps",
+  "搜索页面、按钮、章节…": "Search pages, buttons, sections…",
+  "没有匹配的控件": "No matching controls",
+  "共 {0} 项可跳转的控件": "{0} controls available",
+  "配置导入前 · 逐行差异": "Before importing · line-by-line diff",
+  "确认导入": "Confirm import",
+  "当前配置 → 待导入文件：{0}": "Current config → {0}",
+  "按键排序后比较，只显示真实变更的字段": "Keys sorted; only real changes shown",
+  "两份配置内容相同，没有需要变更的字段": "Both configs are identical; nothing would change",
+  "共 {0} 处差异": "{0} changed lines",
+  "读取当前配置失败，已跳过差异预览": "Could not read current config; diff preview skipped"
 }

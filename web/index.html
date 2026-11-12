@@ -2344,6 +2344,45 @@
     .ob-sheet-frame > .ob-sheet-deco::after{display:none}
     .ob-ilock{height:96px}
   }
+
+  /* ---------- 统一图标 / 命令面板 / 配置差异（v3.8.1） ----------
+     Lucide 只取 SVG 图元，不引运行时；命令面板与差异弹窗复用既有 .modal/.mbox。
+     暗色下前景色一律用 --brand2（--brand 在暗色里太深，当字看不见）。 */
+  .ek-ic{display:inline-block;vertical-align:-2px;flex:none}
+  .pcaret .ek-ic,.caret .ek-ic,.prov-caret .ek-ic{vertical-align:-2px}
+  .tbtn > .ek-ic{vertical-align:-3px}
+  .ai-chip i > .ek-ic,button.rm > .ek-ic{vertical-align:-2px}
+
+  .ekcp-box{width:min(660px,92vw);max-height:78vh}
+  .ekcp-search{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line);color:var(--brand2)}
+  .ekcp-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font-size:14px;font-family:inherit}
+  .ekcp-search kbd{font:11px/1.4 ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:5px;padding:2px 6px;color:var(--muted);background:var(--soft)}
+  .ekcp-list{flex:1;overflow:auto;padding:6px 8px;min-height:0}
+  .ekcp-grp{padding:9px 10px 5px;font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .ekcp-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .ekcp-row.on,.ekcp-row:hover{background:var(--brand-weak)}
+  .ekcp-ic{color:var(--brand2);display:flex;flex:none}
+  .ekcp-tx{display:flex;flex-direction:column;min-width:0;gap:2px}
+  .ekcp-tx b{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ekcp-tx small{font-size:11px;color:var(--muted)}
+  .ekcp-go{margin-left:auto;color:var(--muted);display:flex;opacity:.6}
+  .ekcp-empty{padding:26px;text-align:center;color:var(--muted)}
+  .ekcp-foot{align-items:center;justify-content:space-between}
+  .ekcp-keys{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+
+  .ekdf-box{width:min(980px,94vw);max-height:86vh}
+  .ekdf-sub{padding:9px 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .ekdf-body{flex:1;overflow:auto;min-height:0;padding:8px 12px;background:var(--card)}
+  .ekdf-same{padding:26px;text-align:center;color:var(--muted)}
+  /* diff2html 自带浅色写死值；这里把容器/行号/增删底色收进本项目明暗两套变量，
+     不引入界面语义色之外的绿。 */
+  .ekdf-body .d2h-wrapper{font-size:12px}
+  .ekdf-body .d2h-file-header{background:var(--soft);border-color:var(--line);color:var(--text)}
+  .ekdf-body .d2h-code-line-ctn{background:transparent;color:var(--text)}
+  .ekdf-body .d2h-code-linenumber,.ekdf-body .d2h-code-side-linenumber{background:var(--soft);border-color:var(--line);color:var(--muted)}
+  .ekdf-body .d2h-ins{background:var(--okbg)}
+  .ekdf-body .d2h-del{background:var(--errbg)}
+  @media (max-width:760px){ .ekdf-box{width:96vw} .ekcp-box{width:96vw} }
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -2359,6 +2398,12 @@
 <script src="/vendor/swiper-bundle.min.js"></script>
 <script src="/vendor/anime.umd.min.js"></script>
 <script src="/vendor/driver.js.iife.js"></script>
+<!-- 真实数据可视化：列表过渡 / 配置差异 / 快捷键。同域离线产物，不走 CDN。 -->
+<link rel="stylesheet" href="/vendor/diff2html.min.css" />
+<script src="/vendor/auto-animate.iife.js"></script>
+<script src="/vendor/diff.min.js"></script>
+<script src="/vendor/diff2html.min.js"></script>
+<script src="/vendor/hotkeys.min.js"></script>
 </head>
 <body>
 <header>
@@ -2381,7 +2426,7 @@
         <button class="profile-btn" id="btn-profile" title="个人中心">
           <span class="pavatar" id="profile-avatar">🐟</span>
           <span class="pname" id="profile-name">我</span>
-          <span class="pcaret">▾</span>
+          <span class="pcaret" data-ek-icon="chevron-down" data-ek-size="14"></span>
         </button>
         <div class="profile-pop" id="profile-pop" hidden>
           <div class="pp-title">个人中心</div>
@@ -2748,7 +2793,7 @@
         <div class="row">
           <button id="btn-chain-check">检测</button>
           <details class="split" id="start-menu">
-            <summary>启动<span class="caret">▾</span></summary>
+            <summary>启动<span class="caret" data-ek-icon="chevron-down" data-ek-size="14"></span></summary>
             <div class="splitmenu">
               <button id="btn-start-chain">启动区块链节点</button>
               <span class="hint" id="h-chain"></span>
@@ -2883,7 +2928,7 @@
                原生 select 保留在 DOM 里（隐藏）作为状态存储——所有既有 .value 读写点不用改。 -->
           <div class="prov-dd" id="ai_provider_dd">
             <button type="button" class="prov-btn" id="ai_provider_btn">
-              <span class="prov-ic" id="ai_provider_cur_ic"></span><span id="ai_provider_cur_name"></span><span class="prov-caret">▾</span>
+              <span class="prov-ic" id="ai_provider_cur_ic"></span><span id="ai_provider_cur_name"></span><span class="prov-caret" data-ek-icon="chevron-down" data-ek-size="14"></span>
             </button>
             <div class="prov-menu" id="ai_provider_menu" style="display:none"></div>
           </div>
@@ -3750,9 +3795,9 @@
     <span style="flex:1"></span>
     <button class="ai-stop" id="ai-stop" style="display:none">停止生成</button>
     <button class="tbtn" id="ai-trace-open" title="轨迹 / 审计 / 用量">轨迹</button>
-    <button class="tbtn" id="ai-expand" title="放大">⤢</button>
+    <button class="tbtn" id="ai-expand" title="放大" data-ek-icon="maximize-2" data-ek-size="16"></button>
     <button class="tbtn" id="ai-clear" title="清空整段对话（10 秒内可撤销）">清空</button>
-    <button class="tbtn" id="ai-close">×</button>
+    <button class="tbtn" id="ai-close" data-ek-icon="x" data-ek-size="16"></button>
   </div>
   <div class="ai-body">
     <div class="ai-main">
@@ -4507,6 +4552,96 @@ window.EKAvatarWait = function(host, text){
   };
 };
 
+/* ---------- 统一图标（Lucide 0.468.0 / ISC，只取 SVG path，不引运行时） ----------
+   图元原样取自 lucide-static/icons/*.svg：24×24 网格、2px 描边、round 端点。
+   桌宠形象与头像预设是二创内容，不在此替换。许可全文见 THIRD-PARTY-NOTICE.md。
+   ekIcon(name, size) 返回可直接 innerHTML 的 <svg> 字符串；未知名字回退成圆点，
+   绝不把外部输入拼进 innerHTML —— 名字只用本表里的常量。 */
+const EK_ICONS = {
+  "activity": "<path d=\"M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2\" />",
+  "arrow-right": "<path d=\"M5 12h14\" /><path d=\"m12 5 7 7-7 7\" />",
+  "check": "<path d=\"M20 6 9 17l-5-5\" />",
+  "chevron-down": "<path d=\"m6 9 6 6 6-6\" />",
+  "chevron-right": "<path d=\"m9 18 6-6-6-6\" />",
+  "clock": "<circle cx=\"12\" cy=\"12\" r=\"10\" /><polyline points=\"12 6 12 12 16 14\" />",
+  "command": "<path d=\"M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3\" />",
+  "corner-down-left": "<polyline points=\"9 10 4 15 9 20\" /><path d=\"M20 4v7a4 4 0 0 1-4 4H4\" />",
+  "database": "<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\" /><path d=\"M3 5V19A9 3 0 0 0 21 19V5\" /><path d=\"M3 12A9 3 0 0 0 21 12\" />",
+  "download": "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\" /><polyline points=\"7 10 12 15 17 10\" /><line x1=\"12\" x2=\"12\" y1=\"15\" y2=\"3\" />",
+  "file-diff": "<path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\" /><path d=\"M9 10h6\" /><path d=\"M12 13V7\" /><path d=\"M9 17h6\" />",
+  "filter": "<polygon points=\"22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3\" />",
+  "git-compare": "<circle cx=\"18\" cy=\"18\" r=\"3\" /><circle cx=\"6\" cy=\"6\" r=\"3\" /><path d=\"M13 6h3a2 2 0 0 1 2 2v7\" /><path d=\"M11 18H8a2 2 0 0 1-2-2V9\" />",
+  "info": "<circle cx=\"12\" cy=\"12\" r=\"10\" /><path d=\"M12 16v-4\" /><path d=\"M12 8h.01\" />",
+  "keyboard": "<path d=\"M10 8h.01\" /><path d=\"M12 12h.01\" /><path d=\"M14 8h.01\" /><path d=\"M16 12h.01\" /><path d=\"M18 8h.01\" /><path d=\"M6 8h.01\" /><path d=\"M7 16h10\" /><path d=\"M8 12h.01\" /><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\" />",
+  "list": "<path d=\"M3 12h.01\" /><path d=\"M3 18h.01\" /><path d=\"M3 6h.01\" /><path d=\"M8 12h13\" /><path d=\"M8 18h13\" /><path d=\"M8 6h13\" />",
+  "maximize-2": "<polyline points=\"15 3 21 3 21 9\" /><polyline points=\"9 21 3 21 3 15\" /><line x1=\"21\" x2=\"14\" y1=\"3\" y2=\"10\" /><line x1=\"3\" x2=\"10\" y1=\"21\" y2=\"14\" />",
+  "minimize-2": "<polyline points=\"4 14 10 14 10 20\" /><polyline points=\"20 10 14 10 14 4\" /><line x1=\"14\" x2=\"21\" y1=\"10\" y2=\"3\" /><line x1=\"3\" x2=\"10\" y1=\"21\" y2=\"14\" />",
+  "plus": "<path d=\"M5 12h14\" /><path d=\"M12 5v14\" />",
+  "refresh-cw": "<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\" /><path d=\"M21 3v5h-5\" /><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\" /><path d=\"M8 16H3v5\" />",
+  "search": "<circle cx=\"11\" cy=\"11\" r=\"8\" /><path d=\"m21 21-4.3-4.3\" />",
+  "settings": "<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\" /><circle cx=\"12\" cy=\"12\" r=\"3\" />",
+  "shield-check": "<path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\" /><path d=\"m9 12 2 2 4-4\" />",
+  "terminal": "<polyline points=\"4 17 10 11 4 5\" /><line x1=\"12\" x2=\"20\" y1=\"19\" y2=\"19\" />",
+  "upload": "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\" /><polyline points=\"17 8 12 3 7 8\" /><line x1=\"12\" x2=\"12\" y1=\"3\" y2=\"15\" />",
+  "x": "<path d=\"M18 6 6 18\" /><path d=\"m6 6 12 12\" />",
+};
+function ekIcon(name, size){
+  var d = EK_ICONS[name] || EK_ICONS['info'];
+  var s = Number(size) > 0 ? Number(size) : 16;
+  return '<svg class="ek-ic" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" ' +
+    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true" focusable="false">' + d + '</svg>';
+}
+/* 把带 data-ek-icon 的占位一次性换成 SVG；重复调用安全（换完就把属性删掉）。 */
+function ekIconFill(root){
+  var scope = root || document;
+  scope.querySelectorAll('[data-ek-icon]').forEach(function(el){
+    var n = el.getAttribute('data-ek-icon');
+    el.innerHTML = ekIcon(n, el.getAttribute('data-ek-size'));
+    el.removeAttribute('data-ek-icon');
+  });
+}
+/* ---------- 列表真实增删重排的 FLIP 过渡（auto-animate 0.9.0 / MIT） ----------
+   只挂到「数据真的会增删」的容器：AI 对话消息逐条追加、配置备份列表重排、
+   检测/安装结果卡片刷新。装饰层、静态列表、桌宠一律不挂 —— 挂了也不动，
+   等于给界面加一层无意义的假动画。
+
+   两个必须显式处理的前提：
+   1) 上游只发 ESM，页面里那份是本项目包过 IIFE 的版本，全局名 window.autoAnimate；
+      没加载成功就整段跳过，页面照常用（不能因为少个库就报错白屏）。
+   2) 「减少动态效果」开启时不挂。库自己也会尊重，但这里再加一道，
+      和引导页描线动画用同一口径。 */
+(function(){
+  var IDS = ['ai-msgs', 'cfg_backups', 'detect-cards', 'install-cards'];
+
+  function reduced(){
+    try{ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    catch(e){ return false; }
+  }
+
+  function init(){
+    /* 先把模板里的 data-ek-icon 占位换成 SVG（05-icons.js）。
+       只换一次：ekIconFill 换完就删属性，重复调用不会重复插节点。 */
+    if(typeof ekIconFill === 'function') ekIconFill(document);
+    if(!window.autoAnimate || reduced()) return 0;
+    var n = 0;
+    IDS.forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el || el.dataset.aa === '1') return;
+      try{
+        window.autoAnimate(el, {duration:220, easing:'ease-in-out'});
+        el.dataset.aa = '1';
+        n++;
+      }catch(e){ /* 单个容器失败不影响其余 */ }
+    });
+    return n;
+  }
+
+  window.ekMotionInit = init;
+  window.ekMotionTargets = IDS.slice();
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
 /* ---------- 中英双语（只翻界面文案；后端日志与技术输出保持原文） ----------
    设计：字典直接以中文原文为 key（源文案即 key），缺项自动回退中文，不会出现空白；
    译文由 DOM 文本节点/属性替换完成，并用 MutationObserver 覆盖动态渲染的内容，
@@ -4766,6 +4901,7 @@ const I18N_EN = {
   "两个子进程 · 按日轮转的日志文件 · 进程树登记": "two child processes · daily log files · process tree registration",
   "两个监听端口 + 可托管的进程树": "two listening ports + a managed process tree",
   "两个问句分别演示「只读回复」与「写操作确认」": "The two questions demo a read-only reply and a write-action confirmation",
+  "两份配置内容相同，没有需要变更的字段": "Both configs are identical; nothing would change",
   "严重": "Critical",
   "个人中心": "Profile",
   "个入口": " entry",
@@ -4897,11 +5033,13 @@ const I18N_EN = {
   "全部空闲": "All free",
   "全链路体检": "Full health check",
   "全链路体检从这里起跑，结论就留在这行，不另开报告页。": "The full health check starts here; its verdict stays on this row instead of opening a report page.",
+  "共 {0} 处差异": "{0} changed lines",
   "共 {0} 条": "{0} total",
   "共 {0} 条 · {1} 条每轮注入": "{0} total · {1} injected every turn",
   "共 {0} 条 · 读取于 {1}": "{0} entries · read at {1}",
   "共 {0} 次 · 最近 {1}": "{0} time(s) total · latest {1}",
   "共 {0} 行 · 第 {1}/{2} 页": "{0} rows · page {1}/{2}",
+  "共 {0} 项可跳转的控件": "{0} controls available",
   "关": "Off",
   "关于 / 免责声明": "About / Disclaimer",
   "关于 EnvKit": "About EnvKit",
@@ -5255,6 +5393,7 @@ const I18N_EN = {
   "导出配置": "Export config",
   "导出配置快照": "export config snapshot",
   "导出（脱敏）": "Export (sanitized)",
+  "导览": "Tour",
   "导览进度": "Tour progress",
   "将「{0}」生效到库 {1}？执行前会自动备份，高危语句需二次确认。": "Apply \"{0}\" to database {1}? A backup is taken first; risky statements need a second confirmation.",
   "将先停止再启动：停止后端口需要约 3 秒释放，期间服务短暂不可用。": "It stops first, then starts: the port needs about 3 seconds to free up, so the service is briefly unavailable.",
@@ -5307,6 +5446,7 @@ const I18N_EN = {
   "已加白名单": "Whitelisted",
   "已发起检查，几秒后刷新状态": "Check started; status refreshes in a few seconds",
   "已发送到 {0}": "Sent to {0}",
+  "已取消导入": "Import cancelled",
   "已取消，文件未生效": "Cancelled — the file was not applied",
   "已否决": "Dismissed",
   "已启动": "Started",
@@ -5434,6 +5574,7 @@ const I18N_EN = {
   "当前待处理": "Needs attention",
   "当前版本": "Current version",
   "当前环境有": "Current environment has",
+  "当前配置 → 待导入文件：{0}": "Current config → {0}",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
   "待你确认 · 不会自己动手": "waiting for you · it will not act alone",
@@ -5483,6 +5624,7 @@ const I18N_EN = {
   "我瞅瞅天…": "Let me check the sky…",
   "我遇到了环境问题，以下是最近的日志（错误 {0} 条、警告 {1} 条）。请先判断里面是否真的有错误，再给解决步骤；如果只有警告，请直接说明要不要处理：\n": "I hit an environment problem. Below are recent log lines ({0} errors, {1} warnings). First decide whether any of them is a real error, then give fix steps; if they are warnings only, just say whether anything needs doing:\n",
   "或 JSON 数组；重复内容自动更新而非新增": "or a JSON array; duplicate content updates in place instead of adding a new entry",
+  "所在页面：{0}": "In: {0}",
   "手动复检": "Re-run the check",
   "手动连链端主机": "SSH into the chain host",
   "手机上已关闭：{0}": "Disabled for the phone: {0}",
@@ -5540,6 +5682,7 @@ const I18N_EN = {
   "指标看板": "Metrics boards",
   "按已配置的目录直接跑": "Uses your configured directories",
   "按配置值发送": "Sends the configured value",
+  "按键排序后比较，只显示真实变更的字段": "Keys sorted; only real changes shown",
   "按顺序重新跑一遍检测，日志会跟着更新；不会启动服务、不会建库、不会自动修复。": "Re-running every check in order; logs will update. Nothing is started, created or repaired automatically.",
   "换一个码": "New code",
   "换个项目后自动失效": "goes stale after switching project",
@@ -5554,6 +5697,7 @@ const I18N_EN = {
   "握手成功 · 12ms": "handshake ok · 12ms",
   "握手成功，并能读到表结构": "Handshake succeeds and the schema can be read",
   "搜索目标或动作": "Search target or action",
+  "搜索页面、按钮、章节…": "Search pages, buttons, sections…",
   "搜索项目文件": "Search project files",
   "搞定": "done",
   "摘要后保留量": "Keep after summary",
@@ -5869,6 +6013,7 @@ const I18N_EN = {
   "沙箱内测得：无人值守场景下恒为 0，仅作对照": "Measured in the sandbox: always 0 in unattended runs, for reference only",
   "没拿到天气数据": "No weather data came back",
   "没接到文件呢": "Hmm, no file received",
+  "没有匹配的控件": "No matching controls",
   "没有可导出的数据": "Nothing to export",
   "没有可打开的目录": "No folder to open",
   "没有命中": "No matches",
@@ -6007,6 +6152,7 @@ const I18N_EN = {
   "确认 WeBASE-Front 已启动": "Make sure WeBASE-Front is running",
   "确认卡在这里：你点了才执行。真实操作仍走权限闸门。": "The confirm card lives here: nothing runs until you click. Real actions still pass the permission gate.",
   "确认后将真实执行该操作。": "It will really run after you confirm.",
+  "确认导入": "Confirm import",
   "确认手机连的是同一个 WiFi（不是移动数据、不是访客网络）；路由器的「AP 隔离/客户端隔离」要关掉": "Make sure the phone is on the same Wi-Fi (not cellular or a guest network); turn off AP/client isolation on the router",
   "确认执行": "Run it",
   "确认链端已启动；本机虚拟机场景请确认端口转发与 chain_host 配置": "Make sure the chain is running; for a local VM, check port forwarding and chain_host",
@@ -6033,6 +6179,7 @@ const I18N_EN = {
   "立刻放行一次恢复探针。只有确认底层环境已经恢复时才这么做——否则等于让同一个起不来的服务再被重启一轮。": "Lets one recovery probe through immediately. Only do this once the underlying environment is really back — otherwise the same service that cannot start gets restarted all over again.",
   "立即检查": "Check now",
   "立即检测": "Check now",
+  "章节": "Sections",
   "端口": "Port",
   "端口 8888 被占用": "Port 8888 is in use",
   "端口 :8888": "Port :8888",
@@ -6219,6 +6366,7 @@ const I18N_EN = {
   "读取失败": "Failed to load",
   "读取失败：{0}": "Failed to read: {0}",
   "读取审计…": "Loading audit…",
+  "读取当前配置失败，已跳过差异预览": "Could not read current config; diff preview skipped",
   "读取文件失败：": "Failed to read file: ",
   "读取日志": "read logs",
   "读取环境状态": "read environment status",
@@ -6242,6 +6390,7 @@ const I18N_EN = {
   "跑环境检测": "run env checks",
   "跟上你的鼠标": "I'll follow your cursor",
   "跟着做一遍": "Follow along step by step",
+  "跟着做一遍：{0} 步控件教学": "Walk through {0} control steps",
   "跟随鼠标": "Follow cursor",
   "跳过": "Skipped",
   "车头 = 当前查看的判据 · 读数为结构示意": "The train marks the criterion you are viewing · readings are illustrative",
@@ -6359,6 +6508,7 @@ const I18N_EN = {
   "配置与链端都已就绪": "config and chain both ready",
   "配置修改后会自动保存，并自动调用服务商的 /models 接口拉取在售模型回填（拉取成功即代表 Key 与网址正确；失败时仍可用预置列表或自定义模型名）。Key 经 DPAPI 加密存储，仅本机可解密。": "Changes are saved automatically, then the provider's /models endpoint is called to fetch available models (a successful fetch also proves the key and URL are correct; on failure you can still use the built-in list or type a model name). The API key is DPAPI-encrypted and only decryptable on this machine.",
   "配置备份": "Settings backups",
+  "配置导入前 · 逐行差异": "Before importing · line-by-line diff",
   "配置已保存": "Config saved",
   "配置已保存。下面这些状态还是按旧配置算的，重新检测一次才准。": "Settings saved. These states still reflect the previous settings — run a check to confirm.",
   "配置已恢复，正在重新加载…": "Settings restored — reloading…",
@@ -6427,6 +6577,7 @@ const I18N_EN = {
   "需先填 WeBASE 目录与启动脚本": "Fill in the WeBASE directory and start script first",
   "需先填链端目录与启动脚本": "Fill in the chain directory and start script first",
   "需要你确认": "Your confirmation is needed",
+  "页面": "Pages",
   "页面入口": "Page entry",
   "顶栏那条导航不是装饰：每一步都有输入、有结果、有下一步。": "The top navigation is not decoration: every step has input, output and a next step.",
   "顶栏那条导航不是装饰：走到哪一步、上一步给了什么，都写在界面上。": "The top nav is not decoration: where you are and what the last step produced are both on screen.",
@@ -7489,6 +7640,10 @@ $('#cfg-file').onchange = async e=>{
   try{
     const text=await f.text();
     JSON.parse(text); // 先本地校验，避免把坏文件发给后端
+    // 先看真实差异再提交（76-cfgdiff.js）。差异库没加载或读不到当前配置时，
+    // 函数内部会如实跳过预览并返回 true，不会拿猜出来的内容充当旧配置。
+    const proceed = await ekCfgConfirmImport(text, f.name);
+    if(!proceed){ $('#h-cfg-io').textContent=t('已取消导入'); e.target.value=''; return; }
     const r=await fetch('/api/config/import',{method:'POST',body:text});
     if(!r.ok){
       // 400 时后端返回 {ok:false, problems:[...]}，把问题逐条亮出来
@@ -10525,7 +10680,7 @@ function aiSide(tab){
   if(!dr.classList.contains('open')) aiOpen();
   if(!dr.classList.contains('big')){
     aiBigOn = true; dr.classList.add('big');
-    const b = $ai('ai-expand'); if(b){ b.textContent = '⤡'; b.title = t('还原'); }
+    const b = $ai('ai-expand'); if(b){ b.innerHTML = ekIcon('minimize-2', 16); b.title = t('还原'); }
   }
   aiSideTab = tab || 'trace';
   document.querySelectorAll('#ai-tabs button').forEach(x=>x.classList.toggle('on', x.dataset.tab === aiSideTab));
@@ -10540,7 +10695,7 @@ function aiBig(on){
   aiBigOn = !!on;
   dr.classList.toggle('big', aiBigOn);
   const b = $ai('ai-expand');
-  if(b){ b.textContent = aiBigOn ? '⤡' : '⤢'; b.title = t(aiBigOn ? '还原' : '放大'); }
+  if(b){ b.innerHTML = ekIcon(aiBigOn ? 'minimize-2' : 'maximize-2', 16); b.title = t(aiBigOn ? '还原' : '放大'); }
   if(aiBigOn) aiSide(aiSideTab); else aiPickClose();
 }
 
@@ -11839,7 +11994,7 @@ function aiChipsRender(){
   aiFiles.forEach((f, i)=>{
     const c = document.createElement('span'); c.className = 'ai-chip';
     const b = document.createElement('b'); b.textContent = f.name; b.title = f.path;
-    const x = document.createElement('i'); x.textContent = '×'; x.title = t('移除');
+    const x = document.createElement('i'); x.innerHTML = ekIcon('x', 12); x.title = t('移除');
     x.onclick = ()=>{ aiFiles.splice(i, 1); aiChipsRender(); };
     c.appendChild(b); c.appendChild(x);
     box.appendChild(c);
@@ -11977,7 +12132,7 @@ function aiDocChip(it, onRemove){
        it.note || ''].filter(Boolean).join(' · ');
   if(onRemove){
     const rm = document.createElement('button');
-    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.className = 'rm'; rm.type = 'button'; rm.innerHTML = ekIcon('x', 14); rm.title = t('移除');
     rm.onclick = onRemove;
     d.appendChild(rm);
   }
@@ -11998,7 +12153,7 @@ function aiAttachRender(){
       d.appendChild(im);
     }
     const rm = document.createElement('button');
-    rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = t('移除');
+    rm.className = 'rm'; rm.type = 'button'; rm.innerHTML = ekIcon('x', 14); rm.title = t('移除');
     rm.onclick = ()=>{ aiImgs.splice(i, 1); aiAttachRender(); };
     d.appendChild(rm);
     box.appendChild(d);
@@ -14625,6 +14780,296 @@ document.addEventListener('click', async e=>{
 });
 
 
+/* ---------- Ctrl+K 命令面板：只索引真实存在的控件 ----------
+   索引不是手写清单，是打开面板时现扫 DOM：主导航、带 id 的按钮、各面板的
+   章节标题、以及 EKTour 的 11 步导览。因此条目数量会随界面真实变化，
+   「搜到却点不到」在结构上不可能出现。
+
+   执行动作只有两种：goto(panel) / el.click()。点的是页面上本来就在的控件，
+   破坏性操作照样弹 postConfirm、照样吃服务端 428 —— 命令面板不是新的权限入口，
+   也没有任何「按名字执行任意命令」的能力。AI 工具清单刻意不进索引。 */
+(function(){
+  var box = null, input = null, list = null, countEl = null;
+  var all = [], filtered = [], sel = 0, keySource = 'none';
+
+  function ic(n, s){ return typeof ekIcon === 'function' ? ekIcon(n, s) : ''; }
+  function txt(el){ return (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60); }
+  function panelOf(el){
+    var p = el.closest ? el.closest('.panel') : null;
+    return p && /^panel-/.test(p.id) ? p.id.slice(6) : '';
+  }
+  function excluded(el){
+    if(el.closest('#onboard') || el.closest('#ek-cmd') || el.closest('#ek-cfgdiff')) return true;
+    if(el.hasAttribute && el.hasAttribute('data-food')) return true;   // 桌宠投喂不是功能控件
+    return false;
+  }
+
+  function collect(){
+    var out = [];
+    document.querySelectorAll('.nav[data-panel]').forEach(function(el){
+      var s = txt(el); if(!s) return;
+      var pn = el.getAttribute('data-panel');
+      out.push({group:'page', glabel:t('页面'), text:s, hint:pn,
+        sel:'.nav[data-panel="' + pn + '"]',
+        icon:'chevron-right', act:function(){ goto(pn); }});
+    });
+    document.querySelectorAll('button[id]').forEach(function(el){
+      if(excluded(el) || el.disabled) return;
+      var s = txt(el);
+      if(!s || !/[\u4e00-\u9fa5A-Za-z0-9]/.test(s)) return;
+      var pn = panelOf(el);
+      out.push({group:'act', glabel:t('操作'), text:s,
+        hint:pn ? t('所在页面：{0}', pn) : el.id,
+        sel:'#' + el.id,
+        icon:'corner-down-left', act:function(){ if(pn) goto(pn); el.click(); }});
+    });
+    document.querySelectorAll('.panel h2, .panel h3').forEach(function(el){
+      var s = txt(el), pn = panelOf(el);
+      if(!s || !pn || el.closest('#onboard')) return;
+      out.push({group:'sec', glabel:t('章节'), text:s, hint:t('所在页面：{0}', pn),
+        icon:'list', act:function(){ goto(pn); el.scrollIntoView({block:'center', behavior:'auto'}); }});
+    });
+    if(window.EKTour && Array.isArray(window.EKTour.STEPS)){
+      out.push({group:'tour', glabel:t('导览'),
+        text:t('跟着做一遍：{0} 步控件教学', window.EKTour.STEPS.length),
+        hint:'EKTour', icon:'command',
+        act:function(){ if(window.EKTour.start) window.EKTour.start(); }});
+    }
+    return out;
+  }
+
+  function build(){
+    box = document.createElement('div');
+    box.className = 'modal';
+    box.id = 'ek-cmd';
+    box.innerHTML =
+      '<div class="mbox ekcp-box">' +
+        '<div class="ekcp-search">' + ic('search', 18) +
+          '<input id="ekcp-q" type="text" autocomplete="off" spellcheck="false" placeholder="' +
+            esc(t('搜索页面、按钮、章节…')) + '" />' +
+          '<kbd>Ctrl K</kbd>' +
+        '</div>' +
+        '<div class="ekcp-list" id="ekcp-list"></div>' +
+        '<div class="mfoot ekcp-foot">' +
+          '<span class="hint" id="ekcp-count"></span>' +
+          '<span class="ekcp-keys">' + ic('corner-down-left', 14) + esc(t('打开')) +
+            ' · ↑↓ ' + esc(t('选择')) + ' · Esc ' + esc(t('关闭')) + '</span>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(box);
+    input = document.getElementById('ekcp-q');
+    list = document.getElementById('ekcp-list');
+    countEl = document.getElementById('ekcp-count');
+
+    input.addEventListener('input', function(){ sel = 0; render(); });
+    input.addEventListener('keydown', function(ev){
+      if(ev.key === 'ArrowDown'){ ev.preventDefault(); sel = Math.min(sel + 1, filtered.length - 1); render(); }
+      else if(ev.key === 'ArrowUp'){ ev.preventDefault(); sel = Math.max(sel - 1, 0); render(); }
+      else if(ev.key === 'Enter'){ ev.preventDefault(); runIndex(sel); }
+    });
+    list.addEventListener('click', function(ev){
+      var row = ev.target.closest && ev.target.closest('[data-i]');
+      if(row) runIndex(Number(row.getAttribute('data-i')));
+    });
+    box.addEventListener('click', function(ev){ if(ev.target === box) close(); });
+  }
+
+  function render(){
+    var q = (input.value || '').trim().toLowerCase();
+    filtered = all.filter(function(it){
+      if(!q) return true;
+      return (it.text + ' ' + it.hint + ' ' + it.glabel).toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 60);
+    if(sel >= filtered.length) sel = Math.max(0, filtered.length - 1);
+    var html = '', lastGroup = '';
+    filtered.forEach(function(it, i){
+      if(it.group !== lastGroup){
+        html += '<div class="ekcp-grp">' + esc(it.glabel) + '</div>';
+        lastGroup = it.group;
+      }
+      html += '<div class="ekcp-row' + (i === sel ? ' on' : '') + '" data-i="' + i + '">' +
+        '<span class="ekcp-ic">' + ic(it.icon, 16) + '</span>' +
+        '<span class="ekcp-tx"><b>' + esc(it.text) + '</b><small>' + esc(it.hint) + '</small></span>' +
+        '<span class="ekcp-go">' + ic('arrow-right', 14) + '</span></div>';
+    });
+    if(!filtered.length) html = '<div class="ekcp-empty">' + esc(t('没有匹配的控件')) + '</div>';
+    list.innerHTML = html;
+    countEl.textContent = t('共 {0} 项可跳转的控件', all.length);
+    var on = list.querySelector('.ekcp-row.on');
+    if(on && on.scrollIntoView) on.scrollIntoView({block:'nearest'});
+  }
+
+  function open(){
+    if(!box) build();
+    all = collect();
+    filtered = all.slice();
+    sel = 0;
+    input.value = '';
+    render();
+    box.classList.add('show');
+    setTimeout(function(){ try{ input.focus(); }catch(e){} }, 0);
+  }
+  function close(){ if(box) box.classList.remove('show'); }
+  function toggle(){ if(box && box.classList.contains('show')) close(); else open(); }
+
+  function runIndex(i){
+    var it = filtered[i];
+    if(!it) return;
+    close();
+    // 先收面板再执行：否则目标控件可能被自己的遮罩挡住（真实点不到）
+    setTimeout(function(){ try{ it.act(); }catch(e){} }, 0);
+  }
+
+  function bindKeys(){
+    if(!window.hotkeys) return false;
+    // hotkeys-js 默认在输入框里不触发任何键；这里只放行带 Ctrl/Cmd 的组合键，
+    // 保证在搜索框里按 Ctrl+K 也能重新聚焦，同时不抢普通输入。
+    window.hotkeys.filter = function(ev){
+      var el = ev.target || ev.srcElement, tag = el && el.tagName;
+      if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable))
+        return !!(ev.ctrlKey || ev.metaKey);
+      return true;
+    };
+    window.hotkeys('ctrl+k, command+k', function(ev){
+      ev.preventDefault(); toggle(); return false;
+    });
+    keySource = 'hotkeys';
+    return true;
+  }
+
+  if(!bindKeys()){
+    // 库没加载时保留最基本的可用性；CDP 会单独断言全局 hotkeys 必须存在，
+    // 所以这条降级不会把「vendor 没嵌进 exe」掩盖过去。
+    keySource = 'fallback';
+    document.addEventListener('keydown', function(ev){
+      if((ev.ctrlKey || ev.metaKey) && String(ev.key).toLowerCase() === 'k'){
+        ev.preventDefault(); toggle();
+      }
+    });
+  }
+
+  window.EKCmd = {
+    open: open, close: close, toggle: toggle, runIndex: runIndex,
+    items: function(){ return all.slice(); },
+    shown: function(){ return filtered.map(function(it){ return {text:it.text, group:it.group, hint:it.hint}; }); },
+    collect: collect,
+    state: function(){ return {
+      open: !!(box && box.classList.contains('show')),
+      total: all.length, shown: filtered.length, selected: sel,
+      query: input ? input.value : '', keySource: keySource
+    }; }
+  };
+})();
+/* ---------- 配置导入前：把「到底改了哪几行」摆出来 ----------
+   数据来源只有两处，都在浏览器本地、都是真的：
+     旧 = GET /api/config/export 拿到的当前 config.json 原文；
+     新 = 用户刚选中、已通过 JSON.parse 的导入文件原文。
+   两边先递归按键排序再比较，这样缩进和键顺序不会制造假差异 ——
+   「把对判成错」比不显示差异更糟。
+
+   拿不到旧值就如实跳过预览、走原来的导入流程，绝不拿 cfg 运行时对象
+   或任何猜出来的内容凑一份"旧配置"。后端不新增任何返回配置全文的端点。
+   diff2html 只吃 unified patch 文本，输出进 innerHTML 前由上游模板转义；
+   CDP 门禁另外用带 <script> 的配置值复验一次，确保没有活的元素被造出来。 */
+function ekCfgSort(v){
+  if(Array.isArray(v)) return v.map(ekCfgSort);
+  if(v && typeof v === 'object'){
+    var o = {};
+    Object.keys(v).sort().forEach(function(k){ o[k] = ekCfgSort(v[k]); });
+    return o;
+  }
+  return v;
+}
+function ekCfgNorm(text){ return JSON.stringify(ekCfgSort(JSON.parse(text)), null, 2); }
+
+function ekCfgDiffHTML(oldText, newText){
+  var a = ekCfgNorm(oldText), b = ekCfgNorm(newText);
+  if(a === b) return {same:true, changed:0, patch:'', html:''};
+  var patch = window.Diff.createTwoFilesPatch('config.json', 'config.json', a, b, '', '', {context:3});
+  // 变更行数从 patch 本身数，不数渲染后的 class —— 客观事实优先于措辞
+  var changed = patch.split('\n').filter(function(l){
+    return /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l);
+  }).length;
+  var html = window.Diff2Html.html(patch, {
+    outputFormat:'side-by-side', drawFileList:false, matching:'lines'
+  });
+  return {same:false, changed:changed, patch:patch, html:html};
+}
+window.ekCfgDiffHTML = ekCfgDiffHTML;
+
+var ekdfBox = null;
+function ekdfEnsureBox(){
+  if(ekdfBox) return ekdfBox;
+  ekdfBox = document.createElement('div');
+  ekdfBox.className = 'modal';
+  ekdfBox.id = 'ek-cfgdiff';
+  ekdfBox.innerHTML =
+    '<div class="mbox ekdf-box">' +
+      '<div class="mhead">' + esc(t('配置导入前 · 逐行差异')) + '</div>' +
+      '<div class="ekdf-sub" id="ekdf-sub"></div>' +
+      '<div class="ekdf-body" id="ekdf-body"></div>' +
+      '<div class="mfoot"><span class="hint" id="ekdf-n"></span>' +
+        '<button class="ghost" id="ekdf-cancel">' + esc(t('取消')) + '</button>' +
+        '<button id="ekdf-ok">' + esc(t('确认导入')) + '</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ekdfBox);
+  return ekdfBox;
+}
+/* 切语言后按新语言重建，别让弹窗停在旧语言 */
+document.addEventListener('ek:lang', function(){
+  if(ekdfBox){ ekdfBox.remove(); ekdfBox = null; }
+});
+
+/* 返回 Promise<boolean>：true = 继续导入，false = 用户取消。
+   ESC 由 20-shell.js 的统一处理关掉 .modal.show，这里用 MutationObserver
+   兜住那条路径 —— 否则 Promise 永远不 resolve，await 会卡死。 */
+function ekCfgConfirmImport(text, fileName){
+  return new Promise(function(resolve){
+    if(!window.Diff || !window.Diff2Html){ resolve(true); return; }
+    var settled = false, mo = null;
+
+    function done(v){
+      if(settled) return;
+      settled = true;
+      if(mo) mo.disconnect();
+      if(ekdfBox) ekdfBox.classList.remove('show');
+      resolve(v);
+    }
+
+    function show(oldText){
+      var d;
+      try{ d = ekCfgDiffHTML(oldText, text); }
+      catch(e){ done(true); return; }   // 比较失败：按原流程，不编造差异
+
+      var box = ekdfEnsureBox();
+      box.querySelector('#ekdf-sub').textContent =
+        t('当前配置 → 待导入文件：{0}', fileName) + ' · ' +
+        t('按键排序后比较，只显示真实变更的字段');
+      box.querySelector('#ekdf-body').innerHTML = d.same
+        ? '<div class="ekdf-same">' + esc(t('两份配置内容相同，没有需要变更的字段')) + '</div>'
+        : d.html;
+      box.querySelector('#ekdf-n').textContent = d.same ? '' : t('共 {0} 处差异', d.changed);
+      box.querySelector('#ekdf-cancel').onclick = function(){ done(false); };
+      box.querySelector('#ekdf-ok').onclick = function(){ done(true); };
+      box.onclick = function(ev){ if(ev.target === box) done(false); };
+
+      mo = new MutationObserver(function(){
+        if(ekdfBox && !ekdfBox.classList.contains('show')) done(false);
+      });
+      mo.observe(box, {attributes:true, attributeFilter:['class']});
+      box.classList.add('show');
+    }
+
+    fetch('/api/config/export?t=' + encodeURIComponent(window.__EK_TOKEN__))
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(show)
+      .catch(function(){
+        if(typeof toast === 'function') toast(t('读取当前配置失败，已跳过差异预览'), 'err');
+        done(true);
+      });
+  });
+}
 /* ---------- 全局通知 ---------- */
 
 async function ekSetLoadNotify(){

@@ -2338,3 +2338,42 @@
     .ob-sheet-frame > .ob-sheet-deco::after{display:none}
     .ob-ilock{height:96px}
   }
+
+  /* ---------- 统一图标 / 命令面板 / 配置差异（v3.8.1） ----------
+     Lucide 只取 SVG 图元，不引运行时；命令面板与差异弹窗复用既有 .modal/.mbox。
+     暗色下前景色一律用 --brand2（--brand 在暗色里太深，当字看不见）。 */
+  .ek-ic{display:inline-block;vertical-align:-2px;flex:none}
+  .pcaret .ek-ic,.caret .ek-ic,.prov-caret .ek-ic{vertical-align:-2px}
+  .tbtn > .ek-ic{vertical-align:-3px}
+  .ai-chip i > .ek-ic,button.rm > .ek-ic{vertical-align:-2px}
+
+  .ekcp-box{width:min(660px,92vw);max-height:78vh}
+  .ekcp-search{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line);color:var(--brand2)}
+  .ekcp-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font-size:14px;font-family:inherit}
+  .ekcp-search kbd{font:11px/1.4 ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:5px;padding:2px 6px;color:var(--muted);background:var(--soft)}
+  .ekcp-list{flex:1;overflow:auto;padding:6px 8px;min-height:0}
+  .ekcp-grp{padding:9px 10px 5px;font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .ekcp-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .ekcp-row.on,.ekcp-row:hover{background:var(--brand-weak)}
+  .ekcp-ic{color:var(--brand2);display:flex;flex:none}
+  .ekcp-tx{display:flex;flex-direction:column;min-width:0;gap:2px}
+  .ekcp-tx b{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ekcp-tx small{font-size:11px;color:var(--muted)}
+  .ekcp-go{margin-left:auto;color:var(--muted);display:flex;opacity:.6}
+  .ekcp-empty{padding:26px;text-align:center;color:var(--muted)}
+  .ekcp-foot{align-items:center;justify-content:space-between}
+  .ekcp-keys{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+
+  .ekdf-box{width:min(980px,94vw);max-height:86vh}
+  .ekdf-sub{padding:9px 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .ekdf-body{flex:1;overflow:auto;min-height:0;padding:8px 12px;background:var(--card)}
+  .ekdf-same{padding:26px;text-align:center;color:var(--muted)}
+  /* diff2html 自带浅色写死值；这里把容器/行号/增删底色收进本项目明暗两套变量，
+     不引入界面语义色之外的绿。 */
+  .ekdf-body .d2h-wrapper{font-size:12px}
+  .ekdf-body .d2h-file-header{background:var(--soft);border-color:var(--line);color:var(--text)}
+  .ekdf-body .d2h-code-line-ctn{background:transparent;color:var(--text)}
+  .ekdf-body .d2h-code-linenumber,.ekdf-body .d2h-code-side-linenumber{background:var(--soft);border-color:var(--line);color:var(--muted)}
+  .ekdf-body .d2h-ins{background:var(--okbg)}
+  .ekdf-body .d2h-del{background:var(--errbg)}
+  @media (max-width:760px){ .ekdf-box{width:96vw} .ekcp-box{width:96vw} }
