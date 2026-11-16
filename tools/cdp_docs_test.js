@@ -197,7 +197,7 @@ async function attach(target) {
     ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
     ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
     ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 23, '文档正文有 ' + iso.sections + ' 节（丰富度）');
+    ok(iso.sections >= 24, '文档正文有 ' + iso.sections + ' 节（丰富度）');
     ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
 
     // 深度：操作级细节、真实工具名、排障索引、节间交叉链接、配置默认值
@@ -234,7 +234,7 @@ async function attach(target) {
       lead: document.getElementById('lead-t').textContent
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 23 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.tree >= 24 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
     ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
@@ -289,6 +289,151 @@ async function attach(target) {
     ok(prog > 90, '滚动到底阅读进度接近满（' + Math.round(prog) + '%）');
     const totop = await djs(`document.getElementById('totop').classList.contains('show')`);
     ok(totop, '滚动后出现返回顶部按钮');
+
+    // ---- 5) 检索质量 / 目录跟随 / 锚点分享 / 上下篇 / FAQ 折叠 / 速查页 ----
+    console.log('文档可用性：');
+    await djs(`window.scrollTo({top:0,behavior:'instant'}); true`);
+    await sleep(300);
+    const sh = JSON.parse(await djs(`(function(){
+      var i=document.getElementById('q');
+      i.value='TOFU'; i.dispatchEvent(new Event('input',{bubbles:true}));
+      var hs=document.getElementById('hits');
+      var rows=Array.prototype.slice.call(hs.querySelectorAll('.hit'));
+      return JSON.stringify({ hitsShown: !hs.hidden && getComputedStyle(hs).display!=='none',
+        treeHidden: getComputedStyle(document.getElementById('tree')).display==='none',
+        n: rows.length,
+        marks: rows.filter(function(r){ return !!r.querySelector('mark'); }).length,
+        markTxt: (rows[0] && rows[0].querySelector('mark')) ? rows[0].querySelector('mark').textContent : '',
+        snippet: rows[0] ? rows[0].querySelector('.hit-p').textContent : '',
+        snips: rows.map(function(r){ return r.querySelector('.hit-p').textContent.length; }),
+        overflow: rows.some(function(r){ return r.getBoundingClientRect().right > hs.getBoundingClientRect().right + 1; }),
+        hasWhere: !!(rows[0] && rows[0].querySelector('.hit-where')) });
+    })()`));
+    ok(sh.hitsShown && sh.treeHidden, '搜索时左栏换成命中列表，目录收起');
+    ok(sh.n >= 2 && sh.marks === sh.n, '每条命中都带原文片段并高亮关键词（' + sh.n + ' 条 / ' + sh.marks + ' 处高亮）');
+    ok(/TOFU/i.test(sh.snippet) && sh.snippet.length >= 12, '片段来自正文而不是只有标题（' + (sh.snippet || '').slice(0, 24) + '…）');
+    ok(!sh.overflow, '命中条不溢出左栏（正文区没被盖住）');
+    ok(Math.min.apply(null, sh.snips) >= 16 && Math.max.apply(null, sh.snips) >= 30,
+      '片段带上关键词前后的上下文，不是只剩一个词（' + sh.snips.join('/') + ' 字）');
+    ok(!/use a private key|Trust on first use/i.test(sh.snippet), '中文模式的片段不混入英文原文');
+
+    const hitJump = JSON.parse(await djs(`(function(){
+      var r=document.querySelector('#hits .hit'); var go=r.getAttribute('data-go');
+      r.click(); return JSON.stringify({go:go, hash:location.hash});
+    })()`));
+    await sleep(800);
+    const hitTop = await djs(`(function(){var h=document.getElementById('${hitJump.go}');return h?h.getBoundingClientRect().top:9999;})()`);
+    ok(hitJump.hash === '#' + hitJump.go && Math.abs(hitTop) < 90,
+      '点命中条直接滚到锚点并改写 hash（' + hitJump.go + '，偏移 ' + Math.round(hitTop) + '）');
+    await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
+    await sleep(200);
+
+    // 右目录：滚到后半段时高亮项必须还在可视区里，否则 24 节目的目录等于失效
+    await djs(`(function(){
+      var s=document.querySelectorAll('#body .sec'); window.__tocSec=s.length-3;
+      var t=s[window.__tocSec];
+      window.scrollTo({top:t.getBoundingClientRect().top+window.scrollY-14,behavior:'instant'}); return true;
+    })()`);
+    await sleep(500);
+    const tocKeep = JSON.parse(await djs(`(function(){
+      var t=document.getElementById('toc'), a=t.querySelector('a.on');
+      if(!a) return JSON.stringify({on:false});
+      var br=t.getBoundingClientRect(), ar=a.getBoundingClientRect();
+      var curSec=document.querySelectorAll('#body .sec')[window.__tocSec];
+      var el=document.getElementById(a.dataset.anchor);
+      return JSON.stringify({on:true, visible: ar.top>=br.top-1 && ar.bottom<=br.bottom+1,
+        inSec: !!(curSec && el && curSec.contains(el)), name:a.textContent});
+    })()`));
+    ok(tocKeep.on && tocKeep.visible, '右目录高亮项始终留在可视区（' + (tocKeep.name || '') + '）');
+    ok(tocKeep.inSec, '高亮的是当前读的这一节，不是更早的小节（' + (tocKeep.name || '') + '）');
+
+    const lk = JSON.parse(await djs(`(function(){
+      var b=document.querySelector('#doc-chain .lk'); b.click();
+      return JSON.stringify({hash:location.hash, title:b.getAttribute('title')});
+    })()`));
+    await sleep(300);
+    const lkDone = await djs(`(function(){
+      var b=document.querySelector('#doc-chain .lk');
+      return JSON.stringify({done:b.classList.contains('done'), txt:b.textContent});
+    })()`);
+    const lkOk = JSON.parse(lkDone);
+    ok(lkOk.done && lk.hash === '#doc-chain' && !!lk.title,
+      '节标题锚点按钮复制链接并给出可见反馈（' + lkOk.txt + ' / ' + lk.hash + '）');
+
+    await docs.send('Page.navigate', { url: 'http://127.0.0.1:' + PORT + '/docs#doc-chain' });
+    await sleep(3200);
+    const deep2 = JSON.parse(await djs(`(function(){
+      var h=document.getElementById('doc-chain'), a=document.querySelector('#toc a.on');
+      return JSON.stringify({top:h?h.getBoundingClientRect().top:9999, on:!!a, name:a?a.textContent:''});
+    })()`));
+    ok(Math.abs(deep2.top) < 90 && deep2.on,
+      '带 #doc-chain 直接打开会定位到该节（偏移 ' + Math.round(deep2.top) + '，目录高亮 ' + deep2.name + '）');
+
+    const pn = JSON.parse(await djs(`JSON.stringify((function(){
+      var ns=document.querySelectorAll('#body .sec-nav');
+      var first=ns[0], last=ns[ns.length-1];
+      return { total:ns.length,
+        firstNext: !!first.querySelector('a.next'), firstPrev: !!first.querySelector('a.prev'),
+        lastPrev: !!last.querySelector('a.prev'), lastNext: !!last.querySelector('a.next'),
+        label: first.querySelector('a.next .d').textContent };
+    })())`));
+    ok(pn.total === iso.sections && !pn.firstPrev && pn.firstNext && pn.lastPrev && !pn.lastNext,
+      '每节都有上一篇 / 下一篇，首尾只给单边（' + pn.total + ' 节）');
+
+    const nx = JSON.parse(await djs(`(function(){
+      var a=document.querySelector('#body .sec-nav a.next'); var href=a.getAttribute('href');
+      a.click(); return JSON.stringify({href:href});
+    })()`));
+    await sleep(800);
+    const nxTop = await djs(`(function(){var h=document.querySelector('${nx.href}');return h?h.getBoundingClientRect().top:9999;})()`);
+    ok(Math.abs(nxTop) < 90, '点「下一篇」滚到下一节（' + nx.href + '，偏移 ' + Math.round(nxTop) + '）');
+
+    const faq = JSON.parse(await djs(`JSON.stringify((function(){
+      var d=document.querySelectorAll('#body .faq details');
+      var opens=Array.prototype.filter.call(d, function(x){ return x.open; }).length;
+      return { n:d.length, opens:opens,
+        q: d[1] ? d[1].querySelector('summary').textContent : '',
+        a: d[0] ? (d[0].querySelector('.a') || {textContent:''}).textContent : '' };
+    })())`));
+    ok(faq.n >= 10 && faq.opens === 1, 'FAQ 收成折叠项，默认只展开第一条（' + faq.n + ' 条 / 展开 ' + faq.opens + '）');
+    ok(faq.q.length > 4 && faq.q.indexOf('——') < 0 && faq.a.length > 10,
+      '折叠项把「问题」和「答案」真正拆开了（' + faq.q.slice(0, 16) + '）');
+    const faqOpen = await djs(`(function(){
+      var d=document.querySelectorAll('#body .faq details');
+      if(d.length < 2) return false;
+      d[1].querySelector('summary').click(); return d[1].open;
+    })()`);
+    ok(!!faqOpen, '点标题能展开对应的问答');
+
+    const cs = JSON.parse(await djs(`JSON.stringify((function(){
+      var h=document.getElementById('doc-cheatsheet');
+      var sec=h?h.closest('.sec'):null;
+      var t=sec?sec.textContent:'';
+      return { exists:!!h,
+        ports:['18765','18766','18815'].filter(function(x){ return t.indexOf(x)>=0; }).length,
+        deff:['20200','5002','backup_dir'].filter(function(x){ return t.indexOf(x)>=0; }).length,
+        term: t.indexOf('TOFU')>=0, btn: !!document.getElementById('print-one'),
+        secs: document.querySelectorAll('#body .sec').length };
+    })())`));
+    ok(cs.exists && cs.ports === 3, '速查页收全端口与顺延区间（' + cs.ports + '/3）');
+    ok(cs.deff === 3 && cs.term, '速查页有默认值字段名与术语解释（TOFU）');
+    ok(cs.btn, '速查页带「只打印本节」按钮');
+
+    await docs.send('Emulation.setEmulatedMedia', { media: 'print' });
+    await sleep(200);
+    const pr = JSON.parse(await djs(`(function(){
+      document.body.classList.add('print-one');
+      var others=Array.prototype.slice.call(document.querySelectorAll('#body .sec'))
+        .filter(function(s){ return !s.classList.contains('sec-one'); });
+      var hid=others.every(function(s){ return getComputedStyle(s).display==='none'; });
+      var one=document.querySelector('.sec-one');
+      var shown=one && getComputedStyle(one).display!=='none';
+      document.body.classList.remove('print-one');
+      return JSON.stringify({hid:hid, one:shown, n:others.length});
+    })()`));
+    await docs.send('Emulation.setEmulatedMedia', { media: '' });
+    await sleep(150);
+    ok(pr.hid && pr.one && pr.n === cs.secs - 1, '打印模式只留速查节（藏掉其它 ' + pr.n + ' 节）');
 
     // ---- 5) 双语：与主控制台共享 ek-lang ----
     console.log('英文模式：');

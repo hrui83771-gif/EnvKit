@@ -153,8 +153,6 @@
   .nav-sep{height:1px;background:var(--line);margin:7px 6px}
   .side-link{display:block;width:100%;padding:9px 12px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:12.5px;text-align:left;cursor:pointer}
   .side-link:hover{background:var(--soft2);color:var(--text)}
-  /* 文档入口在下面这张卡片里，不再单独占一格导航；「新窗口」提示留在这里提示会另开标签。 */
-  .side-link .stepno{margin-left:4px;font-weight:400}
   .panel{display:none;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
   .panel.show{display:block;animation:ekfade .18s ease}
   @keyframes ekfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}

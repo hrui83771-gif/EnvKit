@@ -73,6 +73,8 @@ button,input{font:inherit;color:inherit}
 .tree button.on:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;
   background:var(--brand);border-radius:3px}
 .tree .empty{padding:14px 10px;color:var(--muted);font-size:12.5px}
+/* hidden 属性要压过移动端 .tree{display:flex}，否则搜索时目录和结果会同时露出来 */
+.tree[hidden],.hits[hidden]{display:none!important}
 .gc{display:inline-block;min-width:16px;text-align:center;font:10px/14px Consolas,monospace;color:#9aa4b2;background:#f2f4f7;border-radius:7px;padding:0 4px;margin-left:4px}
 .side-foot{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;font-size:11.5px;color:var(--muted)}
 .side-foot a{display:block;padding:3px 0}
@@ -128,6 +130,63 @@ button,input{font:inherit;color:inherit}
 .xlink a:hover{border-bottom-style:solid}
 .tbl td:first-child{white-space:nowrap}
 
+/* 搜索结果：命中片段列表，替换目录显示 */
+.hits{margin-bottom:8px;min-width:0}
+.hits .hit{display:block;width:100%;max-width:100%;min-width:0;overflow:hidden;text-align:left;
+  border:0;background:transparent;cursor:pointer;padding:8px 10px;border-radius:8px;border-left:2px solid transparent}
+.hits .hit:hover{background:#f3f5f9;border-left-color:#c9d5e5}
+.hits .hit-t{display:block;font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.5;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hits .hit-p{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.55;
+  max-height:3.2em;overflow:hidden}
+.hits .hit-where{font-size:10.5px;color:var(--brand2);font-weight:400;margin-left:4px}
+.hits mark{background:#fbe9c8;color:var(--ink);border-radius:2px;padding:0 1px}
+.hits .none{padding:14px 10px;color:var(--muted);font-size:12.5px}
+.hits .hit-more{font-size:11px;color:#9aa4b2;padding:2px 10px 6px}
+
+/* 节标题上的锚点按钮：hover 才显形，点了复制可分享链接 */
+.sec>h2{position:relative}
+.lk{margin-left:auto;flex:none;border:1px solid transparent;background:transparent;color:#b6bfcc;
+  font:600 14px/1 Consolas,monospace;border-radius:6px;padding:3px 7px;cursor:pointer;opacity:0;
+  transition:opacity .12s}
+.sec>h2:hover .lk,.lk:focus{opacity:1}
+.lk:hover{background:var(--brandbg);border-color:#d6e2f2;color:var(--brand2)}
+.lk.done{opacity:1;color:var(--ok);border-color:#d9e8de;background:var(--okbg)}
+
+/* 上一篇 / 下一篇 */
+.sec-nav{display:flex;gap:10px;margin:22px 0 0;padding-top:14px;border-top:1px solid var(--line2)}
+.sec-nav a,.sec-nav i{flex:1 1 0;min-width:0}
+.sec-nav a{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 12px;
+  text-decoration:none;background:#fbfcfe}
+.sec-nav a:hover{border-color:#c9d5e5;background:#f5f8fd}
+.sec-nav a .d{display:block;font-size:10.5px;color:#9aa4b2;letter-spacing:.4px}
+.sec-nav a .n{display:block;font-size:12.5px;color:var(--brand2);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec-nav a.next{text-align:right}
+/* 首尾节只有一边：让它占满整行，不留一块空白像丢了一半 */
+.sec-nav a:only-child{flex:1 1 100%}
+
+/* FAQ 折叠 */
+.faq{margin:10px 0}
+.faq details{border:1px solid var(--line);border-radius:10px;background:#fff;margin:7px 0;overflow:hidden}
+.faq details[open]{background:#fbfcfe;border-color:#dbe4f0}
+.faq summary{cursor:pointer;list-style:none;padding:10px 34px 10px 13px;position:relative;
+  font-size:13.5px;color:var(--ink);font-weight:600;line-height:1.6}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:hover{background:#f5f8fd}
+.faq summary:after{content:"+";position:absolute;right:13px;top:9px;color:#9db2cd;
+  font:400 15px/1.4 Consolas,monospace}
+.faq details[open] summary:after{content:"–"}
+.faq .a{padding:0 14px 11px;font-size:13px;color:var(--sub);line-height:1.85;border-top:1px dashed var(--line2);
+  margin-top:0;padding-top:9px}
+
+/* 速查页打印条 + 轻提示 */
+.one-bar{margin:-2px 0 12px}
+.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,14px);background:#39424e;color:#fff;
+  font-size:12.5px;padding:8px 15px;border-radius:9px;box-shadow:0 6px 22px rgba(47,55,66,.25);
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:70;max-width:80vw}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
 /* 右目录 */
 .toc-title{font-size:10.5px;letter-spacing:.9px;color:#9aa4b2;font-weight:700;padding:0 8px 8px}
 .toc a{display:block;padding:4px 8px 4px 12px;font-size:12px;color:var(--muted);
@@ -161,10 +220,15 @@ button,input{font:inherit;color:inherit}
   .sec>h2{font-size:17px}
 }
 @media print{
-  .hero,.side,.toc,.totop,#prog,.quick,.foot,.cp{display:none!important}
+  .hero,.side,.toc,.totop,#prog,.quick,.foot,.cp,.sec-nav,.lk,.one-bar,.toast{display:none!important}
   body{background:#fff}
   .layout{display:block;padding:0;max-width:none}
   .sec{box-shadow:none;break-inside:avoid;border-color:#ddd}
+  /* 「打印这一页」：只留速查节，其余整页隐藏 */
+  body.print-one .sec:not(.sec-one),body.print-one .lead{display:none!important}
+  body.print-one .layout{padding-top:0}
+  .faq details{border-color:#ddd}
+  .faq .a{display:block}
   a{color:inherit}
 }
 </style>
@@ -194,6 +258,7 @@ button,input{font:inherit;color:inherit}
       <kbd>/</kbd>
     </label>
     <div class="tree" id="tree"></div>
+    <div class="hits" id="hits" hidden></div>
     <div class="side-foot">
       <a href="/#tour" id="replay">重新观看界面导览 →</a>
       <a href="https://github.com/hrui83771-gif" target="_blank" rel="noopener">项目主页 ↗</a>
@@ -207,6 +272,7 @@ button,input{font:inherit;color:inherit}
   <nav class="toc" id="toc"></nav>
 </div>
 <button class="totop" id="totop" type="button" title="回到顶部">↑</button>
+<div class="toast" id="toast"></div>
 <div class="foot">EnvKit · 本页说明全部来自当前构建的实际功能 · 文档可离线阅读</div>
 
 <script>
@@ -229,6 +295,7 @@ button,input{font:inherit;color:inherit}
   function STEPS(items){ return {k:'steps',items:items}; }
   function CODE(code,label){ return {k:'code',code:code,label:label}; }
   function TABLE(head,rows){ return {k:'table',head:head,rows:rows}; }
+  function FAQ(items){ return {k:'faq',items:items}; }
   function XLINK(items){ return {k:'xlink',items:items}; }
 
   var D = [
@@ -407,13 +474,13 @@ button,input{font:inherit;color:inherit}
         z('挂机无人值守再打开「后台守护」，间隔默认 60 秒、最小 30；需要弹通知加开 chain_notify。',
           'For unattended runs enable the background guard (default 60 s, minimum 30) and chain_notify for desktop alerts.')
       ]),
-      H3('chain-live','判活看共识视图','Liveness is the consensus view'),
+      H3('chain-live','三种容易误判的情况','Three easy misreads'),
       NOTE('判活看的是共识视图是否推进，不是区块高度。PBFT 空块只共识不落盘，块高静止是正常态；拿块高判活会把健康链永远判成未恢复。',
            'Liveness is judged by consensus view progression, NOT block height. PBFT empty blocks reach consensus without being stored, so a static height is normal; judging by height marks healthy chains as unrecovered.', 'danger'),
       UL([
-        z('SSH 首次连接按 TOFU 记录主机指纹，之后指纹变化即拒绝。','SSH uses TOFU: the host fingerprint is recorded on first connect and any change is rejected.'),
-        z('自愈态势页展示守护轨迹与影子晋升证据；空列表表示尚无记录，不代表守护没配置。','The self-healing page shows guard traces and shadow promotion evidence. An empty list means no records yet, not that guarding is disabled.'),
-        z('复验通过才算完成；命令返回 0 只说明命令跑了，不等于节点真的活了。','Only a passed verification counts as done; exit code 0 only means the command ran, not that the node is alive.')
+        z('SSH 指纹变了连接被拒——那是保护不是故障：先核对新指纹再决定是否更新，别直接关校验。','A rejected SSH connection after a fingerprint change is protection, not breakage: verify the new fingerprint before trusting it, never simply disable the check.'),
+        z('自愈态势页空列表表示尚无守护 / 影子记录，不代表守护没配置；看配置页的守护开关。','An empty self-healing list means no guard or shadow records yet, not that guarding is off; check the switch on the config page.'),
+        z('「已执行」只说明命令跑了：端口、进程、共识视图、WeBASE 地址四项都拿到证据才算完成。','“Executed” only means the command ran: completion needs evidence from all four — port, process, consensus view and WeBASE URL.')
       ]),
       XLINK([['selfheal','故障自愈轨迹','Self-healing traces'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
@@ -624,6 +691,47 @@ button,input{font:inherit;color:inherit}
       NOTE('方法和原始数据在仓库 docs/eval/；README 不贴会过期的数字。',
            'Method and raw data live in docs/eval/; the README does not paste numbers that go stale.', 'info')
     ]},
+    {id:'cheatsheet', group:z('参考','Reference'), title:z('一页速查','One-page cheatsheet'), body:[
+      P('把这一节打印出来贴机房：端口、默认值、文件位置、安全边界、术语，五项都在这一页。点下面的按钮打印，只会输出本节，不带侧栏和目录。',
+        'Print this section and pin it up: ports, defaults, file locations, safety boundaries and terms on one page. The button prints this section only, without the sidebar or outline.'),
+      H3('cs-port','端口与地址','Ports and addresses'),
+      TABLE([z('用途','Use'),z('值','Value'),z('要点','Notes')],[
+        [z('控制台','Console'),z('18765','18765'),z('只绑回环 127.0.0.1；改配置、跑命令、终端都在这里','Loopback only; config, commands and terminal live here')],
+        [z('手机访问','Mobile access'),z('18766','18766'),z('独立 mux + 配对码，只放只读 / 受控路由','Separate mux with a pairing code; read-only / controlled routes only')],
+        [z('端口冲突','Port conflict'),z('顺延到 18815','shifts up to 18815'),z('评测脚本硬编码 18765，被占用时会拒绝启动并说明原因','Eval scripts hardcode 18765 and refuse to start when it is taken')],
+        [z('业务后端','Business backend'),z('127.0.0.1:8888','127.0.0.1:8888'),z('FarmTrace 的 server/，不属于 EnvKit','FarmTrace server/, not part of EnvKit')]
+      ]),
+      H3('cs-default','默认值','Defaults'),
+      TABLE([z('字段','Field'),z('默认','Default'),z('说明','Notes')],[
+        [z('链群组','Chain group'),z('1','1'),z('留空按 1 处理','Empty means 1')],
+        [z('自愈守护间隔','Guard interval'),z('60 秒','60 s'),z('最小 30 秒，低于就按 30 算','Minimum 30 s')],
+        [z('链节点端口','Chain node port'),z('20200','20200'),z('FISCO-BCOS v2.11 节点','FISCO-BCOS v2.11 node')],
+        [z('WeBASE-Front','WeBASE-Front'),z('5002','5002'),z('链端校验的另一半证据来自这里','Where the other half of chain evidence comes from')],
+        [z('备份目录','Backup dir'),z('backups/','backups/'),z('默认 exe 同级，可用 projects.backup_dir 覆盖','Next to the exe; override with projects.backup_dir')]
+      ]),
+      H3('cs-path','文件与日志','Files and logs'),
+      TABLE([z('对象','Item'),z('位置','Location'),z('要点','Notes')],[
+        [z('配置','Config'),z('config.json','config.json'),z('exe 同级；读不到才回落内置模板','Next to the exe; falls back to the built-in template')],
+        [z('日志','Logs'),z('envkit-日期.log','envkit-DATE.log'),z('同目录还有 -install / -config / -start / -chain / -sys 分栏','Split per source: -install / -config / -start / -chain / -sys')],
+        [z('备份','Backups'),z('backups/','backups/'),z('有 sha256 才算可校验；存在不等于能还原','sha256 makes it verifiable; existence is not restorability')],
+        [z('审计','Audit'),z('按天分文件','daily files'),z('只追加、保留 30 天、口令入库前已脱敏','Append-only, 30 days, secrets redacted')]
+      ]),
+      H3('cs-safe','四条安全边界','Four safety boundaries'),
+      UL([
+        z('只暴露受控工具，不提供任意命令执行；文件探索限制在已配置的项目目录内。','Only controlled tools; no arbitrary command execution, and file access stays inside configured project folders.'),
+        z('写操作必过权限裁决，forbidden 档在派发前就终止，不是执行完再报错。','Writes pass arbitration; the forbidden tier terminates before dispatch, not after an error.'),
+        z('需要确认的动作由服务端返回 428，模型没法用话术跳过这一步。','Actions needing confirmation get a server-side 428 the model cannot talk its way past.'),
+        z('控制台只绑回环；对局域网只开手机端口，而且必须过配对码。','The console binds to loopback; only the mobile port faces the LAN, and it needs a pairing code.')
+      ]),
+      H3('cs-term','术语','Glossary'),
+      TABLE([z('词','Term'),z('一句话解释','In one line')],[
+        [z('TOFU','TOFU'),z('首次连接信任：第一次连 SSH 就记下主机指纹，之后指纹一变直接拒绝','Trust on first use: record the host fingerprint once, reject any later change')],
+        [z('共识视图','Consensus view'),z('PBFT 当前轮次，它在推进就说明链活着；块高静止不代表卡死','The current PBFT round; advancing means alive, a static block height is not a stall')],
+        [z('428','428'),z('服务端强制确认的状态码，缺确认的写操作到此为止','Server-side forced confirmation; a write without it stops here')],
+        [z('已执行，未验证','Executed, unverified'),z('命令跑了，但端口 / 进程 / HTTP / 备份还没给出客观证据','The command ran, but port / process / HTTP / backup evidence is still missing')]
+      ]),
+      XLINK([['troubleshoot','排障索引','Troubleshooting'],['security','安全边界','Security boundary'],['chain','链端校验','Chain checks']])
+    ]},
     {id:'troubleshoot', group:z('参考','Reference'), title:z('排障索引','Troubleshooting index'), body:[
       P('坑按「你看到的症状」排，不按模块排。先找症状，再看先查什么，最后点进对应章节看判据——这样不用从头翻一遍。',
         'Issues are organised by what you see, not by module. Find the symptom, see what to check first, then open the linked section for the judgement rule.'),
@@ -646,7 +754,7 @@ button,input{font:inherit;color:inherit}
     ]},
     {id:'faq', group:z('参考','Reference'), title:z('常见问题','FAQ'), body:[
       H3('faq-q','问答','Questions'),
-      OL([
+      FAQ([
         z('窗口是黑的、能关吗？—— 那是服务进程本体，关掉网页就打不开；用托盘「隐藏窗口到托盘」让它继续在后台跑。新版本控制台已换成纸白底浅色主题。','Can I close the console window? No — it is the service. Closing it kills the page; use the tray action to hide it. New builds use a light paper-coloured theme.'),
         z('还有别的问题？—— 先看上一节「排障索引」，按症状找对应判据。','Another problem? See the previous section, “Troubleshooting index”, and look up the symptom.'),
         z('端口被占用？—— 停止页会报告占用者；第三方进程只报告不结束。EnvKit 端口冲突会自动顺延。','Port in use? The stop page reports the owner but never kills third-party processes. EnvKit shifts to the next free port.'),
@@ -698,6 +806,13 @@ button,input{font:inherit;color:inherit}
     see:z('继续阅读：','Read next:'),
     empty:z('没有匹配的章节','No matching sections'),
     count:z('节文档','sections'),
+    copyLink:z('复制本节链接','Copy link to this section'),
+    copiedLink:z('链接已复制','Link copied'),
+    prev:z('上一篇','Previous'),
+    next:z('下一篇','Next'),
+    hit:z('处命中','hits'),
+    nohit:z('没有匹配的内容，换个词试试','No matches — try another word'),
+    printOne:z('打印这一页（只输出本节）','Print this page (this section only)'),
     ver:z('当前版本：','Current version: '),
     unknown:z('未知','Unknown'),
     back:z('返回控制台','Back to console'),
@@ -707,7 +822,14 @@ button,input{font:inherit;color:inherit}
 
   var tree = document.getElementById('tree'), body = document.getElementById('body'),
       toc = document.getElementById('toc'), q = document.getElementById('q'),
-      prog = document.getElementById('prog'), totop = document.getElementById('totop');
+      prog = document.getElementById('prog'), totop = document.getElementById('totop'),
+      hits = document.getElementById('hits'), toast = document.getElementById('toast');
+  var toastTimer = 0;
+  function flash(msg){
+    toast.textContent = msg; toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toast.classList.remove('show'); }, 1600);
+  }
   function flat(x){
     if(typeof x === 'string') return x;
     if(Array.isArray(x)) return x.map(flat).join(' ');
@@ -716,6 +838,34 @@ button,input{font:inherit;color:inherit}
     return '';
   }
   function hay(s){ return (v(s.title) + ' ' + v(s.group) + ' ' + flat(s.body)).toLowerCase(); }
+  function hitText(b, value){
+    // 表格按「命中的那一行」拼片段：整表拼接再截会跨行，读起来像断句。
+    if(b.k === 'table'){
+      var line = '';
+      b.rows.forEach(function(row){
+        if(line) return;
+        var cells = row.map(flatLang), idx = -1;
+        cells.forEach(function(c, i){ if(idx < 0 && c.toLowerCase().indexOf(value) >= 0) idx = i; });
+        // 从命中的那一格往后拼：前面的列只是标签，带上会把片段挤满。
+        if(idx >= 0) line = cells.slice(idx).join(' · ');
+      });
+      if(line) return line;
+    }
+    return flatLang(b);
+  }
+  /* 只取当前语言：flat() 会把 zh/en 一起拼起来，用来当搜索结果展示会中英混排。 */
+  function flatLang(x){
+    if(typeof x === 'string') return x;
+    if(Array.isArray(x)) return x.map(flatLang).join(' ');
+    if(x && typeof x === 'object'){
+      if(x.zh !== undefined || x.en !== undefined) return v(x);
+      // 表格只拼单元格，不拼表头：否则片段开头总是「字段 默认 说明 …」，读不出信息。
+      if(x.head && x.rows) return x.rows.map(flatLang).join(' ');
+      return Object.keys(x).filter(k => k !== 'code' && k !== 'k' && k !== 'id' && k !== 'lv')
+        .map(k => flatLang(x[k])).join(' ');
+    }
+    return '';
+  }
 
   function block(b){
     if(b.k === 'p') return '<p>' + esc(v(b)) + '</p>';
@@ -733,6 +883,12 @@ button,input{font:inherit;color:inherit}
     if(b.k === 'table') return '<table class="tbl"><thead><tr>' + b.head.map(h =>
       '<th>' + esc(v(h)) + '</th>').join('') + '</tr></thead><tbody>' + b.rows.map(row =>
       '<tr>' + row.map(c => '<td>' + esc(v(c)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+    if(b.k === 'faq') return '<div class="faq">' + b.items.map(function(it, i){
+      var t = v(it), m = t.match(/^(.*?)\s*(?:——|—)\s*([\s\S]*)$/);
+      var qq = m ? m[1] : t, aa = m ? m[2] : '';
+      return '<details' + (i === 0 ? ' open' : '') + '><summary>' + esc(qq) + '</summary>' +
+        (aa ? '<div class="a">' + esc(aa) + '</div>' : '') + '</details>';
+    }).join('') + '</div>';
     if(b.k === 'ver'){
       var ve = document.getElementById('ver');
       return '<p>' + esc(tv(T.ver) + (ve ? ve.textContent.trim() : tv(T.unknown))) + '</p>';
@@ -742,10 +898,21 @@ button,input{font:inherit;color:inherit}
   function renderBody(){
     var html = '';
     D.forEach(function(s, i){
-      html += '<section class="sec"><h2 id="doc-' + s.id + '"><span class="num">' +
-        String(i + 1).padStart(2, '0') + '</span>' + esc(v(s.title)) + '</h2>';
+      var one = s.id === 'cheatsheet';
+      html += '<section class="sec' + (one ? ' sec-one' : '') + '"><h2 id="doc-' + s.id + '"><span class="num">' +
+        String(i + 1).padStart(2, '0') + '</span>' + esc(v(s.title)) +
+        '<button class="lk" type="button" data-lk="doc-' + s.id + '" title="' + esc(tv(T.copyLink)) +
+        '" aria-label="' + esc(tv(T.copyLink)) + '">#</button></h2>';
+      if(one) html += '<div class="one-bar"><button class="hbtn" type="button" id="print-one">' +
+        esc(tv(T.printOne)) + '</button></div>';
       s.body.forEach(function(b){ html += block(b); });
-      html += '</section>';
+      var p = D[i - 1], n = D[i + 1];
+      html += '<nav class="sec-nav">' +
+        (p ? '<a class="prev" href="#doc-' + p.id + '" data-go="doc-' + p.id + '"><span class="d">' +
+             esc(tv(T.prev)) + '</span><span class="n">' + esc(v(p.title)) + '</span></a>' : '<i></i>') +
+        (n ? '<a class="next" href="#doc-' + n.id + '" data-go="doc-' + n.id + '"><span class="d">' +
+             esc(tv(T.next)) + '</span><span class="n">' + esc(v(n.title)) + '</span></a>' : '<i></i>') +
+        '</nav></section>';
     });
     body.innerHTML = html;
     renderToc();
@@ -792,6 +959,53 @@ button,input{font:inherit;color:inherit}
       esc(tv(T.jump)) + '</span>' + picks.map(function(s){
         return '<a href="#doc-' + s.id + '">' + esc(v(s.title)) + '</a>'; }).join('');
   }
+  function snippet(t, value){
+    var i = t.toLowerCase().indexOf(value);
+    if(i < 0) return esc(t.slice(0, 110)) + (t.length > 110 ? '…' : '');
+    var from = Math.max(0, i - 32), to = Math.min(t.length, i + value.length + 44);
+    return (from > 0 ? '…' : '') + esc(t.slice(from, i)) +
+      '<mark>' + esc(t.slice(i, i + value.length)) + '</mark>' +
+      // 关键词后面这一段才是上下文，漏掉就只剩一个光秃秃的词。
+      esc(t.slice(i + value.length, to)) + (to < t.length ? '…' : '');
+  }
+  /* 搜索不再只是把左目录按钮藏起来：给出「哪一节 + 哪一小节 + 含关键词的原文片段」，
+     点一条直接跳到锚点。目录只给标题，用户还得自己找，等于没搜。 */
+  function renderHits(value){
+    if(!value){ hits.hidden = true; hits.innerHTML = ''; tree.hidden = false; return 0; }
+    var out = [];
+    D.forEach(function(s){
+      var found = [], cur = {t:'', a:'doc-' + s.id};
+      if(v(s.title).toLowerCase().indexOf(value) >= 0)
+        found.push({a:'doc-' + s.id, w:'', t:v(s.title)});
+      s.body.forEach(function(b){
+        if(b.k === 'code') return;
+        if(b.k === 'h3'){
+          cur = {t:v(b), a:'s-' + b.id};
+          if(cur.t.toLowerCase().indexOf(value) >= 0) found.push({a:cur.a, w:'', t:cur.t});
+          return;
+        }
+        var t = hitText(b, value);
+        if(t.toLowerCase().indexOf(value) >= 0) found.push({a:cur.a, w:cur.t, t:t});
+      });
+      if(found.length) out.push({s:s, found:found});
+    });
+    var html = '', n = 0;
+    out.forEach(function(o){
+      n += o.found.length;
+      o.found.slice(0, 2).forEach(function(h, i){
+        // 同一节的第二条命中不再重复节名，改用小节名当标题，否则两条看起来一模一样。
+        var tt = i === 0 ? v(o.s.title) : (h.w || v(o.s.title));
+        var wh = i === 0 && h.w ? h.w : '';
+        html += '<button class="hit" type="button" data-go="' + h.a + '"><span class="hit-t">' +
+          esc(tt) + (wh ? '<span class="hit-where">› ' + esc(wh) + '</span>' : '') +
+          '</span><span class="hit-p">' + snippet(h.t, value) + '</span></button>';
+      });
+      if(o.found.length > 2) html += '<div class="hit-more">+' + (o.found.length - 2) + '</div>';
+    });
+    hits.innerHTML = html || '<div class="none">' + esc(tv(T.nohit)) + '</div>';
+    hits.hidden = false; tree.hidden = true;
+    return n;
+  }
   function filterTree(){
     var value = (q.value || '').trim().toLowerCase(), shown = 0;
     [].forEach.call(tree.querySelectorAll('.grpbox'), function(box){
@@ -807,33 +1021,68 @@ button,input{font:inherit;color:inherit}
     });
     if(!shown && value) tree.insertAdjacentHTML('beforeend', '<div class="empty" data-empty>' + esc(tv(T.empty)) + '</div>');
     else { var e = tree.querySelector('[data-empty]'); if(e) e.remove(); }
-    document.getElementById('cnt').textContent = shown + ' ' + tv(T.count);
+    var hitN = renderHits(value);
+    document.getElementById('cnt').textContent = value
+      ? (hitN + ' ' + tv(T.hit)) : (shown + ' ' + tv(T.count));
   }
-  function go(id){
-    var h = document.getElementById('doc-' + id);
-    if(!h) return;
-    window.scrollTo({top:h.getBoundingClientRect().top + window.scrollY - 14, behavior:'smooth'});
-    mark(id);
+  function secOf(anchor){
+    if(anchor.indexOf('doc-') === 0) return anchor.slice(4);
+    for(var i = 0; i < D.length; i++){
+      var b = D[i].body;
+      for(var j = 0; j < b.length; j++){
+        if(b[j].k === 'h3' && 's-' + b[j].id === anchor) return D[i].id;
+      }
+    }
+    return '';
+  }
+  function jumpTo(anchor, instant){
+    var h = document.getElementById(anchor);
+    if(!h) return false;
+    var top = h.getBoundingClientRect().top + window.scrollY - 14;
+    // 跨半个文档的长距离跳转不做平滑动画：一屏以上的平滑滚动要等两秒，人会以为没反应。
+    var far = Math.abs(top - window.scrollY) > window.innerHeight * 1.2;
+    window.scrollTo({top:top, behavior:(instant || far) ? 'instant' : 'smooth'});
+    mark(secOf(anchor), anchor);
+    try{ history.replaceState(null, '', '#' + anchor); }catch(_){}
+    return true;
+  }
+  function go(id){ return jumpTo('doc-' + id); }
+  function keepTocInView(a){
+    var br = toc.getBoundingClientRect(), ar = a.getBoundingClientRect();
+    if(ar.top < br.top + 4) toc.scrollTop -= (br.top + 4 - ar.top);
+    else if(ar.bottom > br.bottom - 4) toc.scrollTop += (ar.bottom - (br.bottom - 4));
   }
   function mark(id, anchor){
     [].forEach.call(tree.querySelectorAll('button[data-sec]'), function(b){
       b.classList.toggle('on', b.dataset.sec === id); });
+    var on = null;
     [].forEach.call(toc.querySelectorAll('a[data-anchor]'), function(a){
-      a.classList.toggle('on', a.dataset.anchor === (anchor || 'doc-' + id)); });
+      var hit = a.dataset.anchor === (anchor || 'doc-' + id);
+      a.classList.toggle('on', hit); if(hit) on = a;
+    });
+    // 23 节 + 30 多个 H3，高亮项跑到可视区外就等于目录失效，这里把它拉回来。
+    if(on) keepTocInView(on);
   }
   function onScroll(){
     var max = document.documentElement.scrollHeight - window.innerHeight;
     prog.style.width = (max > 0 ? Math.min(100, window.scrollY / max * 100) : 0) + '%';
     totop.classList.toggle('show', window.scrollY > 500);
-    var cur = '', anchor = '', best = 121;
+    var cur = '', anchor = '';
     D.forEach(function(s){
       var h = document.getElementById('doc-' + s.id);
       if(h && h.getBoundingClientRect().top <= 120) cur = s.id;
+    });
+    // 只在当前这一节里找高亮的小节：跨节比较会把上一节的 H3 选中，
+    // 因为刚滚到本节顶部时本节第一个 H3 可能还在阈值下面。
+    D.forEach(function(s){
+      if(s.id !== cur) return;
+      var best = -1e9;
       s.body.forEach(function(b){
         if(b.k !== 'h3') return;
         var e = document.getElementById('s-' + b.id);
         if(e){ var t = e.getBoundingClientRect().top;
-          if(t <= 120 && t <= best){ best = t; anchor = 's-' + b.id; } }
+          // 取「已滚过且最靠下」的那个：t 越大越贴近视口顶部。
+          if(t <= 120 && t > best){ best = t; anchor = 's-' + b.id; } }
       });
     });
     if(cur) mark(cur, anchor);
@@ -852,7 +1101,7 @@ button,input{font:inherit;color:inherit}
     document.getElementById('replay').textContent = lang === 'en' ? 'Replay the tour →' : '重新观看界面导览 →';
     renderQuick(); renderBody(); renderTree();
     var hash = (location.hash || '').replace(/^#/, '');
-    if(hash.indexOf('doc-') === 0) mark(hash.slice(4));
+    if(hash && document.getElementById(hash)) jumpTo(hash, true);
   }
 
   tree.addEventListener('click', function(e){
@@ -863,13 +1112,52 @@ button,input{font:inherit;color:inherit}
     var a = e.target.closest && e.target.closest('a[data-anchor]');
     if(!a) return;
     e.preventDefault();
-    var h = document.getElementById(a.dataset.anchor);
-    if(h) window.scrollTo({top:h.getBoundingClientRect().top + window.scrollY - 14, behavior:'smooth'});
-    [].forEach.call(toc.querySelectorAll('a[data-anchor]'), function(x){ x.classList.toggle('on', x === a); });
+    jumpTo(a.dataset.anchor);
   });
   q.addEventListener('input', filterTree);
+  hits.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('.hit');
+    if(b) jumpTo(b.dataset.go);
+  });
+  /* 复制的是「带锚点的完整地址」，不是页内 #；粘贴给别人能直接落在这一节。 */
+  function share(id){
+    var url = location.href.split('#')[0] + '#' + id;
+    try{ history.replaceState(null, '', '#' + id); }catch(_){}
+    var btn = body.querySelector('[data-lk="' + id + '"]');
+    var beat = function(){
+      if(!btn) return;
+      btn.classList.add('done'); btn.textContent = '✓';
+      setTimeout(function(){ btn.classList.remove('done'); btn.textContent = '#'; }, 1400);
+    };
+    var put = function(){
+      try{
+        var ta = document.createElement('textarea');
+        ta.value = url; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand('copy'); ta.remove();
+        if(ok){ beat(); flash(tv(T.copiedLink)); }
+        else { flash(url); }
+      }catch(_){ flash(url); }
+    };
+    // 剪贴板是异步的，先给按钮反馈再等结果：等结果回来才变，用户会以为没生效。
+    beat();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){ flash(tv(T.copiedLink)); }, put);
+    } else put();
+  }
   body.addEventListener('click', function(e){
-    var b = e.target.closest && e.target.closest('.cp');
+    var t = e.target;
+    var lk = t.closest && t.closest('.lk');
+    if(lk){ share(lk.dataset.lk); return; }
+    var gp = t.closest && t.closest('[data-go]');
+    if(gp){ e.preventDefault(); jumpTo(gp.dataset.go); return; }
+    if(t.closest && t.closest('#print-one')){
+      document.body.classList.add('print-one');
+      setTimeout(function(){ window.print(); document.body.classList.remove('print-one'); }, 30);
+      return;
+    }
+    var b = t.closest && t.closest('.cp');
     if(!b) return;
     var pre = b.parentNode.querySelector('pre'), s = pre ? pre.textContent : '';
     var done = function(){ b.textContent = tv(T.copied); setTimeout(function(){ b.textContent = tv(T.copy); }, 1200); };
@@ -888,11 +1176,20 @@ button,input{font:inherit;color:inherit}
     } else if(e.key === 'Escape' && document.activeElement === q){ q.blur(); }
   });
   window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('hashchange', function(){
+    var a = (location.hash || '').replace(/^#/, '');
+    if(a && document.getElementById(a)) jumpTo(a);
+  });
   window.addEventListener('storage', function(e){
     if(e.key === 'ek-lang' && e.newValue) setLang(e.newValue, false);
   });
   setLang(lang, false);
   onScroll();
+  // 正文由脚本生成，浏览器自带的 #锚点 跳转在这之前就发生了，这里补一次。
+  setTimeout(function(){
+    var a = (location.hash || '').replace(/^#/, '');
+    if(a && document.getElementById(a)) jumpTo(a, true);
+  }, 120);
 })();
 </script>
 </body>
