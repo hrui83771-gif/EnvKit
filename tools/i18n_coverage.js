@@ -27,7 +27,10 @@ async () => {
     await sleep(1900);                     // 每个路由都要等异步状态回来后才有文本
     grab();
   }
-  try { document.getElementById('btn-about').click(); await sleep(600); grab(); document.getElementById('about-close').click(); } catch (e) {}
+  // 本轮：侧栏按钮已改跳「使用文档」（整块 data-no-i18n），关于弹窗要从文档页进入。
+  try { document.getElementById('btn-about').click(); await sleep(400);
+        document.getElementById('docs-about').click(); await sleep(600); grab();
+        document.getElementById('about-close').click(); } catch (e) {}
   try { aiOpen(); await sleep(500); grab(); } catch (e) {}
 
   window.removeEventListener('error', onErr);

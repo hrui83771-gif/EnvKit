@@ -444,8 +444,11 @@ $('#cf-cancel').onclick = ()=>closeConfirm(false);
 // （ESC 同样有效，见上面的 keydown 监听）。
 $('#confirm').addEventListener('click', e=>{ if(e.target.id==='confirm') closeConfirm(false); });
 
-/* ---------- 关于 / 免责声明 ---------- */
-$('#btn-about').onclick = ()=>$('#about').classList.add('show');
+/* ---------- 关于（长说明已迁到「使用文档」） ----------
+   #btn-about 保留 id 只为兼容既有回归，它现在是 data-goto="docs"，
+   由上面的统一路由打开文档页；关于弹窗只从文档页的按钮进入。 */
+$('#docs-about').onclick = ()=>$('#about').classList.add('show');
+$('#about-docs').onclick = ()=>{ $('#about').classList.remove('show'); goto('docs'); };
 $('#about-close').onclick = ()=>$('#about').classList.remove('show');
 $('#about').addEventListener('click', e=>{ if(e.target.id==='about') $('#about').classList.remove('show'); });
 

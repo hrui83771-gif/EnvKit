@@ -43,6 +43,12 @@
          顶栏只留"我是谁"和状态，避免一排同权重按钮抢注意力。 -->
     <div class="hactions">
       <span class="chip admin" id="chip-admin" style="display:none">管理员</span>
+      <!-- 搜索入口：不是第二个搜索实现，只是 Ctrl+K 命令面板的可见把手。
+           点击/按键都走 EKCmd.open()，索引仍是"页面里真实存在的控件现扫"。 -->
+      <button class="hdr-search" id="btn-search" type="button" title="搜索页面、按钮、章节（Ctrl+K）">
+        <span class="ek" data-ek-icon="search" data-ek-size="15"></span>
+        <span class="hs-t">搜索</span><kbd>Ctrl+K</kbd>
+      </button>
       <div class="profile" id="profile">
         <button class="profile-btn" id="btn-profile" title="个人中心">
           <span class="pavatar" id="profile-avatar">🐟</span>
@@ -1150,6 +1156,25 @@
       </div>
     </section>
 
+    <!-- 使用文档（本轮）：把操作页上的长说明集中到这里。
+         左侧目录随搜索过滤，正文由 79-docs.js 从真实功能清单渲染，
+         右侧目录是正文里真实存在的 h2/h3 锚点，不是手写假目录。 -->
+    <section class="panel" id="panel-docs">
+      <div class="phead"><h2>使用文档 <span class="stepno">从安装到排障，一页看完</span></h2></div>
+      <div class="docs-shell" id="docs-shell">
+        <div class="docs-side">
+          <label class="docs-filter" for="docs-q">
+            <span class="ek" data-ek-icon="search" data-ek-size="14"></span>
+            <input id="docs-q" type="text" autocomplete="off" spellcheck="false" placeholder="过滤目录" />
+          </label>
+          <div class="docs-tree" id="docs-tree" data-no-i18n></div>
+          <button class="docs-about" id="docs-about" type="button">关于 EnvKit</button>
+        </div>
+        <article class="docs-body" id="docs-body" data-no-i18n></article>
+        <nav class="docs-toc" id="docs-toc" data-no-i18n aria-label="本页目录"></nav>
+      </div>
+    </section>
+
   </main>
 
   <aside class="sidebar">
@@ -1163,6 +1188,7 @@
       <div class="nav" data-panel="heal">自愈态势</div>
       <div class="nav" data-panel="audit">操作审计</div>
       <div class="nav-sep"></div>
+      <div class="nav" data-panel="docs">使用文档</div>
       <div class="nav" data-panel="settings">设置</div>
     </div>
     <div class="svc">
@@ -1195,7 +1221,9 @@
       </div>
     </div>
     <button class="side-link" id="btn-syslog">系统事件（最近错误）</button>
-    <button class="side-link" id="btn-about">关于 / 免责声明</button>
+    <!-- 本轮：说明集中到「使用文档」，这里不再打开长篇关于弹窗。
+         保留原 id 兼容既有回归；data-goto 由 20-shell.js 统一路由。 -->
+    <button class="side-link" id="btn-about" data-goto="docs">使用文档</button>
   </aside>
 </div>
 
@@ -1239,34 +1267,23 @@
 <div class="modal" id="about">
   <div class="mbox" style="width:min(560px,92vw)">
     <div class="mhead">关于 EnvKit</div>
-    <div style="padding:14px 16px;font-size:13px;line-height:1.7;max-height:64vh;overflow:auto">
+    <!-- 本轮：核心功能与免责声明已迁到「使用文档」。这里只留身份信息，
+         操作页不再被长篇说明占满；重看引导的按钮位置保持不变。 -->
+    <div style="padding:14px 16px;font-size:13px;line-height:1.7">
       <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px">
         <img id="about-logo" alt="" style="width:48px;height:48px;border-radius:12px;box-shadow:0 2px 6px rgba(16,24,40,.18)" />
         <div>
           <p style="margin:0"><b>EnvKit</b> <span id="about-ver">v__APP_VERSION__</span></p>
-          <p style="margin:3px 0 0;color:var(--muted)">统一开发环境助手 · 单文件 Go · 零依赖 · 内置 AI 运维助手</p>
+          <p style="margin:3px 0 0;color:var(--muted)">统一开发环境助手 · 单文件 Go · 内置 AI 运维助手</p>
         </div>
       </div>
-      <p style="margin:0 0 10px">作者 / 项目地址：<a href="https://github.com/hrui83771-gif" target="_blank" style="color:var(--info);word-break:break-all">https://github.com/hrui83771-gif</a></p>
-      <h3 style="margin:14px 0 6px">核心功能</h3>
-      <ul style="margin:0;padding-left:18px;line-height:1.8">
-        <li><b>环境安装</b>：Go / Node.js / MySQL 8 检测（版本 + 安装位置）、国内镜像下载（SHA256 校验 + 自动重试）、自动配置 GOPROXY 与 npm registry、演练安装、组件版本管理与一键升级</li>
-        <li><b>程序配置</b>：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告</li>
-        <li><b>链端校验</b>：FISCO-BCOS v2 / WeBASE-Front 连通检测、内嵌 SSH 终端、远程目录浏览、区块高度 / 交易总数 / 客户端版本读取、节点进程健康、宕机自动重启（一键检测 / 后台守护）+ 桌面通知</li>
-        <li><b>程序启动</b>：前后端一键启动（先后端、再前端）、访问地址自动解析、日志按来源分栏与 ANSI 清理、进程树管理（EnvKit 退出自动回收）、一键停止服务并报告端口占用（第三方进程只报告不结束）</li>
-        <li><b>AI 助手</b>：右下角桌面助手（任务进度环、写操作确认徽标、出错一键跳日志、拖入 SQL 直接生效、检测表情反馈）；自然语言问答与诊断报告解读，26 个工具覆盖状态 / 日志 / 审计 / 诊断 / 数据库 / 检测 / 启停 / 白名单 / 清理，写操作一律先确认；兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密</li>
-        <li><b>安全与可靠</b>：密码 DPAPI 加密存储、本机 API 令牌防 CSRF、单实例保护、配置原子写入 + 上一版备份、日志按日轮转与自动清理、panic 兜底与命令超时、杀软白名单一键排除 + 流氓软件深度清除</li>
-      </ul>
-      <h3 style="margin:14px 0 6px">免责声明</h3>
-      <ol style="margin:0;padding-left:18px;color:var(--muted)">
-        <li>本软件按"现状"（AS IS）提供，作者不对其准确性、可靠性、适用性及特定用途的适用性作任何明示或暗示的担保，亦不保证软件无缺陷或永久可用。</li>
-        <li>使用本软件所产生的任何后果（含环境配置失败、数据丢失、服务中断、端口 / 进程异常、链端操作失误、误操作等）均由使用者自行承担，作者不承担任何直接或间接的责任。</li>
-        <li>本软件依赖第三方组件（Go、Node.js、MySQL、FISCO-BCOS、WeBASE 等），其版权与使用许可归各自权利方所有，请遵守其各自的许可协议；本软件不因此获得对第三方组件的任何授权。</li>
-        <li>区块链上链数据具有不可篡改性，但仅供参考，不构成任何投资、法律、财务或商业建议；据此操作产生的风险由使用者自行承担。</li>
-        <li>作者保留在不另行通知的情况下修改、暂停或停止提供本软件及其相关服务的权利。</li>
-      </ol>
+      <p style="margin:0">功能说明、常见问题与免责声明见「使用文档」。</p>
     </div>
-    <div class="mfoot"><button class="ghost" id="about-replay">重新观看介绍</button><button id="about-close">知道了</button></div>
+    <div class="mfoot">
+      <button class="ghost" id="about-docs">查看使用文档</button>
+      <button class="ghost" id="about-replay">重新观看介绍</button>
+      <button id="about-close">知道了</button>
+    </div>
   </div>
 </div>
 

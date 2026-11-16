@@ -166,6 +166,13 @@
     });
   }
 
+  // 顶栏那颗长得像搜索框的按钮只是本面板的可见入口；点它永远「打开」，
+  // 不用 toggle，免得面板已开着时点一下反而关掉（键盘 Ctrl+K 仍是切换）。
+  document.addEventListener('click', function(ev){
+    var b = ev.target && ev.target.closest ? ev.target.closest('#btn-search') : null;
+    if(b){ ev.preventDefault(); open(); }
+  });
+
   window.EKCmd = {
     open: open, close: close, toggle: toggle, runIndex: runIndex,
     items: function(){ return all.slice(); },

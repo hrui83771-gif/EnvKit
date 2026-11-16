@@ -2025,5 +2025,14 @@
   "尚无守护记录。守护开启并跑过一轮后，这里会按时间列出恢复、复验、关联压制与影子评估。": "No guard records yet. After guarding runs one round, restarts, verifications, cascade suppressions and shadow evaluations will appear here in time order.",
   "重新读取守护状态与审计": "Re-read guard status and audit",
   "陪伴": "Companion",
-  "外观": "Appearance"
+  "外观": "Appearance",
+  "搜索": "Search",
+  "搜索页面、按钮、章节（Ctrl+K）": "Search pages, buttons, sections (Ctrl+K)",
+  "使用文档": "Docs",
+  "从安装到排障，一页看完": "From setup to troubleshooting, in one place",
+  "过滤目录": "Filter contents",
+  "本页目录": "On this page",
+  "功能说明、常见问题与免责声明见「使用文档」。": "Feature details, FAQ and the disclaimer are in Docs.",
+  "查看使用文档": "Open docs",
+  "统一开发环境助手 · 单文件 Go · 内置 AI 运维助手": "Unified dev environment assistant · single-file Go · built-in AI ops assistant"
 }

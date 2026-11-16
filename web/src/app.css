@@ -35,6 +35,21 @@
   @media (max-width:1120px){ .brand p{display:none} }
   .chips{display:flex;gap:5px;flex-wrap:wrap;flex:0 1 auto;min-width:0}
   .hactions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:0 0 auto}
+  /* 顶栏搜索：看起来是输入框，实际只是 Ctrl+K 面板的可见把手。
+     不引入第二套索引，窄屏收成一个放大镜，避免把四个状态胶囊挤出屏幕。 */
+  .hdr-search{display:flex;align-items:center;gap:7px;min-width:178px;padding:5px 7px 5px 10px;
+    border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--muted);
+    font-size:12.5px;font-weight:500;cursor:pointer;transition:.15s}
+  .hdr-search:hover{background:var(--card);border-color:var(--brand2);color:var(--text)}
+  .hdr-search .ek{display:flex;align-items:center;flex:none;color:var(--muted)}
+  .hdr-search .hs-t{flex:1;text-align:left;white-space:nowrap}
+  .hdr-search kbd{font:11px Consolas,"Courier New",monospace;padding:2px 6px;
+    border:1px solid var(--line);border-radius:6px;background:var(--card);
+    color:var(--muted);white-space:nowrap}
+  @media(max-width:860px){
+    .hdr-search{min-width:0;width:34px;padding:5px;justify-content:center}
+    .hdr-search .hs-t,.hdr-search kbd{display:none}
+  }
   /* 个人中心：顶栏只留「头像 + 昵称」，语言/主题/杀软/提权收进下拉。
      操作按钮原来一排同权重，真正高频的"看状态"反而被挤到左边。 */
   .profile{position:relative;flex:none}
@@ -2420,4 +2435,54 @@
   .heal-badge.warn{background:var(--warnbg);color:var(--warn)}
   .heal-badge.err{background:var(--errbg);color:var(--err)}
   .heal-badge.info{background:var(--infobg);color:var(--info)}
+
+  /* ---- 使用文档（本轮）：左目录 / 中正文 / 右章节目录 ----
+     三栏各自滚动，正文和目录不会跟着整页跑；窄屏先收右栏，再收成单列。 */
+  .docs-shell{display:grid;grid-template-columns:184px minmax(0,1fr) 168px;gap:14px;align-items:start}
+  .docs-side,.docs-toc{position:sticky;top:74px;max-height:calc(100vh - 96px);overflow:auto}
+  .docs-side{border-right:1px solid var(--line);padding-right:10px}
+  .docs-filter{display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:5px 8px;
+    border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--muted)}
+  .docs-filter input{width:100%;border:0;background:transparent;color:var(--text);
+    font-size:12px;padding:0;outline:none}
+  .docs-tree{display:flex;flex-direction:column;gap:2px}
+  .docs-grpbox[hidden]{display:none}
+  .docs-grp{font-size:11px;color:var(--muted);font-weight:600;padding:8px 8px 3px;letter-spacing:.4px}
+  .docs-item{display:block;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:7px;
+    background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
+  .docs-item:hover{background:var(--soft2);color:var(--text)}
+  .docs-item.on{background:var(--brand-weak);color:var(--brand);font-weight:600}
+  .docs-item[hidden]{display:none}
+  .docs-about{width:100%;margin-top:10px;padding:6px 8px;font-size:12px;
+    border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--muted)}
+  .docs-about:hover{background:var(--off);color:var(--text)}
+  .docs-body{min-width:0;max-height:calc(100vh - 96px);overflow:auto;padding:2px 6px 30px 2px}
+  .docs-body h2{font-size:20px;margin:0 0 8px;scroll-margin-top:74px}
+  .docs-body h3{font-size:15px;margin:22px 0 8px;scroll-margin-top:74px}
+  .docs-body p{font-size:13px;line-height:1.85;color:var(--text);margin:0 0 12px}
+  .docs-body ul,.docs-body ol{margin:0 0 14px;padding-left:20px;color:var(--text);font-size:13px;line-height:1.9}
+  .docs-note{border-left:3px solid var(--brand2);background:var(--soft);border-radius:0 8px 8px 0;
+    padding:9px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.8;color:var(--muted)}
+  .docs-code{position:relative;margin:0 0 14px}
+  .docs-code pre{margin:0;padding:12px 14px;border-radius:9px;background:#1c2430;color:#e7edf5;
+    font:12px/1.7 Consolas,"Courier New",monospace;overflow:auto;white-space:pre}
+  .docs-copy{position:absolute;right:7px;top:7px;padding:2px 8px;font-size:11px;
+    border:1px solid #52627a;border-radius:6px;background:#263244;color:#cfd9e6;cursor:pointer}
+  .docs-copy:hover{background:#31415a}
+  .docs-toc{border-left:1px solid var(--line);padding-left:10px;font-size:12px;color:var(--muted)}
+  .docs-toc-t{font-weight:600;color:var(--text);margin-bottom:7px}
+  .docs-toc a{display:block;padding:3px 0;color:var(--muted);text-decoration:none;line-height:1.5}
+  .docs-toc a:hover,.docs-toc a.on{color:var(--brand)}
+  .docs-toc a.sub{padding-left:12px;font-size:11.5px}
+  @media(max-width:1080px){
+    .docs-shell{grid-template-columns:170px minmax(0,1fr)}
+    .docs-toc{display:none}
+  }
+  @media(max-width:760px){
+    .docs-shell{grid-template-columns:1fr}
+    .docs-side{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line);padding:0 0 10px}
+    .docs-tree{flex-direction:row;flex-wrap:wrap}
+    .docs-grp{width:100%}
+    .docs-body{max-height:none}
+  }
 
