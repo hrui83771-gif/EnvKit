@@ -123,6 +123,9 @@ button,input{font:inherit;color:inherit}
 .tbl td{padding:8px 10px;border-bottom:1px solid var(--line2);color:var(--sub);vertical-align:top}
 .tbl tr:last-child td{border-bottom:0}
 .tbl code{font:11.5px Consolas,monospace;background:#f2f4f7;border-radius:4px;padding:1px 5px;color:var(--brand2)}
+.xlink{margin:14px 0 2px;font-size:12.5px;color:var(--muted)}
+.xlink a{color:var(--brand2);text-decoration:none;border-bottom:1px dashed var(--brand)}
+.xlink a:hover{border-bottom-style:solid}
 .tbl td:first-child{white-space:nowrap}
 
 /* 右目录 */
@@ -226,6 +229,7 @@ button,input{font:inherit;color:inherit}
   function STEPS(items){ return {k:'steps',items:items}; }
   function CODE(code,label){ return {k:'code',code:code,label:label}; }
   function TABLE(head,rows){ return {k:'table',head:head,rows:rows}; }
+  function XLINK(items){ return {k:'xlink',items:items}; }
 
   var D = [
     {id:'runtime', group:z('开始使用','Get started'), title:z('EnvKit 是什么','What EnvKit is'), body:[
@@ -236,7 +240,7 @@ button,input{font:inherit;color:inherit}
         'Observe → Reason → Act → Verify. The fourth step is not an afterthought the model may skip — it carries the same weight as the first three. After acting, verifiers use ports, processes, HTTP, backup contents and chain consensus to decide whether it actually worked.'),
       H3('runtime-rules','三条硬约束','Three hard constraints'),
       UL([
-        z('推理灵活、执行受控：模型可自由决定调用顺序，但所有副作用都经过已注册的 26 个工具，没有"执行任意命令"','Flexible reasoning, controlled execution: the model may reorder calls freely, but every side effect goes through 26 registered tools; there is no arbitrary command execution'),
+        z('推理灵活、执行受控：模型可自由决定调用顺序，但所有副作用都经过已注册的工具集，没有"执行任意命令"','Flexible reasoning, controlled execution: the model may reorder calls freely, but every side effect goes through a registered tool set; there is no arbitrary command execution'),
         z('权限由系统裁定：工具返回成功只代表命令发出去了，能不能说"已完成"由验证器的客观结论决定','The system decides permission: a tool returning success only means the command was sent; saying “done” is the verifier’s objective conclusion'),
         z('经验只影响决策：记忆改变"先查什么、要不要原样重试"，不改变任何操作的授权档位','Experience only affects decisions: memory changes what to check first and whether to retry as-is, never an operation’s permission tier')
       ]),
@@ -348,24 +352,61 @@ button,input{font:inherit;color:inherit}
       P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
         'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
       H3('config-keys','config.json 关键字段','Key config fields'),
-      TABLE([z('字段','Field'),z('用途','Purpose')],[
-        [z('dev.server_port','dev.server_port'),z('控制台端口，默认 18765，冲突自动顺延','Console port, default 18765, shifts on conflict')],
-        [z('goproxy / npm_registry','goproxy / npm_registry'),z('组件与依赖的下载源','Download sources for components and dependencies')],
-        [z('mysql / projects.*','mysql / projects.*'),z('MySQL 参数、前后端目录、库名与备份目录','MySQL settings, front/back-end paths, database and backup directory')],
-        [z('chain.ssh_*','chain.ssh_*'),z('SSH 主机、端口、用户名、密码 / 私钥与主机指纹','SSH host, port, user, password / key and host fingerprint')],
-        [z('chain.chain_*','chain.chain_*'),z('节点地址、目录、启动命令、守护与通知开关','Node address, path, start command, guard and notification switches')],
-        [z('ai.*','ai.*'),z('模型协议、地址与密钥（本机 DPAPI 加密）','Model protocol, endpoint and key (encrypted with DPAPI on this machine)')]
+      TABLE([z('字段','Field'),z('默认 / 示例','Default / example'),z('用途','Purpose')],[
+        [z('dev.server_port','dev.server_port'),z('18765','18765'),z('控制台端口，冲突时向后扫描到 18815','Console port; shifts up to 18815 on conflict')],
+        [z('goproxy','goproxy'),z('goproxy.cn,goproxy.io,direct','goproxy.cn,goproxy.io,direct'),z('Go 组件下载源，逗号分隔按顺序回退','Go component sources, comma-separated fallback order')],
+        [z('npm_registry','npm_registry'),z('mirrors.cloud.tencent.com/npm/','mirrors.cloud.tencent.com/npm/'),z('npm 依赖下载源','npm dependency source')],
+        [z('mysql.port / service_name','mysql.port / service_name'),z('3306 / MySQL80','3306 / MySQL80'),z('MySQL 绿色版端口与服务名','Port and service name of portable MySQL')],
+        [z('projects.*','projects.*'),z('留空 → 在界面填','empty → fill in UI'),z('前后端目录、MySQL 连接、库名、sql_file 与 backup_dir','Front/back-end paths, MySQL connection, DB name, sql_file and backup_dir')],
+        [z('chain.ssh_*','chain.ssh_*'),z('留空 → 在界面填','empty → fill in UI'),z('SSH 主机 / 端口 / 用户 / 密码或私钥 / 主机指纹','SSH host / port / user / password or key / host fingerprint')],
+        [z('chain.chain_guard_secs','chain.chain_guard_secs'),z('60（最小 30）','60 (min 30)'),z('后台守护检测间隔（秒）','Background guard interval in seconds')],
+        [z('chain.chain_autorecover / guard / notify','chain.chain_autorecover / guard / notify'),z('false','false'),z('一键自动恢复 / 周期守护 / 桌面通知，按需打开','One-click recovery / periodic guard / desktop notification, off until enabled')],
+        [z('ai.enabled','ai.enabled'),z('false','false'),z('AI 助手总开关；密钥经 DPAPI 加密存本机','AI master switch; key stored locally with DPAPI')],
+        [z('update.interval_hours','update.interval_hours'),z('72','72'),z('检查 GitHub Releases 的间隔（小时）','Hours between GitHub Releases checks')],
+        [z('notify.muted / pet.weather_enabled','notify.muted / pet.weather_enabled'),z('false','false'),z('全局静音 / 天气查询，默认都关，按需开','Global mute / weather, both off by default')]
+      ]),
+      H3('config-apply','怎么改才生效','How changes take effect'),
+      STEPS([
+        z('改设置页里的开关与阈值：保存后即时生效，写回 config.json 并自动留上一版备份。',
+          'Change switches and thresholds in Settings: they take effect immediately, are written back to config.json and a previous-version backup is kept.'),
+        z('改端口、目录这类连接参数：先在「程序配置」改数据库连接并测试，再改项目目录，最后重启前后端让进程读到新值。',
+          'For ports and paths: change and test the database connection in Configuration, then project paths, then restart front and back end so processes pick up the new values.'),
+        z('直接编辑 config.json：改完要重启 EnvKit；导出配置默认脱敏，分享前确认没带上密钥。',
+          'Editing config.json directly requires an EnvKit restart. Exported configs are redacted by default — check no key slipped in before sharing.')
       ]),
       H3('config-files','本机文件','Files on this machine'),
       CODE(z('config.json                 当前配置\nconfig.dist.json           干净模板\naudit-YYYYMMDD.jsonl       操作审计（保留 30 天）\nenvkit-YYYYMMDD.log        运行日志（按日轮转）\nmissions.json / playbooks.json / memories.json   行动 / 预案 / 记忆',
              'config.json                 active config\nconfig.dist.json           clean template\naudit-YYYYMMDD.jsonl       operation audit (kept 30 days)\nenvkit-YYYYMMDD.log        daily rotating log\nmissions.json / playbooks.json / memories.json   actions / playbooks / memory'),''),
       NOTE('API Key 与数据库密码经 Windows DPAPI 加密，只在本机可解密。导出的配置默认脱敏，分享前再确认一次没有带上密钥。',
-           'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger')
+           'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger'),
+      XLINK([['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'chain', group:z('日常操作','Daily operations'), title:z('链端校验','Chain checks'), body:[
       P('支持 FISCO-BCOS v2 / WeBASE-Front 连通检测、SSH 密码或私钥登录、页面内嵌终端与远程目录浏览；节点异常可一键检测或交给后台守护自动恢复，并触发 Windows 通知。',
         'Supports FISCO-BCOS v2 / WeBASE-Front connectivity, SSH password or key login, an embedded terminal and remote directory browsing. Recovery can be manual or handled by the background guard with Windows notifications.'),
+      H3('chain-fields','要填哪些字段','Fields to fill'),
+      TABLE([z('位置','Where'),z('字段 / 示例','Field / example'),z('说明','Detail')],[
+        [z('程序配置 → 链端配置','Configuration → Chain'),z('主机 192.0.2.10 · 端口 22 · 用户 root','Host 192.0.2.10 · port 22 · user root'),z('先填这个并点「测试 SSH 连接」，绿了再往下','Fill this and test SSH first; continue only when it passes')],
+        [z('链端配置','Chain config'),z('密码留空则用私钥','Leave password empty to use a private key'),z('私钥填本机路径；首次连接按 TOFU 记主机指纹','Key is a local path; first connect records the host fingerprint (TOFU)')],
+        [z('链端配置 → 链','Chain config → chain'),z('链主机留空 = 同 SSH 主机；端口 20200','Chain host empty = same as SSH host; port 20200'),z('链主机与 SSH 不同机时才填','Only fill when the chain host differs from SSH')],
+        [z('链端配置 → 链','Chain config → chain'),z('链端目录 /opt/fisco/nodes/127.0.0.1','Chain dir /opt/fisco/nodes/127.0.0.1'),z('点「选择」用远程目录浏览挑，别手输错路径','Use the remote picker instead of typing a path by hand')],
+        [z('链端配置 → 链','Chain config → chain'),z('启动脚本 bash start_all.sh','Start script bash start_all.sh'),z('宕机自愈时 EnvKit 用它在远端拉起节点','Used by self-healing to restart the node remotely')],
+        [z('链端配置 → WeBASE','Chain config → WeBASE'),z('W 目录 /opt/webase/webase-front · 脚本 bash start.sh · 端口 5002 · 群组 1','W dir /opt/webase/webase-front · script bash start.sh · port 5002 · group 1'),z('只在用 WeBASE-Front 时填','Only needed when using WeBASE-Front')]
+      ]),
+      H3('chain-flow','一次完整检测','One full check'),
+      STEPS([
+        z('填 SSH 主机 / 端口 / 用户与凭据，点「测试 SSH 连接」；状态变绿再继续。',
+          'Fill SSH host / port / user and credentials, then test the connection; continue once it turns green.'),
+        z('填链端口与目录，用「选择」远程挑目录；需要 WeBASE 再填 W 目录与端口。',
+          'Fill the chain port and directory, use the picker to choose the remote directory; fill WeBASE fields only if used.'),
+        z('点「检测」看四项：节点端口、进程、共识视图推进、WeBASE 地址；成功信号是「检测通过」，不是命令返回 0。',
+          'Press Check and inspect four things: node port, process, consensus view progression and WeBASE URL. Success means the check passed, not exit code 0.'),
+        z('要拉起服务用「启动」菜单分别启动节点与 WeBASE；需要命令行时用「终端」或远程执行命令。',
+          'Use the Start menu to bring up the node and WeBASE separately; use Terminal or remote exec for commands.'),
+        z('挂机无人值守再打开「后台守护」，间隔默认 60 秒、最小 30；需要弹通知加开 chain_notify。',
+          'For unattended runs enable the background guard (default 60 s, minimum 30) and chain_notify for desktop alerts.')
+      ]),
       H3('chain-live','判活看共识视图','Liveness is the consensus view'),
       NOTE('判活看的是共识视图是否推进，不是区块高度。PBFT 空块只共识不落盘，块高静止是正常态；拿块高判活会把健康链永远判成未恢复。',
            'Liveness is judged by consensus view progression, NOT block height. PBFT empty blocks reach consensus without being stored, so a static height is normal; judging by height marks healthy chains as unrecovered.', 'danger'),
@@ -373,12 +414,26 @@ button,input{font:inherit;color:inherit}
         z('SSH 首次连接按 TOFU 记录主机指纹，之后指纹变化即拒绝。','SSH uses TOFU: the host fingerprint is recorded on first connect and any change is rejected.'),
         z('自愈态势页展示守护轨迹与影子晋升证据；空列表表示尚无记录，不代表守护没配置。','The self-healing page shows guard traces and shadow promotion evidence. An empty list means no records yet, not that guarding is disabled.'),
         z('复验通过才算完成；命令返回 0 只说明命令跑了，不等于节点真的活了。','Only a passed verification counts as done; exit code 0 only means the command ran, not that the node is alive.')
-      ])
+      ]),
+      XLINK([['selfheal','故障自愈轨迹','Self-healing traces'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'start', group:z('日常操作','Daily operations'), title:z('程序启动与日志','Start and logs'), body:[
       P('前后端一键启动（先后端、再前端），访问地址自动解析；日志按来源分栏并清理 ANSI 转义码，支持复制、下载和自动滚动。',
         'Start backend then frontend with one click; access URLs are resolved automatically. Logs are split by source, stripped of ANSI codes, and support copy, download and auto-scroll.'),
+      H3('start-flow','启动顺序','Start order'),
+      STEPS([
+        z('先在「程序配置」填好前后端目录与数据库连接并测试；目录填的是项目根，不是某个源文件。',
+          'In Configuration, set and test the front/back-end paths and DB connection first; paths point at project roots, not source files.'),
+        z('到「程序启动」点启动：先后端、再前端，访问地址由端口与入口文件自动解析。',
+          'On the Start page press start: backend first, then frontend; the access URL is resolved from ports and entry files.'),
+        z('看日志页：按 install / config / start / chain / sys 分栏，已清理 ANSI 转义码，可复制、下载、自动滚动。',
+          'Read the Logs page: split into install / config / start / chain / sys, ANSI codes stripped, with copy, download and auto-scroll.'),
+        z('验证要用「检测」或 AI 的 verify_environment：看端口、HTTP 握手、进程数，不看启动按钮的反应。',
+          'Verify with Check or the AI verify_environment tool: ports, HTTP handshake and process count — not the start button reaction.'),
+        z('停止时看端口占用报告：第三方进程只报告不结束；EnvKit 子进程绑 Job Object，退出时自动回收。',
+          'On stop, read the port-occupancy report: third-party processes are reported, never killed; EnvKit children are reaped via a Job Object.')
+      ]),
       H3('start-limit','边界与审计','Boundaries & audit'),
       UL([
         z('停止服务时报告端口占用：第三方进程只报告，不会替你结束。','Stopping reports port occupancy: third-party processes are reported, never killed.'),
@@ -386,7 +441,8 @@ button,input{font:inherit;color:inherit}
         z('操作审计只追加、不修改、不回滚，按天分文件保留 30 天；密码与 API Key 在入库前已脱敏。','Operation audit is append-only, kept in daily files for 30 days. Passwords and API keys are redacted before being written.')
       ]),
       NOTE('日志停在某一步且没有任何异常，先确认进程是否还在、退出码是什么——历史上 Windows 句柄重复关闭会让进程无声消失。',
-           'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn')
+           'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn'),
+      XLINK([['config','程序配置','Configuration'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'selfheal', group:z('日常操作','Daily operations'), title:z('故障自愈轨迹','Self-healing traces'), body:[
@@ -405,8 +461,28 @@ button,input{font:inherit;color:inherit}
            'Only a passed verification counts as done; exit code 0 only means the command ran. Liveness is judged by consensus view progression, not block height.', 'danger')
     ]},
     {id:'ai', group:z('AI 与自动化','AI & automation'), title:z('AI 助手','AI assistant'), body:[
-      P('右下角桌宠是状态出口，点它打开 AI 抽屉。26 个受控工具覆盖状态、日志、审计、诊断、数据库、检测、启停、白名单与清理；对话支持 Markdown、表格与代码高亮。兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密。',
-        'The desktop pet is a status outlet; click it to open the AI drawer. 26 controlled tools cover status, logs, audit, diagnostics, database, checks, start/stop, allowlist and cleanup. Chat supports Markdown, tables and code highlighting, with any OpenAI-compatible model and a DPAPI-encrypted key.'),
+      P('右下角桌宠是状态出口，点它打开 AI 抽屉。一组受控工具覆盖状态、日志、审计、诊断、数据库、检测、启停、白名单与清理；对话支持 Markdown、表格与代码高亮。兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密。',
+        'The desktop pet is a status outlet; click it to open the AI drawer. controlled tools cover status, logs, audit, diagnostics, database, checks, start/stop, allowlist and cleanup. Chat supports Markdown, tables and code highlighting, with any OpenAI-compatible model and a DPAPI-encrypted key.'),
+      H3('ai-tools','工具按类看','Tools by category'),
+      TABLE([z('类别','Category'),z('真实工具名','Actual tool names'),z('能做什么','What they do')],[
+        [z('状态与诊断','State & diagnosis'),z('get_system_state · get_env_snapshot · get_project_brief · get_diag_report','get_system_state · get_env_snapshot · get_project_brief · get_diag_report'),z('环境状态、本回合注入的快照、项目画像（语言/脚本/入口）、脱敏诊断报告','Environment state, this turn’s snapshot, project brief and a redacted diagnostic report')],
+        [z('日志与审计','Logs & audit'),z('get_logs · get_audit_log','get_logs · get_audit_log'),z('按 install/config/start/chain/sys 读日志；查「谁、何时、做了什么、结论」','Read logs by scope; query who did what and with what result')],
+        [z('数据库','Database'),z('db_check · db_list · db_query · db_backup · list_backups','db_check · db_list · db_query · db_backup · list_backups'),z('连接检测、列库表行数、只读查询（SELECT/SHOW/DESCRIBE/EXPLAIN/WITH）、备份与只读列备份','Connection check, list DBs, read-only queries, backup and read-only backup listing')],
+        [z('文件与附件','Files & attachments'),z('list_project · search_files · read_file · read_doc','list_project · search_files · read_file · read_doc'),z('列目录、按名/内容搜文件、分页精读项目文件、分页读拖入的 PDF/Office 附件','List, search, page through project files and read dragged-in PDF/Office attachments')],
+        [z('环境与复验','Env & verification'),z('check_env_req · run_detection · verify_environment','check_env_req · run_detection · verify_environment'),z('比对 go.mod/package.json 的版本要求、重新检测组件、按端口/进程/HTTP/备份/共识复验','Check version requirements, re-detect components and verify by port/process/HTTP/backup/consensus')],
+        [z('服务与进程','Services & processes'),z('start_service · stop_service · restart_service · cleanup_processes','start_service · stop_service · restart_service · cleanup_processes'),z('前后端启停重启；清理只停 EnvKit 管的服务并报告端口占用，第三方进程只报告','Start/stop/restart services; cleanup stops only EnvKit’s services and reports port owners')],
+        [z('链端与守护','Chain & guard'),z('get_chain_guard · sync_chain_ip','get_chain_guard · sync_chain_ip'),z('查守护状态与最近结果；把后端链节点地址同步为当前路由配置','Read guard state and recent results; sync backend chain URL with current route config')],
+        [z('记忆与经验','Memory & experience'),z('recall_lessons · manage_memories','recall_lessons · manage_memories'),z('查看历史经验与用户规矩、记录长期记忆；默认关闭，只影响建议顺序','View lessons and user rules, record long-term memory; off by default and suggestion-only')],
+        [z('其他','Others'),z('apply_whitelist','apply_whitelist'),z('把 EnvKit 目录加进 Defender 白名单，弹 UAC 需用户点「是」','Add the EnvKit directory to Defender exclusions; prompts UAC')]
+      ]),
+      H3('ai-ask','可以怎么问','What to ask'),
+      UL([
+        z('「现在 Go / Node / MySQL 装在哪、什么版本？」→ 状态快照，不是让你去翻环境变量。','“Where are Go / Node / MySQL installed and at what versions?” → a state snapshot, not manual env checks.'),
+        z('「业务库里有哪些表，各多少行？」→ db_list + db_query，只读，不改数据。','“What tables are in the business DB and how many rows?” → db_list + db_query, read-only.'),
+        z('「帮我确认服务真的起来了」→ verify_environment，给三态结论而不是「我启动了」。','“Confirm the service is really up” → verify_environment, a three-state verdict instead of “I started it”.'),
+        z('「上次这个错误是怎么修的？」→ recall_lessons + get_audit_log，跨会话回看轨迹。','“How did we fix this error last time?” → recall_lessons + get_audit_log, traces across sessions.'),
+        z('「把这个 SQL 跑了」→ 先备份、再弹确认卡，服务端 428 兜底；取消记「未证明」不算失败。','“Run this SQL” → backup first, then a confirmation card backed by server-side 428; cancelling records “unproven”, not failure.')
+      ]),
       H3('ai-gate','写操作闸门','Write gates'),
       TABLE([z('机制','Mechanism'),z('行为','Behaviour')],[
         [z('写操作确认','Write confirmation'),z('服务端返回 428 强制确认，模型跳不过去；不提供任意命令执行','Server returns 428 and the model cannot bypass it; no arbitrary command execution')],
@@ -415,7 +491,8 @@ button,input{font:inherit;color:inherit}
         [z('记忆与经验','Memory and experience'),z('默认关闭；即使开启也只影响建议顺序，不改变权限档位','Off by default; even on, they only affect suggestion order, never permission levels')]
       ]),
       NOTE('内存里没有的权限，不会因为「这条经验置信度高」而放开。任何写操作都逐条过确认。',
-           'No permission is granted because an experience has high confidence. Every write still goes through confirmation.', 'ok')
+           'No permission is granted because an experience has high confidence. Every write still goes through confirmation.', 'ok'),
+      XLINK([['verify','完成 ≠ 结论','Done ≠ verified'],['security','安全边界','Security boundary']])
     ]},
 
     {id:'missions', group:z('AI 与自动化','AI & automation'), title:z('行动与预案','Actions and playbooks'), body:[
@@ -461,6 +538,17 @@ button,input{font:inherit;color:inherit}
     {id:'mobile', group:z('伴随与陪伴','Companion'), title:z('手机访问','Mobile access'), body:[
       P('个人中心打开「手机访问」后，电脑另开一个局域网端口（默认 18766）并扫码配对。桌面控制台仍只绑 127.0.0.1；手机端口上只有 12 条接口，桌面那一百多个路由在这个端口上不存在——不是"被判断成不允许"。',
         'Turn on Mobile access in the profile to open a separate LAN port (default 18766) and pair by QR code. The desktop console still binds only 127.0.0.1; the mobile port exposes just 12 endpoints — desktop routes simply do not exist there.'),
+      H3('mobile-pair','配对一次，长期信任','Pair once, trust afterwards'),
+      STEPS([
+        z('在个人中心打开「手机访问」开关，电脑会另开一个局域网端口（默认 18766）。',
+          'Turn on Mobile access in the profile; a separate LAN port opens (default 18766).'),
+        z('手机连同一个 WiFi（移动数据连不上），浏览器打开配对弹窗里的访问网址。',
+          'Join the same WiFi (mobile data will not work) and open the URL shown in the pairing dialog on your phone.'),
+        z('输入配对码——每次启动 EnvKit 都会变，点「换一个码」旧码立刻失效。',
+          'Enter the pairing code — it changes on every EnvKit start; “new code” invalidates the old one immediately.'),
+        z('配对后这台手机受信任 30 天；不想要了就关开关或在配对弹窗里移除设备。',
+          'The phone is then trusted for 30 days; turn the switch off or remove the device in the pairing dialog.')
+      ]),
       H3('mobile-tier','三档能力','Three capability tiers'),
       TABLE([z('能力','Capability'),z('默认','Default'),z('说明','Detail')],[
         [z('看屏幕','Screen view'),z('开（只读）','On (read-only)'),z('只能看，不能操作','View only, no control')],
@@ -470,7 +558,8 @@ button,input{font:inherit;color:inherit}
       UL([
         z('每个设备一个令牌；配对可再加一道 6 位动态验证码。','One token per device; an optional 6-digit one-time code adds a second factor.'),
         z('未配对设备连「功能开没开」都探不到：配对码与能力开关先鉴权再判断。','Unpaired devices cannot even detect whether a capability is on; authentication comes before capability checks.')
-      ])
+      ]),
+      XLINK([['security','安全边界','Security boundary'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'pet', group:z('伴随与陪伴','Companion'), title:z('桌宠','Desktop pet'), body:[
@@ -535,10 +624,31 @@ button,input{font:inherit;color:inherit}
       NOTE('方法和原始数据在仓库 docs/eval/；README 不贴会过期的数字。',
            'Method and raw data live in docs/eval/; the README does not paste numbers that go stale.', 'info')
     ]},
+    {id:'troubleshoot', group:z('参考','Reference'), title:z('排障索引','Troubleshooting index'), body:[
+      P('坑按「你看到的症状」排，不按模块排。先找症状，再看先查什么，最后点进对应章节看判据——这样不用从头翻一遍。',
+        'Issues are organised by what you see, not by module. Find the symptom, see what to check first, then open the linked section for the judgement rule.'),
+      H3('ts-symptom','症状 → 先查什么','Symptom → check first'),
+      TABLE([z('症状','Symptom'),z('先查什么','Check first'),z('判据 / 详见','Rule / detail')],[
+        [z('窗口是黑的，能关吗','Black console window, can I close it'),z('没关：关掉网页就打不开','Do not close: the page dies with it'),z('那是服务本体，用托盘「隐藏窗口到托盘」；见「四步走完」','It is the service; hide to tray; see Four steps')],
+        [z('端口被占用','Port in use'),z('停止页的占用报告','Port-occupancy report on the Stop page'),z('第三方进程只报告不结束；EnvKit 端口自动顺延到 18815','Third-party processes reported only; EnvKit shifts up to 18815')],
+        [z('MySQL 服务起不来','MySQL service will not start'),z('是否以管理员身份运行','Whether EnvKit runs as administrator'),z('注册 / 启动服务需要管理员权限，其余功能不需要','Registering/starting needs admin rights; nothing else does')],
+        [z('桌宠点不到','Pet ignores clicks'),z('是否开了鼠标穿透','Whether click-through is on'),z('提示气泡约 5 秒自收；刷新页面或从托盘重开控制台','Hint hides after ~5 s; refresh or reopen from tray')],
+        [z('显示「已执行，未验证」','“Executed, unverified”'),z('端口 / 进程 / HTTP / 备份校验的证据','Evidence from port/process/HTTP/backup checks'),z('命令返回 0 不算完成；见「完成 ≠ 结论」','Exit code 0 is not completion; see Done ≠ verified')],
+        [z('区块高度不动，是卡死吗','Static block height, stuck?'),z('共识视图是否在推进','Whether the consensus view advances'),z('PBFT 空块只共识不落盘，块高静止正常；见「链端校验」','PBFT empty blocks need no storage; see Chain checks')],
+        [z('自愈态势页是空的','Self-healing page empty'),z('守护 / 影子流是否跑过','Whether guard/shadow flow ever ran'),z('空列表=尚无记录，不等于守护没配置；见「故障自愈轨迹」','Empty = no records yet, not disabled; see Self-healing traces')],
+        [z('改了前端界面没变化','Front-end edit has no effect'),z('是否只跑了 web_build.py','Whether only web_build.py was run'),z('前端嵌在 exe 里，要 web_build.py 再 go build；见「从源码构建」','Assets are embedded; run web_build.py then go build; see Build from source')],
+        [z('快捷方式打开的还是旧版','Shortcut opens an old build'),z('是否指向 %LOCALAPPDATA%\\EnvKit','Whether it points at %LOCALAPPDATA%\\EnvKit'),z('重跑 安装.bat 或直接打开仓库根 exe；见「下载与运行前提」','Rerun 安装.bat or open the repository-root exe; see Prerequisites')],
+        [z('日志停在某步、无异常','Log stops mid-step, no error'),z('进程是否还在、退出码是什么','Process alive and exit code'),z('Windows 句柄重复关闭曾让进程无声消失；见「程序启动与日志」','A double-closed handle caused silent exits; see Start and logs')],
+        [z('备份生成了，但不敢信','Backup exists but is doubted'),z('sha256 与内容完整性是否复算','Whether sha256 and content were re-checked'),z('文件存在 ≠ 能还原；见「完成 ≠ 结论」','File existence ≠ restorable; see Done ≠ verified')],
+        [z('评测结果像是没改过','Evaluation looks unchanged'),z('测的是不是旧构建','Whether it tested an old build'),z('前端 embed 在 exe 里；见「评测与故障注入」','Front end is embedded in the exe; see Evaluation')]
+      ]),
+      XLINK([['faq','常见问题','FAQ'],['verify','完成 ≠ 结论','Done ≠ verified'],['eval','评测与故障注入','Evaluation & fault injection']])
+    ]},
     {id:'faq', group:z('参考','Reference'), title:z('常见问题','FAQ'), body:[
       H3('faq-q','问答','Questions'),
       OL([
         z('窗口是黑的、能关吗？—— 那是服务进程本体，关掉网页就打不开；用托盘「隐藏窗口到托盘」让它继续在后台跑。新版本控制台已换成纸白底浅色主题。','Can I close the console window? No — it is the service. Closing it kills the page; use the tray action to hide it. New builds use a light paper-coloured theme.'),
+        z('还有别的问题？—— 先看上一节「排障索引」，按症状找对应判据。','Another problem? See the previous section, “Troubleshooting index”, and look up the symptom.'),
         z('端口被占用？—— 停止页会报告占用者；第三方进程只报告不结束。EnvKit 端口冲突会自动顺延。','Port in use? The stop page reports the owner but never kills third-party processes. EnvKit shifts to the next free port.'),
         z('MySQL 服务起不来？—— 注册 / 启动服务需要管理员权限，右键 EnvKit.exe 以管理员身份运行。','MySQL service will not start? Registering / starting needs admin rights; run EnvKit.exe as administrator.'),
         z('桌宠点不到了？—— 你开了鼠标穿透。刷新页面，或从托盘打开控制台即可恢复；提示气泡约 5 秒后自己收起。','Pet ignores clicks? Click-through is on. Refresh the page or open the console from the tray; the hint hides after about five seconds.'),
@@ -585,6 +695,7 @@ button,input{font:inherit;color:inherit}
       'Filter by topic on the left, copy commands from the text, and follow the highlighted outline on the right. Press / or Ctrl+K to focus search. Works offline and prints cleanly.'),
     jump:z('快速跳转','Jump to'),
     copy:z('复制','Copy'), copied:z('已复制','Copied'),
+    see:z('继续阅读：','Read next:'),
     empty:z('没有匹配的章节','No matching sections'),
     count:z('节文档','sections'),
     ver:z('当前版本：','Current version: '),
@@ -617,6 +728,8 @@ button,input{font:inherit;color:inherit}
       '<li>' + esc(v(i)) + '</li>').join('') + '</ol>';
     if(b.k === 'code') return '<div class="code"><button class="cp" type="button">' + esc(tv(T.copy)) +
       '</button><pre>' + esc(v(b.code)) + '</pre></div>';
+    if(b.k === 'xlink') return '<p class="xlink">' + esc(tv(T.see)) + b.items.map(function(x){
+      return '<a href="#doc-' + x[0] + '">' + esc(x[lang==='en'?2:1]) + '</a>'; }).join(' · ') + '</p>';
     if(b.k === 'table') return '<table class="tbl"><thead><tr>' + b.head.map(h =>
       '<th>' + esc(v(h)) + '</th>').join('') + '</tr></thead><tbody>' + b.rows.map(row =>
       '<tr>' + row.map(c => '<td>' + esc(v(c)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';

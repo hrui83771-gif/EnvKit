@@ -197,8 +197,28 @@ async function attach(target) {
     ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
     ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
     ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 20, '文档正文有 ' + iso.sections + ' 节（丰富度）');
-    ok(iso.tabs >= 8 && iso.steps >= 1, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
+    ok(iso.sections >= 23, '文档正文有 ' + iso.sections + ' 节（丰富度）');
+    ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
+
+    // 深度：操作级细节、真实工具名、排障索引、节间交叉链接、配置默认值
+    const deep = JSON.parse(await djs(`JSON.stringify((function(){
+      var txt = document.getElementById('body').textContent;
+      var links = [].slice.call(document.querySelectorAll('#body .xlink a')).map(function(a){return a.getAttribute('href');});
+      return {
+        trouble: !!document.getElementById('doc-troubleshoot'),
+        tools: ['get_system_state','verify_environment','db_query','read_doc','sync_chain_ip']
+                 .filter(function(n){ return txt.indexOf(n) >= 0; }).length,
+        paths: ['/opt/fisco/nodes','start_all.sh','18766','MySQL80','18765']
+                 .filter(function(n){ return txt.indexOf(n) >= 0; }).length,
+        xlinks: links.length, validLinks: links.every(function(h){ return /^#doc-[a-z]+$/.test(h) && !!document.querySelector(h); }),
+        stale26: /26 个(受控)?工具/.test(txt)
+      };
+    })())`));
+    ok(deep.trouble, '有按症状聚合的排障索引节');
+    ok(deep.tools === 5, 'AI 节列出真实注册工具名（' + deep.tools + '/5）');
+    ok(deep.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + deep.paths + '/5）');
+    ok(deep.xlinks >= 7 && deep.validLinks, '节间交叉链接全部指向存在的锚点（' + deep.xlinks + ' 条）');
+    ok(!deep.stale26, '没有与真实工具数漂移的旧「26 个工具」表述');
 
     // ---- 3) 三栏结构 ----
     console.log('文档站结构：');
@@ -214,7 +234,7 @@ async function attach(target) {
       lead: document.getElementById('lead-t').textContent
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 20 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.tree >= 23 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
     ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
