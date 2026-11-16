@@ -737,6 +737,35 @@
       <div class="hint" style="margin-top:8px">审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 <code>audit-YYYYMMDD.jsonl</code>）；密码与 API Key 在入库前已脱敏。</div>
     </section>
 
+    <!-- 自愈态势（2026-11-16 ①②）：守护做过的事与影子晋升证据。
+         所有内容由 78-heal.js 从 /api/guard/status 渲染，无静态假数据。 -->
+    <section class="panel" id="panel-heal">
+      <div class="phead"><h2>自愈态势 <span class="stepno">守护做过什么 · 策略凭什么自动执行</span></h2></div>
+
+      <div class="chart-card">
+        <div class="chart-hd">
+          <span class="t">守护轨迹</span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <span class="x" id="heal-status-badge"></span>
+            <button class="mini" id="heal-refresh" title="重新读取守护状态与审计">刷新</button>
+          </span>
+        </div>
+        <div class="muted" id="heal-status-note" style="font-size:12px;line-height:1.7"></div>
+        <div id="heal-timeline" style="margin-top:8px"></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-hd">
+          <span class="t">影子晋升看板</span>
+          <span class="x" id="heal-shadow-tip"></span>
+        </div>
+        <div class="muted" style="font-size:12px;line-height:1.7;margin-bottom:8px"
+             id="heal-shadow-hint">影子评估只走 Observe→Plan，在 Execute 前停止。通过≠恢复成功。</div>
+        <div id="heal-shadow"></div>
+      </div>
+      <div class="hint">以上条目全部来自追加式审计与影子记录，不修改、不补写、不回放。空列表表示「尚无记录」，不代表守护未配置。</div>
+    </section>
+
     <!-- 设置（v3.4：基础 / 开发者 / 评测 三区） -->
     <section class="panel" id="panel-settings">
       <div class="phead"><h2>设置 <span class="stepno">基础 · 开发者 · 评测</span></h2></div>
@@ -1131,6 +1160,7 @@
       <div class="nav" data-panel="start">程序启动</div>
       <div class="nav-sep"></div>
       <div class="nav" data-panel="ai">AI 助手</div>
+      <div class="nav" data-panel="heal">自愈态势</div>
       <div class="nav" data-panel="audit">操作审计</div>
       <div class="nav-sep"></div>
       <div class="nav" data-panel="settings">设置</div>

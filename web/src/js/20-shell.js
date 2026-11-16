@@ -149,6 +149,8 @@ function goto(panel){
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('show', p.id==='panel-'+panel));
   // 切进来才拉，避免每次启动都读一遍文件（v2.7：审计面板同时拉看板统计）
   if(panel==='audit'){ loadAudit(); loadStats(); }
+  // 自愈态势：切进来才拉真实审计与影子流，和审计页同一口径（v3.9 ①②）
+  if(panel==='heal'){ loadHeal(); }
   // 设置页每次进入都重读：它和「程序配置」「链端校验」共用同一份 config.json，
   // 缓存一份只在打开时读的值，切回来就会显示过期的目录/端口。
   if(panel==='settings'){ ekSettingsEnter(); }

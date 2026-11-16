@@ -2383,6 +2383,33 @@
   .ekdf-body .d2h-ins{background:var(--okbg)}
   .ekdf-body .d2h-del{background:var(--errbg)}
   @media (max-width:760px){ .ekdf-box{width:96vw} .ekcp-box{width:96vw} }
+
+  /* ---- 自愈态势（①②）：守护轨迹 + 影子晋升 ---- */
+  .heal-row{border-bottom:1px dashed var(--line);padding:5px 2px;font-size:12px}
+  .heal-row:last-child{border-bottom:0}
+  .heal-row>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;line-height:1.6}
+  .heal-row>summary::-webkit-details-marker{display:none}
+  .heal-row>summary:hover{background:var(--soft)}
+  .heal-t,.heal-g{font-family:Consolas,monospace;font-size:11px;color:var(--muted);white-space:nowrap}
+  .heal-a{color:var(--text);word-break:break-all}
+  .heal-g{margin-left:auto;max-width:34%;overflow:hidden;text-overflow:ellipsis}
+  .heal-detail{margin:5px 0 2px;padding:6px 9px;background:var(--soft);border-radius:6px;
+    color:var(--muted);line-height:1.7;word-break:break-all;font-size:11.5px}
+  .heal-card{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px;background:var(--soft)}
+  .heal-card:last-child{margin-bottom:0}
+  .heal-card-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .heal-card-hd b{font-size:12.5px;font-weight:600;color:var(--text)}
+  .heal-bar{height:5px;border-radius:3px;background:var(--off);overflow:hidden;margin:8px 0 6px}
+  .heal-bar i{display:block;height:100%;background:var(--brand)}
+  .heal-meta{font-size:11.5px;color:var(--muted);line-height:1.6}
+  .heal-blockers{margin:5px 0 0;padding-left:17px;font-size:11.5px;color:var(--warn);line-height:1.7}
+  .heal-badge{display:inline-block;font-size:11px;line-height:1.5;border-radius:999px;
+    padding:1px 7px;background:var(--off);color:var(--muted);white-space:nowrap;flex:none}
+  .heal-badge.ok{background:var(--okbg);color:var(--ok)}
+  .heal-badge.warn{background:var(--warnbg);color:var(--warn)}
+  .heal-badge.err{background:var(--errbg);color:var(--err)}
+  .heal-badge.info{background:var(--infobg);color:var(--info)}
+
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -3116,6 +3143,35 @@
       <div class="hint" style="margin-top:8px">审计只追加、不修改、不回滚，按天分文件保留 30 天（exe 同级 <code>audit-YYYYMMDD.jsonl</code>）；密码与 API Key 在入库前已脱敏。</div>
     </section>
 
+    <!-- 自愈态势（2026-11-16 ①②）：守护做过的事与影子晋升证据。
+         所有内容由 78-heal.js 从 /api/guard/status 渲染，无静态假数据。 -->
+    <section class="panel" id="panel-heal">
+      <div class="phead"><h2>自愈态势 <span class="stepno">守护做过什么 · 策略凭什么自动执行</span></h2></div>
+
+      <div class="chart-card">
+        <div class="chart-hd">
+          <span class="t">守护轨迹</span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <span class="x" id="heal-status-badge"></span>
+            <button class="mini" id="heal-refresh" title="重新读取守护状态与审计">刷新</button>
+          </span>
+        </div>
+        <div class="muted" id="heal-status-note" style="font-size:12px;line-height:1.7"></div>
+        <div id="heal-timeline" style="margin-top:8px"></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-hd">
+          <span class="t">影子晋升看板</span>
+          <span class="x" id="heal-shadow-tip"></span>
+        </div>
+        <div class="muted" style="font-size:12px;line-height:1.7;margin-bottom:8px"
+             id="heal-shadow-hint">影子评估只走 Observe→Plan，在 Execute 前停止。通过≠恢复成功。</div>
+        <div id="heal-shadow"></div>
+      </div>
+      <div class="hint">以上条目全部来自追加式审计与影子记录，不修改、不补写、不回放。空列表表示「尚无记录」，不代表守护未配置。</div>
+    </section>
+
     <!-- 设置（v3.4：基础 / 开发者 / 评测 三区） -->
     <section class="panel" id="panel-settings">
       <div class="phead"><h2>设置 <span class="stepno">基础 · 开发者 · 评测</span></h2></div>
@@ -3510,6 +3566,7 @@
       <div class="nav" data-panel="start">程序启动</div>
       <div class="nav-sep"></div>
       <div class="nav" data-panel="ai">AI 助手</div>
+      <div class="nav" data-panel="heal">自愈态势</div>
       <div class="nav" data-panel="audit">操作审计</div>
       <div class="nav-sep"></div>
       <div class="nav" data-panel="settings">设置</div>
@@ -4943,6 +5000,7 @@ const I18N_EN = {
   "从操作记录统计，不是你在下的命令": "computed from activity, not an order from you",
   "从这里开始照着做一遍；以后想再看，「关于」里随时能打开。": "Start here and follow along. You can replay this anytime from About.",
   "仓库根": "Repo root",
+  "以上条目全部来自追加式审计与影子记录，不修改、不补写、不回放。空列表表示「尚无记录」，不代表守护未配置。": "All entries come from append-only audit and shadow logs; nothing is rewritten or replayed. An empty list means no records yet, not that guarding is disabled.",
   "以前开五个窗口来回切，出事了还不知道该看哪一个。": "You used to juggle five windows, with no idea which one to check when something broke.",
   "以后再说": "Later",
   "以管理员身份重启": "Restart as admin",
@@ -5037,6 +5095,7 @@ const I18N_EN = {
   "共 {0} 条": "{0} total",
   "共 {0} 条 · {1} 条每轮注入": "{0} total · {1} injected every turn",
   "共 {0} 条 · 读取于 {1}": "{0} entries · read at {1}",
+  "共 {0} 条策略": "{0} strategies",
   "共 {0} 次 · 最近 {1}": "{0} time(s) total · latest {1}",
   "共 {0} 行 · 第 {1}/{2} 页": "{0} rows · page {1}/{2}",
   "共 {0} 项可跳转的控件": "{0} controls available",
@@ -5045,6 +5104,7 @@ const I18N_EN = {
   "关于 EnvKit": "About EnvKit",
   "关掉只是不再自动产生行动，手动触发不受影响": "Turning it off only stops automatic actions; manual triggers still work",
   "关掉后启动时也不再请求更新地址": "When off, the update URL is not requested even at startup",
+  "关联压制": "Cascade suppressed",
   "关闭": "Off",
   "关闭后 AI 对话与桌面助手均不可用": "When off, AI chat and the desktop assistant are both unavailable",
   "其它": "Other",
@@ -5290,6 +5350,7 @@ const I18N_EN = {
   "基础 · 开发者 · 评测": "Basics · Developer · Evaluation",
   "基础设置已保存": "Basics saved",
   "基线": "Baseline",
+  "基线放行": "Grandfathered",
   "填数据库、建库建表、导入导出配置；连不上会直接告诉你是哪一项不通。": "Fill in database settings, create the schema, import or export config; a failed connection names the exact item.",
   "处于熔断态：自动重启已被拒绝（连续失败达限）": " circuit breaker is tripped: automatic restart refused (failure limit reached)",
   "备份 {0}": "Backup {0}",
@@ -5310,9 +5371,11 @@ const I18N_EN = {
   "复验": "Verify",
   "复验 / 诊断": "Verify / diagnose",
   "复验反复失败": "Verification keeps failing",
+  "复验失败": "Verification failed",
   "复验未通过": "Verification failed",
   "复验环境状态": "Verify environment state",
   "复验观测": "Re-check reading",
+  "复验通过": "Verified",
   "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
   "外面在下雨，伞带上。": "It's raining. Take an umbrella.",
@@ -5348,6 +5411,9 @@ const I18N_EN = {
   "字段多且互相约束，集中在一处改更安全": "Many interdependent fields; editing them in one place is safer",
   "存为预案": "Save as playbook",
   "守护": "Guard",
+  "守护做过什么 · 策略凭什么自动执行": "What the guard did · why a strategy may auto-run",
+  "守护记录": "Guard event",
+  "守护轨迹": "Guard timeline",
   "守护运行状态": "Guard runtime status",
   "守护间隔": "Guardian interval",
   "安全与可靠": "Security & reliability",
@@ -5417,6 +5483,7 @@ const I18N_EN = {
   "小鱼": "Little fish",
   "小鱼干": "Dried fish",
   "小鱼干！我的最爱！": "Small dried fish — my favorite!",
+  "尚无守护记录。守护开启并跑过一轮后，这里会按时间列出恢复、复验、关联压制与影子评估。": "No guard records yet. After guarding runs one round, restarts, verifications, cascade suppressions and shadow evaluations will appear here in time order.",
   "尚未冻结基线": "No baseline frozen yet",
   "尚未检查": "Not checked yet",
   "尚未检测": "Not checked yet",
@@ -5490,6 +5557,7 @@ const I18N_EN = {
   "已整理": "Tidied",
   "已是最新": "Up to date",
   "已是最新版本": "Already up to date",
+  "已晋升": "Promoted",
   "已有一条 AI 对话在进行中（另一个标签页？），请等它结束或点「停止」": "Another AI conversation is already running (another tab?) — wait for it or press Stop",
   "已有一条 AI 对话在进行中，请等它结束或点「停止」": "Another AI conversation is already running — wait for it or press Stop",
   "已清理 {0} 条": "Cleaned up {0}",
@@ -5572,17 +5640,22 @@ const I18N_EN = {
   "当前实例不在 {0} 上：要么该端口被占用后顺延了，要么刚改过还没重启。评测脚本硬编码 18765，端口不一致时后两档会拒绝启动。": "This instance is not on {0}: either the port was taken and EnvKit moved on, or it was changed without a restart. Eval scripts hardcode 18765 and refuse to start the last two tiers when it differs.",
   "当前实例在 :{0}，与设定 :{1} 不一致（被占用顺延，或改过未重启）；评测脚本硬编码 18765，后两档会拒绝启动。": "Running on :{0} but configured :{1} (port shifted, or changed without restart); eval scripts hardcode 18765, so the last two tiers will refuse to start.",
   "当前待处理": "Needs attention",
+  "当前没有配置了恢复策略的可守护服务。": "No guarded service has a recovery strategy configured.",
   "当前版本": "Current version",
   "当前环境有": "Current environment has",
   "当前配置 → 待导入文件：{0}": "Current config → {0}",
   "影子": "Shadow",
   "影子报告": "Shadow reports",
+  "影子晋升看板": "Shadow promotion board",
+  "影子评估": "Shadow evaluation",
+  "影子评估只走 Observe→Plan，在 Execute 前停止。通过≠恢复成功。": "Shadow evaluation runs Observe→Plan only and stops before Execute. Passing is NOT recovery success.",
   "待你确认 · 不会自己动手": "waiting for you · it will not act alone",
   "待处理": "Pending",
   "待复审": "Needs review",
   "待复检": "needs re-check",
   "待机 · 已连接": "idle · connected",
   "待校验": "Pending",
+  "待签字": "Awaiting approval",
   "必须大于起始端口": "Must be greater than the start port",
   "必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝": "Must be a service-starting script (dev / serve / start); build / deploy / migrate are rejected",
   "忽略版本": "Ignore version",
@@ -5813,6 +5886,7 @@ const I18N_EN = {
   "更新检查地址": "Update check URL",
   "最常见原因与修法": "Most likely cause and fix",
   "最新版本": "Latest version",
+  "最近 {0}": "Last {0}",
   "最近 {0} 条": "Last {0}",
   "最近动作": "Recent actions",
   "最近回合": "Recent turns",
@@ -5854,6 +5928,7 @@ const I18N_EN = {
   "未开启（在顶栏「个人中心」下打开）": "Off (turn it on under \"Profile\" in the top bar)",
   "未归属": "untracked",
   "未打开": "Not open",
+  "未执行": "NOT EXECUTED",
   "未找到": "Not found",
   "未指定：用 exe 同级的 backups 目录": "Not set: use the backups folder next to the exe",
   "未收口自动记 expired": "Auto-marked expired when never closed",
@@ -5886,6 +5961,7 @@ const I18N_EN = {
   "未配置项目路径": "No project paths configured",
   "未配置，只弹桌面气泡（不外连）": "Not configured; desktop bubble only (no outbound request)",
   "未配置，只弹气泡": "Not configured, balloons only",
+  "未验到": "Not verified yet",
   "本任务内后续同类操作不再询问（最多 2 次，仅限服务启停）": "Don't ask again for the same kind of action in this task (max 2, service start/stop only)",
   "本会话 · {0} 轮": "This session · {0} turns",
   "本回合": "This turn",
@@ -6165,6 +6241,7 @@ const I18N_EN = {
   "秒；vue/vite 首次编译常要 20s+": "seconds; the first vue/vite build often takes 20s+",
   "秒；每次重试前等多久": "seconds; wait before each retry",
   "秒；调大容忍慢上游，调小更快发现假死": "Seconds; larger tolerates slow upstreams, smaller detects hangs sooner",
+  "积累中": "Accumulating",
   "移除": "Remove",
   "移除后这台手机要重新配对，继续？": "This phone will need to pair again after removal. Continue?",
   "程序启动": "Launch",
@@ -6209,6 +6286,7 @@ const I18N_EN = {
   "系统事件（最近错误）": "System events (recent errors)",
   "系统对话框": "System dialog",
   "系统给的建议是：": "what EnvKit suggests: ",
+  "累计 {0}/{1}（{2}）": "Lifetime {0}/{1} ({2})",
   "红色告警时点它，会直接跳到那条错误行": "On a red alert, click it to jump straight to that error line",
   "约 1 分钟": "~1 min",
   "约 15 秒": "~15 s",
@@ -6279,9 +6357,11 @@ const I18N_EN = {
   "自动滚动": "Auto-scroll",
   "自动经验": "Auto lessons",
   "自动经验是操作审计的统计视图，不单独存储——审计保留 30 天，过期的经验随之失效；你否决过的不会再注入。": "Auto lessons are a computed view over the audit log, not separate storage — the audit keeps 30 days, so stale lessons expire on their own; dismissed ones are never injected again.",
+  "自动重启": "Auto restart",
   "自定义": "Custom",
   "自定义查询 · {0} 行": "Custom query · {0} rows",
   "自定义模型名...": "Custom model name…",
+  "自愈态势": "Self-healing status",
   "自身单文件上限": "Own per-file limit",
   "自身归档份数": "Own archive count",
   "至少保留条数": "Min messages kept",
@@ -6476,6 +6556,7 @@ const I18N_EN = {
   "连点 5 次我会回嘴，10 次撒花，15 次看我喷水；双击投喂，右键能换模式，按住 1.5 秒摸头，拖着我甩会晕": "Click 5x to hear me talk back, 10x for confetti, 15x for a whale spout; double-click to feed, right-click to change mode, hold 1.5s to pat, shake me to get me dizzy",
   "连点 5 次换衣服，10 次换发型，按住 1.5 秒摸头，拖着我甩会晕，连点 15 次有惊喜🌈": "Rapid-click 5× for a new outfit, 10× for new hair, hold 1.5s to pat me, swing me around and I get dizzy, 15× for a surprise🌈",
   "连续失败进了熔断后，用它立刻放行一次探针": "After repeated failures trip the breaker, this lets one probe through immediately",
+  "连续通过 {0} / {1}": "Consecutive passes {0} / {1}",
   "退出": "Exit",
   "退出程序": "Exit EnvKit",
   "适用范围": "Scope",
@@ -6528,6 +6609,7 @@ const I18N_EN = {
   "重新生成密钥后，已经扫过旧密钥的口令器立即失效，需要重新扫。继续？": "After regenerating, any authenticator holding the old key stops working and must be re-scanned. Continue?",
   "重新观看介绍": "Watch the intro again",
   "重新读取": "Reload",
+  "重新读取守护状态与审计": "Re-read guard status and audit",
   "重置": "Reset",
   "重置失败": "Reset failed",
   "重置断路器": "Reset breaker",
@@ -6987,6 +7069,8 @@ function goto(panel){
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('show', p.id==='panel-'+panel));
   // 切进来才拉，避免每次启动都读一遍文件（v2.7：审计面板同时拉看板统计）
   if(panel==='audit'){ loadAudit(); loadStats(); }
+  // 自愈态势：切进来才拉真实审计与影子流，和审计页同一口径（v3.9 ①②）
+  if(panel==='heal'){ loadHeal(); }
   // 设置页每次进入都重读：它和「程序配置」「链端校验」共用同一份 config.json，
   // 缓存一份只在打开时读的值，切回来就会显示过期的目录/端口。
   if(panel==='settings'){ ekSettingsEnter(); }
@@ -15070,6 +15154,144 @@ function ekCfgConfirmImport(text, fileName){
       });
   });
 }
+/* ---------- 自愈态势 + 影子晋升（2026-11-16，功能 ①②） ----------
+   数据源只有 /api/guard/status 的 timeline / shadow 字段，全部是追加式审计
+   与 shadow-*.jsonl 的真实聚合。本文件不写状态、不造记录、不发起动作。
+
+   三条口径必须守住：
+   1. 影子条目 result=ok 是"评估通过"，不是"恢复成功" —— 每条都带未执行标记；
+   2. 空列表 = 尚无记录，不是"守护没开" —— 状态徽标另说配置；
+   3. 后端中文原文走 ekTrData，不经过 t() 的字典缺词会原样露出。 */
+(function(){
+  const KIND = {
+    recover:    {label:'自动重启',   cls:'ok'},
+    verified:   {label:'复验通过',   cls:'ok'},
+    unverified: {label:'未验到',     cls:'warn'},
+    failed:     {label:'复验失败',   cls:'err'},
+    cascade:    {label:'关联压制',   cls:'warn'},
+    shadow:     {label:'影子评估',   cls:'info'},
+    other:      {label:'守护记录',   cls:'muted'}
+  };
+  const ROUTE = {
+    grandfathered: {label:'基线放行', cls:'ok'},
+    promoted:      {label:'已晋升',   cls:'ok'},
+    ready:         {label:'待签字',   cls:'warn'},
+    pending:       {label:'积累中',   cls:'muted'}
+  };
+  let state = null;   // 最近一次成功读取的视图，语言切换时重绘用
+
+  function badge(label, cls){
+    return '<span class="heal-badge ' + esc(cls || 'muted') + '">' + esc(label) + '</span>';
+  }
+  function when(ts){ return String(ts || '').slice(5, 16); }
+
+  function renderTimeline(d){
+    const box = document.getElementById('heal-timeline');
+    if(!box) return;
+    const items = (d && d.timeline) || [];
+    if(!items.length){
+      box.innerHTML = '<div class="muted" style="font-size:12px">尚无守护记录。守护开启并跑过一轮后，这里会按时间列出恢复、复验、关联压制与影子评估。</div>';
+      return;
+    }
+    let h = '';
+    for(const it of items){
+      const k = KIND[it.kind] || KIND.other;
+      // 展开区放 detail / verify 全文；用 <details> 原生交互，不引第三方。
+      const full = [it.detail, it.verify].filter(Boolean).map(x=>ekTrData(x)).join(' · ');
+      h += '<details class="heal-row">' +
+             '<summary>' +
+               '<span class="heal-t">' + esc(when(it.ts)) + '</span>' +
+               badge(t(k.label), k.cls) +
+               '<span class="heal-a">' + esc(ekTrData(it.action || '')) + '</span>' +
+               '<span class="heal-g">' + esc(ekTrData(it.target || '')) + '</span>' +
+               (it.shadow_only ? badge(t('未执行'), 'info') : '') +
+             '</summary>' +
+             (full ? '<div class="heal-detail">' + esc(full) + '</div>' : '<div class="heal-detail muted">—</div>') +
+           '</details>';
+    }
+    box.innerHTML = h;
+  }
+
+  function renderShadow(d){
+    const box = document.getElementById('heal-shadow');
+    const tip = document.getElementById('heal-shadow-tip');
+    if(!box) return;
+    const sh = (d && d.shadow) || {};
+    const list = sh.strategies || [];
+    const agg = {};
+    for(const a of (sh.aggregates || [])) agg[a.strategy] = a;
+    if(tip) tip.textContent = list.length ? t('共 {0} 条策略', list.length) : '';
+    if(!list.length){
+      box.innerHTML = '<div class="muted" style="font-size:12px">' +
+        esc(ekTrData(sh.empty_note || '当前没有配置了恢复策略的可守护服务。')) + '</div>';
+      return;
+    }
+    const need = sh.need || 20;
+    let h = '';
+    for(const s of list){
+      const r = ROUTE[s.route] || ROUTE.pending;
+      const a = agg[s.strategy] || {total:0, pass:0, pass_rate:-1};
+      const rate = a.pass_rate < 0 ? '—' : Math.round(a.pass_rate) + '%';
+      const blockers = (s.blockers || []).map(x=>'<li>' + esc(ekTrData(x)) + '</li>').join('');
+      // 进度条宽度只由连续通过数计算，失败一次即清零（后端 shadowPassesOf 的口径）
+      const pct = Math.min(100, Math.round(100 * (s.passes || 0) / need));
+      h += '<div class="heal-card">' +
+             '<div class="heal-card-hd">' +
+               '<b>' + esc(ekTrData(s.strategy)) + '</b>' +
+               badge(t(r.label), r.cls) +
+               '<span class="heal-g">' + esc(ekTrData((s.approved_by || ''))) + '</span>' +
+             '</div>' +
+             '<div class="heal-bar"><i style="width:' + pct + '%"></i></div>' +
+             '<div class="heal-meta">' +
+               t('连续通过 {0} / {1}', s.passes || 0, need) + ' · ' +
+               t('累计 {0}/{1}（{2}）', a.pass, a.total, rate) +
+               (a.last_ts ? ' · ' + t('最近 {0}', when(a.last_ts)) : '') +
+             '</div>' +
+             (blockers ? '<ul class="heal-blockers">' + blockers + '</ul>' : '') +
+           '</div>';
+    }
+    box.innerHTML = h;
+  }
+
+  function renderStatus(d){
+    const s = (d && d.status) || {};
+    const badgeEl = document.getElementById('heal-status-badge');
+    const noteEl = document.getElementById('heal-status-note');
+    if(badgeEl){
+      let label = t('未配置'), cls = 'muted';
+      if(!s.host){ label = t('未配置'); }
+      else if(s.last_unreachable > 0){ label = t('连不上'); cls = 'warn'; }
+      else if(s.enabled && s.last_check){ label = t('运行中'); cls = 'ok'; }
+      else if(s.enabled){ label = t('已开启'); }
+      badgeEl.innerHTML = badge(label, cls);
+    }
+    if(noteEl){
+      // 状态说明是后端拼好的中文，按原样翻；"尚未完成第一轮"要说清楚不是没在跑。
+      noteEl.textContent = ekTrData(s.note || '');
+    }
+  }
+
+  async function loadHeal(){
+    let d = null;
+    try{ d = await (await fetch('/api/guard/status')).json(); }
+    catch(e){
+      const box = document.getElementById('heal-timeline');
+      if(box) box.innerHTML = '<div class="muted" style="font-size:12px">' + esc(t('读取失败')) + '</div>';
+      return;
+    }
+    state = d;
+    renderStatus(d);
+    renderTimeline(d);
+    renderShadow(d);
+  }
+  window.loadHeal = loadHeal;
+  window.ekHealState = ()=> state;   // CDP 断言与调试用，只读引用
+
+  const rf = document.getElementById('heal-refresh');
+  if(rf) rf.onclick = ()=> loadHeal();
+  // 语言切换后重绘：applyI18n 只翻静态节点，动态生成的中文要重走 ekTrData。
+  document.addEventListener('ek:lang', ()=>{ if(state){ renderStatus(state); renderTimeline(state); renderShadow(state); } });
+})();
 /* ---------- 全局通知 ---------- */
 
 async function ekSetLoadNotify(){

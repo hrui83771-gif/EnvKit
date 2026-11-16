@@ -168,23 +168,9 @@ func guardBrief() string {
 // 与环境状态不同（它每 30~300 秒才动一次），混在一起会让状态中心的
 // 缓存频繁失效——而状态中心是首页轮询的热点。
 func handleGuardStatus(w http.ResponseWriter, r *http.Request) {
-	s := guardSnapshot()
-	// 带上最近几次守护动作，让用户看到"它到底做了什么"而不只是"现在怎样"
-	recent := auditQuery("all", actGuard, 8)
-	acts := make([]map[string]any, 0, len(recent))
-	for _, e := range recent {
-		if !strings.Contains(e.Action, "recover") && !strings.Contains(e.Action, "unreachable") {
-			continue
-		}
-		acts = append(acts, map[string]any{
-			"ts": e.Ts, "action": e.Action, "target": e.Target,
-			"result": e.Result, "detail": e.Detail, "verify": e.Verify,
-		})
-		if len(acts) >= 5 {
-			break
-		}
-	}
-	writeJSON(w, map[string]any{"status": s, "recent": acts, "shadow": shadowStatusForAPI()})
+	// 视图聚合在 heal_view.go：status/recent 原样保留（老页面与 AI 工具共用），
+	// 新增 timeline（自愈态势）与 shadow.aggregates（影子累计统计）。
+	writeJSON(w, guardStatusView())
 }
 
 func init() {
