@@ -125,6 +125,14 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     bubble.style.setProperty('--bbx', Math.round(dx) + 'px');
   }
   function hideBubble(){ clearTimeout(bubbleTimer); pet.classList.remove('show-bubble'); }
+  /* 定时气泡：纯提示文案用（如"点不到我了"）。
+     不能直接 say(html,false)——那条 2.4 秒定时器在 confirm/thinking/busy
+     下会故意不隐藏（那些状态的气泡必须常驻），结果穿透提示一开就永远挂着。
+     这里自己接管 timer，到点就收，不看当前状态。 */
+  function sayFor(html, ms){
+    say(html, true);
+    bubbleTimer = setTimeout(()=>{ pet.classList.remove('show-bubble'); bubbleTimer = null; }, ms || 5000);
+  }
   function spawn(cls, style, life, txt){
     const s = document.createElement('span');
     s.className = cls; if(txt) s.textContent = txt;
@@ -464,7 +472,8 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
       b.setAttribute('aria-pressed', petPass ? 'true' : 'false');
     }
     if(petPass){
-      say(t('已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复'), true);
+      /* 穿透后整只鱼都不吃鼠标，用户没法点掉气泡——必须自己定时收走。 */
+      sayFor(t('已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复'), 5000);
     } else {
       say(t('穿透已解除'));
     }

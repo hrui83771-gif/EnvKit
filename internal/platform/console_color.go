@@ -26,6 +26,11 @@ var (
 	procGetCurrFont     = modKernel32.NewProc("GetCurrentConsoleFontEx")
 	procSetScrBufSize   = modKernel32.NewProc("SetConsoleScreenBufferSize")
 	procSetWindowInfo   = modKernel32.NewProc("SetConsoleWindowInfo")
+	procGetScrBufInfoEx = modKernel32.NewProc("GetConsoleScreenBufferInfoEx")
+	procSetScrBufInfoEx = modKernel32.NewProc("SetConsoleScreenBufferInfoEx")
+	procFillChar        = modKernel32.NewProc("FillConsoleOutputCharacterW")
+	procFillAttr        = modKernel32.NewProc("FillConsoleOutputAttribute")
+	procSetCursorPos    = modKernel32.NewProc("SetConsoleCursorPosition")
 )
 
 type coord struct {
@@ -35,6 +40,77 @@ type coord struct {
 
 type smallRect struct {
 	L, T, R, B int16
+}
+
+// consoleScreenBufferInfoEx 对应 CONSOLE_SCREEN_BUFFER_INFOEX（Windows 7+）。
+// ColorTable 是 16 个 COLORREF；wAttributes 低 4 位前景 / 高 4 位背景索引。
+type consoleScreenBufferInfoEx struct {
+	CbSize               uint32
+	DwSize               coord
+	DwCursorPosition     coord
+	WAttributes          uint16
+	SrWindow             smallRect
+	DwMaximumWindowSize  coord
+	WPopupAttributes     uint16
+	BFullscreenSupported uint32
+	ColorTable           [16]uint32
+}
+
+// rgb 把 (r,g,b) 打包成 COLORREF（Win32 是 0x00BBGGRR，不是常见的 RRGGBB）。
+func rgb(r, g, b uint32) uint32 { return r | g<<8 | b<<16 }
+
+// consolePalette 是浅色主题的 16 色调色板。索引与 ANSI 色码对齐：
+// 0=默认背景、7=默认前景，1/2/3/6 对应 Colorize 的红/绿/黄/青。
+// 关键：默认背景必须是浅色；级别色要压暗，尤其黄色（原生 #ffff00 在浅底上
+// 几乎看不见）。青也换成深蓝，否则 INFO 一整行会糊在纸白上。
+// 纯函数，便于单测把"黑底变白纸"这件事钉死。
+func consolePalette() [16]uint32 {
+	return [16]uint32{
+		rgb(250, 248, 245), // 0 背景：与网页 #faf8f5 同一张纸
+		rgb(176, 35, 24),   // 1 红 FAIL / ERR
+		rgb(6, 118, 71),    // 2 绿 OK
+		rgb(180, 95, 6),    // 3 黄 WARN / HINT（压成琥珀）
+		rgb(30, 90, 170),   // 4 蓝
+		rgb(140, 55, 120),  // 5 品红
+		rgb(27, 78, 140),   // 6 青 → 深蓝 INFO（真青在浅底上没对比）
+		rgb(35, 39, 46),    // 7 前景：近黑但不纯黑
+		rgb(96, 100, 110),  // 8 亮黑 → 中灰
+		rgb(210, 60, 45),   // 9 亮红
+		rgb(12, 150, 90),   // 10 亮绿
+		rgb(205, 120, 20),  // 11 亮黄
+		rgb(40, 110, 200),  // 12 亮蓝
+		rgb(165, 75, 150),  // 13 亮品红
+		rgb(30, 110, 160),  // 14 亮青
+		rgb(70, 76, 86),    // 15 亮白 → 深灰（别在浅底上隐形）
+	}
+}
+
+// applyLightTheme 重映射调色板 + 清屏。
+// 不依赖 ANSI/VT：老 conhost 上照样能把黑窗换成浅色，这是本轮修复的关键——
+// 之前只给日志插 ANSI 色码，VT 不可用时整窗依然是黑的。
+// 清屏是必须的：ConfigureConsole 之前的启动日志已经用旧黑底画在缓冲区里了，
+// 不清就留下一条条黑底文字，视觉上还是"黑乎乎的窗口"。
+func applyLightTheme(h uintptr) {
+	var info consoleScreenBufferInfoEx
+	info.CbSize = uint32(unsafe.Sizeof(info))
+	if r, _, _ := procGetScrBufInfoEx.Call(h, uintptr(unsafe.Pointer(&info))); r == 0 {
+		return
+	}
+	info.ColorTable = consolePalette()
+	info.WAttributes = 0x07 // 前景索引 7（深色）／背景索引 0（纸白）
+	info.WPopupAttributes = 0x07
+	if r, _, _ := procSetScrBufInfoEx.Call(h, uintptr(unsafe.Pointer(&info))); r == 0 {
+		return
+	}
+	cells := uint32(info.DwSize.X) * uint32(info.DwSize.Y)
+	if cells == 0 {
+		return
+	}
+	origin := uintptr(uint32(0) | uint32(0)<<16)
+	var written uint32
+	procFillChar.Call(h, uintptr(' '), uintptr(cells), origin, uintptr(unsafe.Pointer(&written)))
+	procFillAttr.Call(h, uintptr(0x07), uintptr(cells), origin, uintptr(unsafe.Pointer(&written)))
+	procSetCursorPos.Call(h, origin)
 }
 
 // consoleFontInfoEx 对应 CONSOLE_FONT_INFOEX（Windows 7+）。
@@ -94,8 +170,8 @@ func Colorize(level, line string, enabled bool) string {
 	return c + line + "\x1b[0m"
 }
 
-// ConfigureConsole 设置窗口标题、Consolas 字体与合理尺寸（宽 108 × 高 30）。
-// 全部 best-effort：任何一步失败都不影响服务运行；只在真控制台上做。
+// ConfigureConsole 设置窗口标题、Consolas 字体、合理尺寸（宽 108 × 高 30）
+// 与浅色配色。全部 best-effort：任何一步失败都不影响服务运行；只在真控制台上做。
 func ConfigureConsole(title string) {
 	h, _, _ := procGetStdHandle.Call(stdOut)
 	if h == 0 || h == uintptr(^uintptr(0)) {
@@ -125,4 +201,6 @@ func ConfigureConsole(title string) {
 	var rc smallRect
 	rc.L, rc.T, rc.R, rc.B = 0, 0, 107, 29
 	procSetWindowInfo.Call(h, 1, uintptr(unsafe.Pointer(&rc)))
+	// 放最后：前面的尺寸/字体变更可能重绘，配色和清屏要在它们之后落定。
+	applyLightTheme(h)
 }

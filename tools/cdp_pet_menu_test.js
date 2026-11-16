@@ -172,6 +172,26 @@ function seed() {
     ok(pass.restored.indexOf('鼠标穿透') >= 0, '关闭后文案复原');
     ok(pass.pressed === 'false', '关闭后 aria-pressed=false');
 
+    // ---- 4b) 穿透提示必须自己消失（v3.9 实测缺陷：say(...,true) 常驻）----
+    // 穿透后气泡也 pointer-events:none，用户点不掉；所以断言不能只看"出现了"，
+    // 必须真的等到超时后 DOM 里 show-bubble 被摘掉。变异：把 sayFor 改回
+    // say(...,true)，本组第一条仍绿、第二条必红。
+    console.log('穿透提示自动收起：');
+    const bub0 = JSON.parse(await evalJS(`(function(){
+      var b = document.querySelector('#pet-ctx [data-act="passthrough"]');
+      b.click();
+      return JSON.stringify({
+        shown: document.getElementById('pet').classList.contains('show-bubble'),
+        txt: document.getElementById('pet-bubble').textContent
+      });
+    })()`));
+    ok(bub0.shown, '开启穿透时提示气泡出现');
+    ok(bub0.txt.indexOf('穿透') >= 0, '气泡是穿透提示（不是旧台词残留）');
+    await sleep(5500);
+    const bub1 = await evalJS(`document.getElementById('pet').classList.contains('show-bubble')`);
+    ok(bub1 === false, '约 5 秒后气泡自动收起（不再常驻）');
+    await evalJS(`(function(){ document.querySelector('#pet-ctx [data-act="passthrough"]').click(); return true; })()`);
+
     // ---- 5) 原有分发未破：立即检测仍是真动作（data-act 一个没改）----
     console.log('动作分发：');
     const acts = JSON.parse(await evalJS(`JSON.stringify(
