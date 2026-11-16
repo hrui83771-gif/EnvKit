@@ -85,6 +85,10 @@ button,input{font:inherit;color:inherit}
   padding:18px 22px;margin-bottom:16px;box-shadow:var(--shadow)}
 .lead b{color:var(--brand2)}
 .lead p{margin:6px 0 0;color:var(--sub);font-size:13px}
+/* 分页阅读：正文一次只渲染一节，面包屑补「在哪一组」的位置感 */
+.crumb{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:11.5px;color:#9aa4b2}
+.crumb .sep{color:#ccd3dd}
+.crumb b{font-weight:600;color:var(--brand2)}
 .sec{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px 26px 24px;
   margin-bottom:16px;box-shadow:var(--shadow);scroll-margin-top:16px}
 .sec>h2{margin:0 0 14px;font-size:19px;line-height:1.4;display:flex;align-items:center;gap:10px;
@@ -163,8 +167,10 @@ button,input{font:inherit;color:inherit}
 .sec-nav a .n{display:block;font-size:12.5px;color:var(--brand2);font-weight:600;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sec-nav a.next{text-align:right}
-/* 首尾节只有一边：让它占满整行，不留一块空白像丢了一半 */
-.sec-nav a:only-child{flex:1 1 100%}
+/* 首尾节只有一边：保持半宽并贴到对应那一侧，和两边都在时的位置一致 */
+.sec-nav a:only-child{flex:0 1 calc(50% - 5px)}
+.sec-nav a.prev:only-child{margin-right:auto}
+.sec-nav a.next:only-child{margin-left:auto}
 
 /* FAQ 折叠 */
 .faq{margin:10px 0}
@@ -194,8 +200,9 @@ button,input{font:inherit;color:inherit}
 .toc a:hover{color:var(--ink);text-decoration:none}
 .toc a.on{color:var(--brand2);border-left-color:var(--brand);font-weight:600}
 .toc a.sub{padding-left:22px;font-size:11.5px}
-.toc-grp{font-size:10.5px;letter-spacing:.6px;color:#9aa4b2;font-weight:700;padding:10px 8px 3px;text-transform:uppercase}
-.toc-grp:not(:first-of-type){border-top:1px dashed var(--line2);margin-top:5px}
+/* 右栏只列当前这一节：节标题当第一项，顺手给个回顶入口 */
+.toc a.sec-t{font-size:12.5px;font-weight:600;color:var(--sub);border-left-color:transparent}
+.toc .toc-none{font-size:11.5px;color:#9aa4b2;padding:4px 12px}
 
 .totop{position:fixed;right:24px;bottom:24px;width:40px;height:40px;border-radius:50%;
   background:#fff;border:1px solid var(--line);box-shadow:var(--shadow);color:var(--brand2);
@@ -220,7 +227,7 @@ button,input{font:inherit;color:inherit}
   .sec>h2{font-size:17px}
 }
 @media print{
-  .hero,.side,.toc,.totop,#prog,.quick,.foot,.cp,.sec-nav,.lk,.one-bar,.toast{display:none!important}
+  .hero,.side,.toc,.totop,#prog,.quick,.foot,.cp,.sec-nav,.lk,.one-bar,.toast,.crumb{display:none!important}
   body{background:#fff}
   .layout{display:block;padding:0;max-width:none}
   .sec{box-shadow:none;break-inside:avoid;border-color:#ddd}
@@ -239,7 +246,7 @@ button,input{font:inherit;color:inherit}
   <div class="hero-in">
     <div class="brand">
       <div class="logo">E</div>
-      <div><h1>EnvKit 使用文档</h1><p>从安装到排障，一页看完 · 单文件、离线可用</p></div>
+      <div><h1>EnvKit 使用文档</h1><p>从安装到排障，按节阅读 · 单文件、离线可用</p></div>
     </div>
     <div class="hero-side">
       <span class="ver" id="ver">v__APP_VERSION__</span>
@@ -375,9 +382,9 @@ button,input{font:inherit;color:inherit}
       NOTE('命令面板索引的是页面上真实存在的导航与按钮，不索引 AI 工具；写操作仍走各自的确认闸门。',
            'The palette indexes real navigation and buttons on the page, not AI tools; write operations still pass their own confirmation gates.', 'ok')
     ]},
-    {id:'prep', group:z('安装与构建','Install & build'), title:z('下载与运行前提','Download and prerequisites'), body:[
-      P('从 Releases 下载最新的 Windows x64 压缩包，解压后运行 安装.bat（复制到 %LOCALAPPDATA%\\EnvKit 并建桌面快捷方式），或直接双击 EnvKit.exe —— 单文件、免安装。',
-        'Download the latest Windows x64 archive from Releases, run 安装.bat to copy it into %LOCALAPPDATA%\\EnvKit with a desktop shortcut, or just double-click EnvKit.exe — one file, no installer.'),
+    {id:'install', group:z('安装与构建','Install & build'), title:z('安装与构建','Install & build'), body:[
+      P('从 Releases 下载最新的 Windows x64 压缩包，解压后运行 安装.bat（复制到 %LOCALAPPDATA%\\EnvKit 并建桌面快捷方式），或直接双击 EnvKit.exe —— 单文件、免安装。想自己编译就往下看源码构建。',
+        'Download the latest Windows x64 archive from Releases and run 安装.bat to copy it into %LOCALAPPDATA%\\EnvKit with a desktop shortcut, or just double-click EnvKit.exe — one file, no installer. To compile it yourself, build from source below.'),
       H3('prep-req','运行前提','Requirements'),
       TABLE([z('项目','Item'),z('要求','Requirement')],[
         [z('操作系统','OS'),z('Windows 10 / 11 x64','Windows 10 / 11 x64')],
@@ -386,25 +393,17 @@ button,input{font:inherit;color:inherit}
         [z('网络','Network'),z('首次安装组件约 180 MB，可配下载代理','About 180 MB on first component install; proxy configurable')]
       ]),
       NOTE('如果走的是桌面快捷方式，注意它可能指向 %LOCALAPPDATA%\\EnvKit 里的旧副本。更新后请重新运行 安装.bat，或直接打开仓库根的 EnvKit.exe。',
-           'A desktop shortcut may still point at an old copy in %LOCALAPPDATA%\\EnvKit. After an update, rerun 安装.bat or open the EnvKit.exe at the repository root.', 'warn')
-    ]},
-
-    {id:'build', group:z('安装与构建','Install & build'), title:z('从源码构建','Build from source'), body:[
+           'A desktop shortcut may still point at an old copy in %LOCALAPPDATA%\\EnvKit. After an update, rerun 安装.bat or open the EnvKit.exe at the repository root.', 'warn'),
+      H3('build-src','从源码构建','Build from source'),
       CODE('git clone https://github.com/hrui83771-gif/EnvKit.git\ncd EnvKit\ngo build -trimpath -ldflags "-s -w" -o EnvKit.exe .','bash'),
-      P('需要 Go 1.26 或更高；图标与版本信息已通过 resource.syso 编进 exe。构建产物就是仓库根的 EnvKit.exe，单文件自带全部前端资源。',
-        'Requires Go 1.26 or newer. The icon and version info are compiled in via resource.syso. The result is the single-file EnvKit.exe at the repository root with all front-end assets embedded.'),
-      H3('build-front','改前端的正确姿势','Editing the front end'),
-      P('前端源码按文件拆在 web/src/，改完必须运行 python tools/web_build.py 重拼成 web/index.html，再 go build 重新嵌入。只跑 web_build.py 不重建 exe，界面不会变——这是最常见的「改了没生效」。',
-        'Front-end sources live in web/src/. After editing, run python tools/web_build.py and then go build to re-embed. Running only web_build.py will not change the exe — the most common cause of “nothing changed”.'),
+      P('需要 Go 1.26 或更高；图标与版本信息已通过 resource.syso 编进 exe。构建产物就是仓库根的 EnvKit.exe，单文件自带全部前端资源。前端源码按文件拆在 web/src/，改完必须按下面的顺序重建——只跑 web_build.py 不重建 exe，界面不会变，这是最常见的「改了没生效」。',
+        'Requires Go 1.26 or newer. The icon and version info are compiled in via resource.syso. The result is the single-file EnvKit.exe at the repository root with all front-end assets embedded. Front-end sources live in web/src/; rebuild in this order — running only web_build.py will not change the exe, the most common cause of “nothing changed”.'),
       CODE('python tools/web_build.py\ngo build -trimpath -ldflags "-s -w" -o EnvKit.exe .','bash'),
       NOTE('直接改 web/index.html 会在下次构建时被覆盖；web_build.py --check 只校验产物一致性，不会重新嵌入。',
-           'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn')
-    ]},
-
-    {id:'install', group:z('安装与构建','Install & build'), title:z('环境安装','Environment setup'), body:[
+           'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn'),
+      H3('install-cap','环境安装','Environment setup'),
       P('检测会同时读版本号与安装位置，不只看命令能不能跑。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
         'Detection reads both version and install path, not just whether a command runs. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
-      H3('install-cap','能力清单','Capabilities'),
       TABLE([z('能力','Capability'),z('说明','Detail')],[
         [z('演练安装','Dry run'),z('先列出会下载什么、装到哪里，再决定是否真装','See what would be downloaded and installed before committing')],
         [z('SHA256 校验','SHA256 check'),z('下载完比对摘要，不对就换源重试','Compare hashes after download; retry from another source on mismatch')],
@@ -562,7 +561,7 @@ button,input{font:inherit;color:inherit}
       XLINK([['verify','完成 ≠ 结论','Done ≠ verified'],['security','安全边界','Security boundary']])
     ]},
 
-    {id:'missions', group:z('AI 与自动化','AI & automation'), title:z('行动与预案','Actions and playbooks'), body:[
+    {id:'missions', group:z('AI 与自动化','AI & automation'), title:z('行动、报表与晨报','Actions, reports and briefing'), body:[
       P('AI 抽屉的「行动」tab 把一次处置变成可持久化、可续作的行动：手动新建、定时巡检、守护降级、本机入站触发都会产出行动。断网断流或程序重启后点「继续」，从最后完成的步骤接着跑，不从头再来。',
         'The Actions tab turns a repair into a persistent, resumable action. Manual creation, scheduled checks, guard degradation and local inbound triggers all produce actions. After a network drop or restart, press Continue to resume from the last completed step.'),
       H3('missions-play','预案的养成','How playbooks grow'),
@@ -572,14 +571,9 @@ button,input{font:inherit;color:inherit}
         z('预案连败 3 次自动进「待复审」，不再推荐。','Three consecutive failures put a playbook into review and it stops being recommended.'),
         z('「取消」记的是「未证明」，不算「修不好」，不参与失败统计。','Cancelling records “unproven”, not “unfixable”, and does not count as a failure.')
       ]),
-      NOTE('成长报表按 ISO 周列出首次解决率、平均步数、用户修正率、预案命中率与有效率，全部从真实记录算出；分母为 0 显示「—」而不是 0%。',
-           'The growth report lists first-time resolution, average steps, user corrections and playbook hit / effective rates by ISO week, computed from real records; a zero denominator shows “—”, not 0%.', 'ok')
-    ]},
-
-    {id:'growth', group:z('AI 与自动化','AI & automation'), title:z('成长报表','Growth report'), body:[
-      P('行动 tab 下方按 ISO 周列出五项指标，全部从 missions.json / playbooks.json / 审计直接算出，不经模型转述。',
-        'Below the Actions tab, five metrics are listed by ISO week, computed directly from missions.json / playbooks.json / audit — not narrated by a model.'),
-      H3('growth-metrics','五项指标','Five metrics'),
+      H3('growth-metrics','成长报表：五项指标','Growth report: five metrics'),
+      P('行动 tab 下方按 ISO 周列出首次解决率、平均步数、用户修正率、预案命中率与有效率，全部从 missions.json / playbooks.json / 审计直接算出，不经模型转述。分母为 0 显示「—」而不是 0%；样本不足会明说「这个量级看不出趋势」。',
+        'Below the Actions tab, first-time resolution, average steps, user corrections and playbook hit / effective rates are listed by ISO week, computed directly from missions.json / playbooks.json / audit — not narrated by a model. A zero denominator shows “—”, not 0%; small samples explicitly say “too little data for a trend”.'),
       TABLE([z('指标','Metric'),z('含义','Meaning')],[
         [z('首次解决率','First-time resolution'),z('没靠用户修正就收口的比例','Share closed without user correction')],
         [z('平均步数','Average steps'),z('一次行动平均用几步','Average step count per action')],
@@ -587,14 +581,9 @@ button,input{font:inherit;color:inherit}
         [z('预案命中率','Playbook hit rate'),z('预填步骤被采用的比例','Share of pre-filled steps adopted')],
         [z('预案有效率','Playbook effectiveness'),z('采用后真正收口的比例','Share of adopted playbooks that closed the action')]
       ]),
-      H3('growth-honesty','诚实分母','Honest denominators'),
-      NOTE('分母为 0 显示「—」而不是 0%；样本不足会明说「这个量级看不出趋势」。「取消」记的是「未证明」，不算「修不好」，不参与失败统计。',
-           'A zero denominator shows “—”, not 0%; small samples explicitly say “too little data for a trend”. Cancelling records “unproven”, not “unfixable”, and is excluded from failure stats.', 'ok')
-    ]},
-    {id:'report', group:z('AI 与自动化','AI & automation'), title:z('晨报','Morning report'), body:[
+      H3('report-what','晨报','Morning report'),
       P('按设置里的时刻（默认 08:30）产出一份只读报告：服务状态、近 24 小时崩溃与熔断、磁盘趋势、未收口的行动、组件与链端状态。',
         'A read-only report is produced at the configured time (08:30 by default): service state, crashes and circuit breaks in the last 24 hours, disk trend, open actions, component and chain state.'),
-      H3('report-what','报告内容','What is inside'),
       UL([
         z('全部来自系统记录，生成过程不经过模型。','All content comes from system records; the model is not involved in generating it.'),
         z('在行动列表里直接查看，或下载为 .md。','View it in the action list or download it as .md.'),
@@ -629,7 +618,7 @@ button,input{font:inherit;color:inherit}
       XLINK([['security','安全边界','Security boundary'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
-    {id:'pet', group:z('伴随与陪伴','Companion'), title:z('桌宠','Desktop pet'), body:[
+    {id:'pet', group:z('伴随与陪伴','Companion'), title:z('桌宠与托盘','Desktop pet and tray'), body:[
       P('右下角的大肥鱼会跟着任务换状态：待机、思考、干活、等待确认、出错；进度环显示当前任务，悬停能看到任务名与耗时。有确认卡时它会举蓝色徽标，点徽标可直接批准或拒绝。',
         'The fish changes with task state: idle, thinking, working, awaiting confirmation or error. The ring shows progress; hovering shows the task name and elapsed time. A blue badge on confirmation lets you approve or reject without opening the drawer.'),
       H3('pet-act','动作一览','Actions at a glance'),
@@ -642,13 +631,10 @@ button,input{font:inherit;color:inherit}
         [z('右键','Right click'),z('归位、说一句、三档大小、原地 / 溜达 / 跟随、鼠标穿透、AI 抽屉、立即检测','Home, say, three sizes, still / wander / follow, click-through, AI drawer, immediate check')]
       ]),
       NOTE('天气默认关闭；在设置里开启后，右键「查看天气」给实况 / 细节 / 建议三行。开了鼠标穿透后整只鱼都不吃点击，提示气泡约 5 秒后自己收起；要恢复就刷新页面，或从托盘重新打开控制台。',
-           'Weather is off by default; enable it in Settings for a three-line report. With click-through on, the pet ignores clicks and the hint bubble hides after about five seconds. Refresh the page or reopen the console from the tray to restore.', 'warn')
-    ]},
-
-    {id:'settings', group:z('伴随与陪伴','Companion'), title:z('设置与托盘','Settings and tray'), body:[
+           'Weather is off by default; enable it in Settings for a three-line report. With click-through on, the pet ignores clicks and the hint bubble hides after about five seconds. Refresh the page or reopen the console from the tray to restore.', 'warn'),
+      H3('settings-zone','设置与托盘','Settings and tray'),
       P('设置页一页三区：基础、开发者、评测。日志配额、校验窗口、重试次数、AI 读取上限这些原本写死的常量都能改，改完即生效。',
         'Settings has three sections: basic, developer and evaluation. Log quotas, verification windows, retry counts and AI read limits — once hard-coded — are all editable and take effect immediately.'),
-      H3('settings-zone','设置分区','Settings sections'),
       UL([
         z('更新检查默认每 3 天查一次 GitHub Releases；全局静音一键停掉所有主动通知。','Update check queries GitHub Releases every three days by default; global mute stops all proactive notifications.'),
         z('托盘右键：打开控制台 / 程序配置 / 日志目录；隐藏窗口到托盘，退出前停掉前后端。','Tray menu: open console / configuration / log directory; hide to tray, and stop front and back end before exit.'),
@@ -799,9 +785,10 @@ button,input{font:inherit;color:inherit}
 
   var T = {
     lead:z('一份文档，讲清 EnvKit','One guide for all of EnvKit'),
-    leadp:z('左侧按主题筛选，正文可复制命令，右侧目录随滚动高亮。按 / 或 Ctrl+K 聚焦搜索；本页可离线阅读，也可以直接打印。',
-      'Filter by topic on the left, copy commands from the text, and follow the highlighted outline on the right. Press / or Ctrl+K to focus search. Works offline and prints cleanly.'),
+    leadp:z('左侧按主题筛选，一次读一节，读完用底部的上一篇 / 下一篇继续。按 / 或 Ctrl+K 聚焦搜索；本页可离线阅读，也可以直接打印当前这节。',
+      'Filter by topic on the left and read one section at a time, then continue with previous / next at the bottom. Press / or Ctrl+K to focus search. Works offline and prints the current section cleanly.'),
     jump:z('快速跳转','Jump to'),
+    onpage:z('此页面','On this page'),
     copy:z('复制','Copy'), copied:z('已复制','Copied'),
     see:z('继续阅读：','Read next:'),
     empty:z('没有匹配的章节','No matching sections'),
@@ -895,27 +882,45 @@ button,input{font:inherit;color:inherit}
     }
     return '';
   }
-  function renderBody(){
-    var html = '';
-    D.forEach(function(s, i){
-      var one = s.id === 'cheatsheet';
-      html += '<section class="sec' + (one ? ' sec-one' : '') + '"><h2 id="doc-' + s.id + '"><span class="num">' +
-        String(i + 1).padStart(2, '0') + '</span>' + esc(v(s.title)) +
-        '<button class="lk" type="button" data-lk="doc-' + s.id + '" title="' + esc(tv(T.copyLink)) +
-        '" aria-label="' + esc(tv(T.copyLink)) + '">#</button></h2>';
-      if(one) html += '<div class="one-bar"><button class="hbtn" type="button" id="print-one">' +
-        esc(tv(T.printOne)) + '</button></div>';
-      s.body.forEach(function(b){ html += block(b); });
-      var p = D[i - 1], n = D[i + 1];
-      html += '<nav class="sec-nav">' +
-        (p ? '<a class="prev" href="#doc-' + p.id + '" data-go="doc-' + p.id + '"><span class="d">' +
-             esc(tv(T.prev)) + '</span><span class="n">' + esc(v(p.title)) + '</span></a>' : '<i></i>') +
-        (n ? '<a class="next" href="#doc-' + n.id + '" data-go="doc-' + n.id + '"><span class="d">' +
-             esc(tv(T.next)) + '</span><span class="n">' + esc(v(n.title)) + '</span></a>' : '<i></i>') +
-        '</nav></section>';
-    });
-    body.innerHTML = html;
-    renderToc();
+  /* 分页渲染：正文一次只放一节。整页堆 19 节读起来没有「读到哪」的边界，
+     右栏目录也会退化成全文索引；一页一节之后，右栏只服务当前这一节。 */
+  var cur = '';                 // 当前节 id
+  var ALIAS = { prep:'install', build:'install', growth:'missions', report:'missions', settings:'pet' };
+  function docIdx(id){
+    for(var i = 0; i < D.length; i++) if(D[i].id === id) return i;
+    return -1;
+  }
+  function sectionHtml(s, i){
+    var html = '<div class="crumb"><b>' + esc(v(s.group)) + '</b><span class="sep">›</span>' +
+      esc((i + 1) + ' / ' + D.length) + '</div>' +
+      '<section class="sec' + (s.id === 'cheatsheet' ? ' sec-one' : '') + '">' +
+      '<h2 id="doc-' + s.id + '"><span class="num">' + String(i + 1).padStart(2, '0') + '</span>' +
+      esc(v(s.title)) + '<button class="lk" type="button" data-lk="doc-' + s.id + '" title="' +
+      esc(tv(T.copyLink)) + '" aria-label="' + esc(tv(T.copyLink)) + '">#</button></h2>';
+    if(s.id === 'cheatsheet') html += '<div class="one-bar"><button class="hbtn" type="button" id="print-one">' +
+      esc(tv(T.printOne)) + '</button></div>';
+    s.body.forEach(function(b){ html += block(b); });
+    var p = D[i - 1], n = D[i + 1];
+    // 首尾只渲染存在的那个方向：留一个空 <i> 会占掉半行，看着像少了一张卡片。
+    html += '<nav class="sec-nav">' +
+      (p ? '<a class="prev" href="#doc-' + p.id + '"><span class="d">' + esc(tv(T.prev)) +
+           '</span><span class="n">' + esc(v(p.title)) + '</span></a>' : '') +
+      (n ? '<a class="next" href="#doc-' + n.id + '"><span class="d">' + esc(tv(T.next)) +
+           '</span><span class="n">' + esc(v(n.title)) + '</span></a>' : '') +
+      '</nav></section>';
+    return html;
+  }
+  function renderPage(id){
+    var i = docIdx(id); if(i < 0) i = 0;
+    var s = D[i];
+    cur = s.id;
+    body.innerHTML = sectionHtml(s, i);
+    // 引导语只留在第一节：每页都挂一张大卡片会把正文挤下去。
+    var lead = document.querySelector('.lead');
+    if(lead) lead.style.display = i === 0 ? '' : 'none';
+    renderToc(s);
+    mark(s.id);
+    setProgress(i);
   }
   function renderTree(){
     var html = '', last = null, gi = -1;
@@ -934,19 +939,17 @@ button,input{font:inherit;color:inherit}
     tree.innerHTML = html;
     filterTree();
   }
-  function renderToc(){
-    var html = '<div class="toc-title">' + esc(v(z('本页目录','On this page'))) + '</div>', last = null;
-    D.forEach(function(s){
-      var g = v(s.group);
-      if(g !== last){ html += '<div class="toc-grp">' + esc(g) + '</div>'; last = g; }
-      var h = document.getElementById('doc-' + s.id);
-      if(h) html += '<a href="#' + h.id + '" data-anchor="' + h.id + '">' +
-        esc(h.textContent.replace(/^\d+\s*/, '')) + '</a>';
-      s.body.forEach(function(b){
-        if(b.k === 'h3') html += '<a href="#s-' + b.id + '" data-anchor="s-' + b.id +
-          '" class="sub">' + esc(v(b)) + '</a>';
-      });
+  function renderToc(s){
+    var html = '<div class="toc-title">' + esc(tv(T.onpage)) + '</div>';
+    html += '<a href="#doc-' + s.id + '" data-anchor="doc-' + s.id + '" class="sec-t">' +
+      esc(v(s.title)) + '</a>';
+    var n = 0;
+    s.body.forEach(function(b){
+      if(b.k !== 'h3') return;
+      n++;
+      html += '<a href="#s-' + b.id + '" data-anchor="s-' + b.id + '" class="sub">' + esc(v(b)) + '</a>';
     });
+    if(!n) html += '<div class="toc-none">' + esc(v(z('本节没有小节','No subsections'))) + '</div>';
     toc.innerHTML = html;
   }
   function renderQuick(){
@@ -1026,7 +1029,11 @@ button,input{font:inherit;color:inherit}
       ? (hitN + ' ' + tv(T.hit)) : (shown + ' ' + tv(T.count));
   }
   function secOf(anchor){
-    if(anchor.indexOf('doc-') === 0) return anchor.slice(4);
+    if(anchor.indexOf('doc-') === 0){
+      var id = anchor.slice(4);
+      // 合并过的小节保留旧 id 当别名，老书签 / 站外链接不会 404。
+      return ALIAS[id] || id;
+    }
     for(var i = 0; i < D.length; i++){
       var b = D[i].body;
       for(var j = 0; j < b.length; j++){
@@ -1035,18 +1042,29 @@ button,input{font:inherit;color:inherit}
     }
     return '';
   }
-  function jumpTo(anchor, instant){
-    var h = document.getElementById(anchor);
-    if(!h) return false;
-    var top = h.getBoundingClientRect().top + window.scrollY - 14;
-    // 跨半个文档的长距离跳转不做平滑动画：一屏以上的平滑滚动要等两秒，人会以为没反应。
-    var far = Math.abs(top - window.scrollY) > window.innerHeight * 1.2;
-    window.scrollTo({top:top, behavior:(instant || far) ? 'instant' : 'smooth'});
-    mark(secOf(anchor), anchor);
-    try{ history.replaceState(null, '', '#' + anchor); }catch(_){}
+  /* 唯一跳转入口：先判定锚点属于哪一节，必要时换页，再滚到页内锚点。
+     换页后的第一次定位直接跳，平滑动画会让人以为页面卡住。 */
+  function go(anchor, opts){
+    opts = opts || {};
+    var sec = secOf(anchor);
+    if(!sec || docIdx(sec) < 0) return false;
+    var same = sec === cur;
+    if(!same) renderPage(sec);
+    var target = anchor.indexOf('doc-') === 0 ? null : document.getElementById(anchor);
+    if(target) window.scrollTo({ top:target.getBoundingClientRect().top + window.scrollY - 14,
+      behavior: same ? 'smooth' : 'instant' });
+    else window.scrollTo({ top:0, behavior:'instant' });
+    mark(sec, anchor);
+    if(!opts.silent){
+      try{ opts.replace ? history.replaceState(null, '', '#' + anchor)
+                        : history.pushState(null, '', '#' + anchor); }catch(_){}
+    }
     return true;
   }
-  function go(id){ return jumpTo('doc-' + id); }
+  function setProgress(i){
+    // 分页之后「滚动进度」不再有意义，改成「读到第几节」。
+    prog.style.width = ((i + 1) / D.length * 100).toFixed(2) + '%';
+  }
   function keepTocInView(a){
     var br = toc.getBoundingClientRect(), ar = a.getBoundingClientRect();
     if(ar.top < br.top + 4) toc.scrollTop -= (br.top + 4 - ar.top);
@@ -1060,22 +1078,12 @@ button,input{font:inherit;color:inherit}
       var hit = a.dataset.anchor === (anchor || 'doc-' + id);
       a.classList.toggle('on', hit); if(hit) on = a;
     });
-    // 23 节 + 30 多个 H3，高亮项跑到可视区外就等于目录失效，这里把它拉回来。
     if(on) keepTocInView(on);
   }
   function onScroll(){
-    var max = document.documentElement.scrollHeight - window.innerHeight;
-    prog.style.width = (max > 0 ? Math.min(100, window.scrollY / max * 100) : 0) + '%';
     totop.classList.toggle('show', window.scrollY > 500);
-    var cur = '', anchor = '';
-    D.forEach(function(s){
-      var h = document.getElementById('doc-' + s.id);
-      if(h && h.getBoundingClientRect().top <= 120) cur = s.id;
-    });
-    // 只在当前这一节里找高亮的小节：跨节比较会把上一节的 H3 选中，
-    // 因为刚滚到本节顶部时本节第一个 H3 可能还在阈值下面。
-    D.forEach(function(s){
-      if(s.id !== cur) return;
+    var s = D[docIdx(cur)], anchor = '';
+    if(s){
       var best = -1e9;
       s.body.forEach(function(b){
         if(b.k !== 'h3') return;
@@ -1084,7 +1092,7 @@ button,input{font:inherit;color:inherit}
           // 取「已滚过且最靠下」的那个：t 越大越贴近视口顶部。
           if(t <= 120 && t > best){ best = t; anchor = 's-' + b.id; } }
       });
-    });
+    }
     if(cur) mark(cur, anchor);
   }
   function setLang(l, save){
@@ -1099,25 +1107,31 @@ button,input{font:inherit;color:inherit}
     document.getElementById('lead-p').textContent = tv(T.leadp);
     q.placeholder = lang === 'en' ? 'Search docs (press /)' : '搜索文档（按 / 聚焦）';
     document.getElementById('replay').textContent = lang === 'en' ? 'Replay the tour →' : '重新观看界面导览 →';
-    renderQuick(); renderBody(); renderTree();
+    renderQuick(); renderTree();
+    // 切语言要把当前这节整页重画；再按 hash 定位一次，免得从页中间跳回顶部。
+    renderPage(cur || D[0].id);
     var hash = (location.hash || '').replace(/^#/, '');
-    if(hash && document.getElementById(hash)) jumpTo(hash, true);
+    if(hash && secOf(hash)) go(hash, {silent:true});
   }
 
   tree.addEventListener('click', function(e){
     var b = e.target.closest && e.target.closest('button[data-sec]');
-    if(b) go(b.dataset.sec);
-  });
-  toc.addEventListener('click', function(e){
-    var a = e.target.closest && e.target.closest('a[data-anchor]');
-    if(!a) return;
-    e.preventDefault();
-    jumpTo(a.dataset.anchor);
+    if(b) go('doc-' + b.dataset.sec);
   });
   q.addEventListener('input', filterTree);
   hits.addEventListener('click', function(e){
     var b = e.target.closest && e.target.closest('.hit');
-    if(b) jumpTo(b.dataset.go);
+    if(b) go(b.dataset.go);
+  });
+  /* 页内所有指向 #锚点 的链接（右目录、快速跳转、交叉链接、上下篇）走同一个入口，
+     行为一致，也省得每处各写一遍 preventDefault。 */
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(href.length < 2) return;
+    e.preventDefault();
+    go(href.slice(1));
   });
   /* 复制的是「带锚点的完整地址」，不是页内 #；粘贴给别人能直接落在这一节。 */
   function share(id){
@@ -1150,8 +1164,6 @@ button,input{font:inherit;color:inherit}
     var t = e.target;
     var lk = t.closest && t.closest('.lk');
     if(lk){ share(lk.dataset.lk); return; }
-    var gp = t.closest && t.closest('[data-go]');
-    if(gp){ e.preventDefault(); jumpTo(gp.dataset.go); return; }
     if(t.closest && t.closest('#print-one')){
       document.body.classList.add('print-one');
       setTimeout(function(){ window.print(); document.body.classList.remove('print-one'); }, 30);
@@ -1176,20 +1188,27 @@ button,input{font:inherit;color:inherit}
     } else if(e.key === 'Escape' && document.activeElement === q){ q.blur(); }
   });
   window.addEventListener('scroll', onScroll, {passive:true});
-  window.addEventListener('hashchange', function(){
+  /* 地址栏改 hash、浏览器前进 / 后退都走这里。点击时自己调 go 并 pushState，
+     而 pushState 不发 hashchange，所以这里只兜底外部改动。 */
+  function route(){
     var a = (location.hash || '').replace(/^#/, '');
-    if(a && document.getElementById(a)) jumpTo(a);
-  });
+    if(a && secOf(a)) go(a, {silent:true});
+  }
+  window.addEventListener('hashchange', route);
+  window.addEventListener('popstate', route);
   window.addEventListener('storage', function(e){
     if(e.key === 'ek-lang' && e.newValue) setLang(e.newValue, false);
   });
   setLang(lang, false);
   onScroll();
-  // 正文由脚本生成，浏览器自带的 #锚点 跳转在这之前就发生了，这里补一次。
-  setTimeout(function(){
-    var a = (location.hash || '').replace(/^#/, '');
-    if(a && document.getElementById(a)) jumpTo(a, true);
-  }, 120);
+  // 首屏没有 hash 时补一个：地址栏随时可分享，后退也有落点。
+  if(!secOf((location.hash || '').replace(/^#/, ''))){
+    try{ history.replaceState(null, '', '#doc-' + D[0].id); }catch(_){}
+  }
+  /* 浏览器会按地址栏 hash 自己滚一次，而正文只渲染了一节，它把 h2 顶到视口顶部，
+     结果封面被推出屏幕。load 之后按同一套规则再定位一次。 */
+  window.addEventListener('load', route);
+  setTimeout(route, 160);
 })();
 </script>
 </body>

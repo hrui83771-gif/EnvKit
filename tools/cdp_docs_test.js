@@ -168,7 +168,8 @@ async function attach(target) {
     let docsTarget = null;
     for (let i = 0; i < 30; i++) {
       const list = (await getJSON('http://127.0.0.1:' + DBG + '/json/list')).filter(t => t.type === 'page');
-      if (list.length > before) { docsTarget = list.find(t => /\/docs(\.html)?$/.test(t.url)); }
+      // 文档页会自己补 #doc-<id> 锚点（地址栏可分享），匹配时要把 hash 算进去。
+      if (list.length > before) { docsTarget = list.find(t => /\/docs(\.html)?(#.*)?$/.test(t.url)); }
       if (docsTarget) break;
       await sleep(250);
     }
@@ -184,65 +185,74 @@ async function attach(target) {
     await sleep(1200);
     const djs = docs.evalJS;
 
+    // 逐节切换统计：分页后正文只有一节，全量规模要从每个页面里累加。
     const iso = JSON.parse(await djs(`JSON.stringify((function(){
+      var btns=[].slice.call(document.querySelectorAll('#tree button[data-sec]'));
+      var ids=btns.map(function(b){ return b.dataset.sec; });
+      var tabs=0, steps=0, xlinks=[], txt='';
+      btns.forEach(function(b){
+        b.click();
+        tabs += document.querySelectorAll('#body .tbl').length;
+        steps += document.querySelectorAll('#body .steps').length;
+        txt += ' ' + document.getElementById('body').textContent;
+        [].slice.call(document.querySelectorAll('#body .xlink a')).forEach(function(a){ xlinks.push(a.getAttribute('href')); });
+      });
       return { path: location.pathname,
         title: document.title,
         mainApp: !!document.getElementById('btn-profile'),
         panel: !!document.getElementById('panel-docs'),
         token: typeof window.__EK_TOKEN__,
-        sections: document.querySelectorAll('#body .sec').length,
-        tabs: document.querySelectorAll('.tbl').length,
-        steps: document.querySelectorAll('.steps').length };
-    })())`));
-    ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
-    ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
-    ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 24, '文档正文有 ' + iso.sections + ' 节（丰富度）');
-    ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
-
-    // 深度：操作级细节、真实工具名、排障索引、节间交叉链接、配置默认值
-    const deep = JSON.parse(await djs(`JSON.stringify((function(){
-      var txt = document.getElementById('body').textContent;
-      var links = [].slice.call(document.querySelectorAll('#body .xlink a')).map(function(a){return a.getAttribute('href');});
-      return {
-        trouble: !!document.getElementById('doc-troubleshoot'),
+        sections: btns.length,
+        perPage: document.querySelectorAll('#body .sec').length,
+        tabs: tabs, steps: steps, xlinks: xlinks.length,
+        validLinks: xlinks.every(function(h){ return ids.indexOf(String(h).replace('#doc-','')) >= 0; }),
         tools: ['get_system_state','verify_environment','db_query','read_doc','sync_chain_ip']
                  .filter(function(n){ return txt.indexOf(n) >= 0; }).length,
         paths: ['/opt/fisco/nodes','start_all.sh','18766','MySQL80','18765']
                  .filter(function(n){ return txt.indexOf(n) >= 0; }).length,
-        xlinks: links.length, validLinks: links.every(function(h){ return /^#doc-[a-z]+$/.test(h) && !!document.querySelector(h); }),
-        stale26: /26 个(受控)?工具/.test(txt)
-      };
+        trouble: txt.indexOf('排障索引') >= 0,
+        stale26: /26 个(受控)?工具/.test(txt) };
     })())`));
-    ok(deep.trouble, '有按症状聚合的排障索引节');
-    ok(deep.tools === 5, 'AI 节列出真实注册工具名（' + deep.tools + '/5）');
-    ok(deep.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + deep.paths + '/5）');
-    ok(deep.xlinks >= 7 && deep.validLinks, '节间交叉链接全部指向存在的锚点（' + deep.xlinks + ' 条）');
-    ok(!deep.stale26, '没有与真实工具数漂移的旧「26 个工具」表述');
+    ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
+    ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
+    ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
+    ok(iso.sections >= 19, '文档共 ' + iso.sections + ' 节（合并小段后的规模）');
+    ok(iso.perPage === 1, '正文一次只渲染一节（实际 ' + iso.perPage + ' 节）');
+    ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
+    ok(iso.trouble, '有按症状聚合的排障索引节');
+    ok(iso.tools === 5, 'AI 节列出真实注册工具名（' + iso.tools + '/5）');
+    ok(iso.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + iso.paths + '/5）');
+    ok(iso.xlinks >= 7 && iso.validLinks, '节间交叉链接全部指向存在的节（' + iso.xlinks + ' 条）');
+    ok(!iso.stale26, '没有与真实工具数漂移的旧「26 个工具」表述');
 
-    // ---- 3) 三栏结构 ----
+    // 遍历停在最后一节，回到第一节再验布局。
+    await djs(`document.querySelector('#tree button[data-sec]').click(); true`);
+    await sleep(250);
+
+    // ---- 3) 三栏结构 + 右栏只服务当前节 ----
     console.log('文档站结构：');
     const st = JSON.parse(await djs(`JSON.stringify({
       tree: document.querySelectorAll('#tree button[data-sec]').length,
       groups: document.querySelectorAll('#tree .grp').length,
       gcounts: Array.from(document.querySelectorAll('#tree .grp .gc')).map(function(x){return x.textContent;}),
       toc: document.querySelectorAll('#toc a[data-anchor]').length,
-      tocSub: document.querySelectorAll('#toc a[data-anchor].sub').length,
-      tocGrp: document.querySelectorAll('#toc .toc-grp').length,
+      pageH3: document.querySelectorAll('#body .sec h3').length,
+      tocInPage: Array.prototype.every.call(document.querySelectorAll('#toc a[data-anchor]'), function(a){
+        var el=document.getElementById(a.dataset.anchor); return !!el && !!el.closest('#body'); }),
       quick: document.querySelectorAll('#quick a').length,
       cols: getComputedStyle(document.querySelector('.layout')).gridTemplateColumns.split(' ').length,
-      lead: document.getElementById('lead-t').textContent
+      lead: document.getElementById('lead-t').textContent,
+      leadShown: getComputedStyle(document.querySelector('.lead')).display !== 'none'
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 24 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.tree >= 19 && st.tree === iso.sections, '左目录与总节数一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
     ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
-    ok(st.toc >= st.tree, '右目录来自正文真实锚点（' + st.toc + '）');
-    ok(st.tocSub >= iso.sections, '每节都有子标题进入右目录（' + st.tocSub + ' 个 H3 ≥ ' + iso.sections + ' 节）');
-    ok(st.tocGrp === st.groups, '右目录按组分节（' + st.tocGrp + ' 组）');
+    ok(st.toc === st.pageH3 + 1 && st.tocInPage,
+      '右栏「此页面」只列当前节（' + st.toc + ' 项 = ' + st.pageH3 + ' 个 H3 + 节标题）');
     ok(st.quick === st.groups, '快速跳转按分组取代表节（' + st.quick + ' 项 = ' + st.groups + ' 组）');
-    ok(!!st.lead, '封面有引导语（' + st.lead.slice(0, 20) + '）');
+    ok(!!st.lead && st.leadShown, '第一节有引导语（' + st.lead.slice(0, 16) + '）');
 
     try {
       fs.mkdirSync(path.join(REPO, '.gotmp', 'ux-preview'), { recursive: true });
@@ -263,18 +273,20 @@ async function attach(target) {
     ok(filt.txt.some(x => x.indexOf('链端') >= 0), '按正文命中而不是只按标题（TOFU 只在正文里）');
     await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
 
+    // 点左目录＝换页，不是滚到页面某处
     const sc = JSON.parse(await djs(`(function(){
       var b=document.querySelectorAll('#tree button[data-sec]')[4], id=b.dataset.sec;
       b.click();
-      var h=document.getElementById('doc-'+id);
-      return JSON.stringify({id:id, on:b.classList.contains('on'), top:h.getBoundingClientRect().top});
+      return JSON.stringify({id:id, on:b.classList.contains('on'),
+        cur:document.querySelector('#body .sec h2').id, hash:location.hash,
+        secs:document.querySelectorAll('#body .sec').length});
     })()`));
-    await sleep(700);
-    const scTop = await djs(`(function(){var h=document.getElementById('doc-${sc.id}');return h?h.getBoundingClientRect().top:9999;})()`);
-    ok(sc.on && Math.abs(scTop) < 90, '点左目录滚到对应正文（' + sc.id + '，偏移 ' + Math.round(scTop) + '）');
+    await sleep(300);
+    ok(sc.on && sc.cur === 'doc-' + sc.id && sc.hash === '#doc-' + sc.id && sc.secs === 1,
+      '点左目录换到对应节并改写地址（' + sc.id + '）');
 
     await djs(`(function(){var a=document.querySelector('#toc a[data-anchor]'); a.click(); return true;})()`);
-    await sleep(700);
+    await sleep(400);
     const tocOn = await djs(`!!document.querySelector('#toc a[data-anchor].on')`);
     ok(tocOn, '点右目录有高亮反馈');
 
@@ -283,12 +295,20 @@ async function attach(target) {
     const copied = await djs(`document.querySelector('#body .cp').textContent`);
     ok(copied !== '复制' && copied.length > 0, '代码块复制按钮给出可见反馈（' + copied + '）');
 
+    // 进度条改成「读到第几节」：分页后滚动进度没有意义。
+    await djs(`document.querySelector('#tree button[data-sec="chain"]').click(); true`);
+    await sleep(300);
     await djs(`window.scrollTo({top:document.documentElement.scrollHeight, behavior:'instant'}); true`);
     await sleep(400);
-    const prog = await djs(`parseFloat(document.getElementById('prog').style.width) || 0`);
-    ok(prog > 90, '滚动到底阅读进度接近满（' + Math.round(prog) + '%）');
+    const prog = JSON.parse(await djs(`JSON.stringify((function(){
+      var bs=[].slice.call(document.querySelectorAll('#tree button[data-sec]'));
+      var i=bs.findIndex(function(b){ return b.classList.contains('on'); });
+      return { pct: parseFloat(document.getElementById('prog').style.width)||0, idx:i+1 };
+    })())`));
+    ok(Math.abs(prog.pct - 100 * prog.idx / iso.sections) < 2,
+      '进度条反映读到第几节（第 ' + prog.idx + ' 节 → ' + Math.round(prog.pct) + '%）');
     const totop = await djs(`document.getElementById('totop').classList.contains('show')`);
-    ok(totop, '滚动后出现返回顶部按钮');
+    ok(totop, '长节滚到底出现返回顶部按钮');
 
     // ---- 5) 检索质量 / 目录跟随 / 锚点分享 / 上下篇 / FAQ 折叠 / 速查页 ----
     console.log('文档可用性：');
@@ -328,24 +348,21 @@ async function attach(target) {
     await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
     await sleep(200);
 
-    // 右目录：滚到后半段时高亮项必须还在可视区里，否则 24 节目的目录等于失效
+    // 右栏「此页面」：滚到本节靠后的小节时，高亮要落在本节这条上
     await djs(`(function(){
-      var s=document.querySelectorAll('#body .sec'); window.__tocSec=s.length-3;
-      var t=s[window.__tocSec];
-      window.scrollTo({top:t.getBoundingClientRect().top+window.scrollY-14,behavior:'instant'}); return true;
+      var hs=document.querySelectorAll('#body .sec h3');
+      if(hs.length) window.scrollTo({top:hs[hs.length-1].getBoundingClientRect().top+window.scrollY-14,behavior:'instant'});
+      return true;
     })()`);
     await sleep(500);
     const tocKeep = JSON.parse(await djs(`(function(){
-      var t=document.getElementById('toc'), a=t.querySelector('a.on');
+      var a=document.querySelector('#toc a.on');
       if(!a) return JSON.stringify({on:false});
-      var br=t.getBoundingClientRect(), ar=a.getBoundingClientRect();
-      var curSec=document.querySelectorAll('#body .sec')[window.__tocSec];
       var el=document.getElementById(a.dataset.anchor);
-      return JSON.stringify({on:true, visible: ar.top>=br.top-1 && ar.bottom<=br.bottom+1,
-        inSec: !!(curSec && el && curSec.contains(el)), name:a.textContent});
+      return JSON.stringify({on:true, inSec: !!(el && el.closest('#body')),
+        name:a.textContent, isH3:a.classList.contains('sub')});
     })()`));
-    ok(tocKeep.on && tocKeep.visible, '右目录高亮项始终留在可视区（' + (tocKeep.name || '') + '）');
-    ok(tocKeep.inSec, '高亮的是当前读的这一节，不是更早的小节（' + (tocKeep.name || '') + '）');
+    ok(tocKeep.on && tocKeep.inSec, '滚动时高亮落在本节的小节上（' + (tocKeep.name || '') + '）');
 
     const lk = JSON.parse(await djs(`(function(){
       var b=document.querySelector('#doc-chain .lk'); b.click();
@@ -360,34 +377,89 @@ async function attach(target) {
     ok(lkOk.done && lk.hash === '#doc-chain' && !!lk.title,
       '节标题锚点按钮复制链接并给出可见反馈（' + lkOk.txt + ' / ' + lk.hash + '）');
 
+    // 只改 hash 不会重新加载页面，先用空白页逼一次真正的整页加载再验直开。
+    await docs.send('Page.navigate', { url: 'about:blank' });
+    await sleep(500);
     await docs.send('Page.navigate', { url: 'http://127.0.0.1:' + PORT + '/docs#doc-chain' });
     await sleep(3200);
     const deep2 = JSON.parse(await djs(`(function(){
       var h=document.getElementById('doc-chain'), a=document.querySelector('#toc a.on');
-      return JSON.stringify({top:h?h.getBoundingClientRect().top:9999, on:!!a, name:a?a.textContent:''});
+      var t=document.querySelector('#tree button.on');
+      return JSON.stringify({top:h?h.getBoundingClientRect().top:9999, on:!!a, name:a?a.textContent:'',
+        treeOn:t?t.dataset.sec:'', secs:document.querySelectorAll('#body .sec').length,
+        scrollY:window.scrollY});
     })()`));
-    ok(Math.abs(deep2.top) < 90 && deep2.on,
-      '带 #doc-chain 直接打开会定位到该节（偏移 ' + Math.round(deep2.top) + '，目录高亮 ' + deep2.name + '）');
+    // 分页后节标题本来就在封面下方，判据是「只渲染了这一节 + 停在页首」，不是偏移为 0。
+    ok(deep2.on && deep2.secs === 1 && deep2.treeOn === 'chain' && deep2.scrollY === 0 &&
+       deep2.top > 0 && deep2.top < 460,
+      '带 #doc-chain 直接打开只渲染这一节、停在页首（标题距顶 ' + Math.round(deep2.top) + 'px）');
+
+    // ---- 5) 分页路由：换页 / 后退 / 旧锚点 ----
+    console.log('分页路由：');
+    const pr = JSON.parse(await djs(`(function(){
+      var bs=[].slice.call(document.querySelectorAll('#tree button[data-sec]'));
+      bs[4].click(); var prev=bs[4].dataset.sec;
+      bs[5].click();
+      return JSON.stringify({id:bs[5].dataset.sec, prev:prev,
+        cur:document.querySelector('#body .sec h2').id,
+        hash:location.hash, path:location.pathname, secs:document.querySelectorAll('#body .sec').length,
+        lead:getComputedStyle(document.querySelector('.lead')).display});
+    })()`));
+    ok(pr.secs === 1 && pr.cur === 'doc-' + pr.id && pr.hash === '#doc-' + pr.id,
+      '点目录只换正文一节，地址栏跟着变（' + pr.id + '）');
+    ok(pr.path === '/docs', '换页不离开 /docs（客户端路由）');
+    ok(pr.lead === 'none', '非首页不显示引导卡');
+
+    await djs(`history.back(); true`);
+    await sleep(700);
+    const back = JSON.parse(await djs(`JSON.stringify({
+      cur:(document.querySelector('#body .sec h2')||{id:''}).id,
+      hash:location.hash, path:location.pathname,
+      secs:document.querySelectorAll('#body .sec').length})`));
+    ok(back.cur === 'doc-' + pr.prev && back.hash === '#doc-' + pr.prev &&
+       back.path === '/docs' && back.secs === 1,
+      '浏览器后退回到上一节（' + pr.prev + '，实际 ' + (back.cur || '离开了文档页') + '）');
+
+    await docs.send('Page.navigate', { url: 'about:blank' });
+    await sleep(500);
+    await docs.send('Page.navigate', { url: 'http://127.0.0.1:' + PORT + '/docs#doc-build' });
+    await sleep(3200);
+    const alias = JSON.parse(await djs(`JSON.stringify({cur:document.querySelector('#body .sec h2').id,
+      on:(document.querySelector('#tree button.on')||{dataset:{}}).dataset.sec||''})`));
+    ok(alias.cur === 'doc-install' && alias.on === 'install',
+      '旧锚点 #doc-build 落到合并后的「安装与构建」（' + alias.cur + '）');
 
     const pn = JSON.parse(await djs(`JSON.stringify((function(){
-      var ns=document.querySelectorAll('#body .sec-nav');
-      var first=ns[0], last=ns[ns.length-1];
-      return { total:ns.length,
-        firstNext: !!first.querySelector('a.next'), firstPrev: !!first.querySelector('a.prev'),
-        lastPrev: !!last.querySelector('a.prev'), lastNext: !!last.querySelector('a.next'),
-        label: first.querySelector('a.next .d').textContent };
+      function info(){
+        var nav=document.querySelector('#body .sec-nav');
+        return { navs:document.querySelectorAll('#body .sec-nav').length,
+          prev: !!nav.querySelector('a.prev'), next: !!nav.querySelector('a.next') };
+      }
+      var bs=[].slice.call(document.querySelectorAll('#tree button[data-sec]'));
+      bs[0].click(); var first=info();
+      bs[bs.length-1].click(); var last=info();
+      return { navs:first.navs, firstNext:first.next, firstPrev:first.prev,
+        lastPrev:last.prev, lastNext:last.next };
     })())`));
-    ok(pn.total === iso.sections && !pn.firstPrev && pn.firstNext && pn.lastPrev && !pn.lastNext,
-      '每节都有上一篇 / 下一篇，首尾只给单边（' + pn.total + ' 节）');
+    ok(pn.navs === 1 && !pn.firstPrev && pn.firstNext && pn.lastPrev && !pn.lastNext,
+      '每页只有一组上一篇 / 下一篇，首尾只给单边');
 
+    // pn 停在最后一节（没有下一篇），回到第一节再点
+    await djs(`document.querySelectorAll('#tree button[data-sec]')[0].click(); true`);
+    await sleep(300);
     const nx = JSON.parse(await djs(`(function(){
       var a=document.querySelector('#body .sec-nav a.next'); var href=a.getAttribute('href');
       a.click(); return JSON.stringify({href:href});
     })()`));
-    await sleep(800);
-    const nxTop = await djs(`(function(){var h=document.querySelector('${nx.href}');return h?h.getBoundingClientRect().top:9999;})()`);
-    ok(Math.abs(nxTop) < 90, '点「下一篇」滚到下一节（' + nx.href + '，偏移 ' + Math.round(nxTop) + '）');
+    await sleep(700);
+    const nxNow = JSON.parse(await djs(`JSON.stringify({hash:location.hash,
+      cur:document.querySelector('#body .sec h2').id})`));
+    ok(nxNow.hash === nx.href && nxNow.cur === nx.href.slice(1),
+      '点「下一篇」换到下一节（' + nx.href + '）');
 
+    // FAQ / 速查都是独立页，先切过去再验
+    await djs(`document.querySelector('#tree button[data-sec="faq"]').click(); true`);
+    await sleep(400);
     const faq = JSON.parse(await djs(`JSON.stringify((function(){
       var d=document.querySelectorAll('#body .faq details');
       var opens=Array.prototype.filter.call(d, function(x){ return x.open; }).length;
@@ -405,6 +477,8 @@ async function attach(target) {
     })()`);
     ok(!!faqOpen, '点标题能展开对应的问答');
 
+    await djs(`document.querySelector('#tree button[data-sec="cheatsheet"]').click(); true`);
+    await sleep(400);
     const cs = JSON.parse(await djs(`JSON.stringify((function(){
       var h=document.getElementById('doc-cheatsheet');
       var sec=h?h.closest('.sec'):null;
@@ -415,39 +489,43 @@ async function attach(target) {
         term: t.indexOf('TOFU')>=0, btn: !!document.getElementById('print-one'),
         secs: document.querySelectorAll('#body .sec').length };
     })())`));
-    ok(cs.exists && cs.ports === 3, '速查页收全端口与顺延区间（' + cs.ports + '/3）');
+    ok(cs.exists && cs.secs === 1 && cs.ports === 3, '速查页收全端口与顺延区间（' + cs.ports + '/3）');
     ok(cs.deff === 3 && cs.term, '速查页有默认值字段名与术语解释（TOFU）');
     ok(cs.btn, '速查页带「只打印本节」按钮');
 
     await docs.send('Emulation.setEmulatedMedia', { media: 'print' });
     await sleep(200);
-    const pr = JSON.parse(await djs(`(function(){
+    const prn = JSON.parse(await djs(`(function(){
       document.body.classList.add('print-one');
-      var others=Array.prototype.slice.call(document.querySelectorAll('#body .sec'))
-        .filter(function(s){ return !s.classList.contains('sec-one'); });
-      var hid=others.every(function(s){ return getComputedStyle(s).display==='none'; });
+      var shell=['.hero','.side','.toc','.quick','.sec-nav'].every(function(sel){
+        var el=document.querySelector(sel); return !el || getComputedStyle(el).display==='none'; });
       var one=document.querySelector('.sec-one');
       var shown=one && getComputedStyle(one).display!=='none';
       document.body.classList.remove('print-one');
-      return JSON.stringify({hid:hid, one:shown, n:others.length});
+      return JSON.stringify({shell:shell, one:shown, secs:document.querySelectorAll('#body .sec').length});
     })()`));
     await docs.send('Emulation.setEmulatedMedia', { media: '' });
     await sleep(150);
-    ok(pr.hid && pr.one && pr.n === cs.secs - 1, '打印模式只留速查节（藏掉其它 ' + pr.n + ' 节）');
+    ok(prn.shell && prn.one && prn.secs === 1, '打印模式隐藏页面外壳，正文只留当前节');
 
-    // ---- 5) 双语：与主控制台共享 ek-lang ----
+    // ---- 6) 双语：与主控制台共享 ek-lang ----
     console.log('英文模式：');
     await djs(`document.getElementById('lang').click(); true`);
     await sleep(500);
     const en = JSON.parse(await djs(`JSON.stringify((function(){
-      var s=document.getElementById('body').textContent + document.getElementById('tree').textContent +
-            document.getElementById('toc').textContent;
-      // 安装.bat 是仓库里真实的文件名，英文文案里也必须照写，不算漏翻译。
-      s = s.replace(/安装\.bat/g, '');
-      return { cjk: /[\\u4e00-\\u9fa5]/.test(s), sample:(s.match(/[\\u4e00-\\u9fa5]+/g)||[]).slice(0,6).join('|'),
+      var btns=[].slice.call(document.querySelectorAll('#tree button[data-sec]'));
+      var bad='';
+      btns.forEach(function(b){
+        b.click();
+        var s=document.getElementById('body').textContent.replace(/安装\.bat/g,'');
+        if(!bad && /[\\u4e00-\\u9fa5]/.test(s)) bad=(s.match(/[\\u4e00-\\u9fa5]+/g)||[]).slice(0,4).join('|');
+      });
+      var nav=document.getElementById('tree').textContent+document.getElementById('toc').textContent;
+      return { cjk:!!bad, sample:bad, navCjk:/[\\u4e00-\\u9fa5]/.test(nav),
         stored: localStorage.getItem('ek-lang'), path:location.pathname };
     })())`));
-    ok(!en.cjk, '切英文后文档正文 / 目录无中文（' + en.sample + '）');
+    ok(!en.cjk, '切英文后每节正文都没有中文残留（' + en.sample + '）');
+    ok(!en.navCjk, '英文模式左目录 / 右栏也没有中文');
     ok(en.stored === 'en', '语言选择写入 ek-lang，与主控制台共享');
     await djs(`document.getElementById('lang').click(); localStorage.setItem('ek-lang','zh'); true`);
     await sleep(300);

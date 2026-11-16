@@ -67,6 +67,11 @@ const SHADOW = [
 
 function seed() {
   fs.mkdirSync(DIR, { recursive: true });
+  // 聚合读目录下所有 audit-*.jsonl / shadow-*.jsonl：跨午夜跑会连昨天的文件一起读，
+  // total 直接翻倍。夹具目录必须是干净的，先清掉历史日期。
+  fs.readdirSync(DIR).filter(f => /^(audit|shadow)-\d{8}\.jsonl$/.test(f)).forEach(f => {
+    try { fs.rmSync(path.join(DIR, f)); } catch (e) {}
+  });
   fs.writeFileSync(path.join(DIR, 'config.json'), JSON.stringify({
     app_name: 'EnvKit', app_title: '统一开发环境助手',
     install_dir: 'C:\\EnvKit\\tools',
