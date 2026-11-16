@@ -120,7 +120,8 @@ try:
             ("title", "EnvKit 使用文档" in dc),
             ("version-replaced", "__APP_VERSION__" not in dc),
             ("no-token", tok not in dc),
-            ("sections>=14", dc.count("{id:'") >= 14),
+            ("sections>=20", dc.count("{id:'") >= 20),
+            ("groups>=7", len(set(re.findall(r"group:z\('([^']+)'", dc))) >= 7),
             ("no-external", not dc_ext),
         ]
         for name, good in dchecks:

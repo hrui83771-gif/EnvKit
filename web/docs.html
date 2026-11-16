@@ -73,6 +73,7 @@ button,input{font:inherit;color:inherit}
 .tree button.on:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;
   background:var(--brand);border-radius:3px}
 .tree .empty{padding:14px 10px;color:var(--muted);font-size:12.5px}
+.gc{display:inline-block;min-width:16px;text-align:center;font:10px/14px Consolas,monospace;color:#9aa4b2;background:#f2f4f7;border-radius:7px;padding:0 4px;margin-left:4px}
 .side-foot{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;font-size:11.5px;color:var(--muted)}
 .side-foot a{display:block;padding:3px 0}
 
@@ -131,6 +132,8 @@ button,input{font:inherit;color:inherit}
 .toc a:hover{color:var(--ink);text-decoration:none}
 .toc a.on{color:var(--brand2);border-left-color:var(--brand);font-weight:600}
 .toc a.sub{padding-left:22px;font-size:11.5px}
+.toc-grp{font-size:10.5px;letter-spacing:.6px;color:#9aa4b2;font-weight:700;padding:10px 8px 3px;text-transform:uppercase}
+.toc-grp:not(:first-of-type){border-top:1px dashed var(--line2);margin-top:5px}
 
 .totop{position:fixed;right:24px;bottom:24px;width:40px;height:40px;border-radius:50%;
   background:#fff;border:1px solid var(--line);box-shadow:var(--shadow);color:var(--brand2);
@@ -225,9 +228,46 @@ button,input{font:inherit;color:inherit}
   function TABLE(head,rows){ return {k:'table',head:head,rows:rows}; }
 
   var D = [
-    {id:'quick', group:z('入门','Get started'), title:z('四步走完','Four steps'), body:[
+    {id:'runtime', group:z('开始使用','Get started'), title:z('EnvKit 是什么','What EnvKit is'), body:[
+      P('表面上是单文件 Windows 程序：双击、浏览器打开本地控制台、四步完成环境。本质上是面向 Windows 环境的 Agent Runtime——模型负责决策，Runtime 负责边界，Verification 负责结论，三者分开。',
+        'On the surface, a single-file Windows program: double-click, a local console opens, four steps to a ready environment. Underneath it is an Agent Runtime for Windows — the model decides, the Runtime enforces boundaries, Verification draws conclusions.'),
+      H3('runtime-loop','四步循环','The four-step loop'),
+      P('Observe → Reason → Act → Verify。第四步不是"模型想起来才做"的收尾，而是和前三步同等地位的一环：执行之后由验证器用端口、进程、HTTP、备份内容与链端共识去判断到底成没成。',
+        'Observe → Reason → Act → Verify. The fourth step is not an afterthought the model may skip — it carries the same weight as the first three. After acting, verifiers use ports, processes, HTTP, backup contents and chain consensus to decide whether it actually worked.'),
+      H3('runtime-rules','三条硬约束','Three hard constraints'),
+      UL([
+        z('推理灵活、执行受控：模型可自由决定调用顺序，但所有副作用都经过已注册的 26 个工具，没有"执行任意命令"','Flexible reasoning, controlled execution: the model may reorder calls freely, but every side effect goes through 26 registered tools; there is no arbitrary command execution'),
+        z('权限由系统裁定：工具返回成功只代表命令发出去了，能不能说"已完成"由验证器的客观结论决定','The system decides permission: a tool returning success only means the command was sent; saying “done” is the verifier’s objective conclusion'),
+        z('经验只影响决策：记忆改变"先查什么、要不要原样重试"，不改变任何操作的授权档位','Experience only affects decisions: memory changes what to check first and whether to retry as-is, never an operation’s permission tier')
+      ]),
+      NOTE('计划、动作、证据、复验结论、人工确认全部进轨迹与审计；跨会话仍能回答"上次那件事是怎么处理的"。',
+           'Plans, actions, evidence, verification results and manual confirmations all go into traces and audit. Across sessions you can still answer how a past issue was handled.', 'ok')
+    ]},
+    {id:'verify', group:z('开始使用','Get started'), title:z('完成 ≠ 结论','Done ≠ verified'), body:[
+      P('命令返回 0、进程派生成功、备份文件生成、端口有人监听、区块高度有变化——这些都是证据，不是结论。EnvKit 把"是否完成"的判定权从模型手里拿走。',
+        'Exit code 0, a spawned process, a generated backup, a listening port or a changing block height are evidence, not conclusions. EnvKit takes the right to declare completion away from the model.'),
+      H3('verify-evidence','证据对照表','Evidence vs. conclusion'),
+      TABLE([z('证据','Evidence'),z('不足以说明','Does not prove'),z('因为','Because')],[
+        [z('命令返回 0','Exit code 0'),z('服务可用','Service is usable'),z('可能端口没绑上、进程随后退出','Port may not be bound; process may exit afterwards')],
+        [z('进程已派生','Process spawned'),z('服务健康','Service is healthy'),z('可能绑错端口、被别的进程占住','May bind the wrong port or be occupied')],
+        [z('备份文件已生成','Backup file exists'),z('能还原','Restorable'),z('可能缺触发器、校验和对不上、导出被截断','May miss triggers, mismatch checksums or be truncated')],
+        [z('区块高度静止','Static block height'),z('链卡死了','Chain is stuck'),z('PBFT 空块只共识不落盘，判活要看共识视图','PBFT empty blocks reach consensus without storage; check the consensus view')]
+      ]),
+      H3('verify-mech','五个支撑机制','Five supporting mechanisms'),
+      TABLE([z('层面','Layer'),z('解决什么','What it solves')],[
+        [z('Contract OpResult','Contract OpResult'),z('失败被外层吞掉后，模型只能硬编码"已启动"','Failures swallowed upstream forced the model to hard-code “started”')],
+        [z('Verification 验证器','Verification'),z('"命令成功"被误报成"环境已恢复"','“Command succeeded” misreported as “environment restored”')],
+        [z('Policy 四档权限','Policy tiers'),z('"什么算危险"散落多处，换个入口就能绕过','“What is dangerous” was scattered; another entry point bypassed it')],
+        [z('Trace 任务轨迹','Trace'),z('失败无法归因，经验退化成凭空总结','Failures could not be attributed; experience degenerated into guesswork')],
+        [z('Memory 作用域记忆','Memory'),z('把别的项目的经验套到当前项目','Experience from another project applied to the current one')]
+      ]),
+      NOTE('验证不过显示「已执行，未验证」；只有客观证据通过，才显示「已完成」。',
+           'Failed verification shows “executed, unverified”; only passing objective evidence shows “completed”.', 'warn')
+    ]},
+    {id:'quick', group:z('开始使用','Get started'), title:z('四步走完','Four steps'), body:[
       P('双击 EnvKit.exe 后浏览器自动打开本地控制台，按左侧顺序走一遍即可。顶部状态胶囊会随检测与启动结果实时更新；右下角的鱼是状态出口，不是装饰。',
         'Double-click EnvKit.exe and the local console opens automatically. Follow the four steps in the sidebar; status chips update live, and the fish at the lower right is a status outlet.'),
+      H3('quick-flow','四步顺序','The four-step order'),
       STEPS([
         z('环境安装：检测 Go / Node.js / MySQL 的版本与安装位置，镜像下载带 SHA256 校验与失败重试。',
           'Environment: detect Go / Node.js / MySQL versions and paths; mirrored downloads with SHA256 checks and retries.'),
@@ -238,20 +278,36 @@ button,input{font:inherit;color:inherit}
         z('程序启动：先后端再前端；日志按来源分栏，EnvKit 退出时子进程自动回收。',
           'Start: backend first, then frontend. Logs are split by source; child processes are reaped when EnvKit exits.')
       ]),
+      H3('quick-console','控制台与后台','Console and background'),
       NOTE('控制台默认 http://127.0.0.1:18765/ ，端口冲突时自动顺延。那个黑色命令行窗口就是服务本体：关掉它网页就打不开。要从托盘菜单选「隐藏窗口到托盘」，不是结束进程。新版本已把控制台换成纸白底的浅色主题。',
            'The console defaults to http://127.0.0.1:18765/ and shifts ports on conflict. The console window IS the service: closing it kills the page. Use the tray menu to hide it, not to end the process. New builds use a light paper-coloured theme.'),
-      H3('quick-shortcut','键盘与入口','Shortcuts and entries'),
-      TABLE([z('操作','Action'),z('方式','How')],[
-        [z('打开命令面板','Open command palette'),z('Ctrl+K；或点顶栏个人中心左边的搜索框','Ctrl+K, or the search box left of the profile')],
-        [z('跳到某个页面','Jump to a page'),z('命令面板里输入页面名；或用地址栏深链 #config / #chain / #audit','Type a page name in the palette, or use #config / #chain / #audit')],
-        [z('重看界面导览','Replay the tour'),z('本页左侧「重新观看界面导览」→ 回到控制台自动开始','Use “Replay the tour” in the sidebar of this page')],
-        [z('后台运行','Run in background'),z('托盘右键「隐藏窗口到托盘」','Tray → Hide window to tray')]
-      ])
+      P('打开命令面板、跳转页面、重播导览、地址栏深链的方式，见下一节「快捷键与深链」。',
+        'For the command palette, page jumps, tour replay and URL anchors, see the next section, “Shortcuts & deep links”.')
     ]},
 
-    {id:'prep', group:z('入门','Get started'), title:z('下载与运行前提','Download and prerequisites'), body:[
+    {id:'shortcuts', group:z('开始使用','Get started'), title:z('快捷键与深链','Shortcuts & deep links'), body:[
+      P('控制台和文档页共用同一套键盘习惯：命令面板一键唤起，页面用地址栏锚点直达，不用在长列表里翻。',
+        'The console and the docs share one keyboard habit: the command palette is one keystroke away, and pages are reachable through URL anchors instead of long lists.'),
+      H3('shortcuts-keys','键盘','Keyboard'),
+      TABLE([z('按键','Key'),z('作用','Action'),z('范围','Scope')],[
+        [z('Ctrl+K','Ctrl+K'),z('搜索并跳转页面、按钮、章节','Search and jump to pages, buttons and sections'),z('控制台 / 文档','Console / docs')],
+        [z('/','/'),z('聚焦文档搜索框','Focus the docs search box'),z('文档页','Docs')],
+        [z('Esc','Esc'),z('退出搜索框 / 关闭命令面板','Leave search / close the palette'),z('控制台 / 文档','Console / docs')]
+      ]),
+      H3('shortcuts-links','地址栏深链','URL deep links'),
+      TABLE([z('地址','URL'),z('到达','Goes to')],[
+        [z('/docs','/docs'),z('独立文档站（新标签，可离线、可打印）','Standalone docs in a new tab; offline and printable')],
+        [z('/#tour','/#tour'),z('回到控制台并重播界面导览','Back to the console and replay the tour')],
+        [z('/#config、#chain、#audit','/#config, #chain, #audit'),z('直达对应功能页','Straight to the matching page')],
+        [z('/docs#doc-chain','/docs#doc-chain'),z('直达文档某一节','Open a specific docs section')]
+      ]),
+      NOTE('命令面板索引的是页面上真实存在的导航与按钮，不索引 AI 工具；写操作仍走各自的确认闸门。',
+           'The palette indexes real navigation and buttons on the page, not AI tools; write operations still pass their own confirmation gates.', 'ok')
+    ]},
+    {id:'prep', group:z('安装与构建','Install & build'), title:z('下载与运行前提','Download and prerequisites'), body:[
       P('从 Releases 下载最新的 Windows x64 压缩包，解压后运行 安装.bat（复制到 %LOCALAPPDATA%\\EnvKit 并建桌面快捷方式），或直接双击 EnvKit.exe —— 单文件、免安装。',
         'Download the latest Windows x64 archive from Releases, run 安装.bat to copy it into %LOCALAPPDATA%\\EnvKit with a desktop shortcut, or just double-click EnvKit.exe — one file, no installer.'),
+      H3('prep-req','运行前提','Requirements'),
       TABLE([z('项目','Item'),z('要求','Requirement')],[
         [z('操作系统','OS'),z('Windows 10 / 11 x64','Windows 10 / 11 x64')],
         [z('MySQL 绿色版','Portable MySQL'),z('需要 VC++ 2019 Redistributable (x64)','Requires VC++ 2019 Redistributable (x64)')],
@@ -262,7 +318,7 @@ button,input{font:inherit;color:inherit}
            'A desktop shortcut may still point at an old copy in %LOCALAPPDATA%\\EnvKit. After an update, rerun 安装.bat or open the EnvKit.exe at the repository root.', 'warn')
     ]},
 
-    {id:'build', group:z('入门','Get started'), title:z('从源码构建','Build from source'), body:[
+    {id:'build', group:z('安装与构建','Install & build'), title:z('从源码构建','Build from source'), body:[
       CODE('git clone https://github.com/hrui83771-gif/EnvKit.git\ncd EnvKit\ngo build -trimpath -ldflags "-s -w" -o EnvKit.exe .','bash'),
       P('需要 Go 1.26 或更高；图标与版本信息已通过 resource.syso 编进 exe。构建产物就是仓库根的 EnvKit.exe，单文件自带全部前端资源。',
         'Requires Go 1.26 or newer. The icon and version info are compiled in via resource.syso. The result is the single-file EnvKit.exe at the repository root with all front-end assets embedded.'),
@@ -274,9 +330,10 @@ button,input{font:inherit;color:inherit}
            'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn')
     ]},
 
-    {id:'install', group:z('功能','Features'), title:z('环境安装','Environment setup'), body:[
+    {id:'install', group:z('安装与构建','Install & build'), title:z('环境安装','Environment setup'), body:[
       P('检测会同时读版本号与安装位置，不只看命令能不能跑。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
         'Detection reads both version and install path, not just whether a command runs. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
+      H3('install-cap','能力清单','Capabilities'),
       TABLE([z('能力','Capability'),z('说明','Detail')],[
         [z('演练安装','Dry run'),z('先列出会下载什么、装到哪里，再决定是否真装','See what would be downloaded and installed before committing')],
         [z('SHA256 校验','SHA256 check'),z('下载完比对摘要，不对就换源重试','Compare hashes after download; retry from another source on mismatch')],
@@ -287,7 +344,7 @@ button,input{font:inherit;color:inherit}
            'Registering or starting the MySQL service needs administrator rights: run EnvKit.exe as administrator only for that step; everything else works normally.', 'warn')
     ]},
 
-    {id:'config', group:z('功能','Features'), title:z('程序配置','Configuration'), body:[
+    {id:'config', group:z('日常操作','Daily operations'), title:z('程序配置','Configuration'), body:[
       P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
         'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
       H3('config-keys','config.json 关键字段','Key config fields'),
@@ -306,7 +363,7 @@ button,input{font:inherit;color:inherit}
            'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger')
     ]},
 
-    {id:'chain', group:z('功能','Features'), title:z('链端校验','Chain checks'), body:[
+    {id:'chain', group:z('日常操作','Daily operations'), title:z('链端校验','Chain checks'), body:[
       P('支持 FISCO-BCOS v2 / WeBASE-Front 连通检测、SSH 密码或私钥登录、页面内嵌终端与远程目录浏览；节点异常可一键检测或交给后台守护自动恢复，并触发 Windows 通知。',
         'Supports FISCO-BCOS v2 / WeBASE-Front connectivity, SSH password or key login, an embedded terminal and remote directory browsing. Recovery can be manual or handled by the background guard with Windows notifications.'),
       H3('chain-live','判活看共识视图','Liveness is the consensus view'),
@@ -319,9 +376,10 @@ button,input{font:inherit;color:inherit}
       ])
     ]},
 
-    {id:'start', group:z('功能','Features'), title:z('程序启动与日志','Start and logs'), body:[
+    {id:'start', group:z('日常操作','Daily operations'), title:z('程序启动与日志','Start and logs'), body:[
       P('前后端一键启动（先后端、再前端），访问地址自动解析；日志按来源分栏并清理 ANSI 转义码，支持复制、下载和自动滚动。',
         'Start backend then frontend with one click; access URLs are resolved automatically. Logs are split by source, stripped of ANSI codes, and support copy, download and auto-scroll.'),
+      H3('start-limit','边界与审计','Boundaries & audit'),
       UL([
         z('停止服务时报告端口占用：第三方进程只报告，不会替你结束。','Stopping reports port occupancy: third-party processes are reported, never killed.'),
         z('子进程绑定 Job Object，EnvKit 退出时自动回收，避免留下孤儿进程。','Child processes are bound to a Job Object and reaped when EnvKit exits, so no orphans are left behind.'),
@@ -331,9 +389,25 @@ button,input{font:inherit;color:inherit}
            'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn')
     ]},
 
-    {id:'ai', group:z('功能','Features'), title:z('AI 助手','AI assistant'), body:[
+    {id:'selfheal', group:z('日常操作','Daily operations'), title:z('故障自愈轨迹','Self-healing traces'), body:[
+      P('链端守护在后台按周期检查节点，异常时按预案处置；每一次动作都留轨迹，在自愈态势页能看到谁、在什么时候、做了什么、结果如何。断流或重启后点「继续」，从最后完成的步骤接着跑。',
+        'The chain guard checks nodes periodically in the background and handles anomalies through playbooks. Every action leaves a trace, so the self-healing dashboard shows who did what, when and with what result. After a drop or restart, press Continue to resume from the last completed step.'),
+      H3('selfheal-view','自愈态势页','Self-healing dashboard'),
+      UL([
+        z('守护轨迹逐条记录触发、动作与复验结论；空列表表示尚无记录，不代表守护没配置','Guard traces record each trigger, action and verification result; an empty list means no records yet, not that guarding is disabled'),
+        z('影子晋升看板展示策略从影子流到正式晋升的证据；未注册策略标为「待定」','The shadow promotion board shows evidence of a strategy moving from shadow flow to production; unregistered strategies are marked pending'),
+        z('策略集合取「已配置 ∪ 影子流跑过」，没登记但跑过的也会列出来','The strategy set is “configured ∪ seen in shadow flow”, so unregistered but executed strategies are listed too')
+      ]),
+      H3('selfheal-guard','守护开关','Guard switches'),
+      P('config.json 里 chain_autorecover 控制一键检测后的自动恢复，chain_guard 打开周期守护（chain_guard_secs 秒），chain_notify 触发 Windows 通知。主机联系不上时只记录、不误报。',
+        'In config.json, chain_autorecover enables automatic recovery after a manual check, chain_guard turns on periodic guarding (chain_guard_secs seconds), and chain_notify triggers Windows notifications. When the host is unreachable it records the fact without a false alarm.'),
+      NOTE('复验通过才算完成；命令返回 0 只说明命令跑了。判活看共识视图推进，不看块高。',
+           'Only a passed verification counts as done; exit code 0 only means the command ran. Liveness is judged by consensus view progression, not block height.', 'danger')
+    ]},
+    {id:'ai', group:z('AI 与自动化','AI & automation'), title:z('AI 助手','AI assistant'), body:[
       P('右下角桌宠是状态出口，点它打开 AI 抽屉。26 个受控工具覆盖状态、日志、审计、诊断、数据库、检测、启停、白名单与清理；对话支持 Markdown、表格与代码高亮。兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密。',
         'The desktop pet is a status outlet; click it to open the AI drawer. 26 controlled tools cover status, logs, audit, diagnostics, database, checks, start/stop, allowlist and cleanup. Chat supports Markdown, tables and code highlighting, with any OpenAI-compatible model and a DPAPI-encrypted key.'),
+      H3('ai-gate','写操作闸门','Write gates'),
       TABLE([z('机制','Mechanism'),z('行为','Behaviour')],[
         [z('写操作确认','Write confirmation'),z('服务端返回 428 强制确认，模型跳不过去；不提供任意命令执行','Server returns 428 and the model cannot bypass it; no arbitrary command execution')],
         [z('复验三态','Three verification states'),z('通过 / 已执行未验证 / 失败；退出码 0 不算完成','Passed / executed but unverified / failed; exit code 0 is not completion')],
@@ -344,9 +418,10 @@ button,input{font:inherit;color:inherit}
            'No permission is granted because an experience has high confidence. Every write still goes through confirmation.', 'ok')
     ]},
 
-    {id:'missions', group:z('功能','Features'), title:z('行动与预案','Actions and playbooks'), body:[
+    {id:'missions', group:z('AI 与自动化','AI & automation'), title:z('行动与预案','Actions and playbooks'), body:[
       P('AI 抽屉的「行动」tab 把一次处置变成可持久化、可续作的行动：手动新建、定时巡检、守护降级、本机入站触发都会产出行动。断网断流或程序重启后点「继续」，从最后完成的步骤接着跑，不从头再来。',
         'The Actions tab turns a repair into a persistent, resumable action. Manual creation, scheduled checks, guard degradation and local inbound triggers all produce actions. After a network drop or restart, press Continue to resume from the last completed step.'),
+      H3('missions-play','预案的养成','How playbooks grow'),
       OL([
         z('行动收口后把步骤序列存成预案；下次同类故障（同服务 + 同错误类型）由预案预填步骤。','Save the steps as a playbook once an action closes; the next same service + error type pre-fills them.'),
         z('预案预填不等于免确认：写操作照样逐条过 428。','Pre-filled steps still confirm every write through 428.'),
@@ -357,9 +432,25 @@ button,input{font:inherit;color:inherit}
            'The growth report lists first-time resolution, average steps, user corrections and playbook hit / effective rates by ISO week, computed from real records; a zero denominator shows “—”, not 0%.', 'ok')
     ]},
 
-    {id:'report', group:z('功能','Features'), title:z('晨报','Morning report'), body:[
+    {id:'growth', group:z('AI 与自动化','AI & automation'), title:z('成长报表','Growth report'), body:[
+      P('行动 tab 下方按 ISO 周列出五项指标，全部从 missions.json / playbooks.json / 审计直接算出，不经模型转述。',
+        'Below the Actions tab, five metrics are listed by ISO week, computed directly from missions.json / playbooks.json / audit — not narrated by a model.'),
+      H3('growth-metrics','五项指标','Five metrics'),
+      TABLE([z('指标','Metric'),z('含义','Meaning')],[
+        [z('首次解决率','First-time resolution'),z('没靠用户修正就收口的比例','Share closed without user correction')],
+        [z('平均步数','Average steps'),z('一次行动平均用几步','Average step count per action')],
+        [z('用户修正率','User correction rate'),z('AI 方案被用户改过的比例','Share of AI plans the user edited')],
+        [z('预案命中率','Playbook hit rate'),z('预填步骤被采用的比例','Share of pre-filled steps adopted')],
+        [z('预案有效率','Playbook effectiveness'),z('采用后真正收口的比例','Share of adopted playbooks that closed the action')]
+      ]),
+      H3('growth-honesty','诚实分母','Honest denominators'),
+      NOTE('分母为 0 显示「—」而不是 0%；样本不足会明说「这个量级看不出趋势」。「取消」记的是「未证明」，不算「修不好」，不参与失败统计。',
+           'A zero denominator shows “—”, not 0%; small samples explicitly say “too little data for a trend”. Cancelling records “unproven”, not “unfixable”, and is excluded from failure stats.', 'ok')
+    ]},
+    {id:'report', group:z('AI 与自动化','AI & automation'), title:z('晨报','Morning report'), body:[
       P('按设置里的时刻（默认 08:30）产出一份只读报告：服务状态、近 24 小时崩溃与熔断、磁盘趋势、未收口的行动、组件与链端状态。',
         'A read-only report is produced at the configured time (08:30 by default): service state, crashes and circuit breaks in the last 24 hours, disk trend, open actions, component and chain state.'),
+      H3('report-what','报告内容','What is inside'),
       UL([
         z('全部来自系统记录，生成过程不经过模型。','All content comes from system records; the model is not involved in generating it.'),
         z('在行动列表里直接查看，或下载为 .md。','View it in the action list or download it as .md.'),
@@ -367,9 +458,10 @@ button,input{font:inherit;color:inherit}
       ])
     ]},
 
-    {id:'mobile', group:z('功能','Features'), title:z('手机访问','Mobile access'), body:[
+    {id:'mobile', group:z('伴随与陪伴','Companion'), title:z('手机访问','Mobile access'), body:[
       P('个人中心打开「手机访问」后，电脑另开一个局域网端口（默认 18766）并扫码配对。桌面控制台仍只绑 127.0.0.1；手机端口上只有 12 条接口，桌面那一百多个路由在这个端口上不存在——不是"被判断成不允许"。',
         'Turn on Mobile access in the profile to open a separate LAN port (default 18766) and pair by QR code. The desktop console still binds only 127.0.0.1; the mobile port exposes just 12 endpoints — desktop routes simply do not exist there.'),
+      H3('mobile-tier','三档能力','Three capability tiers'),
       TABLE([z('能力','Capability'),z('默认','Default'),z('说明','Detail')],[
         [z('看屏幕','Screen view'),z('开（只读）','On (read-only)'),z('只能看，不能操作','View only, no control')],
         [z('剪贴板','Clipboard'),z('关','Off'),z('碰用户数据，需单独开','Touches user data; separate switch')],
@@ -381,9 +473,10 @@ button,input{font:inherit;color:inherit}
       ])
     ]},
 
-    {id:'pet', group:z('功能','Features'), title:z('桌宠','Desktop pet'), body:[
+    {id:'pet', group:z('伴随与陪伴','Companion'), title:z('桌宠','Desktop pet'), body:[
       P('右下角的大肥鱼会跟着任务换状态：待机、思考、干活、等待确认、出错；进度环显示当前任务，悬停能看到任务名与耗时。有确认卡时它会举蓝色徽标，点徽标可直接批准或拒绝。',
         'The fish changes with task state: idle, thinking, working, awaiting confirmation or error. The ring shows progress; hovering shows the task name and elapsed time. A blue badge on confirmation lets you approve or reject without opening the drawer.'),
+      H3('pet-act','动作一览','Actions at a glance'),
       TABLE([z('动作','Action'),z('效果','Effect')],[
         [z('单击','Single click'),z('打开 AI 抽屉','Open the AI drawer')],
         [z('双击','Double click'),z('喂食，五种食物各有台词与动画','Feed it; five foods with their own lines')],
@@ -396,9 +489,10 @@ button,input{font:inherit;color:inherit}
            'Weather is off by default; enable it in Settings for a three-line report. With click-through on, the pet ignores clicks and the hint bubble hides after about five seconds. Refresh the page or reopen the console from the tray to restore.', 'warn')
     ]},
 
-    {id:'settings', group:z('功能','Features'), title:z('设置与托盘','Settings and tray'), body:[
+    {id:'settings', group:z('伴随与陪伴','Companion'), title:z('设置与托盘','Settings and tray'), body:[
       P('设置页一页三区：基础、开发者、评测。日志配额、校验窗口、重试次数、AI 读取上限这些原本写死的常量都能改，改完即生效。',
         'Settings has three sections: basic, developer and evaluation. Log quotas, verification windows, retry counts and AI read limits — once hard-coded — are all editable and take effect immediately.'),
+      H3('settings-zone','设置分区','Settings sections'),
       UL([
         z('更新检查默认每 3 天查一次 GitHub Releases；全局静音一键停掉所有主动通知。','Update check queries GitHub Releases every three days by default; global mute stops all proactive notifications.'),
         z('托盘右键：打开控制台 / 程序配置 / 日志目录；隐藏窗口到托盘，退出前停掉前后端。','Tray menu: open console / configuration / log directory; hide to tray, and stop front and back end before exit.'),
@@ -406,9 +500,10 @@ button,input{font:inherit;color:inherit}
       ])
     ]},
 
-    {id:'security', group:z('安全','Security'), title:z('安全边界','Security boundary'), body:[
+    {id:'security', group:z('安全与保障','Safety & assurance'), title:z('安全边界','Security boundary'), body:[
       P('所有写操作先过权限裁决，禁止档在派发前终止；需要确认的动作由服务端返回 428 强制确认，模型跳不过去。',
         'Every write goes through permission arbitration and forbidden tiers terminate before dispatch; actions needing confirmation are enforced by a server-side 428 the model cannot bypass.'),
+      H3('sec-tier','四档权限','Four permission tiers'),
       TABLE([z('档位','Tier'),z('含义','Meaning')],[
         [z('auto','auto'),z('只读或无副作用，可直接执行','Read-only or side-effect free, runs directly')],
         [z('confirm','confirm'),z('先弹确认卡，服务端 428 兜底','Shows a confirmation card, backed by server-side 428')],
@@ -425,7 +520,23 @@ button,input{font:inherit;color:inherit}
            'Evidence must be objective: exit code 0 is not task completion, and “not found” is not “lost”.', 'ok')
     ]},
 
-    {id:'faq', group:z('排障','Troubleshooting'), title:z('常见问题','FAQ'), body:[
+    {id:'eval', group:z('安全与保障','Safety & assurance'), title:z('评测与故障注入','Evaluation & fault injection'), body:[
+      P('仓库里有单元测试、浏览器回归，以及 11 类故障注入评测（每类 3 次真实调用），观察模型是否查了、判对了、不越权、不谎报、该复验时复验。',
+        'The repository has unit tests, browser regressions and 11 categories of fault-injection evaluation (three real calls each), checking whether the model looked, judged correctly, stayed in bounds, did not misreport and re-verified when needed.'),
+      H3('eval-catch','抓到过的真实缺陷','Real bugs it caught'),
+      UL([
+        z('备份校验"假绿"——文件存在被当成能还原','Backup “false green” — file existence treated as restorable'),
+        z('大文件截断误报——截断的导出被当成完整','Large-file truncation misreport — a truncated export treated as complete'),
+        z('评测装置在测旧构建——前端嵌在 exe 里，只重建前端等于没改','Evaluation testing an old build — front end is embedded in the exe, so rebuilding only the front end changes nothing')
+      ]),
+      H3('eval-seam','接缝测试','The seam test'),
+      P('agent_loop_e2e_test.go 一条测试覆盖完整闭环：告警 → 预案 → 起草 → 执行 → 复验 → 收口 → 沉淀 → 复用 → 降级 → 经验召回，不调模型。单模块单测测不出接缝问题——历史上两次真实断链都发生在接缝上，而当时所有单测都是绿的。',
+        'One test in agent_loop_e2e_test.go covers the whole loop: alert → playbook → draft → execute → verify → close → distil → reuse → degrade → recall, with no model call. Unit tests cannot see seam problems — two real breakages happened at seams while every unit test was green.'),
+      NOTE('方法和原始数据在仓库 docs/eval/；README 不贴会过期的数字。',
+           'Method and raw data live in docs/eval/; the README does not paste numbers that go stale.', 'info')
+    ]},
+    {id:'faq', group:z('参考','Reference'), title:z('常见问题','FAQ'), body:[
+      H3('faq-q','问答','Questions'),
       OL([
         z('窗口是黑的、能关吗？—— 那是服务进程本体，关掉网页就打不开；用托盘「隐藏窗口到托盘」让它继续在后台跑。新版本控制台已换成纸白底浅色主题。','Can I close the console window? No — it is the service. Closing it kills the page; use the tray action to hide it. New builds use a light paper-coloured theme.'),
         z('端口被占用？—— 停止页会报告占用者；第三方进程只报告不结束。EnvKit 端口冲突会自动顺延。','Port in use? The stop page reports the owner but never kills third-party processes. EnvKit shifts to the next free port.'),
@@ -440,8 +551,16 @@ button,input{font:inherit;color:inherit}
       ])
     ]},
 
-    {id:'about', group:z('关于','About'), title:z('关于与免责声明','About and disclaimer'), body:[
+    {id:'about', group:z('参考','Reference'), title:z('关于与免责声明','About and disclaimer'), body:[
       {k:'ver'},
+      H3('about-history','版本沿革','Version history'),
+      TABLE([z('版本','Version'),z('要点','Highlights')],[
+        [z('v3.5','v3.5'),z('Agent 闭环：预案库、告警闭环、晨报、行动→经验沉淀、成长报表','Agent loop: playbooks, alert closure, morning report, action-to-experience, growth report')],
+        [z('v3.6 / 3.6.1','v3.6 / 3.6.1'),z('修三个"结论报错"缺陷；修 AI 误报与桌宠天气的三个问题','Fixed three misreported conclusions; AI false errors and three pet-weather bugs')],
+        [z('v3.7 / 3.7.1','v3.7 / 3.7.1'),z('手机访问；复验口径统一、日志 WARN 不再判错、设置基础区重排','Mobile access; unified verification, WARN lines no longer flagged, settings rework')],
+        [z('v3.7.2','v3.7.2'),z('手机调试台、本机体检逐条给建议、备份保留份数可配','Mobile debug console, per-item health advice, configurable backup retention')],
+        [z('v3.8.0','v3.8.0'),z('8 屏引导与造型重做、AI 直接读拖入的 Office / PDF、修托盘图标随机消失','Eight-screen tour and visual rework, Office / PDF drag-in, tray icon fix')]
+      ]),
       P('作者 / 项目地址：https://github.com/hrui83771-gif',
         'Author / project: https://github.com/hrui83771-gif'),
       P('EnvKit 是统一开发环境助手：单文件 Go、零运行时依赖、内置 AI 运维助手。形象与部分台词移植自开源项目 dafeiyu-pet（MIT）。',
@@ -519,12 +638,14 @@ button,input{font:inherit;color:inherit}
     renderToc();
   }
   function renderTree(){
-    var html = '', last = null;
+    var html = '', last = null, gi = -1;
     D.forEach(function(s){
       var g = v(s.group);
       if(g !== last){
         if(last !== null) html += '</div>';
-        html += '<div class="grpbox"><div class="grp">' + esc(g) + '</div>';
+        gi++;
+        html += '<div class="grpbox" data-gi="' + gi + '"><div class="grp">' + esc(g) +
+          ' <span class="gc" data-gc="' + gi + '"></span></div>';
         last = g;
       }
       html += '<button type="button" data-sec="' + s.id + '">' + esc(v(s.title)) + '</button>';
@@ -534,14 +655,28 @@ button,input{font:inherit;color:inherit}
     filterTree();
   }
   function renderToc(){
-    var hs = [].slice.call(body.querySelectorAll('h2[id],h3[id]'));
-    toc.innerHTML = '<div class="toc-title">' + esc(v(z('本页目录','On this page'))) + '</div>' +
-      hs.map(function(h){ return '<a href="#' + h.id + '" data-anchor="' + h.id + '"' +
-        (h.tagName === 'H3' ? ' class="sub"' : '') + '>' + esc(h.textContent) + '</a>'; }).join('');
+    var html = '<div class="toc-title">' + esc(v(z('本页目录','On this page'))) + '</div>', last = null;
+    D.forEach(function(s){
+      var g = v(s.group);
+      if(g !== last){ html += '<div class="toc-grp">' + esc(g) + '</div>'; last = g; }
+      var h = document.getElementById('doc-' + s.id);
+      if(h) html += '<a href="#' + h.id + '" data-anchor="' + h.id + '">' +
+        esc(h.textContent.replace(/^\d+\s*/, '')) + '</a>';
+      s.body.forEach(function(b){
+        if(b.k === 'h3') html += '<a href="#s-' + b.id + '" data-anchor="s-' + b.id +
+          '" class="sub">' + esc(v(b)) + '</a>';
+      });
+    });
+    toc.innerHTML = html;
   }
   function renderQuick(){
+    var seen = {}, picks = [];
+    D.forEach(function(s){
+      var g = v(s.group);
+      if(!seen[g]){ seen[g] = 1; picks.push(s); }
+    });
     document.getElementById('quick').innerHTML = '<span style="align-self:center;color:#9aa4b2;font-size:11.5px">' +
-      esc(tv(T.jump)) + '</span>' + D.slice(0, 6).map(function(s){
+      esc(tv(T.jump)) + '</span>' + picks.map(function(s){
         return '<a href="#doc-' + s.id + '">' + esc(v(s.title)) + '</a>'; }).join('');
   }
   function filterTree(){
@@ -555,6 +690,7 @@ button,input{font:inherit;color:inherit}
         b.hidden = !on; if(on) n++;
       });
       box.hidden = n === 0; shown += n;
+      var gc = box.querySelector('.gc'); if(gc) gc.textContent = n;
     });
     if(!shown && value) tree.insertAdjacentHTML('beforeend', '<div class="empty" data-empty>' + esc(tv(T.empty)) + '</div>');
     else { var e = tree.querySelector('[data-empty]'); if(e) e.remove(); }
@@ -566,22 +702,28 @@ button,input{font:inherit;color:inherit}
     window.scrollTo({top:h.getBoundingClientRect().top + window.scrollY - 14, behavior:'smooth'});
     mark(id);
   }
-  function mark(id){
+  function mark(id, anchor){
     [].forEach.call(tree.querySelectorAll('button[data-sec]'), function(b){
       b.classList.toggle('on', b.dataset.sec === id); });
     [].forEach.call(toc.querySelectorAll('a[data-anchor]'), function(a){
-      a.classList.toggle('on', a.dataset.anchor === 'doc-' + id); });
+      a.classList.toggle('on', a.dataset.anchor === (anchor || 'doc-' + id)); });
   }
   function onScroll(){
     var max = document.documentElement.scrollHeight - window.innerHeight;
     prog.style.width = (max > 0 ? Math.min(100, window.scrollY / max * 100) : 0) + '%';
     totop.classList.toggle('show', window.scrollY > 500);
-    var cur = '';
+    var cur = '', anchor = '', best = 121;
     D.forEach(function(s){
       var h = document.getElementById('doc-' + s.id);
       if(h && h.getBoundingClientRect().top <= 120) cur = s.id;
+      s.body.forEach(function(b){
+        if(b.k !== 'h3') return;
+        var e = document.getElementById('s-' + b.id);
+        if(e){ var t = e.getBoundingClientRect().top;
+          if(t <= 120 && t <= best){ best = t; anchor = 's-' + b.id; } }
+      });
     });
-    if(cur) mark(cur);
+    if(cur) mark(cur, anchor);
   }
   function setLang(l, save){
     lang = l === 'en' ? 'en' : 'zh';

@@ -197,22 +197,31 @@ async function attach(target) {
     ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
     ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
     ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 14, '文档正文有 ' + iso.sections + ' 节（丰富度）');
-    ok(iso.tabs >= 5 && iso.steps >= 1, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
+    ok(iso.sections >= 20, '文档正文有 ' + iso.sections + ' 节（丰富度）');
+    ok(iso.tabs >= 8 && iso.steps >= 1, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
 
     // ---- 3) 三栏结构 ----
     console.log('文档站结构：');
     const st = JSON.parse(await djs(`JSON.stringify({
       tree: document.querySelectorAll('#tree button[data-sec]').length,
       groups: document.querySelectorAll('#tree .grp').length,
+      gcounts: Array.from(document.querySelectorAll('#tree .grp .gc')).map(function(x){return x.textContent;}),
       toc: document.querySelectorAll('#toc a[data-anchor]').length,
+      tocSub: document.querySelectorAll('#toc a[data-anchor].sub').length,
+      tocGrp: document.querySelectorAll('#toc .toc-grp').length,
+      quick: document.querySelectorAll('#quick a').length,
       cols: getComputedStyle(document.querySelector('.layout')).gridTemplateColumns.split(' ').length,
       lead: document.getElementById('lead-t').textContent
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 14 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
-    ok(st.groups >= 4, '目录按组分类（' + st.groups + ' 组）');
+    ok(st.tree >= 20 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
+    ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
+       '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
     ok(st.toc >= st.tree, '右目录来自正文真实锚点（' + st.toc + '）');
+    ok(st.tocSub >= iso.sections, '每节都有子标题进入右目录（' + st.tocSub + ' 个 H3 ≥ ' + iso.sections + ' 节）');
+    ok(st.tocGrp === st.groups, '右目录按组分节（' + st.tocGrp + ' 组）');
+    ok(st.quick === st.groups, '快速跳转按分组取代表节（' + st.quick + ' 项 = ' + st.groups + ' 组）');
     ok(!!st.lead, '封面有引导语（' + st.lead.slice(0, 20) + '）');
 
     try {
