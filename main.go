@@ -331,17 +331,14 @@ func main() {
 		}
 	}()
 
+	// 控制台呈现：标题/字体/尺寸只在真控制台生效；stdout 被重定向时全部静默跳过。
+	platform.ConfigureConsole("EnvKit 服务进程 · 控制台")
 	info(scSys, "服务", "控制台已启动：%s", openURL)
-	// 黑窗口必须显眼地讲清"能不能关"：这是新用户最高频的困惑点
-	fmt.Println()
-	fmt.Println("======================================================")
-	fmt.Println("  此窗口是 EnvKit 的服务进程，请保持开启！")
-	fmt.Println("  · 关闭它会导致网页无法访问；右上角的 × 已禁用，误点不会出事")
-	fmt.Println("  · 退出方法：按 Ctrl+C，或右键任务栏托盘图标选「退出 EnvKit」（都会先停服务）")
-	fmt.Println("  · 托盘右键还能：打开控制台 / 程序配置 / 打开日志目录 / 隐藏窗口到托盘")
-	fmt.Println("  控制台页面：" + openURL + "（浏览器未自动打开时，复制此地址访问）")
-	fmt.Println("======================================================")
-	fmt.Println()
+	// 黑窗口必须显眼地讲清"能不能关"：这是新用户最高频的困惑点。
+	// 版本 / 地址 / 状态做成分级彩色信息块，不混在 INFO 日志流里。
+	for _, l := range bannerLines(openURL, appVersion, consoleColorOn && platform.ConsoleVTEnabled()) {
+		fmt.Println(l)
+	}
 	// 本机 API 鉴权：/api/* 需携带随机令牌（页面注入），防浏览器内其它网页 CSRF
 	startTaskWatchdog()
 	// 服务放到后台跑：Windows 的托盘消息循环必须占用主 goroutine

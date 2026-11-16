@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"envkit/internal/platform"
 )
 
 // ---------- 实时日志 Hub (SSE) ----------
@@ -391,6 +393,11 @@ func logf(scope, level, step, format string, args ...interface{}) {
 	logfSrc(scope, "", level, step, format, args...)
 }
 
+// consoleColorOn 启动时探测一次：stdout 是不是支持 VT 的真控制台。
+// 只探测一次而不是每行探测——每行调 GetConsoleMode 会给日志热路径加系统调用；
+// 更重要的是 GetConsoleMode 对重定向流会失败，逐行探测等于把开销白花在绝大多数场景。
+var consoleColorOn = platform.ConsoleVTEnabled()
+
 func logfSrc(scope, src, level, step, format string, args ...interface{}) {
 	ts := time.Now().Format("15:04:05")
 	line := fmt.Sprintf("%s [%s]", ts, level)
@@ -399,7 +406,10 @@ func logfSrc(scope, src, level, step, format string, args ...interface{}) {
 	}
 	line += " " + fmt.Sprintf(format, args...)
 	hub.Publish(LogMsg{Scope: scope, Src: src, Line: line})
-	fmt.Println("[" + scope + "] " + line)
+	// 只有屏幕输出着色；hub（网页）与落盘文件拿的是上面的纯文本，
+	// 否则 \x1b[...] 会被当成正文存进日志、又被 SSE 推给前端。
+	plain := "[" + scope + "] " + line
+	fmt.Println(platform.Colorize(level, plain, consoleColorOn))
 }
 
 func info(scope, step, f string, a ...interface{}) { logf(scope, "INFO", step, f, a...) }

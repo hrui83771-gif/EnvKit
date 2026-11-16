@@ -308,7 +308,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## 图标资源：Lucide（ISC）
 
-界面的功能性图标（放大 / 还原 / 关闭 / 折叠箭头 / 勾叉 / 搜索 / 命令面板等 26 个）取自 `lucide-static` 0.468.0 的 SVG 图元，统一 24×24 网格、2px 描边、round 端点。**只取图元，不引入任何运行时依赖**；图元表在 `web/src/js/05-icons.js` 的 `EK_ICONS`，由 `ekIcon()` 包一层 `<svg>` 输出。桌宠形象与个人中心的头像预设是二创内容，不在替换范围内。
+界面的功能性图标（放大 / 还原 / 关闭 / 折叠箭头 / 勾叉 / 搜索 / 命令面板 / 桌宠菜单等 34 个）取自 `lucide-static` 0.468.0 的 SVG 图元，统一 24×24 网格、2px 描边、round 端点。**只取图元，不引入任何运行时依赖**；图元表在 `web/src/js/05-icons.js` 的 `EK_ICONS`，由 `ekIcon()` 包一层 `<svg>` 输出。桌宠形象与个人中心的头像预设是二创内容，不在替换范围内。
 
 - **来源**：<https://github.com/lucide-icons/lucide>
 - **许可**：ISC License（全文见下）

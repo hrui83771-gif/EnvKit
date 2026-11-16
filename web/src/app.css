@@ -578,15 +578,32 @@
   .pet-mc .yes{background:var(--brand);color:#fff}
   .pet-mc .no{background:var(--soft);color:var(--muted);border:1px solid var(--line)}
   /* 桌宠右键菜单 */
-  .pet-ctx{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;display:none;min-width:150px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  /* 桌宠右键控制菜单（v3.9：分组 + 图标 + 分段选择器）。
+     结构：.pet-ctx > .pet-ctx-grp > (.pet-ctx-h 小标题 + button/.pet-ctx-seg)。
+     图标放独立 <span.ek>，绝不放按钮自身——ekIconFill 用 innerHTML 替换占位，
+     放按钮上会把文字一起抹掉。分段当前值靠 button.cur（沿用既有 toggle 机制）。 */
+  .pet-ctx{position:fixed;z-index:999;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:7px;display:none;min-width:196px;max-height:82vh;overflow:auto;box-shadow:0 8px 28px rgba(0,0,0,.5)}
   .pet-ctx.show{display:block}
-  .pet-ctx button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-size:13px;padding:8px 12px;border-radius:7px;cursor:pointer}
+  .pet-ctx-grp{padding:2px 0 5px}
+  .pet-ctx-grp+.pet-ctx-grp{border-top:1px solid var(--line);padding-top:6px}
+  .pet-ctx-h{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--muted);padding:2px 8px 5px;text-transform:uppercase}
+  .pet-ctx-h .ek{opacity:.7}
+  .pet-ctx button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;color:var(--text);font-size:12.5px;padding:7px 9px;border-radius:7px;cursor:pointer;line-height:1.4}
   /* 必须比 .pet-ctx button 更具体，否则盖不住它：[hidden] 的 UA 默认规则
      （display:none）会被这条作者规则覆盖掉，表现为"天气没开，菜单里却一直
      有个『查看天气』，点了没反应"。hidden 属性只能靠显式规则压回来。 */
   .pet-ctx button[hidden]{display:none}
   .pet-ctx button:hover{background:var(--soft2)}
-  .pet-ctx .sep{height:1px;background:var(--line);margin:4px 6px}
+  .pet-ctx button .ek{flex:none;display:inline-flex;opacity:.72}
+  .pet-ctx button.cur{background:var(--brand);color:#fff}
+  .pet-ctx button.cur .ek{opacity:1;color:#fff}
+  /* 分段选择器：三段等宽挤在一行，当前段填充品牌色。枚举型设置不再是
+     三个并列按钮让用户猜哪个生效，而是明确「三选一」的控件。 */
+  .pet-ctx-seg{display:flex;gap:2px;padding:0 3px 3px}
+  .pet-ctx-seg button{flex:1 1 0;min-width:0;flex-direction:column;justify-content:center;gap:3px;text-align:center;font-size:10.5px;padding:6px 2px;background:var(--off);border:1px solid transparent}
+  .pet-ctx-seg button:hover{background:var(--soft2)}
+  .pet-ctx-seg button.cur{background:var(--brand);color:#fff;border-color:transparent}
+  .pet-ctx-seg button .ek{opacity:.8}
   #ai-drawer{display:none;position:fixed;top:0;right:0;bottom:0;width:min(430px,94vw);background:var(--card);border-left:1px solid var(--line);z-index:65;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
   #ai-drawer.open{display:flex}
   .ai-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}

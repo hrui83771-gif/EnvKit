@@ -2023,5 +2023,7 @@
   "以上条目全部来自追加式审计与影子记录，不修改、不补写、不回放。空列表表示「尚无记录」，不代表守护未配置。": "All entries come from append-only audit and shadow logs; nothing is rewritten or replayed. An empty list means no records yet, not that guarding is disabled.",
   "影子评估只走 Observe→Plan，在 Execute 前停止。通过≠恢复成功。": "Shadow evaluation runs Observe→Plan only and stops before Execute. Passing is NOT recovery success.",
   "尚无守护记录。守护开启并跑过一轮后，这里会按时间列出恢复、复验、关联压制与影子评估。": "No guard records yet. After guarding runs one round, restarts, verifications, cascade suppressions and shadow evaluations will appear here in time order.",
-  "重新读取守护状态与审计": "Re-read guard status and audit"
+  "重新读取守护状态与审计": "Re-read guard status and audit",
+  "陪伴": "Companion",
+  "外观": "Appearance"
 }

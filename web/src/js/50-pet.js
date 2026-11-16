@@ -408,7 +408,10 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     const map = {still:'mode-still', wander:'mode-wander', follow:'mode-follow'};
     for(const k in map){
       const b = ctxmenu.querySelector('[data-act="' + map[k] + '"]');
-      if(b) b.classList.toggle('cur', petMode === k);
+      if(b){
+        b.classList.toggle('cur', petMode === k);
+        b.setAttribute('aria-pressed', petMode === k ? 'true' : 'false');
+      }
     }
   }
   function setPetMode(m){
@@ -427,7 +430,10 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
   function petSizeButtons(){
     for(const s of PET_SIZES){
       const b = ctxmenu.querySelector('[data-act="size-' + s + '"]');
-      if(b) b.classList.toggle('cur', petSize === s);
+      if(b){
+        b.classList.toggle('cur', petSize === s);
+        b.setAttribute('aria-pressed', petSize === s ? 'true' : 'false');
+      }
     }
   }
   function setPetSize(s){
@@ -450,8 +456,12 @@ let petAIState = ()=>{}, petAIIdle = ()=>{}, petAskConfirm = ()=>{}, petConfirmD
     pet.classList.toggle('passthrough', petPass);
     const b = ctxmenu.querySelector('[data-act="passthrough"]');
     if(b){
-      b.textContent = petPass ? t('解除鼠标穿透') : t('鼠标穿透（点不到它）');
+      /* 只改文字 span，不能写 b.textContent —— 那会把图标 <span class=ek> 一起抹掉，
+         菜单重做后的图标会在切换穿透时凭空消失（v3.9 实测坑）。 */
+      const label = b.querySelector('.pet-ctx-t');
+      if(label) label.textContent = petPass ? t('解除鼠标穿透') : t('鼠标穿透（点不到它）');
       b.classList.toggle('cur', petPass);
+      b.setAttribute('aria-pressed', petPass ? 'true' : 'false');
     }
     if(petPass){
       say(t('已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复'), true);
