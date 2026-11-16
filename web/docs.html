@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>EnvKit · 使用文档</title>
+<style>
+/* EnvKit 使用文档：自包含独立页，不引用 app.css，也不依赖主界面的任何 JS。
+   与主控制台同色系（#faf8f5 纸白 / #4a6fa5 蓝），但排版按文档站重做：
+   封面 → 三栏正文 → 右目录联动，宽屏阅读、窄屏单列、打印去壳。 */
+:root{
+  --bg:#faf8f5;--paper:#fff;--ink:#2f3742;--sub:#4a5a6e;--muted:#7d8794;
+  --line:#e6e1d8;--line2:#f0ece4;--brand:#4a6fa5;--brand2:#3a5d8f;
+  --brandbg:#eef3fa;--warn:#C9A15C;--warnbg:#fbf5e9;
+  --danger:#B05652;--dangerbg:#fcf0ed;--ok:#5C8A6B;--okbg:#eef6f0;
+  --shadow:0 1px 2px rgba(74,111,165,.06),0 8px 24px rgba(74,111,165,.04);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background-image:radial-gradient(circle at 12% 8%,rgba(74,111,165,.045),transparent 42%),
+                   radial-gradient(circle at 88% 4%,rgba(201,161,92,.045),transparent 38%);
+}
+a{color:var(--brand2);text-decoration:none}
+a:hover{text-decoration:underline}
+button,input{font:inherit;color:inherit}
+
+/* 顶部阅读进度 */
+#prog{position:fixed;left:0;top:0;height:3px;width:0;background:linear-gradient(90deg,var(--brand),#7fa3cd);
+  z-index:60;transition:width .12s linear}
+
+/* 封面 */
+.hero{border-bottom:1px solid var(--line);background:rgba(255,255,255,.72);backdrop-filter:blur(8px)}
+.hero-in{max-width:1360px;margin:0 auto;padding:26px 24px 18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{width:46px;height:46px;border-radius:13px;flex:none;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(145deg,#5b7fb4,#3f628f);color:#fff;font-weight:700;font-size:24px;
+  box-shadow:0 3px 10px rgba(63,98,143,.24)}
+.brand h1{font-size:21px;line-height:1.25;margin:0;letter-spacing:.3px}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.hero-side{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ver{font:11.5px/1 Consolas,Monaco,monospace;color:var(--muted);background:#fff;border:1px solid var(--line);
+  border-radius:999px;padding:7px 11px;white-space:nowrap}
+.hbtn{background:#fff;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:12.5px;
+  color:var(--sub);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.hbtn:hover{border-color:#c9d5e5;background:#f8fafd;text-decoration:none}
+.hbtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.hbtn.primary:hover{background:var(--brand2);border-color:var(--brand2)}
+.quick{max-width:1360px;margin:0 auto;padding:0 24px 16px;display:flex;gap:8px;flex-wrap:wrap}
+.quick a{font-size:12px;color:var(--sub);background:#fff;border:1px solid var(--line);border-radius:999px;
+  padding:5px 12px;text-decoration:none}
+.quick a:hover{border-color:#c9d5e5;color:var(--brand2);background:#fbfcfe}
+
+/* 三栏 */
+.layout{display:grid;grid-template-columns:246px minmax(0,780px) 196px;gap:26px;
+  max-width:1360px;margin:0 auto;padding:26px 24px 90px;align-items:start}
+.side,.toc{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto;scrollbar-width:thin}
+.search{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:10px;
+  padding:8px 10px;margin-bottom:12px}
+.search svg{flex:none;color:var(--muted)}
+.search input{border:0;outline:0;background:transparent;flex:1;min-width:0;font-size:13px}
+.search input::placeholder{color:#a5adba}
+.search kbd{font:10.5px/1.5 Consolas,monospace;color:#9aa4b2;border:1px solid var(--line);
+  border-radius:4px;padding:0 5px;background:var(--bg)}
+.grp{padding:11px 8px 4px;font-size:10.5px;letter-spacing:.9px;color:#9aa4b2;font-weight:700;text-transform:uppercase}
+.tree button{display:block;width:100%;text-align:left;border:0;background:transparent;cursor:pointer;
+  border-radius:8px;padding:6px 10px 6px 12px;font-size:13px;color:var(--sub);position:relative}
+.tree button:hover{background:#f3f5f9;color:var(--ink)}
+.tree button.on{background:var(--brandbg);color:var(--brand2);font-weight:600}
+.tree button.on:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;
+  background:var(--brand);border-radius:3px}
+.tree .empty{padding:14px 10px;color:var(--muted);font-size:12.5px}
+.side-foot{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;font-size:11.5px;color:var(--muted)}
+.side-foot a{display:block;padding:3px 0}
+
+/* 正文 */
+.main{min-width:0}
+.lead{background:linear-gradient(135deg,#fff,#fbfcfe);border:1px solid var(--line);border-radius:16px;
+  padding:18px 22px;margin-bottom:16px;box-shadow:var(--shadow)}
+.lead b{color:var(--brand2)}
+.lead p{margin:6px 0 0;color:var(--sub);font-size:13px}
+.sec{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px 26px 24px;
+  margin-bottom:16px;box-shadow:var(--shadow);scroll-margin-top:16px}
+.sec>h2{margin:0 0 14px;font-size:19px;line-height:1.4;display:flex;align-items:center;gap:10px;
+  padding-bottom:11px;border-bottom:1px solid var(--line2)}
+.num{flex:none;width:26px;height:26px;border-radius:8px;background:var(--brandbg);color:var(--brand2);
+  font:600 12px/26px Consolas,monospace;text-align:center}
+.sec p{margin:9px 0;color:var(--sub);font-size:13.5px;line-height:1.9}
+.sec ul,.sec ol{margin:9px 0;padding-left:22px;color:var(--sub);font-size:13.5px;line-height:1.85}
+.sec li{margin:4px 0;padding-left:2px}
+.sec li::marker{color:#9db2cd}
+.sec h3{margin:20px 0 8px;font-size:14.5px;color:var(--ink);scroll-margin-top:18px;
+  display:flex;align-items:center;gap:7px}
+.sec h3:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--brand);flex:none}
+
+.note{margin:13px 0;padding:10px 14px;border-radius:0 10px 10px 0;border-left:3px solid var(--brand);
+  background:var(--brandbg);color:var(--sub);font-size:13px;line-height:1.8}
+.note.warn{border-left-color:var(--warn);background:var(--warnbg)}
+.note.danger{border-left-color:var(--danger);background:var(--dangerbg)}
+.note.ok{border-left-color:var(--ok);background:var(--okbg)}
+.note b{color:var(--ink)}
+
+.code{position:relative;background:#f6f4ef;border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;margin:12px 0}
+.code pre{margin:0;white-space:pre-wrap;word-break:break-all;font:12.5px/1.75 Consolas,Monaco,monospace;color:#3b4654}
+.cp{position:absolute;right:8px;top:7px;background:#fff;border:1px solid var(--line);border-radius:6px;
+  padding:2px 9px;font-size:11px;color:var(--sub);cursor:pointer}
+.cp:hover{border-color:#c9d5e5;color:var(--brand2)}
+
+.steps{list-style:none;margin:14px 0;padding:0;counter-reset:st}
+.steps li{counter-increment:st;position:relative;padding:10px 14px 10px 46px;margin:8px 0;
+  background:#fbfcfe;border:1px solid var(--line);border-radius:10px;color:var(--sub);font-size:13.5px}
+.steps li:before{content:counter(st);position:absolute;left:12px;top:11px;width:22px;height:22px;
+  border-radius:50%;background:var(--brand);color:#fff;text-align:center;line-height:22px;font:600 11px/22px Consolas,monospace}
+
+.tbl{width:100%;border-collapse:collapse;margin:13px 0;font-size:12.5px}
+.tbl th{text-align:left;padding:8px 10px;background:#f7f9fc;color:var(--sub);font-weight:600;
+  border-bottom:1px solid var(--line)}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--line2);color:var(--sub);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl code{font:11.5px Consolas,monospace;background:#f2f4f7;border-radius:4px;padding:1px 5px;color:var(--brand2)}
+.tbl td:first-child{white-space:nowrap}
+
+/* 右目录 */
+.toc-title{font-size:10.5px;letter-spacing:.9px;color:#9aa4b2;font-weight:700;padding:0 8px 8px}
+.toc a{display:block;padding:4px 8px 4px 12px;font-size:12px;color:var(--muted);
+  border-left:2px solid transparent;line-height:1.5}
+.toc a:hover{color:var(--ink);text-decoration:none}
+.toc a.on{color:var(--brand2);border-left-color:var(--brand);font-weight:600}
+.toc a.sub{padding-left:22px;font-size:11.5px}
+
+.totop{position:fixed;right:24px;bottom:24px;width:40px;height:40px;border-radius:50%;
+  background:#fff;border:1px solid var(--line);box-shadow:var(--shadow);color:var(--brand2);
+  cursor:pointer;display:none;align-items:center;justify-content:center;font-size:18px;z-index:40}
+.totop.show{display:flex}
+.foot{max-width:1360px;margin:0 auto;padding:0 24px 40px;color:#9aa4b2;font-size:11.5px;text-align:center}
+
+@media(max-width:1180px){
+  .layout{grid-template-columns:226px minmax(0,1fr)}
+  .toc{display:none}
+}
+@media(max-width:820px){
+  .hero-in,.quick,.layout,.foot{padding-left:15px;padding-right:15px}
+  .layout{display:block;padding-top:16px}
+  .side{position:static;max-height:none;overflow:visible;margin-bottom:16px}
+  .tree{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+  .tree .grp{display:none}
+  .tree button{width:auto;flex:none;border:1px solid var(--line);background:#fff;padding:6px 11px;font-size:12.5px}
+  .tree button.on:before{display:none}
+  .side-foot{display:none}
+  .sec{padding:18px 17px}
+  .sec>h2{font-size:17px}
+}
+@media print{
+  .hero,.side,.toc,.totop,#prog,.quick,.foot,.cp{display:none!important}
+  body{background:#fff}
+  .layout{display:block;padding:0;max-width:none}
+  .sec{box-shadow:none;break-inside:avoid;border-color:#ddd}
+  a{color:inherit}
+}
+</style>
+</head>
+<body>
+<div id="prog"></div>
+<header class="hero">
+  <div class="hero-in">
+    <div class="brand">
+      <div class="logo">E</div>
+      <div><h1>EnvKit 使用文档</h1><p>从安装到排障，一页看完 · 单文件、离线可用</p></div>
+    </div>
+    <div class="hero-side">
+      <span class="ver" id="ver">v__APP_VERSION__</span>
+      <button class="hbtn" id="lang" type="button" title="Switch to English">EN</button>
+      <a class="hbtn primary" href="/">返回控制台</a>
+    </div>
+  </div>
+  <nav class="quick" id="quick"></nav>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <label class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="搜索文档（按 / 聚焦）" />
+      <kbd>/</kbd>
+    </label>
+    <div class="tree" id="tree"></div>
+    <div class="side-foot">
+      <a href="/#tour" id="replay">重新观看界面导览 →</a>
+      <a href="https://github.com/hrui83771-gif" target="_blank" rel="noopener">项目主页 ↗</a>
+      <span id="cnt"></span>
+    </div>
+  </aside>
+  <main class="main" id="main">
+    <div class="lead"><b id="lead-t"></b><p id="lead-p"></p></div>
+    <div id="body"></div>
+  </main>
+  <nav class="toc" id="toc"></nav>
+</div>
+<button class="totop" id="totop" type="button" title="回到顶部">↑</button>
+<div class="foot">EnvKit · 本页说明全部来自当前构建的实际功能 · 文档可离线阅读</div>
+
+<script>
+(function(){
+  'use strict';
+  /* 语言与主控制台共用 localStorage 的 ek-lang；storage 事件让两个标签页同步。 */
+  var lang = 'zh';
+  try { lang = localStorage.getItem('ek-lang') === 'en' ? 'en' : 'zh'; } catch (e) {}
+  document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+
+  function v(x){ return x && typeof x === 'object' && !Array.isArray(x) ? (x[lang] || x.zh || '') : (x || ''); }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function z(zh,en){ return {zh:zh,en:en}; }
+  function P(zh,en){ return {k:'p',zh:zh,en:en}; }
+  function NOTE(zh,en,lv){ return {k:'note',lv:lv||'tip',zh:zh,en:en}; }
+  function H3(id,zh,en){ return {k:'h3',id:id,zh:zh,en:en}; }
+  function UL(items){ return {k:'ul',items:items}; }
+  function OL(items){ return {k:'ol',items:items}; }
+  function STEPS(items){ return {k:'steps',items:items}; }
+  function CODE(code,label){ return {k:'code',code:code,label:label}; }
+  function TABLE(head,rows){ return {k:'table',head:head,rows:rows}; }
+
+  var D = [
+    {id:'quick', group:z('入门','Get started'), title:z('四步走完','Four steps'), body:[
+      P('双击 EnvKit.exe 后浏览器自动打开本地控制台，按左侧顺序走一遍即可。顶部状态胶囊会随检测与启动结果实时更新；右下角的鱼是状态出口，不是装饰。',
+        'Double-click EnvKit.exe and the local console opens automatically. Follow the four steps in the sidebar; status chips update live, and the fish at the lower right is a status outlet.'),
+      STEPS([
+        z('环境安装：检测 Go / Node.js / MySQL 的版本与安装位置，镜像下载带 SHA256 校验与失败重试。',
+          'Environment: detect Go / Node.js / MySQL versions and paths; mirrored downloads with SHA256 checks and retries.'),
+        z('程序配置：填项目目录与数据库连接，建库建表、备份还原都在这一页。',
+          'Configuration: set project paths and database connection; create schema, back up and restore here.'),
+        z('链端校验：填 SSH 与链目录，检查节点端口、进程与共识视图。',
+          'Chain: set SSH and chain paths; check node ports, processes and consensus view.'),
+        z('程序启动：先后端再前端；日志按来源分栏，EnvKit 退出时子进程自动回收。',
+          'Start: backend first, then frontend. Logs are split by source; child processes are reaped when EnvKit exits.')
+      ]),
+      NOTE('控制台默认 http://127.0.0.1:18765/ ，端口冲突时自动顺延。那个黑色命令行窗口就是服务本体：关掉它网页就打不开。要从托盘菜单选「隐藏窗口到托盘」，不是结束进程。新版本已把控制台换成纸白底的浅色主题。',
+           'The console defaults to http://127.0.0.1:18765/ and shifts ports on conflict. The console window IS the service: closing it kills the page. Use the tray menu to hide it, not to end the process. New builds use a light paper-coloured theme.'),
+      H3('quick-shortcut','键盘与入口','Shortcuts and entries'),
+      TABLE([z('操作','Action'),z('方式','How')],[
+        [z('打开命令面板','Open command palette'),z('Ctrl+K；或点顶栏个人中心左边的搜索框','Ctrl+K, or the search box left of the profile')],
+        [z('跳到某个页面','Jump to a page'),z('命令面板里输入页面名；或用地址栏深链 #config / #chain / #audit','Type a page name in the palette, or use #config / #chain / #audit')],
+        [z('重看界面导览','Replay the tour'),z('本页左侧「重新观看界面导览」→ 回到控制台自动开始','Use “Replay the tour” in the sidebar of this page')],
+        [z('后台运行','Run in background'),z('托盘右键「隐藏窗口到托盘」','Tray → Hide window to tray')]
+      ])
+    ]},
+
+    {id:'prep', group:z('入门','Get started'), title:z('下载与运行前提','Download and prerequisites'), body:[
+      P('从 Releases 下载最新的 Windows x64 压缩包，解压后运行 安装.bat（复制到 %LOCALAPPDATA%\\EnvKit 并建桌面快捷方式），或直接双击 EnvKit.exe —— 单文件、免安装。',
+        'Download the latest Windows x64 archive from Releases, run 安装.bat to copy it into %LOCALAPPDATA%\\EnvKit with a desktop shortcut, or just double-click EnvKit.exe — one file, no installer.'),
+      TABLE([z('项目','Item'),z('要求','Requirement')],[
+        [z('操作系统','OS'),z('Windows 10 / 11 x64','Windows 10 / 11 x64')],
+        [z('MySQL 绿色版','Portable MySQL'),z('需要 VC++ 2019 Redistributable (x64)','Requires VC++ 2019 Redistributable (x64)')],
+        [z('管理员权限','Administrator'),z('注册 / 启动 MySQL 服务时需要；其余功能不需要','Only for registering / starting the MySQL service')],
+        [z('网络','Network'),z('首次安装组件约 180 MB，可配下载代理','About 180 MB on first component install; proxy configurable')]
+      ]),
+      NOTE('如果走的是桌面快捷方式，注意它可能指向 %LOCALAPPDATA%\\EnvKit 里的旧副本。更新后请重新运行 安装.bat，或直接打开仓库根的 EnvKit.exe。',
+           'A desktop shortcut may still point at an old copy in %LOCALAPPDATA%\\EnvKit. After an update, rerun 安装.bat or open the EnvKit.exe at the repository root.', 'warn')
+    ]},
+
+    {id:'build', group:z('入门','Get started'), title:z('从源码构建','Build from source'), body:[
+      CODE('git clone https://github.com/hrui83771-gif/EnvKit.git\ncd EnvKit\ngo build -trimpath -ldflags "-s -w" -o EnvKit.exe .','bash'),
+      P('需要 Go 1.26 或更高；图标与版本信息已通过 resource.syso 编进 exe。构建产物就是仓库根的 EnvKit.exe，单文件自带全部前端资源。',
+        'Requires Go 1.26 or newer. The icon and version info are compiled in via resource.syso. The result is the single-file EnvKit.exe at the repository root with all front-end assets embedded.'),
+      H3('build-front','改前端的正确姿势','Editing the front end'),
+      P('前端源码按文件拆在 web/src/，改完必须运行 python tools/web_build.py 重拼成 web/index.html，再 go build 重新嵌入。只跑 web_build.py 不重建 exe，界面不会变——这是最常见的「改了没生效」。',
+        'Front-end sources live in web/src/. After editing, run python tools/web_build.py and then go build to re-embed. Running only web_build.py will not change the exe — the most common cause of “nothing changed”.'),
+      CODE('python tools/web_build.py\ngo build -trimpath -ldflags "-s -w" -o EnvKit.exe .','bash'),
+      NOTE('直接改 web/index.html 会在下次构建时被覆盖；web_build.py --check 只校验产物一致性，不会重新嵌入。',
+           'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn')
+    ]},
+
+    {id:'install', group:z('功能','Features'), title:z('环境安装','Environment setup'), body:[
+      P('检测会同时读版本号与安装位置，不只看命令能不能跑。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
+        'Detection reads both version and install path, not just whether a command runs. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
+      TABLE([z('能力','Capability'),z('说明','Detail')],[
+        [z('演练安装','Dry run'),z('先列出会下载什么、装到哪里，再决定是否真装','See what would be downloaded and installed before committing')],
+        [z('SHA256 校验','SHA256 check'),z('下载完比对摘要，不对就换源重试','Compare hashes after download; retry from another source on mismatch')],
+        [z('版本管理','Version manager'),z('组件版本集中管理，可单独升级，不必重装整套','Central version list; upgrade a single component without reinstalling everything')],
+        [z('镜像配置','Mirrors'),z('GOPROXY 与 npm registry 自动指向可达的国内源','GOPROXY and npm registry point at reachable domestic mirrors')]
+      ]),
+      NOTE('注册或启动 MySQL 服务需要管理员权限：右键 EnvKit.exe「以管理员身份运行」只在这一步需要，其余功能照常用。',
+           'Registering or starting the MySQL service needs administrator rights: run EnvKit.exe as administrator only for that step; everything else works normally.', 'warn')
+    ]},
+
+    {id:'config', group:z('功能','Features'), title:z('程序配置','Configuration'), body:[
+      P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
+        'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
+      H3('config-keys','config.json 关键字段','Key config fields'),
+      TABLE([z('字段','Field'),z('用途','Purpose')],[
+        [z('dev.server_port','dev.server_port'),z('控制台端口，默认 18765，冲突自动顺延','Console port, default 18765, shifts on conflict')],
+        [z('goproxy / npm_registry','goproxy / npm_registry'),z('组件与依赖的下载源','Download sources for components and dependencies')],
+        [z('mysql / projects.*','mysql / projects.*'),z('MySQL 参数、前后端目录、库名与备份目录','MySQL settings, front/back-end paths, database and backup directory')],
+        [z('chain.ssh_*','chain.ssh_*'),z('SSH 主机、端口、用户名、密码 / 私钥与主机指纹','SSH host, port, user, password / key and host fingerprint')],
+        [z('chain.chain_*','chain.chain_*'),z('节点地址、目录、启动命令、守护与通知开关','Node address, path, start command, guard and notification switches')],
+        [z('ai.*','ai.*'),z('模型协议、地址与密钥（本机 DPAPI 加密）','Model protocol, endpoint and key (encrypted with DPAPI on this machine)')]
+      ]),
+      H3('config-files','本机文件','Files on this machine'),
+      CODE(z('config.json                 当前配置\nconfig.dist.json           干净模板\naudit-YYYYMMDD.jsonl       操作审计（保留 30 天）\nenvkit-YYYYMMDD.log        运行日志（按日轮转）\nmissions.json / playbooks.json / memories.json   行动 / 预案 / 记忆',
+             'config.json                 active config\nconfig.dist.json           clean template\naudit-YYYYMMDD.jsonl       operation audit (kept 30 days)\nenvkit-YYYYMMDD.log        daily rotating log\nmissions.json / playbooks.json / memories.json   actions / playbooks / memory'),''),
+      NOTE('API Key 与数据库密码经 Windows DPAPI 加密，只在本机可解密。导出的配置默认脱敏，分享前再确认一次没有带上密钥。',
+           'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger')
+    ]},
+
+    {id:'chain', group:z('功能','Features'), title:z('链端校验','Chain checks'), body:[
+      P('支持 FISCO-BCOS v2 / WeBASE-Front 连通检测、SSH 密码或私钥登录、页面内嵌终端与远程目录浏览；节点异常可一键检测或交给后台守护自动恢复，并触发 Windows 通知。',
+        'Supports FISCO-BCOS v2 / WeBASE-Front connectivity, SSH password or key login, an embedded terminal and remote directory browsing. Recovery can be manual or handled by the background guard with Windows notifications.'),
+      H3('chain-live','判活看共识视图','Liveness is the consensus view'),
+      NOTE('判活看的是共识视图是否推进，不是区块高度。PBFT 空块只共识不落盘，块高静止是正常态；拿块高判活会把健康链永远判成未恢复。',
+           'Liveness is judged by consensus view progression, NOT block height. PBFT empty blocks reach consensus without being stored, so a static height is normal; judging by height marks healthy chains as unrecovered.', 'danger'),
+      UL([
+        z('SSH 首次连接按 TOFU 记录主机指纹，之后指纹变化即拒绝。','SSH uses TOFU: the host fingerprint is recorded on first connect and any change is rejected.'),
+        z('自愈态势页展示守护轨迹与影子晋升证据；空列表表示尚无记录，不代表守护没配置。','The self-healing page shows guard traces and shadow promotion evidence. An empty list means no records yet, not that guarding is disabled.'),
+        z('复验通过才算完成；命令返回 0 只说明命令跑了，不等于节点真的活了。','Only a passed verification counts as done; exit code 0 only means the command ran, not that the node is alive.')
+      ])
+    ]},
+
+    {id:'start', group:z('功能','Features'), title:z('程序启动与日志','Start and logs'), body:[
+      P('前后端一键启动（先后端、再前端），访问地址自动解析；日志按来源分栏并清理 ANSI 转义码，支持复制、下载和自动滚动。',
+        'Start backend then frontend with one click; access URLs are resolved automatically. Logs are split by source, stripped of ANSI codes, and support copy, download and auto-scroll.'),
+      UL([
+        z('停止服务时报告端口占用：第三方进程只报告，不会替你结束。','Stopping reports port occupancy: third-party processes are reported, never killed.'),
+        z('子进程绑定 Job Object，EnvKit 退出时自动回收，避免留下孤儿进程。','Child processes are bound to a Job Object and reaped when EnvKit exits, so no orphans are left behind.'),
+        z('操作审计只追加、不修改、不回滚，按天分文件保留 30 天；密码与 API Key 在入库前已脱敏。','Operation audit is append-only, kept in daily files for 30 days. Passwords and API keys are redacted before being written.')
+      ]),
+      NOTE('日志停在某一步且没有任何异常，先确认进程是否还在、退出码是什么——历史上 Windows 句柄重复关闭会让进程无声消失。',
+           'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn')
+    ]},
+
+    {id:'ai', group:z('功能','Features'), title:z('AI 助手','AI assistant'), body:[
+      P('右下角桌宠是状态出口，点它打开 AI 抽屉。26 个受控工具覆盖状态、日志、审计、诊断、数据库、检测、启停、白名单与清理；对话支持 Markdown、表格与代码高亮。兼容任意 OpenAI 协议模型，Key 经 DPAPI 加密。',
+        'The desktop pet is a status outlet; click it to open the AI drawer. 26 controlled tools cover status, logs, audit, diagnostics, database, checks, start/stop, allowlist and cleanup. Chat supports Markdown, tables and code highlighting, with any OpenAI-compatible model and a DPAPI-encrypted key.'),
+      TABLE([z('机制','Mechanism'),z('行为','Behaviour')],[
+        [z('写操作确认','Write confirmation'),z('服务端返回 428 强制确认，模型跳不过去；不提供任意命令执行','Server returns 428 and the model cannot bypass it; no arbitrary command execution')],
+        [z('复验三态','Three verification states'),z('通过 / 已执行未验证 / 失败；退出码 0 不算完成','Passed / executed but unverified / failed; exit code 0 is not completion')],
+        [z('拖入文件','Drop a file'),z('.sql 走备份 → 确认 → 执行；docx / xlsx / pptx / pdf 由后端抽取并真分页','SQL goes backup → confirm → execute; documents are extracted back-end with real pagination')],
+        [z('记忆与经验','Memory and experience'),z('默认关闭；即使开启也只影响建议顺序，不改变权限档位','Off by default; even on, they only affect suggestion order, never permission levels')]
+      ]),
+      NOTE('内存里没有的权限，不会因为「这条经验置信度高」而放开。任何写操作都逐条过确认。',
+           'No permission is granted because an experience has high confidence. Every write still goes through confirmation.', 'ok')
+    ]},
+
+    {id:'missions', group:z('功能','Features'), title:z('行动与预案','Actions and playbooks'), body:[
+      P('AI 抽屉的「行动」tab 把一次处置变成可持久化、可续作的行动：手动新建、定时巡检、守护降级、本机入站触发都会产出行动。断网断流或程序重启后点「继续」，从最后完成的步骤接着跑，不从头再来。',
+        'The Actions tab turns a repair into a persistent, resumable action. Manual creation, scheduled checks, guard degradation and local inbound triggers all produce actions. After a network drop or restart, press Continue to resume from the last completed step.'),
+      OL([
+        z('行动收口后把步骤序列存成预案；下次同类故障（同服务 + 同错误类型）由预案预填步骤。','Save the steps as a playbook once an action closes; the next same service + error type pre-fills them.'),
+        z('预案预填不等于免确认：写操作照样逐条过 428。','Pre-filled steps still confirm every write through 428.'),
+        z('预案连败 3 次自动进「待复审」，不再推荐。','Three consecutive failures put a playbook into review and it stops being recommended.'),
+        z('「取消」记的是「未证明」，不算「修不好」，不参与失败统计。','Cancelling records “unproven”, not “unfixable”, and does not count as a failure.')
+      ]),
+      NOTE('成长报表按 ISO 周列出首次解决率、平均步数、用户修正率、预案命中率与有效率，全部从真实记录算出；分母为 0 显示「—」而不是 0%。',
+           'The growth report lists first-time resolution, average steps, user corrections and playbook hit / effective rates by ISO week, computed from real records; a zero denominator shows “—”, not 0%.', 'ok')
+    ]},
+
+    {id:'report', group:z('功能','Features'), title:z('晨报','Morning report'), body:[
+      P('按设置里的时刻（默认 08:30）产出一份只读报告：服务状态、近 24 小时崩溃与熔断、磁盘趋势、未收口的行动、组件与链端状态。',
+        'A read-only report is produced at the configured time (08:30 by default): service state, crashes and circuit breaks in the last 24 hours, disk trend, open actions, component and chain state.'),
+      UL([
+        z('全部来自系统记录，生成过程不经过模型。','All content comes from system records; the model is not involved in generating it.'),
+        z('在行动列表里直接查看，或下载为 .md。','View it in the action list or download it as .md.'),
+        z('全局静音会停掉主动通知，报告仍可手动打开。','Global mute stops proactive notifications; the report can still be opened manually.')
+      ])
+    ]},
+
+    {id:'mobile', group:z('功能','Features'), title:z('手机访问','Mobile access'), body:[
+      P('个人中心打开「手机访问」后，电脑另开一个局域网端口（默认 18766）并扫码配对。桌面控制台仍只绑 127.0.0.1；手机端口上只有 12 条接口，桌面那一百多个路由在这个端口上不存在——不是"被判断成不允许"。',
+        'Turn on Mobile access in the profile to open a separate LAN port (default 18766) and pair by QR code. The desktop console still binds only 127.0.0.1; the mobile port exposes just 12 endpoints — desktop routes simply do not exist there.'),
+      TABLE([z('能力','Capability'),z('默认','Default'),z('说明','Detail')],[
+        [z('看屏幕','Screen view'),z('开（只读）','On (read-only)'),z('只能看，不能操作','View only, no control')],
+        [z('剪贴板','Clipboard'),z('关','Off'),z('碰用户数据，需单独开','Touches user data; separate switch')],
+        [z('终端','Terminal'),z('关','Off'),z('能执行命令，危险度最高','Can execute commands; highest risk')]
+      ]),
+      UL([
+        z('每个设备一个令牌；配对可再加一道 6 位动态验证码。','One token per device; an optional 6-digit one-time code adds a second factor.'),
+        z('未配对设备连「功能开没开」都探不到：配对码与能力开关先鉴权再判断。','Unpaired devices cannot even detect whether a capability is on; authentication comes before capability checks.')
+      ])
+    ]},
+
+    {id:'pet', group:z('功能','Features'), title:z('桌宠','Desktop pet'), body:[
+      P('右下角的大肥鱼会跟着任务换状态：待机、思考、干活、等待确认、出错；进度环显示当前任务，悬停能看到任务名与耗时。有确认卡时它会举蓝色徽标，点徽标可直接批准或拒绝。',
+        'The fish changes with task state: idle, thinking, working, awaiting confirmation or error. The ring shows progress; hovering shows the task name and elapsed time. A blue badge on confirmation lets you approve or reject without opening the drawer.'),
+      TABLE([z('动作','Action'),z('效果','Effect')],[
+        [z('单击','Single click'),z('打开 AI 抽屉','Open the AI drawer')],
+        [z('双击','Double click'),z('喂食，五种食物各有台词与动画','Feed it; five foods with their own lines')],
+        [z('按住 1.5 秒','Hold 1.5 s'),z('摸头','Pet it')],
+        [z('拖着甩','Drag fast'),z('它会晕','It gets dizzy')],
+        [z('连点 5 / 10 / 15 次','Click 5 / 10 / 15 times'),z('回嘴 / 撒花 / 喷水','Talk back / confetti / water spray')],
+        [z('右键','Right click'),z('归位、说一句、三档大小、原地 / 溜达 / 跟随、鼠标穿透、AI 抽屉、立即检测','Home, say, three sizes, still / wander / follow, click-through, AI drawer, immediate check')]
+      ]),
+      NOTE('天气默认关闭；在设置里开启后，右键「查看天气」给实况 / 细节 / 建议三行。开了鼠标穿透后整只鱼都不吃点击，提示气泡约 5 秒后自己收起；要恢复就刷新页面，或从托盘重新打开控制台。',
+           'Weather is off by default; enable it in Settings for a three-line report. With click-through on, the pet ignores clicks and the hint bubble hides after about five seconds. Refresh the page or reopen the console from the tray to restore.', 'warn')
+    ]},
+
+    {id:'settings', group:z('功能','Features'), title:z('设置与托盘','Settings and tray'), body:[
+      P('设置页一页三区：基础、开发者、评测。日志配额、校验窗口、重试次数、AI 读取上限这些原本写死的常量都能改，改完即生效。',
+        'Settings has three sections: basic, developer and evaluation. Log quotas, verification windows, retry counts and AI read limits — once hard-coded — are all editable and take effect immediately.'),
+      UL([
+        z('更新检查默认每 3 天查一次 GitHub Releases；全局静音一键停掉所有主动通知。','Update check queries GitHub Releases every three days by default; global mute stops all proactive notifications.'),
+        z('托盘右键：打开控制台 / 程序配置 / 日志目录；隐藏窗口到托盘，退出前停掉前后端。','Tray menu: open console / configuration / log directory; hide to tray, and stop front and back end before exit.'),
+        z('个人中心可设昵称，桌宠的开场问候会带上名字；还能切语言与主题。','Set a nickname in the profile and the pet greeting uses it; language and theme can also be switched there.')
+      ])
+    ]},
+
+    {id:'security', group:z('安全','Security'), title:z('安全边界','Security boundary'), body:[
+      P('所有写操作先过权限裁决，禁止档在派发前终止；需要确认的动作由服务端返回 428 强制确认，模型跳不过去。',
+        'Every write goes through permission arbitration and forbidden tiers terminate before dispatch; actions needing confirmation are enforced by a server-side 428 the model cannot bypass.'),
+      TABLE([z('档位','Tier'),z('含义','Meaning')],[
+        [z('auto','auto'),z('只读或无副作用，可直接执行','Read-only or side-effect free, runs directly')],
+        [z('confirm','confirm'),z('先弹确认卡，服务端 428 兜底','Shows a confirmation card, backed by server-side 428')],
+        [z('elevated','elevated'),z('需要管理员权限，右键以管理员身份运行','Needs administrator rights; run as administrator')],
+        [z('forbidden','forbidden'),z('禁止档，派发前直接终止','Terminated before dispatch')]
+      ]),
+      UL([
+        z('只暴露受控工具，不提供任意命令执行；文件探索限制在已配置的项目目录内。','Only controlled tools are exposed; no arbitrary command execution, and file exploration stays inside configured project directories.'),
+        z('本机 API 令牌防 CSRF，并校验 Origin；控制台只绑回环地址。','A local API token prevents CSRF with Origin checks; the console binds only to loopback.'),
+        z('配置原子写入 + 上一版备份；日志按日轮转与自动清理；有 panic 兜底与命令超时。','Atomic config writes with a previous-version backup; daily log rotation and cleanup; panic recovery and command timeouts.'),
+        z('记忆只影响建议，不改变任何操作的权限档位。','Memory only affects suggestions, never permission tiers.')
+      ]),
+      NOTE('判据要能被客观事实验证：「命令返回 0」不等于「任务完成」，「没找到」不等于「丢了」。',
+           'Evidence must be objective: exit code 0 is not task completion, and “not found” is not “lost”.', 'ok')
+    ]},
+
+    {id:'faq', group:z('排障','Troubleshooting'), title:z('常见问题','FAQ'), body:[
+      OL([
+        z('窗口是黑的、能关吗？—— 那是服务进程本体，关掉网页就打不开；用托盘「隐藏窗口到托盘」让它继续在后台跑。新版本控制台已换成纸白底浅色主题。','Can I close the console window? No — it is the service. Closing it kills the page; use the tray action to hide it. New builds use a light paper-coloured theme.'),
+        z('端口被占用？—— 停止页会报告占用者；第三方进程只报告不结束。EnvKit 端口冲突会自动顺延。','Port in use? The stop page reports the owner but never kills third-party processes. EnvKit shifts to the next free port.'),
+        z('MySQL 服务起不来？—— 注册 / 启动服务需要管理员权限，右键 EnvKit.exe 以管理员身份运行。','MySQL service will not start? Registering / starting needs admin rights; run EnvKit.exe as administrator.'),
+        z('桌宠点不到了？—— 你开了鼠标穿透。刷新页面，或从托盘打开控制台即可恢复；提示气泡约 5 秒后自己收起。','Pet ignores clicks? Click-through is on. Refresh the page or open the console from the tray; the hint hides after about five seconds.'),
+        z('显示「已执行，未验证」？—— 命令确实跑了，但端口 / 进程 / HTTP / 备份校验还没给出客观证据，不能算完成。','“Executed, unverified”? The command ran, but port / process / HTTP / backup checks produced no objective evidence yet, so it is not complete.'),
+        z('链上区块高度不动是卡死了吗？—— 不一定。空闲链只共识不落盘，判活要看共识视图推进。','Is a static block height a stuck chain? Not necessarily. Idle chains reach consensus without storing blocks; check consensus view progression.'),
+        z('自愈态势页是空的？—— 空列表表示尚无守护 / 影子流记录，不等于守护没配置。','Self-healing page empty? An empty list means no guard or shadow-flow records yet, not that guarding is disabled.'),
+        z('改了前端界面没变化？—— 前端资源嵌在 exe 里。要 web_build.py 重拼 + go build 重新嵌入，两步都做。','Changed the front end but nothing changed? Assets are embedded in the exe: run web_build.py AND go build.'),
+        z('桌面快捷方式打开的还是旧版？—— 它可能指向 %LOCALAPPDATA%\\EnvKit 的旧副本，重新运行安装.bat 或直接打开仓库根的 exe。','Shortcut still opens the old version? It may point at %LOCALAPPDATA%\\EnvKit; rerun 安装.bat or open the repository-root exe.'),
+        z('文档页怎么单独打开？—— 侧栏「使用文档」会在新标签页打开本页；地址是 /docs，可以收藏，也可以按 / 聚焦搜索。','How do I open these docs separately? The sidebar “Docs” entry opens a new tab at /docs; bookmark it, and press / to focus search.')
+      ])
+    ]},
+
+    {id:'about', group:z('关于','About'), title:z('关于与免责声明','About and disclaimer'), body:[
+      {k:'ver'},
+      P('作者 / 项目地址：https://github.com/hrui83771-gif',
+        'Author / project: https://github.com/hrui83771-gif'),
+      P('EnvKit 是统一开发环境助手：单文件 Go、零运行时依赖、内置 AI 运维助手。形象与部分台词移植自开源项目 dafeiyu-pet（MIT）。',
+        'EnvKit is a unified development-environment assistant: single-file Go, no runtime dependencies, with a built-in AI operations assistant. Pet art and some lines are adapted from dafeiyu-pet (MIT).'),
+      H3('about-disclaimer','免责声明','Disclaimer'),
+      OL([
+        z('本软件按「现状」（AS IS）提供，作者不对准确性、可靠性、适用性及特定用途的适用性作任何明示或暗示的担保，也不保证无缺陷或永久可用。','This software is provided AS IS. The author makes no warranty, express or implied, as to accuracy, reliability, fitness for a particular purpose, or that it is defect-free or permanently available.'),
+        z('使用本软件产生的任何后果（含环境配置失败、数据丢失、服务中断、端口 / 进程异常、链端操作失误等）均由使用者自行承担，作者不承担直接或间接责任。','Any consequence of using this software (including failed setup, data loss, service interruption, port / process faults or chain operation errors) is the user’s responsibility; the author accepts no direct or indirect liability.'),
+        z('本软件依赖 Go、Node.js、MySQL、FISCO-BCOS、WeBASE 等第三方组件，其版权与许可归各自权利方所有；本软件不因此获得任何授权。','This software depends on third-party components including Go, Node.js, MySQL, FISCO-BCOS and WeBASE. Their copyrights and licenses belong to their respective owners; no license is granted by this software.'),
+        z('链上数据不可篡改，但仅供参考，不构成投资、法律、财务或商业建议；据此操作的风险由使用者自行承担。','On-chain data is immutable but provided for reference only. It is not investment, legal, financial or business advice; risks from acting on it are borne by the user.'),
+        z('作者保留在不另行通知的情况下修改、暂停或停止提供本软件及相关服务的权利。','The author reserves the right to modify, suspend or discontinue this software and related services without notice.')
+      ]),
+      H3('about-license','第三方声明','Third-party notices'),
+      P('桌宠形象与台词移植自 dafeiyu-pet（MIT），托盘库 systray 为 Apache-2.0，前端内嵌 marked（MIT）、highlight.js（BSD-3-Clause）、AutoAnimate（MIT）、diff2html（MIT）、jsdiff（BSD-3-Clause）、hotkeys-js（MIT）、Lucide（ISC）。完整许可、版本与 SHA256 见仓库 THIRD-PARTY-NOTICE.md。',
+        'Pet art and lines are adapted from dafeiyu-pet (MIT); systray is Apache-2.0; bundled marked (MIT), highlight.js (BSD-3-Clause), AutoAnimate (MIT), diff2html (MIT), jsdiff (BSD-3-Clause), hotkeys-js (MIT) and Lucide (ISC). Full notices, versions and SHA256 hashes are in THIRD-PARTY-NOTICE.md.')
+    ]}
+  ];
+
+  var T = {
+    lead:z('一份文档，讲清 EnvKit','One guide for all of EnvKit'),
+    leadp:z('左侧按主题筛选，正文可复制命令，右侧目录随滚动高亮。按 / 或 Ctrl+K 聚焦搜索；本页可离线阅读，也可以直接打印。',
+      'Filter by topic on the left, copy commands from the text, and follow the highlighted outline on the right. Press / or Ctrl+K to focus search. Works offline and prints cleanly.'),
+    jump:z('快速跳转','Jump to'),
+    copy:z('复制','Copy'), copied:z('已复制','Copied'),
+    empty:z('没有匹配的章节','No matching sections'),
+    count:z('节文档','sections'),
+    ver:z('当前版本：','Current version: '),
+    unknown:z('未知','Unknown'),
+    back:z('返回控制台','Back to console'),
+    en:z('中文','中文'), zh:z('EN','EN')
+  };
+  function tv(x){ return v(x); }
+
+  var tree = document.getElementById('tree'), body = document.getElementById('body'),
+      toc = document.getElementById('toc'), q = document.getElementById('q'),
+      prog = document.getElementById('prog'), totop = document.getElementById('totop');
+  function flat(x){
+    if(typeof x === 'string') return x;
+    if(Array.isArray(x)) return x.map(flat).join(' ');
+    if(x && typeof x === 'object') return Object.keys(x).filter(k => k !== 'code' && k !== 'k' && k !== 'id' && k !== 'lv')
+      .map(k => flat(x[k])).join(' ');
+    return '';
+  }
+  function hay(s){ return (v(s.title) + ' ' + v(s.group) + ' ' + flat(s.body)).toLowerCase(); }
+
+  function block(b){
+    if(b.k === 'p') return '<p>' + esc(v(b)) + '</p>';
+    if(b.k === 'note') return '<div class="note ' + (b.lv === 'warn' || b.lv === 'danger' || b.lv === 'ok' ? b.lv : '') +
+      '">' + esc(v(b)) + '</div>';
+    if(b.k === 'h3') return '<h3 id="s-' + b.id + '">' + esc(v(b)) + '</h3>';
+    if(b.k === 'ul' || b.k === 'ol') return '<' + b.k + '>' + b.items.map(i =>
+      '<li>' + esc(v(i)) + '</li>').join('') + '</' + b.k + '>';
+    if(b.k === 'steps') return '<ol class="steps">' + b.items.map(i =>
+      '<li>' + esc(v(i)) + '</li>').join('') + '</ol>';
+    if(b.k === 'code') return '<div class="code"><button class="cp" type="button">' + esc(tv(T.copy)) +
+      '</button><pre>' + esc(v(b.code)) + '</pre></div>';
+    if(b.k === 'table') return '<table class="tbl"><thead><tr>' + b.head.map(h =>
+      '<th>' + esc(v(h)) + '</th>').join('') + '</tr></thead><tbody>' + b.rows.map(row =>
+      '<tr>' + row.map(c => '<td>' + esc(v(c)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+    if(b.k === 'ver'){
+      var ve = document.getElementById('ver');
+      return '<p>' + esc(tv(T.ver) + (ve ? ve.textContent.trim() : tv(T.unknown))) + '</p>';
+    }
+    return '';
+  }
+  function renderBody(){
+    var html = '';
+    D.forEach(function(s, i){
+      html += '<section class="sec"><h2 id="doc-' + s.id + '"><span class="num">' +
+        String(i + 1).padStart(2, '0') + '</span>' + esc(v(s.title)) + '</h2>';
+      s.body.forEach(function(b){ html += block(b); });
+      html += '</section>';
+    });
+    body.innerHTML = html;
+    renderToc();
+  }
+  function renderTree(){
+    var html = '', last = null;
+    D.forEach(function(s){
+      var g = v(s.group);
+      if(g !== last){
+        if(last !== null) html += '</div>';
+        html += '<div class="grpbox"><div class="grp">' + esc(g) + '</div>';
+        last = g;
+      }
+      html += '<button type="button" data-sec="' + s.id + '">' + esc(v(s.title)) + '</button>';
+    });
+    if(last !== null) html += '</div>';
+    tree.innerHTML = html;
+    filterTree();
+  }
+  function renderToc(){
+    var hs = [].slice.call(body.querySelectorAll('h2[id],h3[id]'));
+    toc.innerHTML = '<div class="toc-title">' + esc(v(z('本页目录','On this page'))) + '</div>' +
+      hs.map(function(h){ return '<a href="#' + h.id + '" data-anchor="' + h.id + '"' +
+        (h.tagName === 'H3' ? ' class="sub"' : '') + '>' + esc(h.textContent) + '</a>'; }).join('');
+  }
+  function renderQuick(){
+    document.getElementById('quick').innerHTML = '<span style="align-self:center;color:#9aa4b2;font-size:11.5px">' +
+      esc(tv(T.jump)) + '</span>' + D.slice(0, 6).map(function(s){
+        return '<a href="#doc-' + s.id + '">' + esc(v(s.title)) + '</a>'; }).join('');
+  }
+  function filterTree(){
+    var value = (q.value || '').trim().toLowerCase(), shown = 0;
+    [].forEach.call(tree.querySelectorAll('.grpbox'), function(box){
+      var n = 0;
+      [].forEach.call(box.querySelectorAll('button[data-sec]'), function(b){
+        var s = D.filter(function(x){ return x.id === b.dataset.sec; })[0];
+        if(!s) return;
+        var on = !value || hay(s).indexOf(value) >= 0;
+        b.hidden = !on; if(on) n++;
+      });
+      box.hidden = n === 0; shown += n;
+    });
+    if(!shown && value) tree.insertAdjacentHTML('beforeend', '<div class="empty" data-empty>' + esc(tv(T.empty)) + '</div>');
+    else { var e = tree.querySelector('[data-empty]'); if(e) e.remove(); }
+    document.getElementById('cnt').textContent = shown + ' ' + tv(T.count);
+  }
+  function go(id){
+    var h = document.getElementById('doc-' + id);
+    if(!h) return;
+    window.scrollTo({top:h.getBoundingClientRect().top + window.scrollY - 14, behavior:'smooth'});
+    mark(id);
+  }
+  function mark(id){
+    [].forEach.call(tree.querySelectorAll('button[data-sec]'), function(b){
+      b.classList.toggle('on', b.dataset.sec === id); });
+    [].forEach.call(toc.querySelectorAll('a[data-anchor]'), function(a){
+      a.classList.toggle('on', a.dataset.anchor === 'doc-' + id); });
+  }
+  function onScroll(){
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    prog.style.width = (max > 0 ? Math.min(100, window.scrollY / max * 100) : 0) + '%';
+    totop.classList.toggle('show', window.scrollY > 500);
+    var cur = '';
+    D.forEach(function(s){
+      var h = document.getElementById('doc-' + s.id);
+      if(h && h.getBoundingClientRect().top <= 120) cur = s.id;
+    });
+    if(cur) mark(cur);
+  }
+  function setLang(l, save){
+    lang = l === 'en' ? 'en' : 'zh';
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+    if(save){ try{ localStorage.setItem('ek-lang', lang); }catch(e){} }
+    var b = document.getElementById('lang');
+    b.textContent = lang === 'en' ? tv(T.zh) : tv(T.en);
+    b.title = lang === 'en' ? 'Switch to Chinese' : 'Switch to English';
+    document.title = lang === 'en' ? 'EnvKit · Docs' : 'EnvKit · 使用文档';
+    document.getElementById('lead-t').textContent = tv(T.lead);
+    document.getElementById('lead-p').textContent = tv(T.leadp);
+    q.placeholder = lang === 'en' ? 'Search docs (press /)' : '搜索文档（按 / 聚焦）';
+    document.getElementById('replay').textContent = lang === 'en' ? 'Replay the tour →' : '重新观看界面导览 →';
+    renderQuick(); renderBody(); renderTree();
+    var hash = (location.hash || '').replace(/^#/, '');
+    if(hash.indexOf('doc-') === 0) mark(hash.slice(4));
+  }
+
+  tree.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('button[data-sec]');
+    if(b) go(b.dataset.sec);
+  });
+  toc.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a[data-anchor]');
+    if(!a) return;
+    e.preventDefault();
+    var h = document.getElementById(a.dataset.anchor);
+    if(h) window.scrollTo({top:h.getBoundingClientRect().top + window.scrollY - 14, behavior:'smooth'});
+    [].forEach.call(toc.querySelectorAll('a[data-anchor]'), function(x){ x.classList.toggle('on', x === a); });
+  });
+  q.addEventListener('input', filterTree);
+  body.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('.cp');
+    if(!b) return;
+    var pre = b.parentNode.querySelector('pre'), s = pre ? pre.textContent : '';
+    var done = function(){ b.textContent = tv(T.copied); setTimeout(function(){ b.textContent = tv(T.copy); }, 1200); };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(done, done);
+      else { var ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+    }catch(_){ done(); }
+  });
+  totop.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
+  document.getElementById('lang').addEventListener('click', function(){ setLang(lang === 'en' ? 'zh' : 'en', true); });
+  document.addEventListener('keydown', function(e){
+    var typing = /^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '');
+    if((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')){
+      e.preventDefault(); q.focus(); q.select();
+    } else if(e.key === 'Escape' && document.activeElement === q){ q.blur(); }
+  });
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('storage', function(e){
+    if(e.key === 'ek-lang' && e.newValue) setLang(e.newValue, false);
+  });
+  setLang(lang, false);
+  onScroll();
+})();
+</script>
+</body>
+</html>

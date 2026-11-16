@@ -52,6 +52,10 @@ OUT = os.path.join(ROOT, "web", "index.html")
 MOBILE = os.path.join(SRC, "mobile.html")
 MOBILE_OUT = os.path.join(ROOT, "web", "mobile.html")
 
+# 使用文档（独立页）：自包含单文件，和 mobile.html 一样只做 src → web 的同步。
+DOCS = os.path.join(SRC, "docs.html")
+DOCS_OUT = os.path.join(ROOT, "web", "docs.html")
+
 CSS_MARK = "<!--@css-->"
 JS_MARK = "<!--@appjs-->"
 
@@ -83,6 +87,7 @@ def build():
 def main():
     out = build()
     mobile = io.open(MOBILE, encoding="utf-8").read()
+    docs = io.open(DOCS, encoding="utf-8").read()
     if "--check" in sys.argv:
         cur = io.open(OUT, encoding="utf-8").read() if os.path.exists(OUT) else ""
         if cur != out:
@@ -92,14 +97,19 @@ def main():
         if curm != mobile:
             print("mobile.html 与 web/src 不一致——请运行 python tools/web_build.py")
             return 1
-        print("index.html / mobile.html 与 web/src 一致（%d + %d 字符，js %d 个片段）"
-              % (len(out), len(mobile), len(js_files())))
+        curd = io.open(DOCS_OUT, encoding="utf-8").read() if os.path.exists(DOCS_OUT) else ""
+        if curd != docs:
+            print("docs.html 与 web/src 不一致——请运行 python tools/web_build.py")
+            return 1
+        print("index.html / mobile.html / docs.html 与 web/src 一致（%d + %d + %d 字符，js %d 个片段）"
+              % (len(out), len(mobile), len(docs), len(js_files())))
         return 0
     io.open(OUT, "w", encoding="utf-8", newline="\n").write(out)
     io.open(MOBILE_OUT, "w", encoding="utf-8", newline="\n").write(mobile)
-    print("已生成 web/index.html：%d 字符（css %d + js %d，%d 个片段）、web/mobile.html：%d 字符"
+    io.open(DOCS_OUT, "w", encoding="utf-8", newline="\n").write(docs)
+    print("已生成 web/index.html：%d 字符（css %d + js %d，%d 个片段）、web/mobile.html：%d 字符、web/docs.html：%d 字符"
           % (len(out), len(io.open(CSS, encoding="utf-8").read()),
-             len(read_js()), len(js_files()), len(mobile)))
+             len(read_js()), len(js_files()), len(mobile), len(docs)))
     return 0
 
 

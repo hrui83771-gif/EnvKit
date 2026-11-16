@@ -31,8 +31,16 @@
         sel:'.nav[data-panel="' + pn + '"]',
         icon:'chevron-right', act:function(){ goto(pn); }});
     });
+    // 独立文档页入口：侧栏导航与关于按钮都带 data-open-docs。
+    // 只收一次，避免同一个入口在「页面」和「操作」两组里重复出现。
+    document.querySelectorAll('[data-open-docs]').forEach(function(el){
+      var s = txt(el); if(!s) return;
+      out.push({group:'page', glabel:t('页面'), text:s, hint:'docs',
+        sel:'[data-open-docs]', icon:'chevron-right',
+        act:function(){ if(window.ekOpenDocs) window.ekOpenDocs(); else el.click(); }});
+    });
     document.querySelectorAll('button[id]').forEach(function(el){
-      if(excluded(el) || el.disabled) return;
+      if(excluded(el) || el.disabled || el.hasAttribute('data-open-docs')) return;
       var s = txt(el);
       if(!s || !/[\u4e00-\u9fa5A-Za-z0-9]/.test(s)) return;
       var pn = panelOf(el);

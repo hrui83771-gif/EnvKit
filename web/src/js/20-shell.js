@@ -161,6 +161,9 @@ document.querySelectorAll('[data-goto]').forEach(c=>c.addEventListener('click',(
 // 用 goto 且不模拟点击：新标签页打开时也能一次到位。
 function ekApplyHash(){
   const h = (location.hash || '').replace(/^#/, '');
+  // 独立文档页的「重新观看界面导览」回到 /#tour：这里直接起导览，
+  // 不再模拟点某个按钮，新标签打开时也能一次到位。
+  if(h === 'tour'){ try{ if(window.EKTour && window.EKTour.start) window.EKTour.start(); }catch(e){} return; }
   if(h && document.getElementById('panel-' + h)) goto(h);
 }
 ekApplyHash();
@@ -444,11 +447,12 @@ $('#cf-cancel').onclick = ()=>closeConfirm(false);
 // （ESC 同样有效，见上面的 keydown 监听）。
 $('#confirm').addEventListener('click', e=>{ if(e.target.id==='confirm') closeConfirm(false); });
 
-/* ---------- 关于（长说明已迁到「使用文档」） ----------
-   #btn-about 保留 id 只为兼容既有回归，它现在是 data-goto="docs"，
-   由上面的统一路由打开文档页；关于弹窗只从文档页的按钮进入。 */
-$('#docs-about').onclick = ()=>$('#about').classList.add('show');
-$('#about-docs').onclick = ()=>{ $('#about').classList.remove('show'); goto('docs'); };
+/* ---------- 关于（长说明已迁到独立文档页 /docs） ----------
+   #btn-about 保留 id 只为兼容既有回归；侧栏入口和它都带 data-open-docs，
+   统一在新标签打开独立文档页。关于弹窗里的按钮也走同一入口。 */
+function ekOpenDocs(){ window.open('/docs', '_blank', 'noopener'); }
+document.querySelectorAll('[data-open-docs]').forEach(c => c.addEventListener('click', ()=>ekOpenDocs()));
+$('#about-docs').onclick = ()=>{ $('#about').classList.remove('show'); ekOpenDocs(); };
 $('#about-close').onclick = ()=>$('#about').classList.remove('show');
 $('#about').addEventListener('click', e=>{ if(e.target.id==='about') $('#about').classList.remove('show'); });
 

@@ -27,9 +27,8 @@ async () => {
     await sleep(1900);                     // 每个路由都要等异步状态回来后才有文本
     grab();
   }
-  // 本轮：侧栏按钮已改跳「使用文档」（整块 data-no-i18n），关于弹窗要从文档页进入。
-  try { document.getElementById('btn-about').click(); await sleep(400);
-        document.getElementById('docs-about').click(); await sleep(600); grab();
+  // 使用文档已是独立页 /docs，主界面不再内嵌；这里只抓关于弹窗的残留中文。
+  try { document.getElementById('about').classList.add('show'); await sleep(500); grab();
         document.getElementById('about-close').click(); } catch (e) {}
   try { aiOpen(); await sleep(500); grab(); } catch (e) {}
 

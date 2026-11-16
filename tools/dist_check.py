@@ -108,6 +108,29 @@ try:
         fail.append("external script/link")
     print(f"{'OK ' if not ext else 'BAD'} script/link 外链 = {ext}")
 
+    # 独立文档页：必须真嵌进 exe、版本占位符已替换、绝不注入 API 令牌、零外链。
+    # 文档页不挂任何 API，所以页面里出现令牌本身就是缺陷。
+    print("--- 独立文档页 /docs ---")
+    try:
+        r = urllib.request.urlopen("http://127.0.0.1:18765/docs", timeout=10)
+        dc = r.read().decode("utf-8", "ignore")
+        dc_ext = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^"]+)"', dc)
+        dchecks = [
+            ("http-200", r.status == 200),
+            ("title", "EnvKit 使用文档" in dc),
+            ("version-replaced", "__APP_VERSION__" not in dc),
+            ("no-token", tok not in dc),
+            ("sections>=14", dc.count("{id:'") >= 14),
+            ("no-external", not dc_ext),
+        ]
+        for name, good in dchecks:
+            if not good:
+                fail.append("docs/" + name)
+            print(f"{'OK ' if good else 'BAD'} docs/{name:<18} {dc_ext if name == 'no-external' and dc_ext else ''}")
+    except Exception as e:
+        fail.append("docs/exception")
+        print("ERROR docs:", e)
+
     print("chain_guard  =", j["chain"]["chain_guard"], "(应 False，否则会去连别人的服务器)")
     if j["chain"]["chain_guard"]:
         fail.append("chain_guard")

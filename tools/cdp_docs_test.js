@@ -1,14 +1,16 @@
-// CDP 回归（本轮）：顶栏搜索入口 + 三栏使用文档页。
+// CDP 回归：独立文档页 /docs + 顶栏搜索入口。
 //
 // 守的是几个能被用户撞见的事实：
-//   1) 顶栏搜索框在个人中心左边，点它打开的是已有 Ctrl+K 面板（不是第二套搜索）；
-//   2) 侧栏「关于 / 免责声明」变成跳文档，关于弹窗只能从文档页进入；
-//   3) 文档页左目录 / 中正文 / 右目录同源生成，过滤与复制真能用；
-//   4) 切英文后文档正文不含中文（dz 双语 + ek:lang 重渲染）。
+//   1) 侧栏「使用文档」在新标签打开 /docs，不是主界面里切 panel；
+//   2) 这个新页面真正独立：没有主控制台的 DOM、没有注入令牌、纯静态；
+//   3) 三栏文档站：目录过滤 / 正文表格与步骤 / 右目录联动 / 复制 / 阅读进度；
+//   4) 中英双语共享 ek-lang，英文模式文档正文无中文残留；
+//   5) 顶栏搜索框打开的是已有 Ctrl+K 面板，搜「文档」能找到入口。
 //
-// 变异：--mut=no-search 拿掉搜索按钮；--mut=about-modal 把侧栏按钮恢复成
-// 打开关于弹窗。两组各红自己的断言，不靠提前 fatal。
-// 用法：node tools/cdp_docs_test.js [--mut=no-search|--mut=about-modal]
+// 变异：--mut=no-entry 把侧栏按钮换成没有 data-open-docs 的新节点（点它不开页）；
+//       --mut=embed-docs 需配合临时去掉 main.go 的 /docs 路由并重建 exe——
+//       此时 /docs 落回主界面 serveIndex，独立页断言必红。
+// 用法：node tools/cdp_docs_test.js [--mut=no-entry|--mut=embed-docs]
 // 隔离：独立端口 18831 + ENVKIT_INSTANCE_TAG + 独立数据目录。
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -41,6 +43,26 @@ function seed() {
   }, null, 2), 'utf8');
 }
 
+async function attach(target) {
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  let mid = 0;
+  const pending = new Map();
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+  };
+  const send = (method, params) => new Promise(res => {
+    const id = ++mid; pending.set(id, res); ws.send(JSON.stringify({ id, method, params }));
+  });
+  const evalJS = async expr => {
+    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+    if (r.result && r.result.exceptionDetails) throw new Error('页面异常：' + JSON.stringify(r.result.exceptionDetails));
+    return r.result && r.result.result ? r.result.result.value : undefined;
+  };
+  return { ws, send, evalJS };
+}
+
 (async () => {
   seed();
   const env = Object.assign({}, process.env, { ENVKIT_INSTANCE_TAG: 'docs' });
@@ -60,7 +82,7 @@ function seed() {
   ], { stdio: 'ignore' });
   await sleep(2500);
 
-  let ws = null;
+  let main = null, docs = null;
   const fails = [];
   const ok = (cond, msg) => { if (cond) console.log('  PASS ' + msg); else { fails.push(msg); console.log('  FAIL ' + msg); } };
 
@@ -73,48 +95,21 @@ function seed() {
     const page = targets.find(t => t.type === 'page');
     if (!page) throw new Error('no page target');
 
-    ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-    let mid = 0;
-    const pending = new Map();
-    ws.onmessage = ev => {
-      const m = JSON.parse(ev.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-    };
-    const send = (method, params) => new Promise(res => { const id = ++mid; pending.set(id, res); ws.send(JSON.stringify({ id, method, params })); });
-    const evalJS = async (expr) => {
-      const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
-      if (r.result && r.result.exceptionDetails) throw new Error('页面异常：' + JSON.stringify(r.result.exceptionDetails));
-      return r.result && r.result.result ? r.result.result.value : undefined;
-    };
-
+    main = await attach(page);
+    const { send, evalJS } = main;
     await send('Runtime.enable', {});
     await send('Page.enable', {});
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url: URL_ });
     await sleep(4000);
-    // CDP profile 复用，上一轮可能停在英文；这里显式回到中文再断言文案。
-    await evalJS(`ekSetLang('zh', true); true`);
+    await evalJS(`ekSetLang('zh', true); localStorage.setItem('ek-lang','zh'); true`);
     await sleep(300);
-
-    if (MUT === '--mut=no-search') {
-      await evalJS(`(function(){ var b=document.getElementById('btn-search'); if(b) b.remove(); return true; })()`);
-    }
-    if (MUT === '--mut=about-modal') {
-      await evalJS(`(function(){
-        var b=document.getElementById('btn-about'); if(!b) return true;
-        var nb=b.cloneNode(true); nb.removeAttribute('data-goto');
-        nb.onclick=function(){ document.getElementById('about').classList.add('show'); };
-        b.parentNode.replaceChild(nb,b); return true;
-      })()`);
-    }
 
     // ---- 1) 顶栏搜索把手 ----
     console.log('顶栏搜索：');
     const hdr = JSON.parse(await evalJS(`JSON.stringify((function(){
       var b=document.getElementById('btn-search'), p=document.getElementById('btn-profile');
-      return { exists:!!b,
-        before: !!(b && p && (b.compareDocumentPosition(p) & 4)),
+      return { exists:!!b, before: !!(b && p && (b.compareDocumentPosition(p) & 4)),
         kbd: !!(b && b.querySelector('kbd')), icon: !!(b && b.querySelector('.ek svg')),
         kbdText: b && b.querySelector('kbd') ? b.querySelector('kbd').textContent : '' };
     })())`));
@@ -122,9 +117,7 @@ function seed() {
     ok(hdr.before, '搜索入口在个人中心左侧（DOM 顺序）');
     ok(hdr.icon && hdr.kbd && /Ctrl/.test(hdr.kbdText), '放大镜图标 + Ctrl+K 键帽都在');
 
-    const clicked = await evalJS(`(function(){
-      var b=document.getElementById('btn-search'); if(!b) return false; b.click(); return true;
-    })()`);
+    await evalJS(`document.getElementById('btn-search').click(); true`);
     await sleep(200);
     const cp = JSON.parse(await evalJS(`JSON.stringify((function(){
       var box=document.getElementById('ek-cmd');
@@ -132,124 +125,180 @@ function seed() {
         focus: document.activeElement ? document.activeElement.id : '',
         total: window.EKCmd ? window.EKCmd.state().total : 0 };
     })())`));
-    ok(clicked && cp.open, '点搜索框打开 Ctrl+K 命令面板');
-    ok(cp.focus === 'ekcp-q', '打开后输入焦点落在面板搜索框');
+    ok(cp.open && cp.focus === 'ekcp-q', '点搜索框打开 Ctrl+K 面板并聚焦搜索框');
     ok(cp.total > 0, '面板索引来自真实控件（' + cp.total + ' 项）');
     const hit = JSON.parse(await evalJS(`(function(){
       var i=document.getElementById('ekcp-q');
       i.value='文档'; i.dispatchEvent(new Event('input',{bubbles:true}));
       return JSON.stringify(Array.from(document.querySelectorAll('#ekcp-list .ekcp-row b')).map(function(x){return x.textContent;}));
     })()`));
-    ok(hit.indexOf('使用文档') >= 0, '搜「文档」能找到文档页（' + hit.join('/') + '）');
+    ok(hit.some(x => x.indexOf('使用文档') >= 0), '搜「文档」能找到独立文档入口（' + hit.join('/') + '）');
     await evalJS(`window.EKCmd.close(); true`);
 
-    // ---- 2) 侧栏按钮跳文档，不再弹关于 ----
-    console.log('侧栏跳转：');
-    const side = JSON.parse(await evalJS(`JSON.stringify((function(){
+    // ---- 2) 侧栏入口在新标签打开独立页 ----
+    console.log('独立页面入口：');
+    const entry = JSON.parse(await evalJS(`JSON.stringify((function(){
       var b=document.getElementById('btn-about');
-      return { goto: b ? b.getAttribute('data-goto') : null, text: b ? b.textContent.trim() : '' };
+      return { attr: !!(b && b.hasAttribute('data-open-docs')), text: b ? b.textContent.trim() : '',
+        panel: !!document.getElementById('panel-docs') };
     })())`));
-    ok(side.goto === 'docs', '原关于按钮改为 data-goto=docs');
-    await evalJS(`(function(){ var b=document.getElementById('btn-about'); if(b) b.click(); return true; })()`);
-    await sleep(250);
-    const jump = JSON.parse(await evalJS(`JSON.stringify({
-      docs: document.getElementById('panel-docs').classList.contains('show'),
-      about: document.getElementById('about').classList.contains('show')
-    })`));
-    ok(jump.docs, '点侧栏按钮进入文档页');
-    ok(!jump.about, '点侧栏按钮不再弹出长篇关于窗口');
+    ok(entry.attr, '侧栏按钮带 data-open-docs（新标签打开）');
+    ok(!entry.panel, '主界面不再内嵌 panel-docs');
 
-    // ---- 3) 三栏结构 / 过滤 / 目录 / 复制 ----
-    // 显式进一次文档页：变异 about-modal 会在上一步停住，结构组不应被连带判红。
-    await evalJS(`goto('docs'); true`);
-    await sleep(150);
-    console.log('文档页结构：');
-    const st = JSON.parse(await evalJS(`JSON.stringify({
-      tree: document.querySelectorAll('#docs-tree .docs-item').length,
-      groups: document.querySelectorAll('#docs-tree .docs-grpbox').length,
-      secs: document.querySelectorAll('#docs-body .docs-sec').length,
-      toc: document.querySelectorAll('#docs-toc [data-anchor]').length,
-      code: document.querySelectorAll('#docs-body .docs-copy').length,
-      cols: getComputedStyle(document.getElementById('docs-shell')).gridTemplateColumns.split(' ').length
+    if (MUT === '--mut=no-entry') {
+      await evalJS(`(function(){
+        var b=document.getElementById('btn-about'); if(!b) return true;
+        var n=b.cloneNode(true); n.removeAttribute('data-open-docs');
+        b.parentNode.replaceChild(n,b); return true;
+      })()`);
+    }
+    const before = (await getJSON('http://127.0.0.1:' + DBG + '/json/list')).filter(t => t.type === 'page').length;
+    await evalJS(`window.__opened=[]; var _o=window.open; window.open=function(u){ window.__opened.push(String(u)); return _o.apply(window, arguments); }; true`);
+    // 真鼠标点击：脚本 .click() 没有用户手势，headless Chrome 会拦下弹窗。
+    const rect = JSON.parse(await evalJS(`(function(){
+      var b=document.getElementById('btn-about'), r=b.getBoundingClientRect();
+      return JSON.stringify({x:r.left+r.width/2, y:r.top+r.height/2, w:r.width, h:r.height});
+    })()`));
+    await send('Input.dispatchMouseEvent', { type:'mouseMoved', x:rect.x, y:rect.y });
+    await send('Input.dispatchMouseEvent', { type:'mousePressed', x:rect.x, y:rect.y, button:'left', clickCount:1 });
+    await send('Input.dispatchMouseEvent', { type:'mouseReleased', x:rect.x, y:rect.y, button:'left', clickCount:1 });
+    await sleep(500);
+    const opened = JSON.parse(await evalJS(`JSON.stringify(window.__opened || [])`));
+    ok(opened.some(u => u === '/docs'), '侧栏入口调用 window.open("/docs")');
+    let docsTarget = null;
+    for (let i = 0; i < 30; i++) {
+      const list = (await getJSON('http://127.0.0.1:' + DBG + '/json/list')).filter(t => t.type === 'page');
+      if (list.length > before) { docsTarget = list.find(t => /\/docs(\.html)?$/.test(t.url)); }
+      if (docsTarget) break;
+      await sleep(250);
+    }
+    ok(!!docsTarget, '点侧栏入口真的新开了 /docs 标签页' + (docsTarget ? '' : '（未新增 page target）'));
+
+    // 入口变异时后续几组没有前置条件，明确 SKIP 而不是抛异常提前退出：
+    // 红必须来自断言失败，不能来自脚本自己断掉。
+    if (docsTarget) {
+    docs = await attach(docsTarget);
+    await docs.send('Runtime.enable', {});
+    await docs.send('Page.enable', {});
+    await docs.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(1200);
+    const djs = docs.evalJS;
+
+    const iso = JSON.parse(await djs(`JSON.stringify((function(){
+      return { path: location.pathname,
+        title: document.title,
+        mainApp: !!document.getElementById('btn-profile'),
+        panel: !!document.getElementById('panel-docs'),
+        token: typeof window.__EK_TOKEN__,
+        sections: document.querySelectorAll('#body .sec').length,
+        tabs: document.querySelectorAll('.tbl').length,
+        steps: document.querySelectorAll('.steps').length };
+    })())`));
+    ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
+    ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
+    ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
+    ok(iso.sections >= 14, '文档正文有 ' + iso.sections + ' 节（丰富度）');
+    ok(iso.tabs >= 5 && iso.steps >= 1, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
+
+    // ---- 3) 三栏结构 ----
+    console.log('文档站结构：');
+    const st = JSON.parse(await djs(`JSON.stringify({
+      tree: document.querySelectorAll('#tree button[data-sec]').length,
+      groups: document.querySelectorAll('#tree .grp').length,
+      toc: document.querySelectorAll('#toc a[data-anchor]').length,
+      cols: getComputedStyle(document.querySelector('.layout')).gridTemplateColumns.split(' ').length,
+      lead: document.getElementById('lead-t').textContent
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 10 && st.secs === st.tree, '目录项与正文小节一一对应（' + st.tree + '/' + st.secs + '）');
+    ok(st.tree >= 14 && st.tree === iso.sections, '左目录与正文小节一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 4, '目录按组分类（' + st.groups + ' 组）');
-    ok(st.toc >= st.secs, '右侧目录来自正文真实锚点（' + st.toc + '）');
-    ok(st.code >= 2, '正文有可复制代码块（' + st.code + '）');
+    ok(st.toc >= st.tree, '右目录来自正文真实锚点（' + st.toc + '）');
+    ok(!!st.lead, '封面有引导语（' + st.lead.slice(0, 20) + '）');
 
-    // 留一张实际渲染的预览图（gitignore 的 .gotmp，不进提交）。
-    try{
-      fs.mkdirSync(path.join(REPO, '.gotmp', 'ux-preview'), {recursive:true});
-      const shot = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
-      fs.writeFileSync(path.join(REPO, '.gotmp', 'ux-preview', '06-docs.png'),
+    try {
+      fs.mkdirSync(path.join(REPO, '.gotmp', 'ux-preview'), { recursive: true });
+      const shot = await docs.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      fs.writeFileSync(path.join(REPO, '.gotmp', 'ux-preview', '06-docs-standalone.png'),
         Buffer.from(shot.result.data, 'base64'));
-    }catch(e){}
+    } catch (e) {}
 
-    const filt = JSON.parse(await evalJS(`(function(){
-      var i=document.getElementById('docs-q');
+    // ---- 4) 过滤 / 跳转 / 复制 / 阅读进度 ----
+    console.log('文档交互：');
+    const filt = JSON.parse(await djs(`(function(){
+      var i=document.getElementById('q');
       i.value='TOFU'; i.dispatchEvent(new Event('input',{bubbles:true}));
-      var bs=Array.from(document.querySelectorAll('#docs-tree .docs-item')).filter(function(b){return !b.hidden;});
+      var bs=Array.from(document.querySelectorAll('#tree button[data-sec]')).filter(function(b){return !b.hidden;});
       return JSON.stringify({n:bs.length, txt:bs.map(function(b){return b.textContent;})});
     })()`));
-    ok(filt.n > 0 && filt.n < st.tree, '过滤真能收窄目录（' + filt.n + '/' + st.tree + '）');
-    ok(filt.txt.some(x => x.indexOf('链端') >= 0), '过滤按正文命中而不是只按标题（TOFU 只在正文里）');
-    await evalJS(`(function(){var i=document.getElementById('docs-q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
+    ok(filt.n > 0 && filt.n < st.tree, '搜索真能收窄目录（' + filt.n + '/' + st.tree + '）');
+    ok(filt.txt.some(x => x.indexOf('链端') >= 0), '按正文命中而不是只按标题（TOFU 只在正文里）');
+    await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
 
-    const sc = JSON.parse(await evalJS(`(function(){
-      var b=document.querySelectorAll('#docs-tree .docs-item')[4], id=b.dataset.sec;
+    const sc = JSON.parse(await djs(`(function(){
+      var b=document.querySelectorAll('#tree button[data-sec]')[4], id=b.dataset.sec;
       b.click();
-      var body=document.getElementById('docs-body'), h=document.getElementById('doc-'+id);
-      return JSON.stringify({id:id, top: h ? h.getBoundingClientRect().top - body.getBoundingClientRect().top : 9999,
-        on:b.classList.contains('on')});
+      var h=document.getElementById('doc-'+id);
+      return JSON.stringify({id:id, on:b.classList.contains('on'), top:h.getBoundingClientRect().top});
     })()`));
-    ok(sc.on && Math.abs(sc.top) < 24, '点左目录滚到对应正文（' + sc.id + '，偏移 ' + Math.round(sc.top) + '）');
+    await sleep(700);
+    const scTop = await djs(`(function(){var h=document.getElementById('doc-${sc.id}');return h?h.getBoundingClientRect().top:9999;})()`);
+    ok(sc.on && Math.abs(scTop) < 90, '点左目录滚到对应正文（' + sc.id + '，偏移 ' + Math.round(scTop) + '）');
 
-    const tocClick = JSON.parse(await evalJS(`(function(){
-      var a=document.querySelectorAll('#docs-toc [data-anchor]')[0], h=document.getElementById(a.dataset.anchor);
-      a.click();
-      var body=document.getElementById('docs-body');
-      return JSON.stringify({on:a.classList.contains('on'),
-        top:h.getBoundingClientRect().top - body.getBoundingClientRect().top});
-    })()`));
-    ok(tocClick.on && Math.abs(tocClick.top) < 90, '点右目录跳到对应章节');
+    await djs(`(function(){var a=document.querySelector('#toc a[data-anchor]'); a.click(); return true;})()`);
+    await sleep(700);
+    const tocOn = await djs(`!!document.querySelector('#toc a[data-anchor].on')`);
+    ok(tocOn, '点右目录有高亮反馈');
 
-    await evalJS(`document.querySelector('#docs-body .docs-copy').click(); true`);
-    await sleep(250);
-    const copied = await evalJS(`document.querySelector('#docs-body .docs-copy').textContent`);
+    await djs(`document.querySelector('#body .cp').click(); true`);
+    await sleep(300);
+    const copied = await djs(`document.querySelector('#body .cp').textContent`);
     ok(copied !== '复制' && copied.length > 0, '代码块复制按钮给出可见反馈（' + copied + '）');
 
-    // ---- 4) 关于入口仍保留，且重看引导没丢 ----
+    await djs(`window.scrollTo({top:document.documentElement.scrollHeight, behavior:'instant'}); true`);
+    await sleep(400);
+    const prog = await djs(`parseFloat(document.getElementById('prog').style.width) || 0`);
+    ok(prog > 90, '滚动到底阅读进度接近满（' + Math.round(prog) + '%）');
+    const totop = await djs(`document.getElementById('totop').classList.contains('show')`);
+    ok(totop, '滚动后出现返回顶部按钮');
+
+    // ---- 5) 双语：与主控制台共享 ek-lang ----
+    console.log('英文模式：');
+    await djs(`document.getElementById('lang').click(); true`);
+    await sleep(500);
+    const en = JSON.parse(await djs(`JSON.stringify((function(){
+      var s=document.getElementById('body').textContent + document.getElementById('tree').textContent +
+            document.getElementById('toc').textContent;
+      // 安装.bat 是仓库里真实的文件名，英文文案里也必须照写，不算漏翻译。
+      s = s.replace(/安装\.bat/g, '');
+      return { cjk: /[\\u4e00-\\u9fa5]/.test(s), sample:(s.match(/[\\u4e00-\\u9fa5]+/g)||[]).slice(0,6).join('|'),
+        stored: localStorage.getItem('ek-lang'), path:location.pathname };
+    })())`));
+    ok(!en.cjk, '切英文后文档正文 / 目录无中文（' + en.sample + '）');
+    ok(en.stored === 'en', '语言选择写入 ek-lang，与主控制台共享');
+    await djs(`document.getElementById('lang').click(); localStorage.setItem('ek-lang','zh'); true`);
+    await sleep(300);
+
+    } else {
+      console.log('  SKIP 独立页未打开，结构 / 交互 / 英文三组跳过（前置条件不满足）');
+    }
+
+    // ---- 6) 关于弹窗与重看引导仍在 ----
     console.log('关于入口：');
-    await evalJS(`document.getElementById('docs-about').click(); true`);
+    await evalJS(`document.getElementById('about').classList.add('show'); true`);
     await sleep(150);
     const ab = JSON.parse(await evalJS(`JSON.stringify({
       shown: document.getElementById('about').classList.contains('show'),
       replay: !!document.getElementById('about-replay'),
-      back: !!document.getElementById('about-docs')
+      docs: !!document.getElementById('about-docs')
     })`));
-    ok(ab.shown && ab.replay && ab.back, '文档内「关于 EnvKit」可打开弹窗，重看引导按钮仍在');
+    ok(ab.shown && ab.replay && ab.docs, '主界面关于弹窗保留，重看引导 / 文档按钮都在');
     await evalJS(`document.getElementById('about-close').click(); true`);
-
-    // ---- 5) 英文模式文档无中文残留 ----
-    console.log('英文模式：');
-    await evalJS(`ekSetLang('en', true); true`);
-    await sleep(400);
-    const en = JSON.parse(await evalJS(`JSON.stringify((function(){
-      var s = document.getElementById('docs-body').textContent + document.getElementById('docs-tree').textContent +
-              document.getElementById('docs-toc').textContent;
-      return { cjk: /[\\u4e00-\\u9fa5]/.test(s), sample: s.slice(0, 60) };
-    })())`));
-    ok(!en.cjk, '切英文后文档正文 / 目录无中文（' + en.sample + '）');
-    const enHdr = await evalJS(`document.getElementById('btn-search').textContent + '|' +
-      document.getElementById('btn-about').textContent`);
-    ok(!/[\u4e00-\u9fa5]/.test(enHdr), '英文模式搜索框 / 侧栏按钮无中文（' + enHdr + '）');
-    await evalJS(`ekSetLang('zh', true); true`);
   } catch (e) {
     fails.push('EXCEPTION: ' + e.message);
     console.log('EXCEPTION', e.message);
   } finally {
-    if (ws) { try { ws.close(); } catch (e) {} }
+    if (docs) { try { docs.ws.close(); } catch (e) {} }
+    if (main) { try { main.ws.close(); } catch (e) {} }
     try { chrome.kill(); } catch (e) {}
     try { envkit.kill(); } catch (e) {}
   }

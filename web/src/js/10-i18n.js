@@ -1143,6 +1143,7 @@ const I18N_EN = {
   "断路器阈值": "Breaker threshold",
   "新建行动": "New mission",
   "新手指引": "Quick tour",
+  "新窗口": "New tab",
   "无": "None",
   "无 · 只读本机 PATH 与版本号": "None · reads local PATH and version strings only",
   "无效操作次数 / 验证准确性 / 安全违规率 / 误拒率": "Invalid ops / verification accuracy / safety violations / false rejections",

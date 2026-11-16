@@ -33,6 +33,12 @@ var (
 //go:embed web/index.html
 var indexHTML string
 
+// 使用文档是自包含的独立页：/docs 在新标签打开，纯静态内容。
+// 刻意不注入令牌、不挂任何 API —— 它不需要读写本机状态。
+//
+//go:embed web/docs.html
+var docsHTML string
+
 // 托盘图标：直接嵌入仓库里的 app.ico，不依赖 exe 同目录是否还留着这个文件。
 //
 //go:embed app.ico
@@ -172,6 +178,8 @@ func main() {
 		os.Exit(0)
 	})
 
+	http.HandleFunc("/docs", serveDocs)
+	http.HandleFunc("/docs.html", serveDocs)
 	http.HandleFunc("/", serveIndex)
 	http.HandleFunc("/api/config", handleConfig)
 	http.HandleFunc("/api/check", handleCheck)
@@ -505,6 +513,12 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 	html := strings.ReplaceAll(indexHTML, "__APP_VERSION__", appVersion+" · "+buildDate)
 	html = strings.ReplaceAll(html, "__TOKEN__", currentToken())
 	_, _ = w.Write([]byte(html))
+}
+
+// serveDocs 只替换版本号，不注入 __TOKEN__，也不需要任何 API。
+func serveDocs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(strings.ReplaceAll(docsHTML, "__APP_VERSION__", appVersion+" · "+buildDate)))
 }
 
 // 静态嵌入资源（xterm 等）

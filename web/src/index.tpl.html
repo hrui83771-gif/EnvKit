@@ -1156,25 +1156,6 @@
       </div>
     </section>
 
-    <!-- 使用文档（本轮）：把操作页上的长说明集中到这里。
-         左侧目录随搜索过滤，正文由 79-docs.js 从真实功能清单渲染，
-         右侧目录是正文里真实存在的 h2/h3 锚点，不是手写假目录。 -->
-    <section class="panel" id="panel-docs">
-      <div class="phead"><h2>使用文档 <span class="stepno">从安装到排障，一页看完</span></h2></div>
-      <div class="docs-shell" id="docs-shell">
-        <div class="docs-side">
-          <label class="docs-filter" for="docs-q">
-            <span class="ek" data-ek-icon="search" data-ek-size="14"></span>
-            <input id="docs-q" type="text" autocomplete="off" spellcheck="false" placeholder="过滤目录" />
-          </label>
-          <div class="docs-tree" id="docs-tree" data-no-i18n></div>
-          <button class="docs-about" id="docs-about" type="button">关于 EnvKit</button>
-        </div>
-        <article class="docs-body" id="docs-body" data-no-i18n></article>
-        <nav class="docs-toc" id="docs-toc" data-no-i18n aria-label="本页目录"></nav>
-      </div>
-    </section>
-
   </main>
 
   <aside class="sidebar">
@@ -1188,7 +1169,7 @@
       <div class="nav" data-panel="heal">自愈态势</div>
       <div class="nav" data-panel="audit">操作审计</div>
       <div class="nav-sep"></div>
-      <div class="nav" data-panel="docs">使用文档</div>
+      <div class="nav" data-open-docs>使用文档 <span class="stepno">新窗口</span></div>
       <div class="nav" data-panel="settings">设置</div>
     </div>
     <div class="svc">
@@ -1223,7 +1204,7 @@
     <button class="side-link" id="btn-syslog">系统事件（最近错误）</button>
     <!-- 本轮：说明集中到「使用文档」，这里不再打开长篇关于弹窗。
          保留原 id 兼容既有回归；data-goto 由 20-shell.js 统一路由。 -->
-    <button class="side-link" id="btn-about" data-goto="docs">使用文档</button>
+    <button class="side-link" id="btn-about" data-open-docs>使用文档</button>
   </aside>
 </div>
 
