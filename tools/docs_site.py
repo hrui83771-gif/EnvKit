@@ -40,7 +40,10 @@ def build(version, strict=True):
     if "__APP_VERSION__" not in raw:
         return None, fail("源文件里没有版本占位符，可能已经在别的流程里被替换过")
 
-    out = raw.replace("__APP_VERSION__", version)
+    # 源码里的占位是 v__APP_VERSION__——前缀 v 已经在模板里，不能再来一个。
+    # dispatch 传进来的可能是 v3.8.0 也可能是 main，统一成「一次 v」的显示形式。
+    shown = version if version.startswith("v") else "v" + version
+    out = raw.replace("v__APP_VERSION__", shown).replace("__APP_VERSION__", shown)
     if CONSOLE_LINK not in out:
         return None, fail("找不到「返回控制台」链接，站点版会指向域名根")
     out = out.replace(CONSOLE_LINK, RELEASE_LINK)
@@ -53,6 +56,7 @@ def build(version, strict=True):
 
     checks = [
         ("version-replaced", "__APP_VERSION__" not in out),
+        ("version-not-doubled", 'id="ver">vv' not in out),
         ("no-console-root", 'href="/"' not in out),
         ("no-tour-link", 'href="/#tour"' not in out),
         ("no-external-asset", not re.findall(
