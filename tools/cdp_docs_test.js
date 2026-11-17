@@ -203,6 +203,9 @@ async function attach(target) {
         panel: !!document.getElementById('panel-docs'),
         token: typeof window.__EK_TOKEN__,
         sections: btns.length,
+        ids: ids,
+        glossary: ids.indexOf('glossary') >= 0 && txt.indexOf('共识视图') >= 0,
+        leadNav: [].slice.call(document.querySelectorAll('#lead-nav a')).map(function(a){ return a.getAttribute('href'); }),
         perPage: document.querySelectorAll('#body .sec').length,
         tabs: tabs, steps: steps, xlinks: xlinks.length,
         validLinks: xlinks.every(function(h){ return ids.indexOf(String(h).replace('#doc-','')) >= 0; }),
@@ -216,10 +219,14 @@ async function attach(target) {
     ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
     ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
     ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 19, '文档共 ' + iso.sections + ' 节（合并小段后的规模）');
+    ok(iso.sections >= 20, '文档共 ' + iso.sections + ' 节（含术语对照）');
     ok(iso.perPage === 1, '正文一次只渲染一节（实际 ' + iso.perPage + ' 节）');
     ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
     ok(iso.trouble, '有按症状聚合的排障索引节');
+    ok(iso.glossary, '有术语对照节，解释自造词');
+    ok(iso.leadNav.length === 2 && iso.leadNav.indexOf('#doc-quick') >= 0 &&
+       iso.leadNav.indexOf('#doc-troubleshoot') >= 0,
+       '页头两条引导直达四步与排障（' + iso.leadNav.join('/') + '）');
     ok(iso.tools === 5, 'AI 节列出真实注册工具名（' + iso.tools + '/5）');
     ok(iso.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + iso.paths + '/5）');
     ok(iso.xlinks >= 7 && iso.validLinks, '节间交叉链接全部指向存在的节（' + iso.xlinks + ' 条）');
@@ -245,7 +252,7 @@ async function attach(target) {
       leadShown: getComputedStyle(document.querySelector('.lead')).display !== 'none'
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 19 && st.tree === iso.sections, '左目录与总节数一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.tree >= 20 && st.tree === iso.sections, '左目录与总节数一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
     ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
@@ -347,6 +354,53 @@ async function attach(target) {
       '点命中条直接滚到锚点并改写 hash（' + hitJump.go + '，偏移 ' + Math.round(hitTop) + '）');
     await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
     await sleep(200);
+
+    // 搜索补洞：命令行也要能搜到；空格分词按 AND；+N 真能展开；↑↓/Enter 能选能跳。
+    const sx = JSON.parse(await djs(`(function(){
+      var i=document.getElementById('q'), hs=document.getElementById('hits');
+      function search(w){
+        i.value=w; i.dispatchEvent(new Event('input',{bubbles:true}));
+        var rows=[].slice.call(hs.querySelectorAll('.hit'));
+        return { all: rows.length,
+                 visible: rows.filter(function(r){ return !r.hidden; }).length,
+                 more: hs.querySelectorAll('.hit-more').length,
+                 marks: [].slice.call(hs.querySelectorAll('mark')).map(function(m){ return m.textContent; }),
+                 text: hs.textContent, none: !!hs.querySelector('.none') };
+      }
+      var code=search('web_build');
+      var multi=search('端口 占用');
+      var nomatch=search('端口 zzzzznotfound');
+      var expand=search('配置');
+      var moreBefore=expand.more, visibleBefore=expand.visible;
+      var m=hs.querySelector('.hit-more');
+      if(m) m.click();
+      var visibleAfter=hs.querySelectorAll('.hit:not([hidden])').length;
+      var moreAfter=hs.querySelectorAll('.hit-more:not([hidden])').length;
+      var key=search('TOFU');
+      document.getElementById('q').focus();
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+      var list=[].slice.call(hs.querySelectorAll('.hit:not([hidden])'));
+      var selIdx=list.findIndex(function(r){ return r.classList.contains('sel'); });
+      var selGo=selIdx>=0 ? list[selIdx].getAttribute('data-go') : '';
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      return JSON.stringify({code:code,multi:multi,nomatch:nomatch,
+        expand:{before:visibleBefore,after:visibleAfter,moreBefore:moreBefore,moreAfter:moreAfter},
+        key:{selIdx:selIdx,selGo:selGo,hash:location.hash}});
+    })()`));
+    ok(sx.code.all > 0 && sx.code.text.indexOf('python tools/web_build.py') >= 0,
+      '命令行参与搜索（web_build 命中源码构建命令）');
+    ok(sx.multi.all > 0 && sx.multi.marks.indexOf('端口') >= 0 && sx.multi.marks.indexOf('占用') >= 0,
+      '空格分词按 AND 命中并分别高亮（' + sx.multi.marks.join('/') + '）');
+    ok(sx.nomatch.all === 0 && sx.nomatch.none, '两词有一个不匹配就不出命中');
+    ok(sx.expand.moreBefore > 0 && sx.expand.after > sx.expand.before &&
+       sx.expand.moreAfter === sx.expand.moreBefore - 1,
+      '+N 是真按钮，点了展开全部命中（可见 ' + sx.expand.before + '→' + sx.expand.after + '）');
+    ok(sx.key.selIdx === 1 && sx.key.hash === '#' + sx.key.selGo,
+      '↓↓ 选中第二条命中，Enter 跳到对应锚点（' + sx.key.selGo + '）');
+    // 键盘测试跳到了别的节，后面还要验链节标题的复制按钮，必须先回到链节。
+    await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#tree button[data-sec="chain"]').click(); return true;})()`);
+    await sleep(250);
 
     // 右栏「此页面」：滚到本节靠后的小节时，高亮要落在本节这条上
     await djs(`(function(){

@@ -13,6 +13,8 @@
 [![Release](https://img.shields.io/github/v/release/hrui83771-gif/EnvKit)](https://github.com/hrui83771-gif/EnvKit/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
+**[在线使用文档](https://hrui83771-gif.github.io/EnvKit/)** · 按节阅读、可搜索、可分享锚点
+
 </div>
 
 ---

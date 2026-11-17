@@ -85,6 +85,10 @@ button,input{font:inherit;color:inherit}
   padding:18px 22px;margin-bottom:16px;box-shadow:var(--shadow)}
 .lead b{color:var(--brand2)}
 .lead p{margin:6px 0 0;color:var(--sub);font-size:13px}
+.lead-nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.lead-nav a{display:inline-block;font-size:12px;color:var(--brand2);border:1px solid #d6e2f2;
+  background:#f7faff;border-radius:999px;padding:4px 11px;text-decoration:none}
+.lead-nav a:hover{background:#eaf1fb;border-color:var(--brand2)}
 /* 分页阅读：正文一次只渲染一节，面包屑补「在哪一组」的位置感 */
 .crumb{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:11.5px;color:#9aa4b2}
 .crumb .sep{color:#ccd3dd}
@@ -138,7 +142,8 @@ button,input{font:inherit;color:inherit}
 .hits{margin-bottom:8px;min-width:0}
 .hits .hit{display:block;width:100%;max-width:100%;min-width:0;overflow:hidden;text-align:left;
   border:0;background:transparent;cursor:pointer;padding:8px 10px;border-radius:8px;border-left:2px solid transparent}
-.hits .hit:hover{background:#f3f5f9;border-left-color:#c9d5e5}
+.hits .hit:hover,.hits .hit.sel{background:#eaf1fb;border-left-color:var(--brand2)}
+.hits .hit[hidden],.hits .hit-more[hidden]{display:none}
 .hits .hit-t{display:block;font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.5;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hits .hit-p{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.55;
@@ -146,7 +151,8 @@ button,input{font:inherit;color:inherit}
 .hits .hit-where{font-size:10.5px;color:var(--brand2);font-weight:400;margin-left:4px}
 .hits mark{background:#fbe9c8;color:var(--ink);border-radius:2px;padding:0 1px}
 .hits .none{padding:14px 10px;color:var(--muted);font-size:12.5px}
-.hits .hit-more{font-size:11px;color:#9aa4b2;padding:2px 10px 6px}
+.hits .hit-more{font-size:11px;color:var(--brand2);padding:2px 10px 6px;border:0;background:transparent;cursor:pointer}
+.hits .hit-more:hover{text-decoration:underline}
 
 /* 节标题上的锚点按钮：hover 才显形，点了复制可分享链接 */
 .sec>h2{position:relative}
@@ -273,7 +279,7 @@ button,input{font:inherit;color:inherit}
     </div>
   </aside>
   <main class="main" id="main">
-    <div class="lead"><b id="lead-t"></b><p id="lead-p"></p></div>
+    <div class="lead"><b id="lead-t"></b><p id="lead-p"></p><div class="lead-nav" id="lead-nav"></div></div>
     <div id="body"></div>
   </main>
   <nav class="toc" id="toc"></nav>
@@ -374,10 +380,10 @@ button,input{font:inherit;color:inherit}
       ]),
       H3('shortcuts-links','地址栏深链','URL deep links'),
       TABLE([z('地址','URL'),z('到达','Goes to')],[
-        [z('/docs','/docs'),z('独立文档站（新标签，可离线、可打印）','Standalone docs in a new tab; offline and printable')],
-        [z('/#tour','/#tour'),z('回到控制台并重播界面导览','Back to the console and replay the tour')],
-        [z('/#config、#chain、#audit','/#config, #chain, #audit'),z('直达对应功能页','Straight to the matching page')],
-        [z('/docs#doc-chain','/docs#doc-chain'),z('直达文档某一节','Open a specific docs section')]
+        [z('/docs','/docs'),z('桌面版服务端文档站（新标签，可离线、可打印）','Docs served by the desktop app in a new tab; offline and printable')],
+        [z('/#tour','/#tour'),z('回到控制台并重播界面导览（仅桌面版）','Back to the console and replay the tour (desktop only)')],
+        [z('/#config、#chain、#audit','/#config, #chain, #audit'),z('直达对应功能页（仅桌面版）','Straight to the matching page (desktop only)')],
+        [z('/docs#doc-chain','/docs#doc-chain'),z('直达文档某一节（桌面版 / 在线版通用）','Open a specific section (desktop and online)')]
       ]),
       NOTE('命令面板索引的是页面上真实存在的导航与按钮，不索引 AI 工具；写操作仍走各自的确认闸门。',
            'The palette indexes real navigation and buttons on the page, not AI tools; write operations still pass their own confirmation gates.', 'ok')
@@ -677,6 +683,28 @@ button,input{font:inherit;color:inherit}
       NOTE('方法和原始数据在仓库 docs/eval/；README 不贴会过期的数字。',
            'Method and raw data live in docs/eval/; the README does not paste numbers that go stale.', 'info')
     ]},
+    {id:'glossary', group:z('参考','Reference'), title:z('术语对照','Glossary'), body:[
+      P('正文里出现的自造词集中在这里，一句人话加一个出处。读正文碰到不懂的，按 / 搜这个词也能直接跳回来。',
+        'Every project-specific term in one place: one plain sentence and where it is used. Press / and type the term to jump back.'),
+      H3('glossary-terms','词与出处','Terms and where they appear'),
+      TABLE([z('术语','Term'),z('人话','In plain words'),z('出处','See')],[
+        [z('Agent Runtime','Agent Runtime'),z('模型负责决策，Runtime 管边界，Verification 给结论','The model decides, the Runtime enforces boundaries, Verification concludes'),z('EnvKit 是什么','What EnvKit is')],
+        [z('OpResult','OpResult'),z('工具调用的统一结果结构，失败不会被外层吞掉','Uniform tool result; failures cannot be swallowed upstream'),z('完成 ≠ 结论','Done is not verified')],
+        [z('Verification / 复验','Verification / re-check'),z('用端口、进程、HTTP、备份、共识证据再判一次','Use ports, processes, HTTP, backups and consensus evidence to decide again'),z('完成 ≠ 结论','Done is not verified')],
+        [z('Policy 四档','Four Policy tiers'),z('按危险程度分级的权限闸门，危险档要人工确认','Permission gates by risk; dangerous tiers need human confirmation'),z('安全边界','Security boundary')],
+        [z('Trace','Trace'),z('一次任务的计划、动作、证据、结论流水，用来归因','Plan, actions, evidence and conclusions of one task, for attribution'),z('故障自愈轨迹','Self-healing traces')],
+        [z('Memory','Memory'),z('按项目存经验，只影响先查什么，不改权限','Project-scoped experience; changes what to check first, never permissions'),z('AI 助手','AI assistant')],
+        [z('动作 Action','Action'),z('告警或诊断之后的一次可执行处置，写操作要确认','One executable response after an alert or diagnosis; writes need confirmation'),z('行动、报表与晨报','Actions and reports')],
+        [z('预案 playbooks','Playbooks'),z('预先写好的处置步骤，命中后不用现场想','Prepared response steps, so nothing has to be invented on the spot'),z('程序配置','Configuration')],
+        [z('守护 guard','Guard'),z('后台按周期巡检，异常时按预案处置','Periodic background checks that follow a playbook on anomalies'),z('故障自愈轨迹','Self-healing traces')],
+        [z('影子流','Shadow flow'),z('新策略先跑但不动真环境，攒够证据再晋升','New strategies run without touching production until evidence accumulates'),z('故障自愈轨迹','Self-healing traces')],
+        [z('共识视图','Consensus view'),z('PBFT 下判链活的依据；块高静止不代表卡死','Liveness signal under PBFT; a static block height does not mean a stuck chain'),z('链端校验','Chain checks')],
+        [z('审计日志','Audit log'),z('写操作留下的可追溯记录，按日轮转保留 30 天','Traceable record of write operations, rotated daily and kept 30 days'),z('程序配置','Configuration')],
+        [z('深链','Deep link'),z('带 #doc-xxx 的地址，打开直接落在那一节','An address with #doc-xxx that opens straight at that section'),z('快捷键与深链','Shortcuts and deep links')]
+      ]),
+      NOTE('Policy 管能不能做，Verification 管做没做成，审计管事后能不能查——这是三个不同层面，不要混着一句话讲。',
+           'Policy decides whether an action is allowed, Verification whether it worked, and audit whether it can be traced later. Three separate layers.', 'ok')
+    ]},
     {id:'cheatsheet', group:z('参考','Reference'), title:z('一页速查','One-page cheatsheet'), body:[
       P('把这一节打印出来贴机房：端口、默认值、文件位置、安全边界、术语，五项都在这一页。点下面的按钮打印，只会输出本节，不带侧栏和目录。',
         'Print this section and pin it up: ports, defaults, file locations, safety boundaries and terms on one page. The button prints this section only, without the sidebar or outline.'),
@@ -751,7 +779,7 @@ button,input{font:inherit;color:inherit}
         z('自愈态势页是空的？—— 空列表表示尚无守护 / 影子流记录，不等于守护没配置。','Self-healing page empty? An empty list means no guard or shadow-flow records yet, not that guarding is disabled.'),
         z('改了前端界面没变化？—— 前端资源嵌在 exe 里。要 web_build.py 重拼 + go build 重新嵌入，两步都做。','Changed the front end but nothing changed? Assets are embedded in the exe: run web_build.py AND go build.'),
         z('桌面快捷方式打开的还是旧版？—— 它可能指向 %LOCALAPPDATA%\\EnvKit 的旧副本，重新运行安装.bat 或直接打开仓库根的 exe。','Shortcut still opens the old version? It may point at %LOCALAPPDATA%\\EnvKit; rerun 安装.bat or open the repository-root exe.'),
-        z('文档页怎么单独打开？—— 侧栏「使用文档」会在新标签页打开本页；地址是 /docs，可以收藏，也可以按 / 聚焦搜索。','How do I open these docs separately? The sidebar “Docs” entry opens a new tab at /docs; bookmark it, and press / to focus search.')
+        z('文档页怎么单独打开？—— 侧栏「使用文档」会在新标签页打开本页；桌面版地址是 /docs，在线版是 https://hrui83771-gif.github.io/EnvKit/ ，都可以收藏，也可以按 / 聚焦搜索。','How do I open these docs separately? The sidebar “Docs” entry opens a new tab. Desktop address is /docs, online edition is https://hrui83771-gif.github.io/EnvKit/ . Bookmark either, and press / to focus search.')
       ])
     ]},
 
@@ -787,6 +815,8 @@ button,input{font:inherit;color:inherit}
     lead:z('一份文档，讲清 EnvKit','One guide for all of EnvKit'),
     leadp:z('左侧按主题筛选，一次读一节，读完用底部的上一篇 / 下一篇继续。按 / 或 Ctrl+K 聚焦搜索；本页可离线阅读，也可以直接打印当前这节。',
       'Filter by topic on the left and read one section at a time, then continue with previous / next at the bottom. Press / or Ctrl+K to focus search. Works offline and prints the current section cleanly.'),
+    startHere:z('只想跑通？从四步开始','Just want it running? Start with four steps'),
+    stuck:z('卡住了？按症状查排障索引','Stuck? Look up the symptom'),
     jump:z('快速跳转','Jump to'),
     onpage:z('此页面','On this page'),
     copy:z('复制','Copy'), copied:z('已复制','Copied'),
@@ -824,17 +854,31 @@ button,input{font:inherit;color:inherit}
       .map(k => flat(x[k])).join(' ');
     return '';
   }
-  function hay(s){ return (v(s.title) + ' ' + v(s.group) + ' ' + flat(s.body)).toLowerCase(); }
-  function hitText(b, value){
+  function termsOf(value){ return (value || '').trim().toLowerCase().split(/\s+/).filter(Boolean); }
+  function hasAll(text, terms){
+    var s = String(text == null ? '' : text).toLowerCase();
+    return terms.length > 0 && terms.every(function(w){ return s.indexOf(w) >= 0; });
+  }
+  function hay(s, terms){
+    var codes = s.body.filter(function(b){ return b.k === 'code'; })
+      .map(function(b){ return b.code; }).join(' ');
+    return (v(s.title) + ' ' + v(s.group) + ' ' + flat(s.body) + ' ' + codes).toLowerCase();
+  }
+  function hitText(b, terms){
+    // 命令行也要能搜到：它恰恰是读者最想复制的东西。
+    if(b.k === 'code') return b.code || '';
     // 表格按「命中的那一行」拼片段：整表拼接再截会跨行，读起来像断句。
     if(b.k === 'table'){
       var line = '';
       b.rows.forEach(function(row){
         if(line) return;
-        var cells = row.map(flatLang), idx = -1;
-        cells.forEach(function(c, i){ if(idx < 0 && c.toLowerCase().indexOf(value) >= 0) idx = i; });
+        var cells = row.map(flatLang), all = cells.join(' · '), idx = -1;
+        if(!hasAll(all, terms)) return;
+        cells.forEach(function(c, i){
+          if(idx < 0 && terms.some(function(w){ return c.toLowerCase().indexOf(w) >= 0; })) idx = i;
+        });
         // 从命中的那一格往后拼：前面的列只是标签，带上会把片段挤满。
-        if(idx >= 0) line = cells.slice(idx).join(' · ');
+        line = idx > 0 ? cells.slice(idx).join(' · ') : all;
       });
       if(line) return line;
     }
@@ -882,7 +926,7 @@ button,input{font:inherit;color:inherit}
     }
     return '';
   }
-  /* 分页渲染：正文一次只放一节。整页堆 19 节读起来没有「读到哪」的边界，
+  /* 分页渲染：正文一次只放一节。整页堆 20 节读起来没有「读到哪」的边界，
      右栏目录也会退化成全文索引；一页一节之后，右栏只服务当前这一节。 */
   var cur = '';                 // 当前节 id
   var ALIAS = { prep:'install', build:'install', growth:'missions', report:'missions', settings:'pet' };
@@ -962,61 +1006,71 @@ button,input{font:inherit;color:inherit}
       esc(tv(T.jump)) + '</span>' + picks.map(function(s){
         return '<a href="#doc-' + s.id + '">' + esc(v(s.title)) + '</a>'; }).join('');
   }
-  function snippet(t, value){
-    var i = t.toLowerCase().indexOf(value);
-    if(i < 0) return esc(t.slice(0, 110)) + (t.length > 110 ? '…' : '');
-    var from = Math.max(0, i - 32), to = Math.min(t.length, i + value.length + 44);
-    return (from > 0 ? '…' : '') + esc(t.slice(from, i)) +
-      '<mark>' + esc(t.slice(i, i + value.length)) + '</mark>' +
-      // 关键词后面这一段才是上下文，漏掉就只剩一个光秃秃的词。
-      esc(t.slice(i + value.length, to)) + (to < t.length ? '…' : '');
+  function rex(w){ return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function snippet(t, terms){
+    var low = t.toLowerCase(), at = -1, last = 0;
+    terms.forEach(function(w){
+      var i = low.indexOf(w);
+      if(i >= 0 && (at < 0 || i < at)) at = i;
+      if(i >= 0 && i + w.length > last) last = i + w.length;
+    });
+    if(at < 0) return esc(t.slice(0, 110)) + (t.length > 110 ? '…' : '');
+    // 窗口围着最早的词展开，但保证最后一个词也落在窗口里，否则多词搜索只高亮一半。
+    var from = Math.max(0, at - 32), to = Math.min(t.length, Math.max(at + 70, last + 30));
+    var out = esc((from > 0 ? '…' : '') + t.slice(from, to) + (to < t.length ? '…' : ''));
+    terms.forEach(function(w){ if(w) out = out.replace(new RegExp(rex(esc(w)), 'gi'), '<mark>$&</mark>'); });
+    return out;
   }
-  /* 搜索不再只是把左目录按钮藏起来：给出「哪一节 + 哪一小节 + 含关键词的原文片段」，
-     点一条直接跳到锚点。目录只给标题，用户还得自己找，等于没搜。 */
+  /* 搜索给出「哪一节 + 哪一小节 + 含关键词的原文片段」，点一条直接跳到锚点。
+     多词按 AND 处理（空格分隔），命令行也参与匹配。 */
   function renderHits(value){
-    if(!value){ hits.hidden = true; hits.innerHTML = ''; tree.hidden = false; return 0; }
+    var terms = termsOf(value);
+    if(!terms.length){ hits.hidden = true; hits.innerHTML = ''; tree.hidden = false; clearSel(); return 0; }
     var out = [];
     D.forEach(function(s){
       var found = [], cur = {t:'', a:'doc-' + s.id};
-      if(v(s.title).toLowerCase().indexOf(value) >= 0)
-        found.push({a:'doc-' + s.id, w:'', t:v(s.title)});
+      if(hasAll(v(s.title), terms)) found.push({a:'doc-' + s.id, w:'', t:v(s.title)});
       s.body.forEach(function(b){
-        if(b.k === 'code') return;
         if(b.k === 'h3'){
           cur = {t:v(b), a:'s-' + b.id};
-          if(cur.t.toLowerCase().indexOf(value) >= 0) found.push({a:cur.a, w:'', t:cur.t});
+          if(hasAll(cur.t, terms)) found.push({a:cur.a, w:'', t:cur.t});
           return;
         }
-        var t = hitText(b, value);
-        if(t.toLowerCase().indexOf(value) >= 0) found.push({a:cur.a, w:cur.t, t:t});
+        var t = hitText(b, terms);
+        if(hasAll(t, terms)) found.push({a:cur.a, w:cur.t, t:t});
       });
       if(found.length) out.push({s:s, found:found});
     });
-    var html = '', n = 0;
+    var html = '', n = 0, gid = 0;
     out.forEach(function(o){
       n += o.found.length;
-      o.found.slice(0, 2).forEach(function(h, i){
+      var g = 'hg' + (gid++);
+      html += '<div class="hit-group" data-g="' + g + '">';
+      o.found.forEach(function(h, i){
         // 同一节的第二条命中不再重复节名，改用小节名当标题，否则两条看起来一模一样。
         var tt = i === 0 ? v(o.s.title) : (h.w || v(o.s.title));
         var wh = i === 0 && h.w ? h.w : '';
-        html += '<button class="hit" type="button" data-go="' + h.a + '"><span class="hit-t">' +
+        html += '<button class="hit' + (i >= 2 ? ' extra' : '') + '" type="button" data-go="' + h.a + '"' +
+          (i >= 2 ? ' hidden' : '') + '><span class="hit-t">' +
           esc(tt) + (wh ? '<span class="hit-where">› ' + esc(wh) + '</span>' : '') +
-          '</span><span class="hit-p">' + snippet(h.t, value) + '</span></button>';
+          '</span><span class="hit-p">' + snippet(h.t, terms) + '</span></button>';
       });
-      if(o.found.length > 2) html += '<div class="hit-more">+' + (o.found.length - 2) + '</div>';
+      html += '</div>';
+      if(o.found.length > 2)
+        html += '<button class="hit-more" type="button" data-more="' + g + '">+' + (o.found.length - 2) + '</button>';
     });
     hits.innerHTML = html || '<div class="none">' + esc(tv(T.nohit)) + '</div>';
-    hits.hidden = false; tree.hidden = true;
+    hits.hidden = false; tree.hidden = true; clearSel();
     return n;
   }
   function filterTree(){
-    var value = (q.value || '').trim().toLowerCase(), shown = 0;
+    var value = (q.value || '').trim().toLowerCase(), terms = termsOf(value), shown = 0;
     [].forEach.call(tree.querySelectorAll('.grpbox'), function(box){
       var n = 0;
       [].forEach.call(box.querySelectorAll('button[data-sec]'), function(b){
         var s = D.filter(function(x){ return x.id === b.dataset.sec; })[0];
         if(!s) return;
-        var on = !value || hay(s).indexOf(value) >= 0;
+        var on = !terms.length || hasAll(hay(s, terms), terms);
         b.hidden = !on; if(on) n++;
       });
       box.hidden = n === 0; shown += n;
@@ -1105,6 +1159,9 @@ button,input{font:inherit;color:inherit}
     document.title = lang === 'en' ? 'EnvKit · Docs' : 'EnvKit · 使用文档';
     document.getElementById('lead-t').textContent = tv(T.lead);
     document.getElementById('lead-p').textContent = tv(T.leadp);
+    document.getElementById('lead-nav').innerHTML =
+      '<a href="#doc-quick">' + esc(tv(T.startHere)) + '</a>' +
+      '<a href="#doc-troubleshoot">' + esc(tv(T.stuck)) + '</a>';
     q.placeholder = lang === 'en' ? 'Search docs (press /)' : '搜索文档（按 / 聚焦）';
     document.getElementById('replay').textContent = lang === 'en' ? 'Replay the tour →' : '重新观看界面导览 →';
     renderQuick(); renderTree();
@@ -1119,8 +1176,28 @@ button,input{font:inherit;color:inherit}
     if(b) go('doc-' + b.dataset.sec);
   });
   q.addEventListener('input', filterTree);
+  var sel = -1;
+  function hitsList(){ return [].slice.call(hits.querySelectorAll('.hit:not([hidden])')); }
+  function clearSel(){
+    sel = -1;
+    [].forEach.call(hits.querySelectorAll('.hit.sel'), function(el){ el.classList.remove('sel'); });
+  }
+  function markSel(i){
+    var list = hitsList();
+    if(!list.length){ clearSel(); return; }
+    sel = (i + list.length) % list.length;
+    list.forEach(function(el, k){ el.classList.toggle('sel', k === sel); });
+    list[sel].scrollIntoView({block:'nearest'});
+  }
   hits.addEventListener('click', function(e){
-    var b = e.target.closest && e.target.closest('.hit');
+    var more = e.target.closest && e.target.closest('.hit-more');
+    if(more){
+      var g = document.querySelector('.hit-group[data-g="' + more.dataset.more + '"]');
+      if(g) [].forEach.call(g.querySelectorAll('.hit.extra'), function(el){ el.hidden = false; });
+      more.hidden = true; clearSel();
+      return;
+    }
+    var b = e.target.closest && e.target.closest('.hit:not([hidden])');
     if(b) go(b.dataset.go);
   });
   /* 页内所有指向 #锚点 的链接（右目录、快速跳转、交叉链接、上下篇）走同一个入口，
@@ -1182,10 +1259,17 @@ button,input{font:inherit;color:inherit}
   totop.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
   document.getElementById('lang').addEventListener('click', function(){ setLang(lang === 'en' ? 'zh' : 'en', true); });
   document.addEventListener('keydown', function(e){
+    if(e.isComposing) return;
     var typing = /^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '');
     if((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')){
       e.preventDefault(); q.focus(); q.select();
-    } else if(e.key === 'Escape' && document.activeElement === q){ q.blur(); }
+    } else if(e.key === 'Escape' && document.activeElement === q){ q.blur(); clearSel(); }
+    else if((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !hits.hidden &&
+            (document.activeElement === q || hits.contains(document.activeElement)) && hitsList().length){
+      e.preventDefault(); markSel(sel + (e.key === 'ArrowDown' ? 1 : -1));
+    } else if(e.key === 'Enter' && document.activeElement === q && !hits.hidden && hitsList().length){
+      e.preventDefault(); go(hitsList()[sel >= 0 ? sel : 0].dataset.go);
+    }
   });
   window.addEventListener('scroll', onScroll, {passive:true});
   /* 地址栏改 hash、浏览器前进 / 后退都走这里。点击时自己调 go 并 pushState，
