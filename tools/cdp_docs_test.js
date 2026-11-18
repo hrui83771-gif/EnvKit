@@ -571,12 +571,13 @@ async function attach(target) {
       sub:document.getElementById('hero-p').textContent,
       langBtn:document.getElementById('lang').textContent,
       langTitle:document.getElementById('lang').title,
-      themeBtn:document.getElementById('theme').textContent
+      themeBtn:document.getElementById('theme').title,
+      themeSvg:!!document.querySelector('#theme svg')
     })`));
     ok(/使用文档/.test(zhHead.h1) && /安装到排障/.test(zhHead.sub), '中文模式页头标题与副标题是中文');
     ok(zhHead.langBtn === 'EN' && /English/.test(zhHead.langTitle),
       '中文模式按钮显示「EN」且 title 指向英文（' + zhHead.langBtn + ' / ' + zhHead.langTitle + '）');
-    ok(/暗色/.test(zhHead.themeBtn), '中文模式主题按钮显示「暗色」（点后变暗）');
+    ok(zhHead.themeSvg && /切换暗色/.test(zhHead.themeBtn), '中文模式主题按钮是 SVG，aria/title 写「切换暗色」');
 
     console.log('英文模式：');
     await djs(`document.getElementById('lang').click(); true`);
@@ -595,7 +596,8 @@ async function attach(target) {
         sub:document.getElementById('hero-p').textContent,
         langBtn:document.getElementById('lang').textContent,
         langTitle:document.getElementById('lang').title,
-        themeBtn:document.getElementById('theme').textContent,
+        themeBtn:document.getElementById('theme').title,
+        themeSvg:!!document.querySelector('#theme svg'),
         stored: localStorage.getItem('ek-lang'), path:location.pathname };
     })())`));
     ok(!en.cjk, '切英文后每节正文都没有中文残留（' + en.sample + '）');
@@ -603,7 +605,7 @@ async function attach(target) {
     ok(/Docs/.test(en.h1) && /From install/.test(en.sub), '英文模式页头标题与副标题切成英文（' + en.h1 + '）');
     ok(en.langBtn === '中文' && /Chinese/.test(en.langTitle),
       '英文模式按钮显示「中文」且 title 指向中文（' + en.langBtn + ' / ' + en.langTitle + '）');
-    ok(/Dark/.test(en.themeBtn), '英文模式主题按钮显示「Dark」');
+    ok(en.themeSvg && /Switch to dark/.test(en.themeBtn), '英文模式主题按钮是 SVG，aria/title 写「Switch to dark」');
     ok(en.stored === 'en', '语言选择写入 ek-lang，与主控制台共享');
     await djs(`document.getElementById('lang').click(); localStorage.setItem('ek-lang','zh'); true`);
     await sleep(300);
@@ -612,25 +614,60 @@ async function attach(target) {
     const th0 = JSON.parse(await djs(`JSON.stringify({
       attr:document.body.dataset.theme||'', scheme:document.querySelector('meta[name="color-scheme"]').content,
       bg:getComputedStyle(document.body).backgroundColor,
-      btn:document.getElementById('theme').textContent
+      svg:!!document.querySelector('#theme svg'), title:document.getElementById('theme').title,
+      aria:document.getElementById('theme').getAttribute('aria-label')
     })`));
-    ok(th0.attr === 'light' && th0.scheme === 'light' && /暗色/.test(th0.btn),
-      '默认亮色：data-theme 非 dark、color-scheme=light、按钮写「暗色」');
+    ok(th0.attr === 'light' && th0.scheme === 'light' && th0.svg && /暗色/.test(th0.title) && th0.aria === th0.title,
+      '默认亮色：非 dark、scheme=light，主题按钮是月亮 SVG 且 title/aria 都是「切换暗色」');
     await djs(`document.getElementById('theme').click(); true`);
     await sleep(200);
     const th1 = JSON.parse(await djs(`JSON.stringify({
       attr:document.body.dataset.theme||'', scheme:document.querySelector('meta[name="color-scheme"]').content,
       bg:getComputedStyle(document.body).backgroundColor, stored:localStorage.getItem('ek-theme'),
-      btn:document.getElementById('theme').textContent,
+      svg:!!document.querySelector('#theme svg'), title:document.getElementById('theme').title,
       card:getComputedStyle(document.querySelector('#body .sec')).backgroundColor
     })`));
-    ok(th1.attr === 'dark' && th1.scheme === 'dark' && th1.stored === 'dark' && /亮色/.test(th1.btn),
+    ok(th1.attr === 'dark' && th1.scheme === 'dark' && th1.stored === 'dark' && th1.svg && /亮色/.test(th1.title),
       '点主题按钮切暗色：data-theme/scheme/存储/按钮四处同步');
     ok(th1.bg !== th0.bg && th1.card !== th0.bg, '暗色下页面与卡片底色都真的变了（' + th0.bg + ' → ' + th1.bg + '）');
     await djs(`document.getElementById('theme').click(); true`);
     await sleep(200);
     const th2 = JSON.parse(await djs(`JSON.stringify({attr:document.body.dataset.theme||'', stored:localStorage.getItem('ek-theme')})`));
     ok(th2.attr === 'light' && th2.stored === 'light', '再点一次回亮色并写入 ek-theme');
+
+    console.log('手机端适配：');
+    await docs.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await sleep(300);
+    // 切到含表格的 chain 节——表格是最容易撑破窄屏的元素
+    await djs(`(function(){var b=document.querySelector('#tree button[data-sec="chain"]');if(b)b.click();return true})()`);
+    await sleep(300);
+    const mob = JSON.parse(await djs(`JSON.stringify((function(){
+      var vw=document.documentElement.clientWidth;
+      var over=[];
+      ['.hero','.brand','.hero-side','#theme','#lang','#cta','.quick','.layout','.side','.search','.sec','.sec>h2','.tbl','.sec-nav','.foot'].forEach(function(sel){
+        var e=document.querySelector(sel); if(!e) return;
+        var b=e.getBoundingClientRect();
+        if(b.right>vw+1||b.left<-1) over.push(sel+':'+Math.round(b.right));
+      });
+      var tbl=document.querySelector('.tbl');
+      var grp=document.querySelector('.grpbox'), tbtn=document.querySelector('#tree button');
+      var cs=getComputedStyle(document.querySelector('.layout'));
+      return { vw:vw, scrollW:document.documentElement.scrollWidth, over:over,
+        cols:cs.display, toc:getComputedStyle(document.getElementById('toc')).display,
+        grpDisplay:grp?getComputedStyle(grp).display:'', btnWrap:tbtn?getComputedStyle(tbtn).whiteSpace:'',
+        tblScroll:tbl?tbl.scrollWidth:0, tblClient:tbl?tbl.clientWidth:0,
+        themeSvg:!!document.querySelector('#theme svg'),
+        themeW:Math.round(document.getElementById('theme').getBoundingClientRect().width) };
+    })())`));
+    ok(mob.vw === 390 && mob.scrollW <= mob.vw && mob.over.length === 0,
+      '390px 下整页不横向溢出（scrollW=' + mob.scrollW + '，越界=' + mob.over.join(',') + '）');
+    ok(mob.cols === 'block' && mob.toc === 'none', '手机端三栏收成单列、右目录隐藏');
+    ok(mob.grpDisplay === 'flex' && mob.btnWrap === 'nowrap', '目录分组在手机端横向排列且标题不折成竖排');
+    ok(mob.tblScroll > mob.tblClient && mob.tblClient < mob.vw,
+      '宽表格自身横向滚动而不撑破页面（' + mob.tblClient + '/' + mob.tblScroll + '）');
+    ok(mob.themeSvg && mob.themeW >= 28 && mob.themeW <= 40, '手机端主题按钮是 32px 级 SVG 图标');
+    await docs.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(300);
 
     } else {
       console.log('  SKIP 独立页未打开，结构 / 交互 / 英文三组跳过（前置条件不满足）');
