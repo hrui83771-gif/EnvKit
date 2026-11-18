@@ -50,9 +50,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function seed() {
   fs.mkdirSync(DIR, { recursive: true });
-  // 隔离目录跑完就删（见文件末尾的收尾）：exe 不预置，缺了就从仓库根那份复制一次，
-  // 这样"删干净"之后下一次跑不必再手动 go build。
-  if (!fs.existsSync(EXE)) { try { fs.copyFileSync(path.join(REPO, 'EnvKit.exe'), EXE); } catch (e) {} }
+  // **每轮强制覆盖 exe**：原来写的是 `if(!exists) copy`，于是上一轮的旧副本会一直是
+  // 被测对象 —— 重建根目录的 EnvKit.exe 也不会更新（"在测旧二进制"的老坑，实测假红 3 轮）。
+  try { fs.copyFileSync(path.join(REPO, 'EnvKit.exe'), EXE); } catch (e) {}
+  // 「配置备份」卡的高度取决于已有几份 .bak：跨轮累积会让"两列配平""整页高度"这类
+  // 量尺寸断言自己抖动（同一份代码两次跑出 169 / 312 两个高度）。
+  // 每轮从"还没有备份"开始，这几条断言才有固定的分母。
+  ['', '.bak', '.bak2', '.bak3'].forEach(sfx => { try { fs.rmSync(CFG + sfx, { force: true }); } catch (e) {} });
   fs.writeFileSync(CFG, JSON.stringify({
     dev: { server_port: PORT },
     missions: { enabled: false, inbound_hook: false, briefing_at: 'off' },
@@ -68,12 +72,6 @@ function seed() {
 }
 
 (async () => {
-  if (!fs.existsSync(EXE)) {
-    // 隔离目录跑完就删（见文件末尾）：exe 不预置，缺了就从仓库根那份复制一次，
-    // 这样「删干净」之后下一次跑不必再手动 go build。
-    fs.mkdirSync(DIR, { recursive: true });
-    fs.copyFileSync(path.join(REPO, 'EnvKit.exe'), EXE);
-  }
   seed();
   const env = Object.assign({}, process.env, { ENVKIT_INSTANCE_TAG: 'setl' });
   const envkit = spawn(EXE, [], { cwd: DIR, env: env, stdio: 'ignore' });
@@ -146,7 +144,9 @@ function seed() {
     ok(st.legacyGrid === 0, '旧的 .set-grid 没复活（它才是"矮卡右边留洞"的来源）→ ' + st.legacyGrid);
     ok(st.colN === 2, '恰好两列 → ' + st.colN);
     ok(st.perCol[0] >= 4 && st.perCol[1] >= 4, '两列各 ≥ 4 张卡 → ' + JSON.stringify(st.perCol));
-    ok(st.cards === 13, '基础区共 13 张卡（6 + 6 + 能力开关）→ ' + st.cards);
+    // 14 张 = 左 7 + 右 6 + 跨列的「能力开关」。v3.4.0 加「定时行动」后这条一直没跟上，
+    // 于是长期假红——数字写死就得跟着卡片一起改。
+    ok(st.cards === 14, '基础区共 14 张卡（7 + 6 + 能力开关）→ ' + st.cards);
 
     // ---- B. 盒子：没有洞、两列配平、整页收紧 ----
     const box = JSON.parse(await evalJS(`(function(){
@@ -162,7 +162,8 @@ function seed() {
           var g = cards[i].y - (cards[i-1].y + cards[i-1].h);
           if(g > 9) holes.push(cards[i-1].t + ' > ' + cards[i].t + ' = ' + g + 'px');
         }
-        return { h: Math.round(col.getBoundingClientRect().height), holes: holes, n: cards.length };
+        return { h: Math.round(col.getBoundingClientRect().height), holes: holes, n: cards.length,
+                 list: cards.map(function(c){ return c.t + '=' + c.h; }) };
       });
       var pr = pane.getBoundingClientRect();
       return JSON.stringify({ cols: cols, paneH: Math.round(pr.height), vw: innerWidth });
@@ -171,9 +172,12 @@ function seed() {
     ok(box.cols[0].holes.length === 0, '左列同列内没有洞 → ' + JSON.stringify(box.cols[0].holes));
     ok(box.cols[1].holes.length === 0, '右列同列内没有洞 → ' + JSON.stringify(box.cols[1].holes));
     const dh = Math.abs(box.cols[0].h - box.cols[1].h);
-    ok(dh <= 120, '两列高度配平：' + box.cols[0].h + ' vs ' + box.cols[1].h + '（差 ' + dh + 'px）');
-    // 改前整页 1661：这里给 1560 的上限，收紧 100px 以上才算数
-    ok(box.paneH <= 1560, '基础区整页收紧到 ' + box.paneH + 'px（改前 1661）');
+    ok(dh <= 120, '两列高度配平：' + box.cols[0].h + ' vs ' + box.cols[1].h + '（差 ' + dh + 'px）'
+      + ' 左[' + box.cols[0].list.join(' ') + '] 右[' + box.cols[1].list.join(' ') + ']');
+    // 两列内容各自 1358 / 1470，页头等固定高度约 231 → 理论下限 1701。
+    // 配平前是 1807（左 1576 右 1252），所以门槛按「配平后的下限 + 余量」定，
+    // 而不是写死某个历史数字：上限一超就说明又有人把卡堆到一列里了。
+    ok(box.paneH <= 1710, '基础区整页 ' + box.paneH + 'px（两列下限 1701；配平前 1807）');
 
     // 每张卡都不许宽过列：长路径/长 URL 把列撑破时，卡会横向溢出
     const over = JSON.parse(await evalJS(`(function(){
@@ -226,6 +230,60 @@ function seed() {
     })()`));
     ok(pb.has, 'projectsBody() 回传了 backup_dir（不回传 = 老页面一保存就抹掉）');
     ok(pb.v === BACKUP, 'projectsBody() 里的值就是刚存的那份 → ' + JSON.stringify(pb.v));
+
+    // ---- E2. 切 tab 不许冲掉没保存的输入 ----
+    // 原始问题：填了一半去「开发者」看一眼再切回来，输入框已被服务端值覆盖，
+    // 而页面上没有任何提示（这一页是手动保存，没有防抖自动保存兜底）。
+    const PROBE = 'https://probe.invalid,direct';
+    await evalJS(`(function(){
+      var el=document.getElementById('s_goproxy');
+      el.value=${JSON.stringify(PROBE)};
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      document.querySelector('[data-set-tab="dev"]').click();
+      document.querySelector('[data-set-tab="base"]').click();
+    })()`);
+    // 必须在重读落地之后再量：ekSetLoadBase 是 async，点完立刻读永远读到「还没覆盖」的自己，
+    // 这条断言就恒真——第一版正是这样，把守卫关掉也照样绿。
+    await sleep(900);
+    const keep = JSON.parse(await evalJS(`JSON.stringify({
+      after:document.getElementById('s_goproxy').value,
+      status:(document.getElementById('h-set-save')||{}).textContent||''
+    })`));
+    ok(keep.after === PROBE,
+      '切「开发者」再切回来，没保存的输入还在（改前会被服务端值覆盖）→ ' + JSON.stringify(keep.after));
+    ok(/未保存/.test(keep.status), '保存状态如实写「有未保存的改动」而不是「已读取」→ ' + keep.status);
+
+    // 再点保存：落盘的必须是用户刚改的值，不是被覆盖后的旧值
+    await evalJS(`document.getElementById('btn-set-save').click()`);
+    await sleep(2200);
+    let saved2 = null;
+    try { saved2 = JSON.parse(fs.readFileSync(CFG, 'utf8')); } catch (e) {}
+    ok(saved2 && saved2.goproxy === PROBE,
+      '保存写出的是用户输入，而不是被覆盖后的旧值 → ' + JSON.stringify(saved2 && saved2.goproxy));
+
+    // 正向对照：干净状态下切 tab 仍然要重读（别把守卫做成"再也不刷新"）
+    await evalJS(`(function(){
+      var el=document.getElementById('s_goproxy');
+      /* 回退到 direct 而不是空串：后端校验「Go 代理不能为空」，
+         用空串回退会拿到 400，那是夹具自己造的失败，不是守卫的问题。 */
+      el.value='direct'; el.dispatchEvent(new Event('input',{bubbles:true}));
+      document.getElementById('btn-set-save').click();
+    })()`);
+    await sleep(2200);
+    const afterSave = await evalJS(`(document.getElementById('h-set-save')||{}).textContent||''`);
+    ok(/已读取|已保存/.test(afterSave), '第二次保存本身要成功（状态 → ' + afterSave + '）');
+    await evalJS(`(function(){
+      document.querySelector('[data-set-tab="dev"]').click();
+      document.querySelector('[data-set-tab="base"]').click();
+    })()`);
+    await sleep(1200);
+    const reloaded = JSON.parse(await evalJS(`(function(){
+      var snap=(EK_SET.sig.base||'').split('\\u0001'), now=ekSetSig('base').split('\\u0001'), bad=[];
+      for(var i=0;i<Math.max(snap.length,now.length);i++) if(snap[i]!==now[i]) bad.push(snap[i]+' → '+now[i]);
+      return JSON.stringify({status:(document.getElementById('h-set-save')||{}).textContent||'', bad:bad.slice(0,4)});
+    })()`));
+    ok(/已读取/.test(reloaded.status),
+      '没有未保存改动时仍然重读服务端（别把守卫做成永不刷新）→ ' + reloaded.status + ' ' + JSON.stringify(reloaded.bad));
 
     // ---- F. 本机体检：5 行、非管理员不涂警告色 ----
     const hl = JSON.parse(await evalJS(`(function(){

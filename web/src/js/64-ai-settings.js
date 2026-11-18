@@ -756,7 +756,15 @@ function ekSetPane(name){
   if(tabs) tabs.querySelectorAll('.cfg-tab').forEach(b=>b.classList.toggle('on', b.dataset.setTab===name));
   document.querySelectorAll('#panel-settings .cfg-pane').forEach(p=>p.classList.toggle('show', p.dataset.setPane===name));
   EK_SET.tab = name;
-  if(name==='base'){ ekSetLoadBase(); ekSetLoadExtras(); }
+  if(name==='base'){
+    /* 指纹必须在「基础配置 + 附加快捷卡」都写完之后再拍：update_url、天气这些格子
+       是 ekSetLoadExtras 写的，拍早了它们会被当成"用户改过"，守卫就一直不重读了。
+       ekSetLoadBase 返回 false = 因为有你没保存的改动而跳过了覆盖，这时绝不能重拍，
+       否则等于把用户的值当成基线，下次切 tab 就把他的输入冲掉。 */
+    const baseLoad = ekSetLoadBase();
+    const extrasLoad = ekSetLoadExtras();
+    Promise.all([baseLoad, extrasLoad]).then(r=>{ if(r[0] !== false) ekSetSnap('base'); });
+  }
   else if(name==='dev') ekSetLoadDev();
   else if(name==='eval'){ ekEvLoad(); ekEvPoll(true); }
   if(name!=='eval') ekEvPoll(false);

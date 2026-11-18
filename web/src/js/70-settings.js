@@ -104,8 +104,43 @@ function ekSetHealth(h){
   }
 }
 
-async function ekSetLoadBase(){
+/* ---------- 「表单被改过就别覆盖」 ----------
+   设置页是**手动保存**（基础区「保存基础设置」/ 开发者区「保存开发者配置」），
+   没有老页面那种 800ms 防抖自动保存兜底。而切 tab、从别的页面点回「设置」，
+   都会走 ekSetLoadBase / ekSetLoadDev，旧行为是无条件把服务端值写回输入框：
+   填了一半去「开发者」看一眼再切回来，刚填的东西已经没了，**页面上还什么都没说**。
+
+   判据不写死字段清单 —— 清单会和保存函数漂移，加了新字段忘了加就会重新丢。
+   这里改成「读成功时给整页控件拍个指纹」，下次覆盖前先比一次：
+   改了（含目录选择器、端口 chips 这类间接写入）就保留，没改才刷新。
+
+   指纹只认 value/checked，不认 focus/hover，所以只是划过不影响判断。 */
+function ekSetPaneEl(name){
+  return document.querySelector('#panel-settings .cfg-pane[data-set-pane="'+name+'"]');
+}
+function ekSetSig(name){
+  const pane = ekSetPaneEl(name);
+  if(!pane) return '';
+  return [].map.call(pane.querySelectorAll('input,select,textarea'), el=>{
+    const v = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+    return (el.id || '?') + '=' + v;
+  }).join('\u0001');
+}
+/* 读成功（或存成功）后调用：此刻输入框里的值就是「服务端那份」 */
+function ekSetSnap(name){ EK_SET.sig = EK_SET.sig || {}; EK_SET.sig[name] = ekSetSig(name); }
+function ekSetFormDirty(name){
+  const snap = EK_SET.sig && EK_SET.sig[name];
+  if(snap == null) return false;          // 从没读过 → 没有可保护的值
+  return ekSetSig(name) !== snap;
+}
+
+async function ekSetLoadBase(force){
   const st = $('#h-set-save');
+  if(!force && ekSetFormDirty('base')){
+    /* 不覆盖、也不假装已保存：把事实写在保存状态那行，并指向真正能落盘的按钮。 */
+    if(st) st.textContent = t('有未保存的改动，已保留（点「保存基础设置」写入）');
+    return false;
+  }
   if(st) st.textContent = t('读取中…');
   try{
     const [c, pet, ai, hh] = await Promise.all([
@@ -176,8 +211,13 @@ async function ekSetLoadBase(){
       const el = $(sel);
       if(el) el.title = el.value || '';
     });
+    /* 写完了才拍指纹：拍早了会把「写了一半」当成基线，之后永远判不出改动 */
+    ekSetSnap('base');
+    return true;
   }catch(e){
     if(st) st.textContent = t('读取失败：{0}', e);
+    /* 读失败时不要留下新基线：留着旧的那份，下次进来还会重试覆盖 */
+    return false;
   }
 }
 
@@ -220,12 +260,16 @@ async function ekSetSaveBase(){
       /* 老页面 DOM 里还是旧值：不重填的话，用户在「程序配置」随手改一个输入框，
          那次自动保存就会把刚设的目录/代理按旧值写回去。必须重读一次。 */
       try{ await loadConfig(); }catch(e){}
-      await ekSetLoadBase();
+      /* force：刚存下的就是页面上这些值，指纹必然「对不上」，不强制就永远读不回来 */
+      await ekSetLoadBase(true);
       /* 天气那一格也在同一块面板里，用户按的是同一个「保存」——
          过去这个按钮对它完全无效，必须再单独点一次「应用」（原始反馈：
          "按理说我保存配置后就生效了"）。仍然走独立端点，只是顺序上一起做；
          silent：上面的 toast 已经说了"已保存"，不需要连弹两条。 */
       try{ await ekSetWeather(true); }catch(e){}
+      /* 天气回包可能不带布尔值（走了 else 分支），那时上面那次指纹就还是旧的；
+         存成功这一刻屏上就是服务端那份，收尾再拍一次，避免刚存完立刻被判成"改过"。 */
+      ekSetSnap('base');
     }else{
       let msg = 'HTTP ' + r.status;
       try{
@@ -289,6 +333,9 @@ async function ekSetWeather(quiet){
       if(!quiet){
         toast(eff.weather_enabled ? t('天气已开启（{0}）', eff.weather_city || t('默认城市')) : t('天气已关闭'));
       }
+      /* 天气是「改了就存」的独立端点：存成功后要把指纹重拍一次，
+         否则刚填的城市会被当成「未保存的改动」，往后每次切 tab 都判成脏。 */
+      ekSetSnap('base');
     }else{
       ekWeatherHint(on, city);
       if(!quiet) toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭'));
@@ -344,8 +391,12 @@ function ekDevBindSliders(){
   });
 }
 
-async function ekSetLoadDev(){
+async function ekSetLoadDev(force){
   const st = $('#h-sd-save');
+  if(!force && ekSetFormDirty('dev')){
+    if(st) st.textContent = t('有未保存的改动，已保留（点「保存开发者配置」写入）');
+    return;
+  }
   if(st) st.textContent = t('读取中…');
   try{
     /* 开发者区的「恢复预算」只读块来自 config.json 的 recovery 段：
@@ -393,6 +444,7 @@ async function ekSetLoadDev(){
     ekSetRenderQuirk();
     ekSetRenderRecovery();
     if(st) st.textContent = t('已读取（{0}）', new Date().toLocaleTimeString());
+    ekSetSnap('dev');
   }catch(e){
     if(st) st.textContent = t('读取失败：{0}', e);
   }
@@ -452,7 +504,8 @@ async function ekSetSaveDev(){
     if(r.ok){
       if(st) st.textContent = t('已保存（{0}）', new Date().toLocaleTimeString());
       toast(t('开发者配置已保存；端口改动需重启生效'));
-      await ekSetLoadDev();
+      /* force：同基础区——刚存下的就是屏上这些值，不强制会判成「改过」而跳过重读 */
+      await ekSetLoadDev(true);
     }else{
       const msg = (j.problems && j.problems.length)
         ? j.problems.map(x=>(x.field||'')+' → '+(x.msg||'')).join('；')

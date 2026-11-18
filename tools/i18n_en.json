@@ -2035,5 +2035,8 @@
   "功能说明、常见问题与免责声明见「使用文档」。": "Feature details, FAQ and the disclaimer are in Docs.",
   "查看使用文档": "Open docs",
   "统一开发环境助手 · 单文件 Go · 内置 AI 运维助手": "Unified dev environment assistant · single-file Go · built-in AI ops assistant",
-  "新窗口": "New tab"
+  "新窗口": "New tab",
+  "设置项": "Settings field",
+  "有未保存的改动，已保留（点「保存基础设置」写入）": "Unsaved changes kept — press Save basics to write them",
+  "有未保存的改动，已保留（点「保存开发者配置」写入）": "Unsaved changes kept — press Save developer settings to write them"
 }

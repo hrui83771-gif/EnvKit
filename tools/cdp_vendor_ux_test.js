@@ -240,6 +240,56 @@ function seed() {
     await esc();
     check('cmd-esc-closes', (await evalJS('EKCmd.state().open')) === false);
 
+    // ---- 4b. 设置项也要进索引：字段标签不是控件，靠这一条才搜得到 ----
+    // 反例很具体：设置页的标签是 <label for> 与 <div class="set-flabel"><b>，
+    // 既不是 button[id] 也不是 h2/h3，所以面板原来对整页设置项是"隐形"的。
+    const fldAll = await evalJS(`(function(){
+      var a=EKCmd.collect(); var f=a.filter(function(i){return i.group==='field';});
+      return {n:f.length, real:f.filter(function(i){return i.sel && document.querySelector(i.sel);}).length};
+    })()`);
+    check('cmd-indexes-settings-fields', fldAll.n >= 20 && fldAll.real === fldAll.n,
+      JSON.stringify(fldAll));
+    /* 三轮查询分别覆盖两类「不是控件」的设置项：
+       .set-field 里的 <b> 名字，和纯文本的 label[for]。
+       「晨报时刻」只在 label[for] 里，《摘要触发阈值》只在 .set-field 里（开发者页），
+       各查一次才能证明两半都进了索引——只查「端口」的话两半互相顶替，关掉任一半都照样绿。 */
+    for (const term of ['端口', '晨报时刻', '摘要触发阈值']) {
+      await ctrlK();
+      await send('Input.insertText', { text: term });
+      await sleep(250);
+      const fldHit = await evalJS(`(function(){
+        var s=EKCmd.shown();
+        var idx=-1, sel='', txt='';
+        for(var i=0;i<s.length;i++){
+          if(s[i].group==='field' && s[i].text.indexOf(${JSON.stringify(term)})>=0){ idx=i; sel=s[i].sel; txt=s[i].text; break; }
+        }
+        // 结果按组排：同一个词也会命中页面/按钮，所以不能假定第一条就是设置项，
+        // 要点「那一条设置项」，否则测的是别的东西（第一版这么写就假红过一次）。
+        return {shown:s.length, idx:idx, sel:sel, text:txt};
+      })()`);
+      check('cmd-finds-field-' + term, fldHit.idx >= 0 && !!fldHit.sel, JSON.stringify(fldHit));
+      if (fldHit.idx < 0) { await esc(); continue; }
+      await evalJS(`(function(){
+        var row=document.querySelector('#ekcp-list [data-i="${fldHit.idx}"]'); if(row) row.click();
+      })()`);
+      await sleep(900);
+      const landed = await evalJS(`(function(){
+        var act=document.activeElement;
+        var shown=document.querySelector('#panel-settings .cfg-pane.show');
+        return {settings:!!document.querySelector('#panel-settings.show'),
+          pane:shown?shown.getAttribute('data-set-pane'):'',
+          focusId:act?act.id:'',
+          flash:!!(act && act.classList && act.classList.contains('flash')),
+          /* 焦点必须落在「当前显示的那个 pane」里：只比 id 不比可见性的话，
+             跳到隐藏 pane 的输入框也会绿，而用户什么都看不到。 */
+          inShownPane:!!(act && shown && shown.contains(act))};
+      })()`);
+      check('cmd-field-jump-' + term,
+        landed.settings && landed.flash && landed.inShownPane &&
+        landed.focusId === fldHit.sel.replace(/^#/, ''),
+        JSON.stringify(landed) + ' want ' + fldHit.sel);
+    }
+
     // ---- 5. 配置差异：真实数据、键顺序不制造假差异、无活 script ----
     const d = await evalJS(`(function(){
       var a=JSON.stringify({z:1,a:'old'}), b=JSON.stringify({a:'new',z:2,c:true});

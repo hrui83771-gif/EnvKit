@@ -3319,21 +3319,10 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
-              <div class="cktext"><b>启用定时巡检与晨报</b></div>
-            </div>
-            <div class="grid">
-              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
-                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
-              <div><label for="s_ms_brief">晨报时刻</label>
-                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
-            </div>
-            <div class="ckrow">
-              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
-              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
-            </div>
+            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
+            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
+            <div class="ro-list" id="cfg_backups"></div>
+            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
           </div>
 
           </div>
@@ -3347,13 +3336,6 @@
             <!-- 体检不能只报「N 个警告」：状态源为每条问题都算好了 action，
                  把它丢在接口里等于让用户自己去猜下一步。这里逐条列出「问题 + 建议」。 -->
             <ul class="h-issues" id="s_health_issues"></ul>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
-            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
-            <div class="ro-list" id="cfg_backups"></div>
-            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
           </div>
 
           <div class="set-card">
@@ -3400,6 +3382,24 @@
               <div><label>&nbsp;</label><button class="ghost" id="btn-s-alert-test" style="width:100%">发一条测试告警</button></div>
             </div>
             <div class="row" style="margin-top:4px"><span class="hint" id="s_alert_state">—</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b></div>
+            </div>
+            <div class="grid">
+              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
+                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
+              <div><label for="s_ms_brief">晨报时刻</label>
+                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
+            </div>
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
+            </div>
           </div>
 
           </div>
@@ -4616,7 +4616,10 @@ let cfg = null, loaded = false, dirty = false, saveTimer = null, busyNow = '';
    放到文件末尾就会撞 TDZ：Uncaught ReferenceError: Cannot access 'EK_SET'
    before initialization，表现为「设置页一片空白、按钮全无反应」。
    （同类坑在个人中心/桌宠那两个 IIFE 上踩过一次，node --check 查不出来。） */
-const EK_SET = {tab:'base', base:null, dev:null, ev:null, evTimer:null, aiQuirk:null};
+/* sig：每个 tab 表单的「读进来时长什么样」指纹，用来判断用户有没有改过。
+   没有它就只能二选一——要么每次切 tab 都重读（冲掉用户输入），
+   要么再也不重读（外部改了配置这边看不到）。详见 ekSetFormDirty()。 */
+const EK_SET = {tab:'base', base:null, dev:null, ev:null, evTimer:null, aiQuirk:null, sig:{}};
 
 /* ---------- 应用图标（由 tools/make_icon.py 从 cici.png 生成，base64 内嵌保持单文件） ---------- */
 const APP_ICON = "data:image/png;base64,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";
@@ -5956,6 +5959,8 @@ const I18N_EN = {
   "有改动，待保存…": "Unsaved changes…",
   "有新版本 {0}": "Version {0} available",
   "有新版本 {0}，已按设置不再提示": "Version {0} available (muted per settings)",
+  "有未保存的改动，已保留（点「保存基础设置」写入）": "Unsaved changes kept — press Save basics to write them",
+  "有未保存的改动，已保留（点「保存开发者配置」写入）": "Unsaved changes kept — press Save developer settings to write them",
   "有话直说~": "Just ask~",
   "服务 已就绪": "Services ready",
   "服务 异常": "Service error",
@@ -6470,6 +6475,7 @@ const I18N_EN = {
   "记忆层当前": "Memory layer is currently ",
   "设为每轮注入": "Every turn",
   "设置": "Settings",
+  "设置项": "Settings field",
   "访问密码（可选，长期有效）": "Access password (optional, does not expire)",
   "访问网址": "Access URL",
   "评测": "Evaluation",
@@ -13769,7 +13775,15 @@ function ekSetPane(name){
   if(tabs) tabs.querySelectorAll('.cfg-tab').forEach(b=>b.classList.toggle('on', b.dataset.setTab===name));
   document.querySelectorAll('#panel-settings .cfg-pane').forEach(p=>p.classList.toggle('show', p.dataset.setPane===name));
   EK_SET.tab = name;
-  if(name==='base'){ ekSetLoadBase(); ekSetLoadExtras(); }
+  if(name==='base'){
+    /* 指纹必须在「基础配置 + 附加快捷卡」都写完之后再拍：update_url、天气这些格子
+       是 ekSetLoadExtras 写的，拍早了它们会被当成"用户改过"，守卫就一直不重读了。
+       ekSetLoadBase 返回 false = 因为有你没保存的改动而跳过了覆盖，这时绝不能重拍，
+       否则等于把用户的值当成基线，下次切 tab 就把他的输入冲掉。 */
+    const baseLoad = ekSetLoadBase();
+    const extrasLoad = ekSetLoadExtras();
+    Promise.all([baseLoad, extrasLoad]).then(r=>{ if(r[0] !== false) ekSetSnap('base'); });
+  }
   else if(name==='dev') ekSetLoadDev();
   else if(name==='eval'){ ekEvLoad(); ekEvPoll(true); }
   if(name!=='eval') ekEvPoll(false);
@@ -14205,8 +14219,43 @@ function ekSetHealth(h){
   }
 }
 
-async function ekSetLoadBase(){
+/* ---------- 「表单被改过就别覆盖」 ----------
+   设置页是**手动保存**（基础区「保存基础设置」/ 开发者区「保存开发者配置」），
+   没有老页面那种 800ms 防抖自动保存兜底。而切 tab、从别的页面点回「设置」，
+   都会走 ekSetLoadBase / ekSetLoadDev，旧行为是无条件把服务端值写回输入框：
+   填了一半去「开发者」看一眼再切回来，刚填的东西已经没了，**页面上还什么都没说**。
+
+   判据不写死字段清单 —— 清单会和保存函数漂移，加了新字段忘了加就会重新丢。
+   这里改成「读成功时给整页控件拍个指纹」，下次覆盖前先比一次：
+   改了（含目录选择器、端口 chips 这类间接写入）就保留，没改才刷新。
+
+   指纹只认 value/checked，不认 focus/hover，所以只是划过不影响判断。 */
+function ekSetPaneEl(name){
+  return document.querySelector('#panel-settings .cfg-pane[data-set-pane="'+name+'"]');
+}
+function ekSetSig(name){
+  const pane = ekSetPaneEl(name);
+  if(!pane) return '';
+  return [].map.call(pane.querySelectorAll('input,select,textarea'), el=>{
+    const v = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+    return (el.id || '?') + '=' + v;
+  }).join('\u0001');
+}
+/* 读成功（或存成功）后调用：此刻输入框里的值就是「服务端那份」 */
+function ekSetSnap(name){ EK_SET.sig = EK_SET.sig || {}; EK_SET.sig[name] = ekSetSig(name); }
+function ekSetFormDirty(name){
+  const snap = EK_SET.sig && EK_SET.sig[name];
+  if(snap == null) return false;          // 从没读过 → 没有可保护的值
+  return ekSetSig(name) !== snap;
+}
+
+async function ekSetLoadBase(force){
   const st = $('#h-set-save');
+  if(!force && ekSetFormDirty('base')){
+    /* 不覆盖、也不假装已保存：把事实写在保存状态那行，并指向真正能落盘的按钮。 */
+    if(st) st.textContent = t('有未保存的改动，已保留（点「保存基础设置」写入）');
+    return false;
+  }
   if(st) st.textContent = t('读取中…');
   try{
     const [c, pet, ai, hh] = await Promise.all([
@@ -14277,8 +14326,13 @@ async function ekSetLoadBase(){
       const el = $(sel);
       if(el) el.title = el.value || '';
     });
+    /* 写完了才拍指纹：拍早了会把「写了一半」当成基线，之后永远判不出改动 */
+    ekSetSnap('base');
+    return true;
   }catch(e){
     if(st) st.textContent = t('读取失败：{0}', e);
+    /* 读失败时不要留下新基线：留着旧的那份，下次进来还会重试覆盖 */
+    return false;
   }
 }
 
@@ -14321,12 +14375,16 @@ async function ekSetSaveBase(){
       /* 老页面 DOM 里还是旧值：不重填的话，用户在「程序配置」随手改一个输入框，
          那次自动保存就会把刚设的目录/代理按旧值写回去。必须重读一次。 */
       try{ await loadConfig(); }catch(e){}
-      await ekSetLoadBase();
+      /* force：刚存下的就是页面上这些值，指纹必然「对不上」，不强制就永远读不回来 */
+      await ekSetLoadBase(true);
       /* 天气那一格也在同一块面板里，用户按的是同一个「保存」——
          过去这个按钮对它完全无效，必须再单独点一次「应用」（原始反馈：
          "按理说我保存配置后就生效了"）。仍然走独立端点，只是顺序上一起做；
          silent：上面的 toast 已经说了"已保存"，不需要连弹两条。 */
       try{ await ekSetWeather(true); }catch(e){}
+      /* 天气回包可能不带布尔值（走了 else 分支），那时上面那次指纹就还是旧的；
+         存成功这一刻屏上就是服务端那份，收尾再拍一次，避免刚存完立刻被判成"改过"。 */
+      ekSetSnap('base');
     }else{
       let msg = 'HTTP ' + r.status;
       try{
@@ -14390,6 +14448,9 @@ async function ekSetWeather(quiet){
       if(!quiet){
         toast(eff.weather_enabled ? t('天气已开启（{0}）', eff.weather_city || t('默认城市')) : t('天气已关闭'));
       }
+      /* 天气是「改了就存」的独立端点：存成功后要把指纹重拍一次，
+         否则刚填的城市会被当成「未保存的改动」，往后每次切 tab 都判成脏。 */
+      ekSetSnap('base');
     }else{
       ekWeatherHint(on, city);
       if(!quiet) toast(on ? t('天气已开启（{0}）', city||t('默认城市')) : t('天气已关闭'));
@@ -14445,8 +14506,12 @@ function ekDevBindSliders(){
   });
 }
 
-async function ekSetLoadDev(){
+async function ekSetLoadDev(force){
   const st = $('#h-sd-save');
+  if(!force && ekSetFormDirty('dev')){
+    if(st) st.textContent = t('有未保存的改动，已保留（点「保存开发者配置」写入）');
+    return;
+  }
   if(st) st.textContent = t('读取中…');
   try{
     /* 开发者区的「恢复预算」只读块来自 config.json 的 recovery 段：
@@ -14494,6 +14559,7 @@ async function ekSetLoadDev(){
     ekSetRenderQuirk();
     ekSetRenderRecovery();
     if(st) st.textContent = t('已读取（{0}）', new Date().toLocaleTimeString());
+    ekSetSnap('dev');
   }catch(e){
     if(st) st.textContent = t('读取失败：{0}', e);
   }
@@ -14553,7 +14619,8 @@ async function ekSetSaveDev(){
     if(r.ok){
       if(st) st.textContent = t('已保存（{0}）', new Date().toLocaleTimeString());
       toast(t('开发者配置已保存；端口改动需重启生效'));
-      await ekSetLoadDev();
+      /* force：同基础区——刚存下的就是屏上这些值，不强制会判成「改过」而跳过重读 */
+      await ekSetLoadDev(true);
     }else{
       const msg = (j.problems && j.problems.length)
         ? j.problems.map(x=>(x.field||'')+' → '+(x.msg||'')).join('；')
@@ -15002,6 +15069,54 @@ document.addEventListener('click', async e=>{
         sel:'#' + el.id,
         icon:'corner-down-left', act:function(){ if(pn) goto(pn); el.click(); }});
     });
+    /* 设置项：这两类都不是「控件」，上面三次扫描都看不见它们——
+       label[for] 是纯文本 + for 属性，.set-field 里的名字是个 <b>。
+       所以 Ctrl+K 搜「端口」「日志保留」「摘要」永远零命中，用户只能
+       自己点 tab 再滚到底。它们都指向真实输入框，索引进来不会出现
+       「搜到却点不到」；跳转顺便切 tab、滚到可见、聚焦并闪一下。 */
+    function focusField(host, pn, input){
+      return function(){
+        if(pn) goto(pn);
+        var paneEl = host.closest ? host.closest('.cfg-pane') : null;
+        var pane = paneEl ? paneEl.getAttribute('data-set-pane') : '';
+        if(pane && typeof ekSetPane === 'function') ekSetPane(pane);
+        try{ host.scrollIntoView({block:'center', behavior:'auto'}); }catch(e){}
+        if(!input) return;
+        try{ input.focus({preventScroll:true}); }catch(e){ try{ input.focus(); }catch(_){} }
+        input.classList.add('flash');
+        setTimeout(function(){ input.classList.remove('flash'); }, 1300);
+      };
+    }
+    function fieldHint(pn, host){
+      // 页面名取导航按钮上的现成文案：它已经过 i18n，不用再拼一份翻译表
+      var navEl = document.querySelector('.nav[data-panel="' + pn + '"]');
+      var page = navEl ? txt(navEl) : pn;
+      var card = host.closest ? host.closest('.set-card') : null;
+      var cardEl = card ? card.querySelector('.set-card-head .t') : null;
+      var cardT = cardEl ? txt(cardEl) : '';
+      return page + (cardT ? ' · ' + cardT : '');
+    }
+    document.querySelectorAll('.panel label[for]').forEach(function(el){
+      var input = document.getElementById(el.getAttribute('for'));
+      if(!input || excluded(el)) return;      // 指不到真实控件的标签不进索引
+      var s = txt(el); if(!s) return;
+      var pn = panelOf(el);
+      if(!pn) return;
+      out.push({group:'field', glabel:t('设置项'), text:s,
+        hint: fieldHint(pn, el), sel:'#' + input.id,
+        icon:'settings', act: focusField(el, pn, input)});
+    });
+    document.querySelectorAll('.panel .set-field').forEach(function(el){
+      var b = el.querySelector('.set-flabel b'); if(!b) return;
+      var input = el.querySelector('input,select,textarea'); if(!input) return;
+      var s = txt(b); if(!s) return;
+      var pn = panelOf(el);
+      if(!pn) return;
+      var it = {group:'field', glabel:t('设置项'), text:s,
+        hint: fieldHint(pn, el), icon:'settings', act: focusField(el, pn, input)};
+      if(input.id) it.sel = '#' + input.id;
+      out.push(it);
+    });
     document.querySelectorAll('.panel h2, .panel h3').forEach(function(el){
       var s = txt(el), pn = panelOf(el);
       if(!s || !pn || el.closest('#onboard')) return;
@@ -15137,7 +15252,9 @@ document.addEventListener('click', async e=>{
   window.EKCmd = {
     open: open, close: close, toggle: toggle, runIndex: runIndex,
     items: function(){ return all.slice(); },
-    shown: function(){ return filtered.map(function(it){ return {text:it.text, group:it.group, hint:it.hint}; }); },
+    // sel 也回传：门禁要断言「点下去之后焦点就落在它指向的那个控件上」，
+    // 少了这一项只能比 id 猜，跳错 pane 也看不出来。
+    shown: function(){ return filtered.map(function(it){ return {text:it.text, group:it.group, hint:it.hint, sel:it.sel||''}; }); },
     collect: collect,
     state: function(){ return {
       open: !!(box && box.classList.contains('show')),

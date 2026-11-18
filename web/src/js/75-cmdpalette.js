@@ -49,6 +49,54 @@
         sel:'#' + el.id,
         icon:'corner-down-left', act:function(){ if(pn) goto(pn); el.click(); }});
     });
+    /* 设置项：这两类都不是「控件」，上面三次扫描都看不见它们——
+       label[for] 是纯文本 + for 属性，.set-field 里的名字是个 <b>。
+       所以 Ctrl+K 搜「端口」「日志保留」「摘要」永远零命中，用户只能
+       自己点 tab 再滚到底。它们都指向真实输入框，索引进来不会出现
+       「搜到却点不到」；跳转顺便切 tab、滚到可见、聚焦并闪一下。 */
+    function focusField(host, pn, input){
+      return function(){
+        if(pn) goto(pn);
+        var paneEl = host.closest ? host.closest('.cfg-pane') : null;
+        var pane = paneEl ? paneEl.getAttribute('data-set-pane') : '';
+        if(pane && typeof ekSetPane === 'function') ekSetPane(pane);
+        try{ host.scrollIntoView({block:'center', behavior:'auto'}); }catch(e){}
+        if(!input) return;
+        try{ input.focus({preventScroll:true}); }catch(e){ try{ input.focus(); }catch(_){} }
+        input.classList.add('flash');
+        setTimeout(function(){ input.classList.remove('flash'); }, 1300);
+      };
+    }
+    function fieldHint(pn, host){
+      // 页面名取导航按钮上的现成文案：它已经过 i18n，不用再拼一份翻译表
+      var navEl = document.querySelector('.nav[data-panel="' + pn + '"]');
+      var page = navEl ? txt(navEl) : pn;
+      var card = host.closest ? host.closest('.set-card') : null;
+      var cardEl = card ? card.querySelector('.set-card-head .t') : null;
+      var cardT = cardEl ? txt(cardEl) : '';
+      return page + (cardT ? ' · ' + cardT : '');
+    }
+    document.querySelectorAll('.panel label[for]').forEach(function(el){
+      var input = document.getElementById(el.getAttribute('for'));
+      if(!input || excluded(el)) return;      // 指不到真实控件的标签不进索引
+      var s = txt(el); if(!s) return;
+      var pn = panelOf(el);
+      if(!pn) return;
+      out.push({group:'field', glabel:t('设置项'), text:s,
+        hint: fieldHint(pn, el), sel:'#' + input.id,
+        icon:'settings', act: focusField(el, pn, input)});
+    });
+    document.querySelectorAll('.panel .set-field').forEach(function(el){
+      var b = el.querySelector('.set-flabel b'); if(!b) return;
+      var input = el.querySelector('input,select,textarea'); if(!input) return;
+      var s = txt(b); if(!s) return;
+      var pn = panelOf(el);
+      if(!pn) return;
+      var it = {group:'field', glabel:t('设置项'), text:s,
+        hint: fieldHint(pn, el), icon:'settings', act: focusField(el, pn, input)};
+      if(input.id) it.sel = '#' + input.id;
+      out.push(it);
+    });
     document.querySelectorAll('.panel h2, .panel h3').forEach(function(el){
       var s = txt(el), pn = panelOf(el);
       if(!s || !pn || el.closest('#onboard')) return;
@@ -184,7 +232,9 @@
   window.EKCmd = {
     open: open, close: close, toggle: toggle, runIndex: runIndex,
     items: function(){ return all.slice(); },
-    shown: function(){ return filtered.map(function(it){ return {text:it.text, group:it.group, hint:it.hint}; }); },
+    // sel 也回传：门禁要断言「点下去之后焦点就落在它指向的那个控件上」，
+    // 少了这一项只能比 id 猜，跳错 pane 也看不出来。
+    shown: function(){ return filtered.map(function(it){ return {text:it.text, group:it.group, hint:it.hint, sel:it.sel||''}; }); },
     collect: collect,
     state: function(){ return {
       open: !!(box && box.classList.contains('show')),

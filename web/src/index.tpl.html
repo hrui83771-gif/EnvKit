@@ -879,21 +879,10 @@
           </div>
 
           <div class="set-card">
-            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
-            <div class="ckrow" style="margin-top:0">
-              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
-              <div class="cktext"><b>启用定时巡检与晨报</b></div>
-            </div>
-            <div class="grid">
-              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
-                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
-              <div><label for="s_ms_brief">晨报时刻</label>
-                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
-            </div>
-            <div class="ckrow">
-              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
-              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
-            </div>
+            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
+            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
+            <div class="ro-list" id="cfg_backups"></div>
+            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
           </div>
 
           </div>
@@ -907,13 +896,6 @@
             <!-- 体检不能只报「N 个警告」：状态源为每条问题都算好了 action，
                  把它丢在接口里等于让用户自己去猜下一步。这里逐条列出「问题 + 建议」。 -->
             <ul class="h-issues" id="s_health_issues"></ul>
-          </div>
-
-          <div class="set-card">
-            <div class="set-card-head"><span class="t">配置备份</span><span class="tag">恢复需确认</span></div>
-            <p class="hint" style="margin:2px 0 8px">每次保存都会留一份旧配置。恢复会覆盖当前配置，当前配置会自动另存为 .bak。</p>
-            <div class="ro-list" id="cfg_backups"></div>
-            <div class="row" style="margin-top:6px"><button class="ghost" id="cfg-backup-reload">刷新列表</button></div>
           </div>
 
           <div class="set-card">
@@ -960,6 +942,24 @@
               <div><label>&nbsp;</label><button class="ghost" id="btn-s-alert-test" style="width:100%">发一条测试告警</button></div>
             </div>
             <div class="row" style="margin-top:4px"><span class="hint" id="s_alert_state">—</span></div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-head"><span class="t">定时行动</span><span class="tag">巡检</span></div>
+            <div class="ckrow" style="margin-top:0">
+              <label class="switch"><input type="checkbox" id="s_ms_on"><span class="sl"></span></label>
+              <div class="cktext"><b>启用定时巡检与晨报</b></div>
+            </div>
+            <div class="grid">
+              <div><label for="s_ms_patrol">巡检间隔（分钟）</label>
+                <input id="s_ms_patrol" type="number" min="0" max="1440" placeholder="60" /></div>
+              <div><label for="s_ms_brief">晨报时刻</label>
+                <input id="s_ms_brief" placeholder="08:30 / off" /></div>
+            </div>
+            <div class="ckrow">
+              <label class="switch"><input type="checkbox" id="s_ms_inbound"><span class="sl"></span></label>
+              <div class="cktext"><b>允许外部 HTTP 触发</b></div>
+            </div>
           </div>
 
           </div>
