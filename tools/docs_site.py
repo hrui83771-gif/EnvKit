@@ -19,7 +19,23 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "web", "docs.html")
+MAIN_GO = os.path.join(ROOT, "main.go")
 RELEASES = "https://github.com/hrui83771-gif/EnvKit/releases"
+
+
+def build_date():
+    """从 main.go 读构建日期，确保站点版与 exe 内置版页头格式一致。
+
+    exe 内置版由 main.go 替换成「appVersion · buildDate」；站点版先前只有
+    tag 名，两处格式不一致。日期以 main.go 为单一事实源，避免两份硬编码漂移。
+    读不到就返回空串（只显示版本号），不让发布因解析失败而中断。
+    """
+    try:
+        text = io.open(MAIN_GO, encoding="utf-8").read()
+        m = re.search(r'buildDate\s*=\s*"([0-9-]+)"', text)
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
 
 CONSOLE_LINK = '<a class="hbtn primary" id="cta" href="/">返回控制台</a>'
 RELEASE_LINK = ('<a class="hbtn primary" id="cta" href="' + RELEASES +
@@ -47,6 +63,10 @@ def build(version, strict=True):
     # 源码里的占位是 v__APP_VERSION__——前缀 v 已经在模板里，不能再来一个。
     # dispatch 传进来的可能是 v3.8.0 也可能是 main，统一成「一次 v」的显示形式。
     shown = version if version.startswith("v") else "v" + version
+    # 与 exe 内置版同格式：v<版本> · <构建日期>。日期取 main.go，读不到则只显示版本。
+    date = build_date()
+    if date:
+        shown = shown + " · " + date
     out = raw.replace("v__APP_VERSION__", shown).replace("__APP_VERSION__", shown)
     if CONSOLE_LINK not in out:
         return None, fail("找不到「返回控制台」链接，站点版会指向域名根")
@@ -68,7 +88,7 @@ def build(version, strict=True):
         ("no-tour-link", 'href="/#tour"' not in out),
         ("no-external-asset", not re.findall(
             r'<(?:script|link)\b[^>]*\b(?:src|href)="https?://[^"]+"', out)),
-        ("sections>=20", out.count("{id:'") >= 20),
+        ("sections>=21", out.count("{id:'") >= 21),
         ("release-link", RELEASES in out),
         ("cta-single-lang", 'Download / 下载' not in out and BACK_SITE in out),
         ("theme-toggle", 'id="theme"' in out and "ek-theme" in out),

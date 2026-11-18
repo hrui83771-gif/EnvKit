@@ -450,6 +450,41 @@ button,input{font:inherit;color:inherit}
       NOTE('注册或启动 MySQL 服务需要管理员权限：右键 EnvKit.exe「以管理员身份运行」只在这一步需要，其余功能照常用。',
            'Registering or starting the MySQL service needs administrator rights: run EnvKit.exe as administrator only for that step; everything else works normally.', 'warn')
     ]},
+    {id:'upgrade', group:z('安装与构建','Install & build'), title:z('升级、回滚与卸载','Upgrade, rollback & uninstall'), body:[
+      P('EnvKit 是单文件程序，没有安装器：所谓升级就是把新 exe 覆盖旧的。麻烦不在覆盖本身，而在"哪个副本在运行、配置会不会被冲掉、想退回上一版怎么办"这三件事。',
+        'EnvKit is a single-file program with no installer: upgrading simply overwrites the old exe with a new one. The trouble is not the copy itself, but three questions — which copy is running, whether config survives, and how to go back.'),
+      H3('upgrade-overwrite','覆盖升级','In-place upgrade'),
+      STEPS([
+        z('先退出正在运行的实例：托盘图标右键退出，或关闭所有 EnvKit 窗口。exe 被占用时复制会失败，这是升级没生效的头号原因。',
+          'Quit the running instance first: right-click the tray icon to exit, or close all EnvKit windows. A locked exe makes the copy fail — the number one cause of an upgrade that “did not take”.'),
+        z('从 Releases 下载新压缩包，解压后运行 安装.bat：它把新 exe 复制到 %LOCALAPPDATA%\\EnvKit 并更新桌面快捷方式。',
+          'Download the new archive from Releases, unpack and run 安装.bat: it copies the new exe into %LOCALAPPDATA%\\EnvKit and refreshes the desktop shortcut.'),
+        z('确认打开的是新版本：页头版本号应变化；若还是旧的，多半是快捷方式指向了另一份副本，见下条。',
+          'Confirm you are on the new build: the header version should change. If it does not, the shortcut probably points at another copy — see below.'),
+        z('配置不用重新填：config.json 在 exe 同目录，安装脚本只覆盖 exe 和使用说明，不会碰它。',
+          'No need to re-enter settings: config.json sits next to the exe, and the install script only overwrites the exe and readme — it leaves config alone.')
+      ]),
+      NOTE('从源码自己编译时顺序是 web_build.py → go build，且 go build 前要先退出运行中的实例；只跑其中一步会让人以为"改了没生效"。见「从源码构建」。',
+           'When building from source, run web_build.py then go build, and quit the running instance before go build. Doing only one step looks like “nothing changed”. See Build from source.', 'warn'),
+      H3('upgrade-shortcut','快捷方式指向旧副本','Shortcut points at an old copy'),
+      TABLE([z('现象','Symptom'),z('原因','Cause'),z('处理','Fix')],[
+        [z('升级后版本号没变','Version unchanged after upgrade'),z('快捷方式指向 %LOCALAPPDATA%\\EnvKit 的旧 exe','Shortcut points at the old exe in %LOCALAPPDATA%\\EnvKit'),z('重跑 安装.bat，或直接打开仓库根的 EnvKit.exe','Rerun 安装.bat, or open the repo-root EnvKit.exe directly')],
+        [z('两份 exe 版本不一致','Two exes with different versions'),z('仓库根一份、%LOCALAPPDATA%\\EnvKit 一份，各自更新','One at repo root, one in %LOCALAPPDATA%\\EnvKit, updated separately'),z('认准常用那份；两份都在时以快捷方式 TargetPath 为准','Stick to one; when both exist, trust the shortcut’s TargetPath')]
+      ]),
+      H3('upgrade-rollback','回滚到上一版','Roll back'),
+      P('程序本身没有回滚功能，但单文件让回滚很简单：升级前把当前 exe 另存一份（如 EnvKit-v3.7.2.exe），要退回时用它覆盖回去即可。config.json 建议一并备份——如果新版改了配置结构，回滚后旧 exe 未必能读懂新配置。',
+        'There is no built-in rollback, but a single file makes it easy: before upgrading, save a copy of the current exe (e.g. EnvKit-v3.7.2.exe), then overwrite with it to roll back. Back up config.json too — if a new version changed its schema, the old exe may not read the newer config.'),
+      CODE(':: back up the current exe before upgrading\n:: (replace v3.7.2 with your actual version)\ncopy /Y EnvKit.exe EnvKit-v3.7.2.exe\n:: to roll back, overwrite with the backup\ncopy /Y EnvKit-v3.7.2.exe EnvKit.exe',
+           'bat'),
+      NOTE('上面代码块里的文件名只是占位示例，按你当前的实际版本改名；配置备份用「程序配置」页的导出功能，导出的文件可脱敏。',
+           'The filename in the sample is a placeholder — rename it to your actual version. Back up config via the export action on the Configuration page; the export can be redacted.', 'warn'),
+      H3('upgrade-uninstall','彻底卸载','Full uninstall'),
+      P('发布包里带一个 卸载.bat：它结束 EnvKit 进程，删除 %LOCALAPPDATA%\\EnvKit 里的 exe、使用说明和 config.json，并移除桌面快捷方式。想保留配置就先把 config.json 复制出去再运行。',
+        'The release archive ships a 卸载.bat: it stops EnvKit, deletes the exe, readme and config.json in %LOCALAPPDATA%\\EnvKit, and removes the desktop shortcut. Copy config.json out first if you want to keep it.'),
+      NOTE('卸载脚本不会自动删除以下内容，需要按需手动清理：C:\\EnvKit\\tools 组件目录、已注册的 MySQL 服务与数据库数据、PATH 里的环境变量、项目里的 backups 备份目录，以及 exe 同目录的 envkit-*.log 日志。它也不会写注册表的卸载项，所以"添加/删除程序"里看不到 EnvKit 是正常的。',
+           'The uninstall script does not remove these — clean them up manually as needed: the C:\\EnvKit\\tools component directory, the registered MySQL service and its data, PATH entries, the backups directory in your project, and the envkit-*.log files next to the exe. It also writes no registry uninstall entry, so EnvKit not appearing in “Add / Remove Programs” is expected.', 'warn'),
+      XLINK([['install','安装与构建','Install & build'],['start','程序启动与日志','Start and logs'],['config','程序配置','Configuration'],['troubleshoot','排障索引','Troubleshooting']])
+    ]},
 
     {id:'config', group:z('日常操作','Daily operations'), title:z('程序配置','Configuration'), body:[
       P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
@@ -543,9 +578,20 @@ button,input{font:inherit;color:inherit}
         z('子进程绑定 Job Object，EnvKit 退出时自动回收，避免留下孤儿进程。','Child processes are bound to a Job Object and reaped when EnvKit exits, so no orphans are left behind.'),
         z('操作审计只追加、不修改、不回滚，按天分文件保留 30 天；密码与 API Key 在入库前已脱敏。','Operation audit is append-only, kept in daily files for 30 days. Passwords and API keys are redacted before being written.')
       ]),
+      H3('start-logfiles','日志文件在哪','Log files on disk'),
+      P('除了界面里的日志页，每一天的内容也会落盘成文件，放在 exe 同目录：EnvKit 自身是 envkit-<日期>.log（单文件上限 5 MB，保留 10 份归档）；业务前后端是 envkit-<日期>-web.log 和 envkit-<日期>-backend.log（单文件上限 8 MB，保留 5 份归档）。文件名里的日期形如 20261118，旧文件按顺序编号 .1、.2 轮转。',
+        'Besides the in-app Logs page, each day’s output is also written to disk next to the exe: EnvKit itself uses envkit-<date>.log (5 MB per file, 10 archives kept); the business frontend and backend use envkit-<date>-web.log and envkit-<date>-backend.log (8 MB per file, 5 archives kept). The date looks like 20261118; older files rotate as .1, .2 and so on.'),
+      H3('start-export','导出与脱敏','Export and redaction'),
+      TABLE([z('方式','Way'),z('导出内容','What it exports'),z('是否脱敏','Redacted?')],[
+        [z('日志页「下载」','Logs page “Download”'),z('当前查看的那一栏原始文本（已清 ANSI 转义码），存成 envkit-<栏名>.log','Raw text of the single tab you are viewing (ANSI codes stripped), saved as envkit-<tab>.log'),z('否。原样导出，发给别人前请自行检查口令 / API Key','No. Exported verbatim — check for passwords / API keys before sharing')],
+        [z('诊断报告','Diagnostic report'),z('get_diag_report 生成的 Markdown 报告','The Markdown report from get_diag_report'),z('是，内部已脱敏凭据','Yes, credentials are redacted internally')],
+        [z('操作审计','Operation audit'),z('按天分文件的 audit-*.jsonl，保留 30 天','Daily audit-*.jsonl files, kept 30 days'),z('是，参数与详情统一脱敏','Yes, params and details are redacted')]
+      ]),
+      NOTE('日志页「下载」只导当前那一栏，不是全部日志；要交给他人的排障材料，优先用脱敏的诊断报告。',
+           '“Download” on the Logs page exports only the current tab, not everything. For material you hand to someone else, prefer the redacted diagnostic report.', 'warn'),
       NOTE('日志停在某一步且没有任何异常，先确认进程是否还在、退出码是什么——历史上 Windows 句柄重复关闭会让进程无声消失。',
            'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn'),
-      XLINK([['config','程序配置','Configuration'],['troubleshoot','排障索引','Troubleshooting']])
+      XLINK([['config','程序配置','Configuration'],['upgrade','升级、回滚与卸载','Upgrade, rollback & uninstall'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'selfheal', group:z('日常操作','Daily operations'), title:z('故障自愈轨迹','Self-healing traces'), body:[
@@ -809,13 +855,15 @@ button,input{font:inherit;color:inherit}
         z('链上区块高度不动是卡死了吗？—— 不一定。空闲链只共识不落盘，判活要看共识视图推进。','Is a static block height a stuck chain? Not necessarily. Idle chains reach consensus without storing blocks; check consensus view progression.'),
         z('自愈态势页是空的？—— 空列表表示尚无守护 / 影子流记录，不等于守护没配置。','Self-healing page empty? An empty list means no guard or shadow-flow records yet, not that guarding is disabled.'),
         z('改了前端界面没变化？—— 前端资源嵌在 exe 里。要 web_build.py 重拼 + go build 重新嵌入，两步都做。','Changed the front end but nothing changed? Assets are embedded in the exe: run web_build.py AND go build.'),
-        z('桌面快捷方式打开的还是旧版？—— 它可能指向 %LOCALAPPDATA%\\EnvKit 的旧副本，重新运行安装.bat 或直接打开仓库根的 exe。','Shortcut still opens the old version? It may point at %LOCALAPPDATA%\\EnvKit; rerun 安装.bat or open the repository-root exe.'),
+        z('升级 / 回滚 / 卸载怎么做？—— 见「升级、回滚与卸载」一节：覆盖升级先退实例、config.json 不会被冲掉、卸载脚本不会清理组件目录与 MySQL。','How do I upgrade / roll back / uninstall? See “Upgrade, rollback & uninstall”: quit the running instance first, config.json is preserved, and the uninstall script leaves the components and MySQL in place.'),
         z('文档页怎么单独打开？—— 侧栏「使用文档」会在新标签页打开本页；桌面版地址是 /docs，在线版是 https://hrui83771-gif.github.io/EnvKit/ ，都可以收藏，也可以按 / 聚焦搜索。','How do I open these docs separately? The sidebar “Docs” entry opens a new tab. Desktop address is /docs, online edition is https://hrui83771-gif.github.io/EnvKit/ . Bookmark either, and press / to focus search.')
       ])
     ]},
 
     {id:'about', group:z('参考','Reference'), title:z('关于与免责声明','About and disclaimer'), body:[
       {k:'ver'},
+      P('上面是这份文档对应的 EnvKit 版本。在线版与 exe 内置版同源，页头版本号即适用版本；如果你本地 exe 更早，本文提到的功能可能还没有，建议先按「升级、回滚与卸载」更新，或打开本地 exe 的 /docs 看与本机匹配的那一份。',
+        'The version above is the EnvKit build this documentation covers. The online edition and the in-exe edition come from the same source, and the header version is the applicable one. If your local exe is older, features described here may not exist yet — upgrade per “Upgrade, rollback & uninstall”, or open /docs inside your local exe for the build-matched copy.'),
       H3('about-history','版本沿革','Version history'),
       TABLE([z('版本','Version'),z('要点','Highlights')],[
         [z('v3.5','v3.5'),z('Agent 闭环：预案库、告警闭环、晨报、行动→经验沉淀、成长报表','Agent loop: playbooks, alert closure, morning report, action-to-experience, growth report')],

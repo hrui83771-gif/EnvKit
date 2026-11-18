@@ -214,16 +214,19 @@ async function attach(target) {
         paths: ['/opt/fisco/nodes','start_all.sh','18766','MySQL80','18765']
                  .filter(function(n){ return txt.indexOf(n) >= 0; }).length,
         trouble: txt.indexOf('排障索引') >= 0,
+        upgrade: ids.indexOf('upgrade') >= 0 &&
+          /覆盖升级|回滚|卸载/.test(txt),
         stale26: /26 个(受控)?工具/.test(txt) };
     })())`));
     ok(iso.path === '/docs', '新标签地址是 /docs（实际 ' + iso.path + '）');
     ok(!iso.mainApp && !iso.panel, '独立页没有主控制台 DOM（不是切 panel）');
     ok(iso.token === 'undefined', '独立页不注入 API 令牌（纯静态）');
-    ok(iso.sections >= 20, '文档共 ' + iso.sections + ' 节（含术语对照）');
+    ok(iso.sections >= 21, '文档共 ' + iso.sections + ' 节（含升级卸载节）');
     ok(iso.perPage === 1, '正文一次只渲染一节（实际 ' + iso.perPage + ' 节）');
     ok(iso.tabs >= 12 && iso.steps >= 5, '正文含真实表格与步骤卡片（' + iso.tabs + '/' + iso.steps + '）');
     ok(iso.trouble, '有按症状聚合的排障索引节');
     ok(iso.glossary, '有术语对照节，解释自造词');
+    ok(iso.upgrade, '有升级/回滚/卸载节，覆盖覆盖升级、回滚与卸载');
     ok(iso.leadNav.length === 2 && iso.leadNav.indexOf('#doc-quick') >= 0 &&
        iso.leadNav.indexOf('#doc-troubleshoot') >= 0,
        '页头两条引导直达四步与排障（' + iso.leadNav.join('/') + '）');
@@ -231,6 +234,32 @@ async function attach(target) {
     ok(iso.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + iso.paths + '/5）');
     ok(iso.xlinks >= 7 && iso.validLinks, '节间交叉链接全部指向存在的节（' + iso.xlinks + ' 条）');
     ok(!iso.stale26, '没有与真实工具数漂移的旧「26 个工具」表述');
+
+    // 升级/卸载节 + 日志导出表 + 版本提示：切到对应节实测渲染结果。
+    const upd = JSON.parse(await djs(`JSON.stringify((function(){
+      var out = {};
+      document.querySelector('#tree button[data-sec="upgrade"]').click();
+      var ut = document.getElementById('body').textContent;
+      out.upgradeH3 = [].slice.call(document.querySelectorAll('#body .sec h3')).map(function(h){return h.textContent;});
+      out.hasOverwrite = ut.indexOf('覆盖升级') >= 0;
+      out.hasRollback = ut.indexOf('回滚') >= 0;
+      out.hasUninstall = ut.indexOf('卸载') >= 0 && ut.indexOf('MySQL') >= 0;
+      out.hasConfigSafe = ut.indexOf('config.json') >= 0;
+      document.querySelector('#tree button[data-sec="start"]').click();
+      var st = document.getElementById('body').textContent;
+      out.logFiles = /envkit-<日期>|envkit-.*\\.log/.test(st) && st.indexOf('5 MB') >= 0;
+      out.exportTable = st.indexOf('是否脱敏') >= 0 && st.indexOf('原样导出') >= 0;
+      document.querySelector('#tree button[data-sec="about"]').click();
+      out.versionNote = document.getElementById('body').textContent.indexOf('适用') >= 0;
+      out.verText = document.getElementById('ver').textContent.trim();
+      return out;
+    })())`));
+    ok(upd.hasOverwrite && upd.hasRollback && upd.hasUninstall && upd.hasConfigSafe,
+       '升级节覆盖覆盖升级 / 回滚 / 卸载边界 / config 保留四项');
+    ok(upd.upgradeH3.length >= 4, '升级节有小节导航（' + upd.upgradeH3.length + ' 个 h3）');
+    ok(upd.logFiles && upd.exportTable, '日志节写明落盘文件名、配额与导出是否脱敏');
+    ok(upd.versionNote && /\d+\.\d+\.\d+/.test(upd.verText),
+       '关于节有版本适用提示，页头版本号是真实版本（' + upd.verText + '）');
 
     // 遍历停在最后一节，回到第一节再验布局。
     await djs(`document.querySelector('#tree button[data-sec]').click(); true`);
@@ -252,7 +281,7 @@ async function attach(target) {
       leadShown: getComputedStyle(document.querySelector('.lead')).display !== 'none'
     })`));
     ok(st.cols === 3, '宽屏是三栏布局（实际 ' + st.cols + '）');
-    ok(st.tree >= 20 && st.tree === iso.sections, '左目录与总节数一一对应（' + st.tree + '/' + iso.sections + '）');
+    ok(st.tree >= 21 && st.tree === iso.sections, '左目录与总节数一一对应（' + st.tree + '/' + iso.sections + '）');
     ok(st.groups >= 7, '目录按 7 组分类（实际 ' + st.groups + ' 组）');
     ok(st.gcounts.length === st.groups && st.gcounts.every(function(n){return parseInt(n,10) >= 1;}),
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
@@ -587,7 +616,8 @@ async function attach(target) {
       var bad='';
       btns.forEach(function(b){
         b.click();
-        var s=document.getElementById('body').textContent.replace(/安装\.bat/g,'');
+        // 安装.bat / 卸载.bat 是发布包里的真实中文文件名，英文版也按原名保留。
+        var s=document.getElementById('body').textContent.replace(/安装\.bat|卸载\.bat/g,'');
         if(!bad && /[\\u4e00-\\u9fa5]/.test(s)) bad=(s.match(/[\\u4e00-\\u9fa5]+/g)||[]).slice(0,4).join('|');
       });
       var nav=document.getElementById('tree').textContent+document.getElementById('toc').textContent;

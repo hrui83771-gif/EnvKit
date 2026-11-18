@@ -10,7 +10,7 @@ try:
 except Exception:
     pass
 
-import json, os, re, shutil, subprocess, sys, time, urllib.request
+import glob, io, json, os, re, shutil, subprocess, sys, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)  # tools/ 的上一级 = envkit 根目录
@@ -115,19 +115,51 @@ try:
         r = urllib.request.urlopen("http://127.0.0.1:18765/docs", timeout=10)
         dc = r.read().decode("utf-8", "ignore")
         dc_ext = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^"]+)"', dc)
+        # 文档自检：锚点唯一、节间跳转目标存在、写的工具名真在注册表里。
+        # 判据取自 exe 实际吐出的 dc，不取 web/src 源文件——测的就是发布产物。
+        sec_ids = re.findall(r"\{id:'([a-z0-9_-]+)',\s*group:z", dc)
+        h3_ids = re.findall(r"H3\('([a-z0-9_-]+)'", dc)
+        xlink_targets = re.findall(r"XLINK\(\[\['([a-z0-9_-]+)'", dc)
+        sec_set = set(sec_ids)
+        # 每段 XLINK 可能有多项，正则只抓到每段第一项；用更宽的匹配补全。
+        # XLINK([['id',...],['id',...]]) —— 捕获 [[ 与 ]] 之间的所有 ['id'。
+        for grp in re.findall(r"XLINK\(\[(.*?)\]\]\)", dc):
+            xlink_targets += re.findall(r"\['([a-z0-9_-]+)'", grp)
+        xlink_targets = list(set(xlink_targets))
+        # 工具名：文档里出现的 get_/verify_/start_ 等下划线标识符。
+        # 排除后面跟 .sh 的路径（start_all.sh 是链端脚本，不是 AI 工具）。
+        named_tools = set(re.findall(r"\b(?:get|verify|start|stop|restart|cleanup|save)_[a-z_]+", dc))
+        named_tools = {n for n in named_tools if n + ".sh" not in dc}
+        # 注册表散落在多个 .go 文件：ai_tools.go 的 map 字面量 +
+        # verify.go / audit.go / guardstate.go 等的 aiToolRegistry["name"] = 赋值。
+        registered = set()
+        for go_file in glob.glob(os.path.join(ROOT, "*.go")):
+            g = io.open(go_file, encoding="utf-8", errors="ignore").read()
+            registered |= set(re.findall(r'aiToolRegistry\["([a-z_]+)"\]', g))
+            registered |= set(re.findall(r'"([a-z_]+)":\s*\{', g))
+        unknown_tools = sorted(named_tools - registered)
         dchecks = [
             ("http-200", r.status == 200),
             ("title", "EnvKit 使用文档" in dc),
             ("version-replaced", "__APP_VERSION__" not in dc),
             ("no-token", tok not in dc),
-            ("sections>=20", dc.count("{id:'") >= 20),
+            ("sections>=21", len(sec_ids) >= 21),
             ("groups>=7", len(set(re.findall(r"group:z\('([^']+)'", dc))) >= 7),
             ("no-external", not dc_ext),
+            ("anchors-unique", len(sec_ids) == len(sec_set) and len(h3_ids) == len(set(h3_ids))),
+            ("xlink-targets-exist", len(xlink_targets) > 0 and all(t in sec_set for t in xlink_targets)),
+            ("tool-names-real", len(named_tools) > 0 and not unknown_tools),
         ]
+        detail = {
+            "no-external": dc_ext,
+            "xlink-targets-exist": [t for t in xlink_targets if t not in sec_set],
+            "tool-names-real": unknown_tools,
+            "anchors-unique": "sec/h3 id 有重复" if (len(sec_ids) != len(sec_set) or len(h3_ids) != len(set(h3_ids))) else "",
+        }
         for name, good in dchecks:
             if not good:
                 fail.append("docs/" + name)
-            print(f"{'OK ' if good else 'BAD'} docs/{name:<18} {dc_ext if name == 'no-external' and dc_ext else ''}")
+            print(f"{'OK ' if good else 'BAD'} docs/{name:<18} {detail.get(name, '')}")
     except Exception as e:
         fail.append("docs/exception")
         print("ERROR docs:", e)
