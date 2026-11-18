@@ -271,7 +271,8 @@ func main() {
 	http.HandleFunc("/api/ai/providers", handleAIProviders)
 	http.HandleFunc("/api/ai/models", handleAIModels)
 	http.HandleFunc("/api/ai/balance", handleAIBalance)
-	http.HandleFunc("/api/mcp", handleMCP) // MCP 服务端（只读工具，见 ai_mcp.go）；令牌闸由外层 authMW 生效
+	http.HandleFunc("/api/mcp", handleMCP)              // MCP 服务端（只读工具，见 ai_mcp.go）；令牌闸由外层 authMW 生效
+	http.HandleFunc("/api/mcp/config", handleMCPConfig) // MCP 开关与连接配置（设置页「能力开关」卡）
 	http.HandleFunc("/api/component-versions", handleComponentVersions)
 	http.HandleFunc("/api/component-upgrade", handleComponentUpgrade)
 	http.HandleFunc("/api/install-dryrun", handleInstallDryRun)

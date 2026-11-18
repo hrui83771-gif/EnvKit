@@ -113,7 +113,19 @@ func mcpTextErr(msg string) *mcp.CallToolResult {
 
 // handleMCP 惰性构造 handler：工具表在所有 init 都跑完之后才是最终形状，
 // 包级变量在 main 前求值有顺序风险，所以推迟到首个请求。
+//
+// 开关闸放在 Once **之前**：关着的时候连 handler 都不构造——
+// "服务没开"应该表现为"这里什么都没有"，而不是"有服务但拒绝你"。
 func handleMCP(w http.ResponseWriter, r *http.Request) {
+	if !mcpOn() {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":  false,
+			"msg": "MCP 服务未开启：请到 EnvKit 设置页「能力开关」里打开后再连接",
+		})
+		return
+	}
 	mcpHandlerOnce.Do(func() { mcpHandler = aiMCPHandler() })
 	mcpHandler.ServeHTTP(w, r)
 }

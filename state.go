@@ -113,6 +113,11 @@ type Config struct {
 	// 配对、状态、启停、AI 对话。主控制台仍然只听 127.0.0.1 —— 两者不是同一个 mux，
 	// 所以"手机能做什么"由路由表本身决定，而不是由某个 if 决定。见 lanaccess.go。
 	Lan *LanConfig `json:"lan,omitempty"`
+	// MCP 对外工具服务（v3.8）。指针段：老配置没有 "mcp" 段时为 nil → 视为关闭。
+	// 与 Lan 同一哲学：对外提供能力的入口**默认关**，由用户在设置页显式打开。
+	// 端点 /api/mcp 仍在 127.0.0.1 上且要令牌，但"开关关着"是比"令牌闸挡着"
+	// 更早的一道门——关着的时候连握手都不发生，日志里也不会出现 MCP 会话噪音。
+	MCP *MCPConfig `json:"mcp,omitempty"`
 	// UpdateURL 自版本检查地址。两种都认：
 	//   ① 静态 JSON：{"version":"x.y.z","notes":"…"}
 	//   ② GitHub Releases API：/repos/{owner}/{repo}/releases/latest
@@ -134,6 +139,21 @@ type Config struct {
 	// 由托盘菜单「隐藏窗口到托盘 / 显示控制台窗口」写入，下次启动沿用，
 	// 这样"挂机跑"不用每次开机都手动收一次窗口。
 	TrayHidden bool `json:"tray_hidden,omitempty"`
+}
+
+// MCPConfig MCP 对外工具服务开关（config.json 的 "mcp" 段）。
+// 只有一个布尔：要不要在 /api/mcp 上提供 MCP 服务。结构上留指针段而不是顶层
+// *bool，是给将来加"白名单客户端"之类的字段留位——顶层散布尔越加越乱。
+type MCPConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// mcpOn MCP 服务当前是否开启。nil（从没设过）= 关：对外能力缺省关闭，
+// 升级老配置不会突然多出一个在监听的 MCP 端点。
+func mcpOn() bool {
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
+	return mcpOnLocked()
 }
 
 // PetConfig 桌宠配置（config.json 的 "pet" 段）。

@@ -3425,6 +3425,26 @@
           </div>
         </div>
 
+        <div class="set-card" style="margin-top:8px">
+          <div class="set-card-head"><span class="t">MCP 工具服务</span><span class="tag">本机集成</span></div>
+          <div class="grid">
+            <div>
+              <div class="ckrow" style="margin-top:0">
+                <label class="switch"><input type="checkbox" id="s_mcp_on"><span class="sl"></span></label>
+                <div class="cktext"><b>允许 MCP 客户端连接</b></div>
+              </div>
+              <!-- 生效状态与令牌有效期都写在这行：开关勾上却连不上，
+                   是这类"对外服务"最常被报成 bug 的事，状态必须就地可见 -->
+              <div class="hint" id="h-mcp" style="margin-top:4px">—</div>
+              <div class="dirrow" style="margin-top:6px">
+                <button class="ghost" id="btn-mcp-copy">复制连接配置</button>
+              </div>
+              <div class="hint" id="h-mcp-snippet" style="margin-top:4px">—</div>
+            </div>
+            <div><div class="ro-list" id="s_mcp_view" style="margin-top:0"></div></div>
+          </div>
+        </div>
+
         <div class="set-savebar">
           <button id="btn-set-save">保存基础设置</button>
           <button class="ghost" id="btn-set-reload">重新读取</button>
@@ -4818,6 +4838,8 @@ const I18N_EN = {
   "Key 被拒（HTTP {0}）：检查 API Key 是否正确": "Key rejected (HTTP {0}): check that your API key is correct",
   "MB": "MB",
   "MB；前后端 stdout 更碎，默认给得更宽": "MB; frontend/backend stdout is choppier, so the default is wider",
+  "MCP 工具服务已关闭": "MCP tool service disabled",
+  "MCP 工具服务已开启": "MCP tool service enabled",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
   "MySQL 端口": "MySQL port",
@@ -4840,6 +4862,7 @@ const I18N_EN = {
   "Webhook 地址": "Webhook URL",
   "Windows 10 / 11 · 有管理员权限": "Windows 10 / 11 · admin rights",
   "Windows 防火墙没放行这个端口，手机的请求到不了 EnvKit": "Windows Firewall is not allowing this port, so the phone's requests never reach EnvKit",
+  "X-EnvKit-Token（与本页面共用）": "X-EnvKit-Token (shared with this page)",
   "[ERROR] 演示异常：端口 8888 被占用（这条是演示数据）": "[ERROR] Demo issue: port 8888 is in use (demo data only)",
   "[INFO] GOPROXY 已指向国内镜像": "[INFO] GOPROXY points at a domestic mirror",
   "[INFO] MySQL 8.0.36 服务在线": "[INFO] MySQL 8.0.36 service is up",
@@ -5056,6 +5079,7 @@ const I18N_EN = {
   "从操作记录统计，不是你在下的命令": "computed from activity, not an order from you",
   "从这里开始照着做一遍；以后想再看，「关于」里随时能打开。": "Start here and follow along. You can replay this anytime from About.",
   "仓库根": "Repo root",
+  "令牌最长 {0} 小时轮换：客户端 401 时回到这里重新复制": "Token rotates up to every {0}h: when the client returns 401, copy the config here again",
   "以上条目全部来自追加式审计与影子记录，不修改、不补写、不回放。空列表表示「尚无记录」，不代表守护未配置。": "All entries come from append-only audit and shadow logs; nothing is rewritten or replayed. An empty list means no records yet, not that guarding is disabled.",
   "以前开五个窗口来回切，出事了还不知道该看哪一个。": "You used to juggle five windows, with no idea which one to check when something broke.",
   "以后再说": "Later",
@@ -5423,6 +5447,7 @@ const I18N_EN = {
   "复制": "Copy",
   "复制失败，请手动选中网址": "Copy failed — please select the URL manually",
   "复制失败，请用导出 Markdown": "Copy failed — use Export Markdown instead",
+  "复制失败：": "Copy failed: ",
   "复制结论": "Copy conclusion",
   "复制网址": "Copy URL",
   "复查间隔（小时）": "Re-check interval (hours)",
@@ -5591,6 +5616,7 @@ const I18N_EN = {
   "已就绪 · 可以继续问": "ready · ask anything",
   "已开启": "Enabled",
   "已开启 · {0}": "On · {0}",
+  "已开启 · {0} 个只读工具 · 令牌最长 {1} 小时轮换，过期需重新复制": "On · {0} read-only tools · token rotates up to every {1}h, copy again when it expires",
   "已开启 · 手机访问 {0}": "Enabled · phone access at {0}",
   "已开启但端口未在监听（看日志：可能被占用）": "Enabled but the port is not listening (check the log — it may be taken)",
   "已开启但端口没在监听": "Enabled but the port is not listening",
@@ -5978,6 +6004,7 @@ const I18N_EN = {
   "服务商返回 HTTP {0}": "Provider returned HTTP {0}",
   "服务状态：后端已运行、前端已运行、链端校验 2/2 通过。（演示数据）": "Status: backend running, frontend running, chain checks 2/2 passed. (demo data)",
   "服务端口（逗号分隔）": "Service ports (comma separated)",
+  "服务端没有返回配置块": "Server returned no config snippet",
   "未产出": "Not produced",
   "未使用": "Never used",
   "未保存…": "Unsaved…",
@@ -5990,6 +6017,7 @@ const I18N_EN = {
   "未就绪": "Not ready",
   "未开启": "Off",
   "未开启（在顶栏「个人中心」下打开）": "Off (turn it on under \"Profile\" in the top bar)",
+  "未开启：外部 MCP 客户端连 /api/mcp 会被拒绝": "Off: external MCP clients connecting to /api/mcp will be rejected",
   "未归属": "untracked",
   "未打开": "Not open",
   "未执行": "NOT EXECUTED",
@@ -6334,6 +6362,7 @@ const I18N_EN = {
   "端口线索": "Port hints",
   "端口被占用：8888 被上一个实例占着。先结束残留进程，再点启动。": "Port in use: 8888 is held by the previous instance. Kill the leftover process, then hit start.",
   "端口需在 1024-65535": "Port must be within 1024-65535",
+  "端点": "Endpoint",
   "第 {0} 屏，共 {1} 屏": "Slide {0} of {1}",
   "第一次观测": "First reading",
   "第一步是检测本机组件，结果会直接显示在这里。": "Step one detects local components; results show up right here.",
@@ -6621,6 +6650,7 @@ const I18N_EN = {
   "连接终端": "Connect terminal",
   "连接被拒：地址或端口不对": "Connection refused: wrong address or port",
   "连接超时：服务商无响应或网络不通": "Connection timed out: the provider is unresponsive or the network is down",
+  "连接配置已复制，粘贴到 MCP 客户端即可": "Connection config copied — paste it into your MCP client",
   "连普通请求都不完整（{0}）—— 传输链路本身有问题": "Even the plain request is incomplete ({0}) — the transport path itself is broken",
   "连点 5 次我会回嘴，10 次撒花，15 次看我喷水；双击投喂，右键能换模式，按住 1.5 秒摸头，拖着我甩会晕": "Click 5x to hear me talk back, 10x for confetti, 15x for a whale spout; double-click to feed, right-click to change mode, hold 1.5s to pat, shake me to get me dizzy",
   "连点 5 次换衣服，10 次换发型，按住 1.5 秒摸头，拖着我甩会晕，连点 15 次有惊喜🌈": "Rapid-click 5× for a new outfit, 10× for new hair, hold 1.5s to pat me, swing me around and I get dizzy, 15× for a surprise🌈",
@@ -6685,6 +6715,7 @@ const I18N_EN = {
   "重试": "Retry",
   "重试退避": "Retry backoff",
   "量两次": "applied twice",
+  "鉴权": "Auth",
   "钻石": "Diamond",
   "钻石？！这能吃吗……咕咚。真香！": "A diamond?! Can you even eat that... gulp. Delicious!",
   "链主机": "Chain host",
@@ -6772,6 +6803,7 @@ const I18N_EN = {
   "（上一级）": "(up one level)",
   "（无表）": "(no tables)",
   "（无输出）": "(no output)",
+  "（未开启）": "(off)",
   "（没找到可连的地址）": "(no reachable address found)",
   "（没找到手机能连的地址）": "(no address your phone can reach)",
   "（没有记录目标）": "(no goal recorded)",
@@ -14990,6 +15022,7 @@ function ekEvPoll(on){
     if(id === 'btn-set-save') ekSetSaveBase();
     else if(id === 'btn-set-reload') ekSetLoadBase();
     else if(id === 'btn-s-weather') ekSetWeather();
+    else if(id === 'btn-mcp-copy') ekSetMCPCopy();
     else if(id === 'btn-sd-save') ekSetSaveDev();
     else if(id === 'btn-sd-reset') ekSetResetDev();
     else if(id === 'btn-ev-refresh') ekEvLoad();
@@ -15001,6 +15034,7 @@ function ekEvPoll(on){
   document.addEventListener('change', ev=>{
     const id = ev.target && ev.target.id;
     if(id === 's_weather_on' || id === 's_weather_city') ekSetWeather();
+    if(id === 's_mcp_on') ekSetMCPToggle();
   });
   document.addEventListener('keydown', ev=>{
     if(ev.target && ev.target.id === 's_weather_city' && ev.key === 'Enter'){
@@ -15034,11 +15068,83 @@ async function ekSetBreakerReset(){
    共同原则：改完立刻存、存完重读回显。同一份数据让用户在两处手动同步，
    迟早会出现「这边显示已开、实际没开」。
 */
-const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null};
+const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null, mcp:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups(), ekSetLoadMCP()]);
   ekSetLanFWIdle();
+}
+
+/* ==================== MCP 工具服务（v3.8） ====================
+   开关与 /api/mcp/config 单一出入口；令牌与页面共用（12 小时惰性轮换），
+   所以「复制连接配置」必须每次点按钮时**重新 GET** —— 把上次读到的
+   令牌缓存下来复制，过期了用户只会看到客户端报 401，查不到原因。 */
+async function ekSetLoadMCP(){
+  const sw = document.getElementById('s_mcp_on');
+  const h = document.getElementById('h-mcp');
+  const hs = document.getElementById('h-mcp-snippet');
+  const view = document.getElementById('s_mcp_view');
+  try{
+    const j = await fetch('/api/mcp/config').then(r=>r.json());
+    EK_EXT.mcp = j;
+    if(sw) sw.checked = !!j.enabled;
+    if(h){
+      if(!j.enabled){
+        h.textContent = t('未开启：外部 MCP 客户端连 /api/mcp 会被拒绝');
+        h.className = 'hint';
+      }else{
+        h.textContent = t('已开启 · {0} 个只读工具 · 令牌最长 {1} 小时轮换，过期需重新复制', j.tool_count, j.token_ttl_hours);
+        h.className = 'hint';
+      }
+    }
+    if(view){
+      const rows = [{k:t('端点'), v:j.enabled ? j.url : t('（未开启）'), cls:j.enabled?'ok':'warn'}];
+      if(j.enabled) rows.push({k:t('鉴权'), v:t('X-EnvKit-Token（与本页面共用）'), cls:''});
+      ekRo(view, rows);
+    }
+  }catch(e){
+    if(h) h.textContent = t('读取失败：{0}', e);
+    if(view) ekRo(view, [{k:t('状态'), v:t('读取失败'), cls:'bad'}]);
+  }
+  if(hs) hs.textContent = '';
+}
+
+async function ekSetMCPToggle(){
+  const sw = document.getElementById('s_mcp_on');
+  if(!sw) return;
+  try{
+    const r = await fetch('/api/mcp/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:sw.checked})});
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error((j && j.msg) || ('HTTP '+r.status));
+    toast(sw.checked ? t('MCP 工具服务已开启') : t('MCP 工具服务已关闭'), 'ok');
+  }catch(e){
+    toast(t('保存失败：') + e, 'err');
+    // 保存失败要把开关拨回去：界面停在"已开"而服务端还是关，
+    // 用户拿着配置去连只会得到 403，还以为客户端配错了。
+    sw.checked = !sw.checked;
+  }
+  ekSetLoadMCP();
+}
+
+async function ekSetMCPCopy(){
+  const hs = document.getElementById('h-mcp-snippet');
+  try{
+    /* 每次都重新 GET：令牌可能已在后台轮换，缓存里的就是过期令牌 */
+    const j = await fetch('/api/mcp/config').then(r=>r.json());
+    if(!j.snippet) throw new Error(t('服务端没有返回配置块'));
+    await navigator.clipboard.writeText(j.snippet);
+    toast(t('连接配置已复制，粘贴到 MCP 客户端即可'), 'ok');
+    if(hs) hs.textContent = t('令牌最长 {0} 小时轮换：客户端 401 时回到这里重新复制', j.token_ttl_hours);
+  }catch(e){
+    toast(t('复制失败：') + e, 'err');
+    /* 剪贴板 API 在非安全上下文会被浏览器拒：给一个可手动复制的兜底 */
+    if(hs){
+      try{
+        const j = await fetch('/api/mcp/config').then(r=>r.json());
+        hs.textContent = (j.snippet || t('读取失败')) ;
+      }catch(_){ hs.textContent = t('复制失败：') + e; }
+    }
+  }
 }
 
 /* ==================== 配置备份 / 恢复（v3.9） ====================

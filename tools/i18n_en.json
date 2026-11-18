@@ -2038,5 +2038,17 @@
   "新窗口": "New tab",
   "设置项": "Settings field",
   "有未保存的改动，已保留（点「保存基础设置」写入）": "Unsaved changes kept — press Save basics to write them",
-  "有未保存的改动，已保留（点「保存开发者配置」写入）": "Unsaved changes kept — press Save developer settings to write them"
+  "有未保存的改动，已保留（点「保存开发者配置」写入）": "Unsaved changes kept — press Save developer settings to write them",
+  "未开启：外部 MCP 客户端连 /api/mcp 会被拒绝": "Off: external MCP clients connecting to /api/mcp will be rejected",
+  "已开启 · {0} 个只读工具 · 令牌最长 {1} 小时轮换，过期需重新复制": "On · {0} read-only tools · token rotates up to every {1}h, copy again when it expires",
+  "（未开启）": "(off)",
+  "鉴权": "Auth",
+  "X-EnvKit-Token（与本页面共用）": "X-EnvKit-Token (shared with this page)",
+  "端点": "Endpoint",
+  "MCP 工具服务已开启": "MCP tool service enabled",
+  "MCP 工具服务已关闭": "MCP tool service disabled",
+  "连接配置已复制，粘贴到 MCP 客户端即可": "Connection config copied — paste it into your MCP client",
+  "令牌最长 {0} 小时轮换：客户端 401 时回到这里重新复制": "Token rotates up to every {0}h: when the client returns 401, copy the config here again",
+  "复制失败：": "Copy failed: ",
+  "服务端没有返回配置块": "Server returned no config snippet"
 }

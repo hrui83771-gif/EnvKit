@@ -198,6 +198,11 @@ func mergeFormConfig(form, cur Config) Config {
 	if form.Dev == nil {
 		form.Dev = cur.Dev
 	}
+	// MCP 段（v3.8）走独立出入口 /api/mcp/config，同 Dev：老页面 configBody()
+	// 不回传 mcp，指针为空就沿用原值 —— 否则一次自动保存就把 MCP 开关抹回关闭。
+	if form.MCP == nil {
+		form.MCP = cur.MCP
+	}
 	if strings.TrimSpace(form.UpdateURL) == "" {
 		form.UpdateURL = cur.UpdateURL // 同上：表单没有该字段，别让保存把它抹成空
 	}

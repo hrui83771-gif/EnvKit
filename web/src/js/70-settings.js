@@ -811,6 +811,7 @@ function ekEvPoll(on){
     if(id === 'btn-set-save') ekSetSaveBase();
     else if(id === 'btn-set-reload') ekSetLoadBase();
     else if(id === 'btn-s-weather') ekSetWeather();
+    else if(id === 'btn-mcp-copy') ekSetMCPCopy();
     else if(id === 'btn-sd-save') ekSetSaveDev();
     else if(id === 'btn-sd-reset') ekSetResetDev();
     else if(id === 'btn-ev-refresh') ekEvLoad();
@@ -822,6 +823,7 @@ function ekEvPoll(on){
   document.addEventListener('change', ev=>{
     const id = ev.target && ev.target.id;
     if(id === 's_weather_on' || id === 's_weather_city') ekSetWeather();
+    if(id === 's_mcp_on') ekSetMCPToggle();
   });
   document.addEventListener('keydown', ev=>{
     if(ev.target && ev.target.id === 's_weather_city' && ev.key === 'Enter'){
@@ -855,11 +857,83 @@ async function ekSetBreakerReset(){
    共同原则：改完立刻存、存完重读回显。同一份数据让用户在两处手动同步，
    迟早会出现「这边显示已开、实际没开」。
 */
-const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null};
+const EK_EXT = {alert:null, ms:null, upd:null, notify:null, lan:null, mcp:null};
 
 async function ekSetLoadExtras(){
-  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups()]);
+  await Promise.all([ekSetLoadAlert(), ekSetLoadMissions(), ekSetLoadUpdate(), ekSetLoadNotify(), ekSetLoadLan(), ekSetLoadBackups(), ekSetLoadMCP()]);
   ekSetLanFWIdle();
+}
+
+/* ==================== MCP 工具服务（v3.8） ====================
+   开关与 /api/mcp/config 单一出入口；令牌与页面共用（12 小时惰性轮换），
+   所以「复制连接配置」必须每次点按钮时**重新 GET** —— 把上次读到的
+   令牌缓存下来复制，过期了用户只会看到客户端报 401，查不到原因。 */
+async function ekSetLoadMCP(){
+  const sw = document.getElementById('s_mcp_on');
+  const h = document.getElementById('h-mcp');
+  const hs = document.getElementById('h-mcp-snippet');
+  const view = document.getElementById('s_mcp_view');
+  try{
+    const j = await fetch('/api/mcp/config').then(r=>r.json());
+    EK_EXT.mcp = j;
+    if(sw) sw.checked = !!j.enabled;
+    if(h){
+      if(!j.enabled){
+        h.textContent = t('未开启：外部 MCP 客户端连 /api/mcp 会被拒绝');
+        h.className = 'hint';
+      }else{
+        h.textContent = t('已开启 · {0} 个只读工具 · 令牌最长 {1} 小时轮换，过期需重新复制', j.tool_count, j.token_ttl_hours);
+        h.className = 'hint';
+      }
+    }
+    if(view){
+      const rows = [{k:t('端点'), v:j.enabled ? j.url : t('（未开启）'), cls:j.enabled?'ok':'warn'}];
+      if(j.enabled) rows.push({k:t('鉴权'), v:t('X-EnvKit-Token（与本页面共用）'), cls:''});
+      ekRo(view, rows);
+    }
+  }catch(e){
+    if(h) h.textContent = t('读取失败：{0}', e);
+    if(view) ekRo(view, [{k:t('状态'), v:t('读取失败'), cls:'bad'}]);
+  }
+  if(hs) hs.textContent = '';
+}
+
+async function ekSetMCPToggle(){
+  const sw = document.getElementById('s_mcp_on');
+  if(!sw) return;
+  try{
+    const r = await fetch('/api/mcp/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:sw.checked})});
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error((j && j.msg) || ('HTTP '+r.status));
+    toast(sw.checked ? t('MCP 工具服务已开启') : t('MCP 工具服务已关闭'), 'ok');
+  }catch(e){
+    toast(t('保存失败：') + e, 'err');
+    // 保存失败要把开关拨回去：界面停在"已开"而服务端还是关，
+    // 用户拿着配置去连只会得到 403，还以为客户端配错了。
+    sw.checked = !sw.checked;
+  }
+  ekSetLoadMCP();
+}
+
+async function ekSetMCPCopy(){
+  const hs = document.getElementById('h-mcp-snippet');
+  try{
+    /* 每次都重新 GET：令牌可能已在后台轮换，缓存里的就是过期令牌 */
+    const j = await fetch('/api/mcp/config').then(r=>r.json());
+    if(!j.snippet) throw new Error(t('服务端没有返回配置块'));
+    await navigator.clipboard.writeText(j.snippet);
+    toast(t('连接配置已复制，粘贴到 MCP 客户端即可'), 'ok');
+    if(hs) hs.textContent = t('令牌最长 {0} 小时轮换：客户端 401 时回到这里重新复制', j.token_ttl_hours);
+  }catch(e){
+    toast(t('复制失败：') + e, 'err');
+    /* 剪贴板 API 在非安全上下文会被浏览器拒：给一个可手动复制的兜底 */
+    if(hs){
+      try{
+        const j = await fetch('/api/mcp/config').then(r=>r.json());
+        hs.textContent = (j.snippet || t('读取失败')) ;
+      }catch(_){ hs.textContent = t('复制失败：') + e; }
+    }
+  }
 }
 
 /* ==================== 配置备份 / 恢复（v3.9） ====================
