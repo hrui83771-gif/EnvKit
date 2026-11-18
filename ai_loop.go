@@ -1190,6 +1190,11 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 				verdict.Level = PolicyAuto
 				verdict.Reason = verdict.Reason + "（本任务内已批量授权）"
 			}
+			// 参数校验提前到这里，只为两个顺序上的理由（安全语义不变）：
+			// ① forbid 必须先生效——否则模型会把「禁止」读成「参数写错了」反复重试；
+			// ② 不能先弹确认卡——用户不该为一个注定失败的调用点头。
+			// 真正的兜底仍在 aiExecTool（所有执行的唯一入口），这里只是提前拦。
+			argErr := aiValidateToolArgs(a.Name, args)
 			switch {
 			case !known:
 				toolMsg.Content = "错误：该工具不在白名单内"
@@ -1238,6 +1243,20 @@ func aiRunLoop(ctx context.Context, w http.ResponseWriter, fl http.Flusher, msgs
 					return
 				}
 				msgs = append(msgs, aiMsg{Role: "user", Content: "（系统）不要发起用户没有要求的操作。请直接回答用户刚才的问题。"})
+				continue
+			case argErr != nil:
+				// 参数不合规：不弹卡、不执行，把「哪个字段该是什么」交回模型。
+				//
+				// 以前这类调用会一路走到工具里，然后被类型断言静默吞掉
+				// （`args["lines"].(float64)` 取不到就回默认值）——
+				// 用户看到的是“跑了但结果不对”，模型也不知道自己传错了。
+				// 现在退出码是明确的：模型拿到的就是一手错误信息，改一版就能继续。
+				warn(scSys, "AI", "工具 %s 参数校验未通过：%v", a.Name, argErr)
+				toolMsg.Content = argErr.Error()
+				hasToolFailure = true
+				sseToolResult(w, fl, a.Name, firstLines(toolMsg.Content, 300), false)
+				aiMissionStep(a.Name, policyTargetOf(a.Name, args),
+					planLine(a.Name, policyTargetOf(a.Name, args)), false, toolMsg.Content)
 				continue
 			case def.Write && verdict.NeedsConfirm():
 				// 写工具：转确认流程。v3.2 起**不再结束回合**——就地等用户点按，

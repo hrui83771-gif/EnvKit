@@ -117,6 +117,9 @@ var policyRules = map[string]policyRule{
 	"get_chain_guard": {PolicyAuto, false, "读取链端守护状态，不触发任何恢复动作"},
 	// v2.3 N7：读 go.mod / package.json + 比对版本，纯只读
 	"check_env_req": {PolicyAuto, false, "只读项目版本要求并与实际比对"},
+	// 文档检索：读的是打进 exe 的静态索引，不碰任何外部状态
+	"list_docs":       {PolicyAuto, false, "检索自带文档索引，只读"},
+	"get_doc_section": {PolicyAuto, false, "读取自带文档正文，只读"},
 
 	// ---- 需确认：可逆或影响可控 ----
 	"start_service":     {PolicyConfirm, false, "启动服务会占用端口并可能改动运行环境"},

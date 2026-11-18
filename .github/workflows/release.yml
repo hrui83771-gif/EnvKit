@@ -1,0 +1,79 @@
+name: release
+
+# 打 tag（v*）时构建发布包并上传 Release，同时生成构建来源证明（provenance）。
+#
+# 与 eval-gate 的分工：eval-gate 管"能不能测"，这里管"发出去的东西能不能被验证"。
+# 用户从 Releases 下载 exe 双击运行——没有任何签名校验链，所以至少要给出：
+#   1. SHA256SUMS.txt（make_dist.py 已内置在 zip 里）
+#   2. 构建来源证明：actions/attest-build-provenance 走 OIDC 免密钥，
+#      记录"这个 zip 是哪次 CI 运行、哪份源码构建出来的"，
+#      用 `gh attestation verify` 即可离线核验，不需要信任 Releases 页面本身。
+#
+# 复用 eval-gate.yml 踩过的坑（详细注释见那边）：
+#   - step 一律 6 空格缩进；run 脚本注释里不出现 ${{ }}；
+#   - bash 语法的 step 显式 shell: bash；
+#   - python step 设 PYTHONUTF8: '1'（make_dist 会 print 中文文件名）；
+#   - setup-go 版本取自 go.mod（go-version-file），不会再出现 1.25 编译失败。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write        # 上传 Release 资产
+  attestations: write    # 写入 provenance
+  id-token: write        # provenance 的 OIDC 令牌
+
+jobs:
+  build-and-attest:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # 打包前先确认内嵌产物没有分叉：文档、索引、移动端任一漂移都该在这里红掉，
+      # 而不是发出去之后被人发现线上文档和 exe 里写的不一样。
+      - name: Verify embedded assets are in sync
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          python tools/web_build.py --check
+          python tools/docs_index.py --check
+
+      # make_dist.py 会：重编 exe → 秘密扫描（防把真实密钥打进去）→
+      # 组 zip（exe + 安装/卸载.bat + 使用说明 + SHA256SUMS.txt）。
+      - name: Build release zip
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/make_dist.py
+
+      # 对 zip 做来源证明：SLSA v1 格式，OIDC 签发，不需要任何 secret。
+      # 核验方式（下载者本机）：
+      #   gh attestation verify EnvKit-vX.Y.Z-win64.zip -R hrui83771-gif/EnvKit
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.zip
+
+      # 上传到 GitHub Release（tag 对应的 release 不存在则自动创建）。
+      # 用 gh 而不是 softprops：runner 自带、少一个第三方 action 依赖。
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "EnvKit ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*.zip 2>/dev/null || \
+          gh release upload "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            dist/*.zip

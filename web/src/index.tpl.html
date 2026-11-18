@@ -12,6 +12,9 @@
 <!-- 离线内置：Markdown 渲染 + 代码高亮（与 xterm 一样走 go:embed，不依赖外网 CDN） -->
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/highlight.min.js"></script>
+<!-- AI 回答净化的兜底：marked 允许原始 HTML 通过，自研白名单 walk 挡不住
+     解析变形（mXSS）。DOMPurify 跑第二遍，见 60-ai.js 的 aiSanitizeHtml。 -->
+<script src="/vendor/purify.min.js"></script>
 <!-- 首次引导 / 产品导览 + P1-4 操作教学：同域离线产物，不走任何 CDN。
      Swiper 12 管翻页，Anime.js v4 管动画，driver.js 管控件高亮。 -->
 <link rel="stylesheet" href="/vendor/swiper-bundle.min.css" />

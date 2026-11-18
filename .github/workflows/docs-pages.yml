@@ -33,6 +33,10 @@ jobs:
       # 在线版必须用 exe 里那份产物，否则文档会悄悄分叉。
       - name: Verify embedded assets are in sync
         run: python tools/web_build.py --check
+      # 分节页（/s/<id>/）是从索引生成的：索引落后于 docs.html 时，
+      # 站点会静默少一页、sitemap 也收不到。这道先拦。
+      - name: Verify docs index is in sync
+        run: python tools/docs_index.py --check
       - name: Build static docs site
         run: python tools/docs_site.py --version "${{ inputs.version || github.ref_name }}" --out _site
       - uses: actions/configure-pages@v5

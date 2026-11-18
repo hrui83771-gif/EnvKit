@@ -101,15 +101,27 @@ def main():
         if curd != docs:
             print("docs.html 与 web/src 不一致——请运行 python tools/web_build.py")
             return 1
-        print("index.html / mobile.html / docs.html 与 web/src 一致（%d + %d + %d 字符，js %d 个片段）"
-              % (len(out), len(mobile), len(docs), len(js_files())))
+        # 文档索引是 AI 检索工具的输入，和 docs.html 同源，必须一起校验。
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import docs_index
+        idx_ok, idx_msg = docs_index.check_sync()
+        if not idx_ok:
+            print(idx_msg)
+            return 1
+        print("index.html / mobile.html / docs.html 与 web/src 一致（%d + %d + %d 字符，js %d 个片段）；%s"
+              % (len(out), len(mobile), len(docs), len(js_files()), idx_msg))
         return 0
     io.open(OUT, "w", encoding="utf-8", newline="\n").write(out)
     io.open(MOBILE_OUT, "w", encoding="utf-8", newline="\n").write(mobile)
     io.open(DOCS_OUT, "w", encoding="utf-8", newline="\n").write(docs)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import docs_index
+    secs, chunks, idx_bytes = docs_index.write_out()
     print("已生成 web/index.html：%d 字符（css %d + js %d，%d 个片段）、web/mobile.html：%d 字符、web/docs.html：%d 字符"
+          "、web/docs-index.json：%d 节 / %d 块 / %.1f KB"
           % (len(out), len(io.open(CSS, encoding="utf-8").read()),
-             len(read_js()), len(js_files()), len(mobile), len(docs)))
+             len(read_js()), len(js_files()), len(mobile), len(docs),
+             secs, chunks, idx_bytes / 1024.0))
     return 0
 
 

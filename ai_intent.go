@@ -413,6 +413,10 @@ func aiToolCnName(tool string, args map[string]any) string {
 		return "读取项目文件"
 	case "read_doc":
 		return "读取附件内容"
+	case "list_docs":
+		return "检索使用文档"
+	case "get_doc_section":
+		return "读取文档正文"
 	}
 	return tool
 }

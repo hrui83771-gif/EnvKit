@@ -102,6 +102,15 @@ var (
 	hotkeysJS []byte
 )
 
+// AI 回答的净化兜底（v3.9.0）：自研白名单 walk 处理不了浏览器解析变形
+// （mXSS 这类——同一段字符串进 template 再读出会变成另一棵树），DOMPurify
+// 是经长期审计的实现，跑第二遍只为兜住这一层。它不是「补一个不存在的洞」：
+// 60-ai.js 的 aiSanitizeHtml 本来就按 AI_MD_OK 白名单清洗，只是那套是手写遍历。
+var (
+	//go:embed web/vendor/purify.min.js
+	purifyJS []byte
+)
+
 func main() {
 	if !platform.AcquireSingleInstance() {
 		// 已有实例在跑：找到它并直接打开控制台页面（双击场景必须给可见反馈）。
@@ -217,6 +226,7 @@ func main() {
 	http.HandleFunc("/vendor/diff2html.min.css", staticBytes("text/css; charset=utf-8", diff2htmlCSS))
 	http.HandleFunc("/vendor/diff.min.js", staticBytes("application/javascript; charset=utf-8", jsdiffJS))
 	http.HandleFunc("/vendor/hotkeys.min.js", staticBytes("application/javascript; charset=utf-8", hotkeysJS))
+	http.HandleFunc("/vendor/purify.min.js", staticBytes("application/javascript; charset=utf-8", purifyJS))
 	http.HandleFunc("/api/config/export", handleConfigExport)
 	http.HandleFunc("/api/config/import", handleConfigImport)
 	http.HandleFunc("/api/config/backups", handleConfigBackups)
@@ -261,6 +271,7 @@ func main() {
 	http.HandleFunc("/api/ai/providers", handleAIProviders)
 	http.HandleFunc("/api/ai/models", handleAIModels)
 	http.HandleFunc("/api/ai/balance", handleAIBalance)
+	http.HandleFunc("/api/mcp", handleMCP) // MCP 服务端（只读工具，见 ai_mcp.go）；令牌闸由外层 authMW 生效
 	http.HandleFunc("/api/component-versions", handleComponentVersions)
 	http.HandleFunc("/api/component-upgrade", handleComponentUpgrade)
 	http.HandleFunc("/api/install-dryrun", handleInstallDryRun)

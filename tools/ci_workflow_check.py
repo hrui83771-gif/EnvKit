@@ -204,6 +204,23 @@ def check_go_version(doc):
     raise Bad("找不到 actions/setup-go 步骤")
 
 
+def check_workflows_parse():
+    """GitHub 对任何一个 workflow 文件 YAML 非法都会整个仓库的 Actions 拒载
+    （API 返回 Invalid workflow file），所以全量 parse 一遍，别只盯 eval-gate。"""
+    wdir = os.path.join(ROOT, ".github", "workflows")
+    names = sorted(f for f in os.listdir(wdir) if f.endswith(".yml"))
+    for name in names:
+        doc = load() if name == "eval-gate.yml" else _load_named(name)
+        print("OK  %s 解析正常（name=%r）" % (name, doc.get("name")))
+
+
+def _load_named(name):
+    import yaml
+    path = os.path.join(ROOT, ".github", "workflows", name)
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
 def main():
     if not os.path.exists(WF):
         print("FAIL：找不到 %s" % WF)
@@ -226,6 +243,8 @@ def main():
         print("OK  step=%d  run=%d  go=%d.%d  触发=%s"
               % (len(steps), n_run, gov[0], gov[1],
                  ",".join(k for k in ("push", "pull_request", "workflow_dispatch") if k in doc[True] or k in doc.get("on", {}))))
+
+        check_workflows_parse()
         return 0
     except Bad as e:
         print("FAIL：%s" % e)

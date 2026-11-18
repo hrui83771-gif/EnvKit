@@ -2452,6 +2452,9 @@
 <!-- 离线内置：Markdown 渲染 + 代码高亮（与 xterm 一样走 go:embed，不依赖外网 CDN） -->
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/highlight.min.js"></script>
+<!-- AI 回答净化的兜底：marked 允许原始 HTML 通过，自研白名单 walk 挡不住
+     解析变形（mXSS）。DOMPurify 跑第二遍，见 60-ai.js 的 aiSanitizeHtml。 -->
+<script src="/vendor/purify.min.js"></script>
 <!-- 首次引导 / 产品导览 + P1-4 操作教学：同域离线产物，不走任何 CDN。
      Swiper 12 管翻页，Anime.js v4 管动画，driver.js 管控件高亮。 -->
 <link rel="stylesheet" href="/vendor/swiper-bundle.min.css" />
@@ -10739,12 +10742,23 @@ function aiSanitizeHtml(html){
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
   const bad = {SCRIPT:1,STYLE:1,IFRAME:1,OBJECT:1,EMBED:1,FORM:1,SVG:1,MATH:1,LINK:1,META:1};
+  const HTML_NS = 'http://www.w3.org/1999/xhtml';
   const walk = (root)=>{
     for(const el of Array.from(root.children)){
-      const tag = el.tagName;
+      /* 非 HTML 命名空间一律整块删掉，而不是走下面的脱壳分支。
+         这里踩过一次真漏洞：SVG / MathML 元素的 tagName 保留原始大小写
+         （svg、foreignObject），而 bad / AI_MD_OK 的键是大写，判断必然失配
+         → 落到「脱壳」→ 把未经检查的子树直接提升到父级 → 里面的
+         <img onerror> 一路逃到渲染结果里（实测 <svg><foreignObject> 就这么漏）。
+         模型不该产出 SVG，整块移除没有任何内容损失。 */
+      if(el.namespaceURI && el.namespaceURI !== HTML_NS){ el.remove(); continue; }
+      const tag = (el.tagName || '').toUpperCase();
       if(bad[tag]){ el.remove(); continue; }
       if(!AI_MD_OK[tag]){
-        // 认不出的标签脱壳保留文字（模型爱写 <div align=center> 这类）
+        /* 认不出的标签脱壳保留文字（模型爱写 <div align=center> 这类）。
+           先递归净化子树再提升：否则被剥掉的壳会变成「免疫区」，
+           里面的 on* / 危险属性随子节点一起上移。 */
+        walk(el);
         const frag = document.createDocumentFragment();
         while(el.firstChild) frag.appendChild(el.firstChild);
         el.replaceWith(frag);
@@ -10778,13 +10792,40 @@ function aiSanitizeHtml(html){
   walk(tpl.content);
   return tpl.innerHTML;
 }
+/* 第二道净化：DOMPurify 兜住自研 walk 看不到的那一层。
+   为什么需要两道：上面那套是按 DOM 树逐节点过滤，但「字符串 → template →
+   再读回字符串」本身可能改变解析结果（mXSS，命名空间混淆、注释里藏标签等），
+   手工遍历很难穷举。DOMPurify 是经长期审计的实现，白名单保持一致。
+   它不替代自研那套：自研那套会做「认不出的标签脱壳保文字」「按 tag 分权属性」
+   「A 加 rel=noopener」等业务处理，DOMPurify 的 ALLOWED_ATTR 是全局的，
+   给不了这么细的粒度。所以顺序是 自研 → DOMPurify，只兜不改语义。 */
+function aiPurify(html){
+  const P = window.DOMPurify;
+  if(!P || typeof P.sanitize !== 'function') return html;
+  try{
+    return P.sanitize(html, {
+      ALLOWED_TAGS: Object.keys(AI_MD_OK).map(k=>k.toLowerCase()),
+      ALLOWED_ATTR: ['href','title','align','class','type','checked','disabled','target','rel'],
+      // 自研 walk 已经给外链加了 target/rel；DOMPurify 默认剥 target，
+      // 不 ADD 回来链接会在当前标签打开，把控制台整页顶掉。
+      ADD_ATTR: ['target'],
+      ALLOW_DATA_ATTR: false,
+      ALLOW_ARIA_ATTR: false,
+      KEEP_CONTENT: true
+    });
+  }catch(e){
+    // 净化失败宁可退回上一道的结果，也不能让整条回答渲染不出来。
+    if(window.console && console.warn) console.warn('[aiPurify] 兜底净化失败，沿用自研白名单结果', e);
+    return html;
+  }
+}
 function aiMd(t){
   const src = String(t == null ? '' : t);
   if(!window.marked || typeof marked.parse !== 'function') return aiEscHtml(src);
   let html;
   try{ html = marked.parse(src, {gfm:true, breaks:true, async:false}); }
   catch(e){ return aiEscHtml(src); }
-  return aiSanitizeHtml(html);
+  return aiPurify(aiSanitizeHtml(html));
 }
 function aiHighlight(root){
   if(!root || !window.hljs) return;

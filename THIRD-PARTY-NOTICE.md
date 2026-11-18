@@ -61,6 +61,31 @@ AI 回复的 Markdown 渲染与代码高亮，以及手机端的调试控制台�
 | highlight.js | 11.9.0 | BSD-3-Clause | `web/vendor/highlight.min.js` |
 | vConsole | 3.15.1 | MIT | `web/vendor/vconsole.min.js` |
 
+## AI 输出净化兜底：DOMPurify
+
+`marked` 默认允许原始 HTML 通过，AI 回答与工具返回（远程日志行、配置文件内容、
+被控主机响应）都会走 `aiMd()` → `innerHTML` 这一条链路，而页面同源里放着 API 令牌。
+`60-ai.js` 的 `aiSanitizeHtml` 已按 `AI_MD_OK` 白名单做逐节点清洗；DOMPurify 在其后
+再跑一遍，用于兜住手工遍历难以穷举的解析变形（mXSS 等）。两者白名单口径一致，
+DOMPurify 不改变业务语义，只在自研白名单之后追加一道保险。
+
+| 资源 | 版本 | 许可 | 在本项目中的位置 | SHA256 |
+|---|---|---|---|---|
+| DOMPurify（`purify.min.js`） | 3.2.6 | Apache-2.0 或 MPL-2.0（双许可，任选其一） | `web/vendor/purify.min.js` | `89e1fa7647cb495370d3a997ace4387f5d15d9f4c5af12352c53daa400956287` |
+
+### Apache License 2.0 与 MPL-2.0（DOMPurify）
+
+Copyright (c) Cure53 and other contributors.
+
+DOMPurify 以 Apache License 2.0 与 Mozilla Public License 2.0 双许可发布，
+使用者可任选其一。许可全文见：
+
+- Apache License 2.0：<https://www.apache.org/licenses/LICENSE-2.0>
+- Mozilla Public License 2.0：<https://mozilla.org/MPL/2.0/>
+
+本项目按 Apache License 2.0 使用该产物，文件内容未经修改（`tiny` 之外的标准构建）。
+
+
 ### MIT License（marked）
 
 Copyright (c) 2018+, MarkedJS (<https://github.com/markedjs/marked>)
@@ -320,4 +345,21 @@ Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA, OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## MCP 服务端：modelcontextprotocol/go-sdk
+
+- **来源**：<https://github.com/modelcontextprotocol/go-sdk>
+- **版本**：v0.8.0（Go 依赖，经 `go.mod` 引入，不做任何修改）
+- **许可**：MIT License（全文见下）
+- **在本项目中的位置**：`ai_mcp.go` —— 通过 `/api/mcp`（Streamable HTTP）把 EnvKit 的**只读**工具暴露给 MCP 客户端。写工具因没有确认卡环节而结构性不暴露（见该文件头注释）。
+
+### MIT License（modelcontextprotocol/go-sdk）
+
+Copyright (c) 2025 Go MCP SDK Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 

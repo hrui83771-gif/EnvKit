@@ -138,6 +138,16 @@ try:
             registered |= set(re.findall(r'aiToolRegistry\["([a-z_]+)"\]', g))
             registered |= set(re.findall(r'"([a-z_]+)":\s*\{', g))
         unknown_tools = sorted(named_tools - registered)
+        # 文档索引（喂给 AI 的那份）必须与页面里的节一一对应：
+        # 索引是构建产物，页面改了不同步就会「AI 引用的节在文档里不存在」。
+        try:
+            idx = json.load(io.open(os.path.join(ROOT, "web", "docs-index.json"), encoding="utf-8"))
+            idx_ids = [s.get("id", "") for s in idx.get("sections", [])]
+            idx_chunks = sum(len(s.get("chunks", [])) for s in idx.get("sections", []))
+        except Exception as e:
+            idx_ids, idx_chunks = [], 0
+            print("  (读 docs-index.json 失败：%s)" % e)
+        idx_diff = sorted(set(idx_ids) ^ sec_set)
         dchecks = [
             ("http-200", r.status == 200),
             ("title", "EnvKit 使用文档" in dc),
@@ -149,11 +159,15 @@ try:
             ("anchors-unique", len(sec_ids) == len(sec_set) and len(h3_ids) == len(set(h3_ids))),
             ("xlink-targets-exist", len(xlink_targets) > 0 and all(t in sec_set for t in xlink_targets)),
             ("tool-names-real", len(named_tools) > 0 and not unknown_tools),
+            ("doc-index-sync", len(idx_ids) > 0 and idx_chunks > 0 and not idx_diff
+             and len(idx_ids) == len(sec_ids)),
         ]
         detail = {
             "no-external": dc_ext,
             "xlink-targets-exist": [t for t in xlink_targets if t not in sec_set],
             "tool-names-real": unknown_tools,
+            "doc-index-sync": ("索引 %d 节 / %d 块，页面 %d 节，差异 %s"
+                               % (len(idx_ids), idx_chunks, len(sec_ids), idx_diff)),
             "anchors-unique": "sec/h3 id 有重复" if (len(sec_ids) != len(sec_set) or len(h3_ids) != len(set(h3_ids))) else "",
         }
         for name, good in dchecks:

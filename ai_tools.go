@@ -170,6 +170,40 @@ var aiToolRegistry = map[string]aiTool{
 			return "<untrusted_data>\n" + strings.Join(aiGetLogs(scope, lines), "\n") + "\n</untrusted_data>", nil
 		},
 	},
+	"list_docs": {
+		Desc: "查 EnvKit 自带使用文档。不带参数返回全部节标题；带 query 返回最相关的几个片段（含 anchor）。" +
+			"碰到操作步骤、字段含义、报错判据、日志/端口/升级/卸载这类问题时，先查文档再回答，不要凭印象编",
+		Schema: map[string]any{"type": "object", "properties": map[string]any{
+			"query": map[string]any{"type": "string", "description": "要查的内容，如「日志文件在哪个目录」；留空则列出全部节标题"},
+		}, "required": []string{}},
+		Execute: func(args map[string]any) (string, error) {
+			if err := docsLoad(); err != nil {
+				return "", err
+			}
+			q, _ := args["query"].(string)
+			lang := aiDocsLang(args)
+			if strings.TrimSpace(q) == "" {
+				return docsOutline(lang), nil
+			}
+			return docsSearchReport(q, lang), nil
+		},
+	},
+	"get_doc_section": {
+		Desc: "按 id 取文档某一节的正文（超长会截断并列出还能单独取的小节）。id 来自 list_docs",
+		Schema: map[string]any{"type": "object", "properties": map[string]any{
+			"id":      map[string]any{"type": "string", "description": "节 id，如 install / config / start / chain"},
+			"heading": map[string]any{"type": "string", "description": "可选：只取该节里的某个小节（小节 id 或 anchor）"},
+			"lang":    map[string]any{"type": "string", "enum": []string{"zh", "en"}, "description": "文档原文语言，默认 zh；界面为英文时传 en"},
+		}, "required": []string{"id"}},
+		Execute: func(args map[string]any) (string, error) {
+			if err := docsLoad(); err != nil {
+				return "", err
+			}
+			id, _ := args["id"].(string)
+			head, _ := args["heading"].(string)
+			return docsBody(id, head, aiDocsLang(args))
+		},
+	},
 	"db_check": {
 		Desc:   "检测 MySQL 数据库连接是否正常（只读，不修改任何数据）",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}},
@@ -782,6 +816,7 @@ const aiSystemPrompt = `你是 EnvKit 的内置运维助手。EnvKit 是一个 W
    - 快照里的 project 字段已经是项目画像（语言、框架、可用脚本、入口、端口线索），先用它。
    - 需要更细的信息时，按"先看目录、再搜文件、最后精读"的顺序用 list_project → search_files → read_file。
    - 涉及"怎么跑起来/报什么错/配置在哪/入口在哪"的问题，必须先探索再回答，**严禁凭猜测描述项目结构或命令**。
+   - 问的是 **EnvKit 自己的用法**（某个开关在哪、这个字段什么意思、日志落在哪、怎么升级/回滚/卸载、这条报错怎么判）→ 先用 list_docs（可带 query）查自带的使用文档，需要全文再 get_doc_section。**文档里已经写清的事，不要编，也不要让用户自己去翻**。
    - 用户拖进来的文档附件在上下文里只带**第一段**；要读后续内容用 read_doc（doc_id 与下一段 offset 都写在附件那段末尾）。**不要拿第一段当全文**，尤其别据此回答"文档里说……"。
    - 探索工具只能在已配置的项目目录内工作：越界或被安全策略拒绝时，如实告诉用户"看不了 + 为什么"，不要反复重试。
    - 工具返回「已复验通过」= 已用客观证据（端口/HTTP/sha256/共识视图）确认环境恢复；返回「未复验」= 只证明动作执行了，两者不可混为一谈。
@@ -892,6 +927,12 @@ func aiExecTool(name string, args map[string]any) (string, error) {
 		// 只在成功执行时记步，这条永远是 0。
 		traceStep(phAction, actAI, name, policyTargetOf(name, args), "fail", 0, "denied", "")
 		return "", fmt.Errorf("手机端是只读的，不支持执行「%s」；请到电脑上操作", aiToolCnName(name, args))
+	}
+	// 参数按工具自带的 schema 校验（见 ai_validate.go）。
+	// 放在只读闸之后：安全边界优先，禁止的操作不该被"你参数写错了"掩盖。
+	// 放在 Execute 之前：这里返回的 error 会被上层原样回给模型，让它自己改一版。
+	if err := aiValidateToolArgs(name, args); err != nil {
+		return "", err
 	}
 	// ---- 轨迹记录放在执行层，不放调用点 ----
 	//
