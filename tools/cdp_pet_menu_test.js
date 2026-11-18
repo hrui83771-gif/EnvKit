@@ -199,6 +199,41 @@ function seed() {
     for (const a of ['home', 'hide', 'say', 'weather', 'aierr', 'drawer', 'check', 'tricks', 'passthrough']) {
       ok(acts.indexOf(a) >= 0, '保留 data-act=' + a);
     }
+
+    /* ---- 6) 「查看天气」的显隐只认服务端状态，且刷新后不丢 ----
+       用户报的是：只有去设置页保存过一次，右键菜单里才会出现「查看天气」，
+       过一会又没了。真因是启动那次 GET /api/pet/config 发得太早——它排在
+       10-i18n.js 末尾，而统一加 X-EnvKit-Token 的 fetch 包装在 20-shell.js，
+       请求先发出去、拿不到令牌 → 401，被 .catch 静默吞掉 → petWeatherOn 恒为 false。
+       这里故意把 localStorage 写成 '0'（旧的错误缓存），再刷新：
+       只有「真的读到了服务端值」才会显示，缓存说了不算。 */
+    console.log('天气菜单项：');
+    const wxPost = await evalJS(`fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({weather_enabled:true, weather_city:'合肥'})}).then(r=>r.status)`);
+    ok(wxPost === 200, '服务端已开启天气（POST /api/pet/config → ' + wxPost + '）');
+    await evalJS(`localStorage.setItem('ek-pet-weather','0'); true`);
+    await send('Page.reload', {});
+    await sleep(3500);
+    const wx1 = JSON.parse(await evalJS(`JSON.stringify((function(){
+      var b = document.getElementById('pet-act-weather');
+      return { hidden: !!b.hidden, disp: b ? getComputedStyle(b).display : '',
+               inMenu: !!document.querySelector('#pet-ctx #pet-act-weather'),
+               cached: localStorage.getItem('ek-pet-weather') };
+    })())`));
+    ok(wx1.inMenu, '「查看天气」是右键菜单里的一项');
+    ok(wx1.hidden === false && wx1.disp !== 'none',
+      '刷新后菜单项仍在（服务端开着；缓存写的是 0 也不算数）→ ' + JSON.stringify(wx1));
+    ok(wx1.cached === '1', '读到服务端值后把 ek-pet-weather 更正为 1');
+
+    /* 反例：服务端关掉 + 重读设置页 → 菜单项必须跟着消失。
+       少了 70-settings.js 里那次同步，设置页显示已关闭、右键菜单却还挂着，
+       两个入口各说一套。 */
+    await evalJS(`fetch('/api/pet/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({weather_enabled:false})})`);
+    await evalJS(`(async function(){ await ekSetLoadBase(true); })()`);
+    await sleep(600);
+    const wx2 = await evalJS(`document.getElementById('pet-act-weather').hidden`);
+    ok(wx2 === true, '服务端关闭后重读设置页，菜单项同步收起');
   } catch (e) {
     fails.push('EXCEPTION: ' + e.message);
     console.log('EXCEPTION', e.message);

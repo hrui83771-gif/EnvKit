@@ -195,6 +195,14 @@ async function ekSetLoadBase(force){
       $('#s_weather_city').value = pet.weather_city || '';
       ekWeatherCityLoaded = true;   // 已用服务端值填过 → 之后清空才是"用户要清空"
       ekWeatherHint(!!pet.weather_enabled, pet.weather_city || '');
+      /* 读到的既是"设置页的开关"，也是"右键菜单要不要显示查看天气"。
+         只填控件不同步菜单的话：配置文件被外部改过（热重载）或换了窗口，
+         设置页显示已开启、右键菜单却仍按旧的 false 藏着，两边各说一套。
+         菜单只有一个判据 petWeatherOn，这里顺手把它对齐。 */
+      if(petWeatherOn !== !!pet.weather_enabled){
+        petWeatherOn = !!pet.weather_enabled;
+        petWeatherMenuSync();
+      }
     }
     if(ai){
       ekRo('#s_ai_view', [

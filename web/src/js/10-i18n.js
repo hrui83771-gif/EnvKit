@@ -2091,18 +2091,41 @@ if(petCfgBus) petCfgBus.onmessage = e=>{ if(e.data && typeof e.data.on === 'bool
 addEventListener('storage', e=>{
   if(e.key === 'ek-pet-weather' && e.newValue !== null) petWeatherLocal(e.newValue === '1');
 });
-/* 只在启动时读一次：设置页保存后自己会更新（见 ekSetWeather），
-   这里没必要轮询。失败按"关"处理，菜单项隐藏即可，不打扰用户。
-   顺手把设置页那两个控件也填上：不然用户先勾开关、后打开设置页，
-   看到的会是一个空城市框。 */
-fetch('/api/pet/config').then(r=>r.json()).then(j=>{
-  petWeatherOn = !!(j && j.weather_enabled);
-  petWeatherMenuSync();
-  if(j){
-    petWeatherLocal(petWeatherOn, j.weather_city || '');
-    try{ localStorage.setItem('ek-pet-weather', petWeatherOn ? '1' : '0'); }catch(_){}
-  }
-}).catch(()=>{});
+/* 启动时读一次服务端值：设置页保存后自己会更新（见 ekSetWeather），这里不轮询。
+ * 顺手把设置页那两个控件填上：不然用户先勾开关、后打开设置页，看到的会是一个空城市框。
+ *
+ * 三件必须写清楚的事（都是这个开关反复踩过的）：
+ *
+ *  1) **不能在这里直接 fetch**。这段代码在 10-i18n.js 末尾，而给 /api 请求统一加
+ *     X-EnvKit-Token 的包装在 20-shell.js 里 —— 同一个内联脚本按顺序执行，这里发出的
+ *     请求早于包装安装，于是拿不到令牌，服务端回 401「未授权的访问」。旧代码用
+ *     `.catch(()=>{})` 把它咽了，petWeatherOn 停在 false，表现就是：天气明明开着，
+ *     右键菜单里却没有「查看天气」；只有在设置页保存一次（那条 fetch 已带令牌）
+ *     才会短暂出现，刷新后又没了。改成 DOMContentLoaded 后再发：那时整个脚本
+ *     已跑完，包装一定在，且仍然只有一份令牌实现。
+ *
+ *  2) **缓存只用来消闪，不当权威**。localStorage 的 ek-pet-weather 是上一轮的结果，
+ *     先拿它把菜单摆对，用户刷新时不会看到「菜单项先消失再出现」；随后以服务端为准。
+ *
+ *  3) **失败要留痕**。读不到就保持上次状态（未知 ≠ 关），并在控制台留一行，
+ *     不要再静默成 false —— 静默正是这个 bug 活了这么久的原因。 */
+function petWeatherBoot(){
+  try{
+    if(localStorage.getItem('ek-pet-weather') === '1'){ petWeatherOn = true; petWeatherMenuSync(); }
+  }catch(_){}
+  fetch('/api/pet/config').then(r=>{
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(j=>{
+    if(!j || typeof j.weather_enabled !== 'boolean') return;
+    petWeatherLocal(!!j.weather_enabled, j.weather_city || '');
+    try{ localStorage.setItem('ek-pet-weather', j.weather_enabled ? '1' : '0'); }catch(_){}
+  }).catch(e=>{ try{ console.warn('[pet] 天气开关读取失败：', (e && e.message) || e); }catch(_){} });
+}
+/* DOMContentLoaded 之后才发：见上面第 1 条。readyState 守卫是为了
+   万一脚本被动态插入（那时事件已经错过）仍能跑一次。 */
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', petWeatherBoot);
+else petWeatherBoot();
 const EK_ZH_OF = {};   // 译文 → 原文（切回中文时按译文找回）
 for(const k in I18N_EN){
   const v = I18N_EN[k];
