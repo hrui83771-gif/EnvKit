@@ -563,6 +563,21 @@ async function attach(target) {
     ok(prn.shell && prn.one && prn.secs === 1, '打印模式隐藏页面外壳，正文只留当前节');
 
     // ---- 6) 双语：与主控制台共享 ek-lang ----
+    console.log('页头双语与语言按钮：');
+    await djs(`localStorage.setItem('ek-lang','zh'); true`);
+    await sleep(200);
+    const zhHead = JSON.parse(await djs(`JSON.stringify({
+      h1:document.getElementById('hero-t').textContent,
+      sub:document.getElementById('hero-p').textContent,
+      langBtn:document.getElementById('lang').textContent,
+      langTitle:document.getElementById('lang').title,
+      themeBtn:document.getElementById('theme').textContent
+    })`));
+    ok(/使用文档/.test(zhHead.h1) && /安装到排障/.test(zhHead.sub), '中文模式页头标题与副标题是中文');
+    ok(zhHead.langBtn === 'EN' && /English/.test(zhHead.langTitle),
+      '中文模式按钮显示「EN」且 title 指向英文（' + zhHead.langBtn + ' / ' + zhHead.langTitle + '）');
+    ok(/暗色/.test(zhHead.themeBtn), '中文模式主题按钮显示「暗色」（点后变暗）');
+
     console.log('英文模式：');
     await djs(`document.getElementById('lang').click(); true`);
     await sleep(500);
@@ -576,13 +591,46 @@ async function attach(target) {
       });
       var nav=document.getElementById('tree').textContent+document.getElementById('toc').textContent;
       return { cjk:!!bad, sample:bad, navCjk:/[\\u4e00-\\u9fa5]/.test(nav),
+        h1:document.getElementById('hero-t').textContent,
+        sub:document.getElementById('hero-p').textContent,
+        langBtn:document.getElementById('lang').textContent,
+        langTitle:document.getElementById('lang').title,
+        themeBtn:document.getElementById('theme').textContent,
         stored: localStorage.getItem('ek-lang'), path:location.pathname };
     })())`));
     ok(!en.cjk, '切英文后每节正文都没有中文残留（' + en.sample + '）');
     ok(!en.navCjk, '英文模式左目录 / 右栏也没有中文');
+    ok(/Docs/.test(en.h1) && /From install/.test(en.sub), '英文模式页头标题与副标题切成英文（' + en.h1 + '）');
+    ok(en.langBtn === '中文' && /Chinese/.test(en.langTitle),
+      '英文模式按钮显示「中文」且 title 指向中文（' + en.langBtn + ' / ' + en.langTitle + '）');
+    ok(/Dark/.test(en.themeBtn), '英文模式主题按钮显示「Dark」');
     ok(en.stored === 'en', '语言选择写入 ek-lang，与主控制台共享');
     await djs(`document.getElementById('lang').click(); localStorage.setItem('ek-lang','zh'); true`);
     await sleep(300);
+
+    console.log('明暗主题：');
+    const th0 = JSON.parse(await djs(`JSON.stringify({
+      attr:document.body.dataset.theme||'', scheme:document.querySelector('meta[name="color-scheme"]').content,
+      bg:getComputedStyle(document.body).backgroundColor,
+      btn:document.getElementById('theme').textContent
+    })`));
+    ok(th0.attr === 'light' && th0.scheme === 'light' && /暗色/.test(th0.btn),
+      '默认亮色：data-theme 非 dark、color-scheme=light、按钮写「暗色」');
+    await djs(`document.getElementById('theme').click(); true`);
+    await sleep(200);
+    const th1 = JSON.parse(await djs(`JSON.stringify({
+      attr:document.body.dataset.theme||'', scheme:document.querySelector('meta[name="color-scheme"]').content,
+      bg:getComputedStyle(document.body).backgroundColor, stored:localStorage.getItem('ek-theme'),
+      btn:document.getElementById('theme').textContent,
+      card:getComputedStyle(document.querySelector('#body .sec')).backgroundColor
+    })`));
+    ok(th1.attr === 'dark' && th1.scheme === 'dark' && th1.stored === 'dark' && /亮色/.test(th1.btn),
+      '点主题按钮切暗色：data-theme/scheme/存储/按钮四处同步');
+    ok(th1.bg !== th0.bg && th1.card !== th0.bg, '暗色下页面与卡片底色都真的变了（' + th0.bg + ' → ' + th1.bg + '）');
+    await djs(`document.getElementById('theme').click(); true`);
+    await sleep(200);
+    const th2 = JSON.parse(await djs(`JSON.stringify({attr:document.body.dataset.theme||'', stored:localStorage.getItem('ek-theme')})`));
+    ok(th2.attr === 'light' && th2.stored === 'light', '再点一次回亮色并写入 ek-theme');
 
     } else {
       console.log('  SKIP 独立页未打开，结构 / 交互 / 英文三组跳过（前置条件不满足）');

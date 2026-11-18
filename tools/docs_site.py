@@ -21,9 +21,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "web", "docs.html")
 RELEASES = "https://github.com/hrui83771-gif/EnvKit/releases"
 
-CONSOLE_LINK = '<a class="hbtn primary" href="/">返回控制台</a>'
-RELEASE_LINK = ('<a class="hbtn primary" href="' + RELEASES +
-                '" target="_blank" rel="noopener">Download / 下载 ↗</a>')
+CONSOLE_LINK = '<a class="hbtn primary" id="cta" href="/">返回控制台</a>'
+RELEASE_LINK = ('<a class="hbtn primary" id="cta" href="' + RELEASES +
+                '" target="_blank" rel="noopener">下载最新版 ↗</a>')
+# 页头主按钮的文案由 setLang 每帧用 tv(T.backCta) 重写；把词条本身换掉，
+# 切语言后就只会显示一种语言，而不是写死的「Download / 下载」并列。
+BACK_SOURCE = "backCta:z('返回控制台','Back to console')"
+BACK_SITE = "backCta:z('下载最新版 ↗','Download ↗')"
 REPLAY_JS = ("document.getElementById('replay').textContent = "
              "lang === 'en' ? 'Replay the tour →' : '重新观看界面导览 →';")
 RELEASE_JS = ("document.getElementById('replay').textContent = "
@@ -47,6 +51,9 @@ def build(version, strict=True):
     if CONSOLE_LINK not in out:
         return None, fail("找不到「返回控制台」链接，站点版会指向域名根")
     out = out.replace(CONSOLE_LINK, RELEASE_LINK)
+    if BACK_SOURCE not in out:
+        return None, fail("找不到主按钮词条 backCta，站点版会一直显示「返回控制台」")
+    out = out.replace(BACK_SOURCE, BACK_SITE)
     if REPLAY_JS not in out:
         return None, fail("找不到 replay 文案赋值，切语言后会把链接文字改回导览")
     out = out.replace(REPLAY_JS, RELEASE_JS)
@@ -63,6 +70,8 @@ def build(version, strict=True):
             r'<(?:script|link)\b[^>]*\b(?:src|href)="https?://[^"]+"', out)),
         ("sections>=20", out.count("{id:'") >= 20),
         ("release-link", RELEASES in out),
+        ("cta-single-lang", 'Download / 下载' not in out and BACK_SITE in out),
+        ("theme-toggle", 'id="theme"' in out and "ek-theme" in out),
     ]
     bad = [name for name, ok in checks if not ok]
     for name, ok in checks:
