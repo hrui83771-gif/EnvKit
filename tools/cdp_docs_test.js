@@ -205,7 +205,7 @@ async function attach(target) {
         sections: btns.length,
         ids: ids,
         glossary: ids.indexOf('glossary') >= 0 && txt.indexOf('共识视图') >= 0,
-        leadNav: [].slice.call(document.querySelectorAll('#lead-nav a')).map(function(a){ return a.getAttribute('href'); }),
+        leadNav: document.querySelectorAll('#lead-nav a, .lead-nav a').length,
         perPage: document.querySelectorAll('#body .sec').length,
         tabs: tabs, steps: steps, xlinks: xlinks.length,
         validLinks: xlinks.every(function(h){ return ids.indexOf(String(h).replace('#doc-','')) >= 0; }),
@@ -227,9 +227,8 @@ async function attach(target) {
     ok(iso.trouble, '有按症状聚合的排障索引节');
     ok(iso.glossary, '有术语对照节，解释自造词');
     ok(iso.upgrade, '有升级/回滚/卸载节，覆盖覆盖升级、回滚与卸载');
-    ok(iso.leadNav.length === 2 && iso.leadNav.indexOf('#doc-quick') >= 0 &&
-       iso.leadNav.indexOf('#doc-troubleshoot') >= 0,
-       '页头两条引导直达四步与排障（' + iso.leadNav.join('/') + '）');
+    ok(iso.leadNav === 0,
+       '页头不留快速跳转，篇幅还给导语（lead-nav 链接 ' + iso.leadNav + ' 条）');
     ok(iso.tools === 5, 'AI 节列出真实注册工具名（' + iso.tools + '/5）');
     ok(iso.paths === 5, '操作节给出真实字段值 / 端口 / 示例路径（' + iso.paths + '/5）');
     ok(iso.xlinks >= 7 && iso.validLinks, '节间交叉链接全部指向存在的节（' + iso.xlinks + ' 条）');
@@ -375,14 +374,19 @@ async function attach(target) {
 
     const hitJump = JSON.parse(await djs(`(function(){
       var r=document.querySelector('#hits .hit'); var go=r.getAttribute('data-go');
-      r.click(); return JSON.stringify({go:go, hash:location.hash});
+      r.click();
+      return JSON.stringify({go:go, hash:location.hash,
+        qv:document.getElementById('q').value,
+        hitsHidden:document.getElementById('hits').hidden,
+        treeHidden:document.getElementById('tree').hidden});
     })()`));
     await sleep(800);
     const hitTop = await djs(`(function(){var h=document.getElementById('${hitJump.go}');return h?h.getBoundingClientRect().top:9999;})()`);
     ok(hitJump.hash === '#' + hitJump.go && Math.abs(hitTop) < 90,
       '点命中条直接滚到锚点并改写 hash（' + hitJump.go + '，偏移 ' + Math.round(hitTop) + '）');
-    await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`);
-    await sleep(200);
+    ok(hitJump.qv === '' && hitJump.hitsHidden && !hitJump.treeHidden,
+      '点命中条跳转后搜索框自动清空、命中列表收起、目录恢复（不必手动删字）');
+    await sleep(100);
 
     // 搜索补洞：命令行也要能搜到；空格分词按 AND；+N 真能展开；↑↓/Enter 能选能跳。
     const sx = JSON.parse(await djs(`(function(){
@@ -413,9 +417,12 @@ async function attach(target) {
       var selIdx=list.findIndex(function(r){ return r.classList.contains('sel'); });
       var selGo=selIdx>=0 ? list[selIdx].getAttribute('data-go') : '';
       document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      var afterEnter={qv:document.getElementById('q').value,
+        hitsHidden:document.getElementById('hits').hidden,
+        treeHidden:document.getElementById('tree').hidden};
       return JSON.stringify({code:code,multi:multi,nomatch:nomatch,
         expand:{before:visibleBefore,after:visibleAfter,moreBefore:moreBefore,moreAfter:moreAfter},
-        key:{selIdx:selIdx,selGo:selGo,hash:location.hash}});
+        key:{selIdx:selIdx,selGo:selGo,hash:location.hash,after:afterEnter}});
     })()`));
     ok(sx.code.all > 0 && sx.code.text.indexOf('python tools/web_build.py') >= 0,
       '命令行参与搜索（web_build 命中源码构建命令）');
@@ -427,6 +434,8 @@ async function attach(target) {
       '+N 是真按钮，点了展开全部命中（可见 ' + sx.expand.before + '→' + sx.expand.after + '）');
     ok(sx.key.selIdx === 1 && sx.key.hash === '#' + sx.key.selGo,
       '↓↓ 选中第二条命中，Enter 跳到对应锚点（' + sx.key.selGo + '）');
+    ok(sx.key.after.qv === '' && sx.key.after.hitsHidden && !sx.key.after.treeHidden,
+      'Enter 跳转后同样自动清空搜索框并恢复目录');
     // 键盘测试跳到了别的节，后面还要验链节标题的复制按钮，必须先回到链节。
     await djs(`(function(){var i=document.getElementById('q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#tree button[data-sec="chain"]').click(); return true;})()`);
     await sleep(250);
@@ -674,17 +683,21 @@ async function attach(target) {
     const mob = JSON.parse(await djs(`JSON.stringify((function(){
       var vw=document.documentElement.clientWidth;
       var over=[];
-      ['.hero','.brand','.hero-side','#theme','#lang','#cta','.quick','.layout','.side','.search','.sec','.sec>h2','.tbl','.sec-nav','.foot'].forEach(function(sel){
+      // .side/.search 现在在收起的抽屉里（transform 移到视口外），不算横向溢出。
+      ['.hero','.brand','.hero-side','#theme','#lang','#cta','#toc-btn','.quick','.layout','.sec','.sec>h2','.tbl','.sec-nav','.foot'].forEach(function(sel){
         var e=document.querySelector(sel); if(!e) return;
         var b=e.getBoundingClientRect();
         if(b.right>vw+1||b.left<-1) over.push(sel+':'+Math.round(b.right));
       });
       var tbl=document.querySelector('.tbl');
-      var grp=document.querySelector('.grpbox'), tbtn=document.querySelector('#tree button');
+      var side=document.querySelector('.side'), tocBtn=document.getElementById('toc-btn');
       var cs=getComputedStyle(document.querySelector('.layout'));
       return { vw:vw, scrollW:document.documentElement.scrollWidth, over:over,
         cols:cs.display, toc:getComputedStyle(document.getElementById('toc')).display,
-        grpDisplay:grp?getComputedStyle(grp).display:'', btnWrap:tbtn?getComputedStyle(tbtn).whiteSpace:'',
+        btnShow:getComputedStyle(tocBtn).display,
+        sideLeft:Math.round(side.getBoundingClientRect().left),
+        sideOpen:side.classList.contains('open'),
+        treeDisplay:getComputedStyle(document.getElementById('tree')).display,
         tblScroll:tbl?tbl.scrollWidth:0, tblClient:tbl?tbl.clientWidth:0,
         themeSvg:!!document.querySelector('#theme svg'),
         themeW:Math.round(document.getElementById('theme').getBoundingClientRect().width) };
@@ -692,10 +705,36 @@ async function attach(target) {
     ok(mob.vw === 390 && mob.scrollW <= mob.vw && mob.over.length === 0,
       '390px 下整页不横向溢出（scrollW=' + mob.scrollW + '，越界=' + mob.over.join(',') + '）');
     ok(mob.cols === 'block' && mob.toc === 'none', '手机端三栏收成单列、右目录隐藏');
-    ok(mob.grpDisplay === 'flex' && mob.btnWrap === 'nowrap', '目录分组在手机端横向排列且标题不折成竖排');
+    ok(mob.btnShow !== 'none' && !mob.sideOpen && mob.sideLeft < -50,
+      '手机端目录默认收在视口外，页头有「目录」把手（side.left=' + mob.sideLeft + '）');
+    ok(mob.treeDisplay === 'block', '抽屉里目录恢复竖向分组，不再是横向滚动 chips');
     ok(mob.tblScroll > mob.tblClient && mob.tblClient < mob.vw,
       '宽表格自身横向滚动而不撑破页面（' + mob.tblClient + '/' + mob.tblScroll + '）');
     ok(mob.themeSvg && mob.themeW >= 28 && mob.themeW <= 40, '手机端主题按钮是 32px 级 SVG 图标');
+
+    // 目录抽屉：按钮唤出→遮罩出现→动画落定后真的滑进视口→点节跳转自动收起
+    const drawer = JSON.parse(await djs(`JSON.stringify((function(){
+      var btn=document.getElementById('toc-btn'), side=document.querySelector('.side'), mask=document.getElementById('toc-mask');
+      btn.click();
+      return {opened:side.classList.contains('open') && mask.hidden===false &&
+                     btn.getAttribute('aria-expanded')==='true'};
+    })())`));
+    ok(drawer.opened, '点「目录」把手抽屉展开、遮罩出现、aria-expanded 置真');
+    await sleep(400); // 等 .24s 过渡落定，再量坐标（点击瞬间还在滑行途中）
+    ok(await djs(`(function(){var s=document.querySelector('.side');return Math.round(s.getBoundingClientRect().left)>=0;})()`),
+      '抽屉动画落定后真的滑进视口（left>=0）');
+    const drawerPick = JSON.parse(await djs(`JSON.stringify((function(){
+      var target=document.querySelector('#tree button[data-sec="runtime"]');
+      var go=target?target.getAttribute('data-sec'):'';
+      if(target) target.click();
+      var side=document.querySelector('.side'), mask=document.getElementById('toc-mask');
+      return {closed:!side.classList.contains('open') && mask.hidden===true,
+              go:go, hash:location.hash};
+    })())`));
+    ok(drawerPick.closed && drawerPick.hash === '#doc-' + drawerPick.go,
+      '抽屉里点一节跳到对应页并自动收起（' + drawerPick.hash + '）');
+    await djs(`(function(){var b=document.getElementById('toc-btn');b.click();document.getElementById('toc-mask').click();return true})()`);
+    ok(await djs(`!document.querySelector('.side').classList.contains('open')`), '点遮罩也能收起抽屉');
     await docs.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await sleep(300);
 

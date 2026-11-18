@@ -30,7 +30,7 @@
      常量保留成显式列表，是为了让「首次选集」这件事仍然是一个可断言的点：
      真要回到精简版只改这行，测试会立刻告诉你屏数和顺序变了。 */
   var FIRST_RUN_SLIDES = [0, 1, 2, 3, 4, 5, 6, 7];
-  var BRAND_MS = 1400;
+  var BRAND_MS = 1500;   /* 启动片头 1.5s：每次打开 exe 都放一次，与引导是否首次无关 */
   var TOTAL = 8;
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var AM = window.anime || null;
@@ -342,6 +342,7 @@
   var sw = null;
   var brandTimer = null;
   var brandArmed = false;
+  var brandStandalone = false;   /* 真：每次启动的独立片头；假：首次引导内的片头 */
   var returnFocus = null;
   var inited = {};
   var timers = [];
@@ -439,8 +440,17 @@
     if(b) b.classList.remove('play');
     document.removeEventListener('keydown', onBrandKey, true);
     resetStyle(BRAND_SELS);
-    var skip = q('#ob-skip');
-    if(skip && typeof skip.focus === 'function') skip.focus();
+    /* 独立启动片头收尾后把引导层恢复成隐藏态；首次引导的片头由 open() 管，
+       这里不碰 .show，避免提前关掉还没开始的导览。 */
+    if(brandStandalone){
+      brandStandalone = false;
+      OB.classList.remove('show');
+      document.body.classList.remove('ob-active');
+      document.body.classList.remove('boot-brand');
+    } else {
+      var skip = q('#ob-skip');
+      if(skip && typeof skip.focus === 'function') skip.focus();
+    }
   }
 
   function onBrandKey(e){
@@ -1334,4 +1344,25 @@
         ? window.EKAvatarWait(host, text) : function(){};
     }
   };
+
+  /* ---------- 启动片头：每次打开 exe 都放 1.5s，与引导是否首次无关 ----------
+     首次引导自己会在 open('first') 里播片头，这里跳过以免放两遍；
+     第 2 次及以后没有引导，就临时把引导层显示出来、只露 #ob-brand 放一次，
+     结束由 endBrand() 复原。自动化环境跳过——否则全屏层会挡住 CDP 真鼠标点击。 */
+  function bootBrand(){
+    /* seen()=假→首次，交给 open('first') 内部的片头，这里跳过免得放两遍；
+       seen()=真→第 2 次及以后，才由这里补上独立启动片头。 */
+    if(REDUCED || !seen()) return;
+    var automated = !!(navigator.webdriver ||
+      /HeadlessChrome|PhantomJS/i.test(navigator.userAgent));
+    if(automated) return;
+    var ba = q('#ob-brand-avatar'), src = avatarSrc();
+    if(ba && src) ba.src = src;
+    brandStandalone = true;
+    OB.classList.add('show');
+    document.body.classList.add('ob-active');
+    document.body.classList.add('boot-brand');
+    playBrand();
+  }
+  try{ bootBrand(); }catch(e){}
 })();

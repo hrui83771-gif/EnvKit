@@ -2056,6 +2056,8 @@
   #ob-brand{position:absolute;inset:0;z-index:6;display:none;align-items:center;
     justify-content:center;background:var(--bg);cursor:pointer;overflow:hidden}
   #ob-brand.play{display:flex}
+  /* 独立启动片头：引导层临时显示，但只露片头这一层，其余导览 UI 不出现 */
+  body.boot-brand .ob > :not(#ob-brand){display:none!important}
   .ob-brand-glow{position:absolute;width:min(620px,86vw);height:min(620px,86vw);border-radius:50%;
     background:radial-gradient(circle,var(--ob-glow) 0%,transparent 66%);
     filter:blur(30px);opacity:0}
