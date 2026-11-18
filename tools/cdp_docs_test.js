@@ -274,7 +274,7 @@ async function attach(target) {
       pageH3: document.querySelectorAll('#body .sec h3').length,
       tocInPage: Array.prototype.every.call(document.querySelectorAll('#toc a[data-anchor]'), function(a){
         var el=document.getElementById(a.dataset.anchor); return !!el && !!el.closest('#body'); }),
-      quick: document.querySelectorAll('#quick a').length,
+      quickNav: document.getElementById('quick') ? document.querySelectorAll('#quick a').length : -1,
       cols: getComputedStyle(document.querySelector('.layout')).gridTemplateColumns.split(' ').length,
       lead: document.getElementById('lead-t').textContent,
       leadShown: getComputedStyle(document.querySelector('.lead')).display !== 'none'
@@ -286,7 +286,7 @@ async function attach(target) {
        '每个分组都显示本章节数（' + st.gcounts.join('/') + '）');
     ok(st.toc === st.pageH3 + 1 && st.tocInPage,
       '右栏「此页面」只列当前节（' + st.toc + ' 项 = ' + st.pageH3 + ' 个 H3 + 节标题）');
-    ok(st.quick === st.groups, '快速跳转按分组取代表节（' + st.quick + ' 项 = ' + st.groups + ' 组）');
+    ok(st.quickNav === -1, '页头不再有「快速跳转」导航条（#quick 已移除）');
     ok(!!st.lead && st.leadShown, '第一节有引导语（' + st.lead.slice(0, 16) + '）');
 
     try {
@@ -589,7 +589,7 @@ async function attach(target) {
     await sleep(200);
     const prn = JSON.parse(await djs(`(function(){
       document.body.classList.add('print-one');
-      var shell=['.hero','.side','.toc','.quick','.sec-nav'].every(function(sel){
+      var shell=['.hero','.side','.toc','.sec-nav'].every(function(sel){
         var el=document.querySelector(sel); return !el || getComputedStyle(el).display==='none'; });
       var one=document.querySelector('.sec-one');
       var shown=one && getComputedStyle(one).display!=='none';
@@ -684,7 +684,7 @@ async function attach(target) {
       var vw=document.documentElement.clientWidth;
       var over=[];
       // .side/.search 现在在收起的抽屉里（transform 移到视口外），不算横向溢出。
-      ['.hero','.brand','.hero-side','#theme','#lang','#cta','#toc-btn','.quick','.layout','.sec','.sec>h2','.tbl','.sec-nav','.foot'].forEach(function(sel){
+      ['.hero','.brand','.hero-side','#theme','#lang','#cta','#toc-btn','.layout','.sec','.sec>h2','.tbl','.sec-nav','.foot'].forEach(function(sel){
         var e=document.querySelector(sel); if(!e) return;
         var b=e.getBoundingClientRect();
         if(b.right>vw+1||b.left<-1) over.push(sel+':'+Math.round(b.right));
