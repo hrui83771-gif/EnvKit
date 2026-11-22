@@ -944,8 +944,15 @@ func backendStartTaskLocked(dir, actor string) OpResult {
 }
 
 // opStartBackend 后端构建 + 启动执行体（任务协程内运行）。
+// 按 backendProjectKind 分派：Maven 项目走 mvn，其余走 go。
+// 幂等跳过与目录校验两种路径对两种后端完全一致，所以放在分派之前。
 func opStartBackend(dir, actor string) OpResult {
-	fin := auditStart(actor, "start_service", "backend", "go build + go run")
+	kind := backendProjectKind(dir)
+	label := "go build + go run"
+	if kind == "maven" {
+		label = "mvn spring-boot:run"
+	}
+	fin := auditStart(actor, "start_service", "backend", label)
 	setProg("backend-start", true, false, "构建并启动中...")
 	// v3.0 T1.3 幂等前置（修 G3）：已在运行就不重复派生。
 	// 后端连 go build 一起跳过——"改代码后想重新编译"用 restart_service，
@@ -968,6 +975,78 @@ func opStartBackend(dir, actor string) OpResult {
 		fin(resFail, "后端目录不可用")
 		return opFail("start_service", "backend", errKindBadConfig, "后端目录不可用："+dir, "dir="+dir)
 	}
+	if kind == "maven" {
+		return opStartBackendMaven(dir, actor, fin)
+	}
+	return opStartBackendGo(dir, actor, fin)
+}
+
+// opStartBackendMaven Maven 后端执行体：JDK 前置 → mvn 编译快速失败 → spring-boot:run。
+//
+// 与 go 路径同构：build 阶段 streamed（编译错误当场报，不拖进后台日志），
+// run 阶段 background（进程树进 Win Job Object，stop/restart 能整棵杀）。
+// 端口由复验层探（内置候选表含 8080，Spring Boot 默认端口直接命中）。
+func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpResult {
+	// JDK 前置：java 不在 PATH 时再试 JAVA_HOME（Maven 官方就是这么找 JDK 的）
+	javaPath := findExe("java.exe", "java")
+	if javaPath == "" {
+		if jh := strings.TrimSpace(os.Getenv("JAVA_HOME")); jh != "" {
+			cand := filepath.Join(jh, "bin", "java.exe")
+			if hasFile(cand) {
+				javaPath = cand
+			}
+		}
+	}
+	if javaPath == "" {
+		setProg("backend-start", false, false, "未找到 JDK")
+		failS(scStart, "backend", "后端", "未找到 JDK（java）")
+		fin(resFail, "未找到 JDK")
+		return opFail("start_service", "backend", errKindMissingDep,
+			"未找到 JDK：Maven 项目需要 JDK 才能编译运行，请安装 JDK 并配置 PATH 或 JAVA_HOME",
+			"dir="+dir, "need=java")
+	}
+	// Maven：项目自带 mvnw.cmd 优先（不依赖全局安装，CI/换机都不炸），
+	// 否则找 PATH 里的 mvn。Windows 上 os/exec 对 .cmd 自动走 cmd /c。
+	mvnPath := ""
+	if hasFile(filepath.Join(dir, "mvnw.cmd")) {
+		mvnPath = filepath.Join(dir, "mvnw.cmd")
+		infoS(scStart, "backend", "后端", "使用项目自带 Maven 包装器 mvnw.cmd")
+	} else {
+		mvnPath = findExe("mvn.cmd", "mvn")
+	}
+	if mvnPath == "" {
+		setProg("backend-start", false, false, "未找到 Maven")
+		failS(scStart, "backend", "后端", "未找到 Maven（mvn）")
+		fin(resFail, "未找到 Maven")
+		return opFail("start_service", "backend", errKindMissingDep,
+			"未找到 Maven：请安装 Maven 并加入 PATH，或在后端目录提供 mvnw.cmd",
+			"dir="+dir, "need=maven")
+	}
+	infoS(scStart, "backend", "后端", "Maven 编译 @ %s", dir)
+	// -q 只压 info 日志，编译错误照常输出；首次跑会拉依赖，耗时与 npm install 同级。
+	if err := execStreamed(scStart, "backend", "后端", dir, nil, mvnPath, "-q", "compile"); err != nil {
+		setProg("backend-start", false, false, err.Error())
+		failS(scStart, "backend", "后端", "Maven 编译失败：%v", err)
+		fin(resFail, err.Error())
+		return opFail("start_service", "backend", errKindBuildFail,
+			"Maven 编译失败："+firstLines(err.Error(), 300),
+			"dir="+dir, "hint=查看「程序启动」日志中的编译错误；首次运行需下载依赖，失败也可能是网络问题")
+	}
+	infoS(scStart, "backend", "后端", "mvn spring-boot:run")
+	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, nil, mvnPath, "spring-boot:run"); err != nil {
+		setProg("backend-start", false, false, err.Error())
+		failS(scStart, "backend", "后端", "mvn spring-boot:run 失败：%v", err)
+		fin(resFail, err.Error())
+		return opFail("start_service", "backend", errKindSpawnFail,
+			"Maven 启动进程派生失败："+firstLines(err.Error(), 200),
+			"dir="+dir, "hint=先看「启动」日志里 Maven 自己打印的报错；确无任何输出时才考虑安全软件拦截")
+	}
+	okS(scStart, "backend", "后端", "已启动（mvn spring-boot:run）")
+	fin(resOK, "backend")
+	return opOK("start_service", "backend", "后端进程已派生（Maven 编译通过，尚未做服务可用性复验）", "dir="+dir)
+}
+
+func opStartBackendGo(dir, actor string, fin func(result, detail string)) OpResult {
 	exe := findExe("go.exe", "go")
 	if exe == "" {
 		setProg("backend-start", false, false, "未找到 go")

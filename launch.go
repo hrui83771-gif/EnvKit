@@ -35,10 +35,31 @@ type LaunchPlan struct {
 	WebScript   string   `json:"web_script,omitempty"`   // 建议的 npm 脚本（已剔除危险项）
 	WebAll      []string `json:"web_all,omitempty"`      // 全部候选（供 AI 与界面展示）
 	WebSource   string   `json:"web_source,omitempty"`   // config | package.json | none
-	BackendFile string   `json:"backend_file,omitempty"` // 相对后端目录的入口，如 main.go
+	BackendKind string   `json:"backend_kind,omitempty"` // go | maven（决定后端怎么启动）
+	BackendFile string   `json:"backend_file,omitempty"` // go：相对后端目录的入口，如 main.go；maven：pom.xml
 	BackendWhy  string   `json:"backend_why,omitempty"`  // 入口判定依据（给人和 AI 看）
 	Blocked     []string `json:"blocked,omitempty"`      // 被安全规则剔除的脚本名
 	Note        string   `json:"note,omitempty"`         // 需要人介入的说明
+}
+
+// backendProjectKind 判定后端项目种类：maven（pom.xml / mvnw）或 go（其余）。
+// 这是启动分派、复验进程名单、环境符合性检查共用的**唯一口径**。
+//
+// 优先级刻意偏向 go：同时有 go.mod 和 pom.xml 的混合仓库按 Go 项目处理——
+// go.mod 是明确的"用 Go 构建"信号，pom.xml 可能只是仓库里顺带的工具模块。
+func backendProjectKind(backendDir string) string {
+	dir := strings.TrimSpace(backendDir)
+	if dir == "" {
+		return "go"
+	}
+	if hasFile(filepath.Join(dir, "go.mod")) || hasFile(filepath.Join(dir, "main.go")) {
+		return "go"
+	}
+	if hasFile(filepath.Join(dir, "pom.xml")) ||
+		hasFile(filepath.Join(dir, "mvnw.cmd")) || hasFile(filepath.Join(dir, "mvnw")) {
+		return "maven"
+	}
+	return "go"
 }
 
 // ---------- 脚本名规则 ----------
@@ -287,7 +308,15 @@ func currentLaunchPlan() LaunchPlan {
 	p := LaunchPlan{}
 	p.WebScript, p.WebAll, p.WebSource, p.Blocked = inferWebScript(
 		cfg.Projects.FrontendDir, cfg.Projects.WebScript)
-	p.BackendFile, p.BackendWhy = inferBackendFile(cfg.Projects.BackendDir)
+	p.BackendKind = backendProjectKind(cfg.Projects.BackendDir)
+	if p.BackendKind == "maven" {
+		// Maven 项目没有"入口文件"概念，spring-boot:run 由 pom 接管；
+		// BackendFile 填 pom.xml 让下游判断（BackendFile=="" 视为未识别）不误伤。
+		p.BackendFile = "pom.xml"
+		p.BackendWhy = "Maven 项目（检测到 pom.xml/mvnw），启动方式 mvn spring-boot:run"
+	} else {
+		p.BackendFile, p.BackendWhy = inferBackendFile(cfg.Projects.BackendDir)
+	}
 	switch {
 	case p.WebSource == "config":
 		p.Note = "前端启动脚本由你在「程序配置」中指定"
@@ -356,7 +385,11 @@ func launchPlanBrief(p LaunchPlan) string {
 	}
 	sb.WriteString("；后端：")
 	if p.BackendFile != "" {
-		sb.WriteString("go run " + p.BackendFile)
+		if p.BackendKind == "maven" {
+			sb.WriteString("mvn spring-boot:run（Maven 项目，检测到 pom.xml）")
+		} else {
+			sb.WriteString("go run " + p.BackendFile)
+		}
 	} else {
 		sb.WriteString("未识别（不可自动启动）")
 	}

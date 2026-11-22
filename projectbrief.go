@@ -23,14 +23,19 @@ import (
 
 type projectBrief struct {
 	Roots       []string          `json:"roots"`
-	Kinds       []string          `json:"kinds"`        // go / node / vue / react / maven / python / rust / docker
-	Packages    []string          `json:"packages"`     // go 模块名 / npm 包名
+	Kinds       []string          `json:"kinds"`        // go / node / vue / maven / python / rust / docker
+	Packages    []string          `json:"packages"`     // go 模块名 / npm 包名 / maven artifactId
 	Scripts     []string          `json:"scripts"`      // package.json 里的可用脚本（已裁剪）
 	Entries     map[string]string `json:"entries"`      // 入口文件猜测：go_main / web_main
 	Configs     []string          `json:"configs"`      // 值得进一步精读的配置文件
 	PortHints   []int             `json:"port_hints"`   // 端口线索：来自配置文件里的 port 配置
 	NodeModules bool              `json:"node_modules"` // 依赖是否已安装（未装则 npm run 必然失败）
-	Note        string            `json:"note,omitempty"`
+	// Maven 项目补充（非 Maven 项目为空，JSON 里不出现）：
+	// JavaVer 是 pom.xml <java.version> 的声明值，供环境符合性检查与 AI 参考；
+	// 这两个值来自用户的项目文件，是客观事实不是推断。
+	MavenArtifact string `json:"maven_artifact,omitempty"`
+	JavaVer       string `json:"java_ver,omitempty"`
+	Note          string `json:"note,omitempty"`
 }
 
 // ---------- 缓存 ----------
@@ -70,7 +75,24 @@ func projectBriefInvalidate() {
 var (
 	reModuleLine = regexp.MustCompile(`(?m)^module\s+(\S+)`)
 	rePortNum    = regexp.MustCompile(`(?i)port\s*[:=]\s*["']?(\d{2,5})`)
+	// pom.xml：project 级 artifactId 必须先剥掉 <parent> 块再取第一个——
+	// Spring Boot 项目的 parent 块自带 artifactId 且排在前面（TestExtractPomMeta
+	// 抓出来的：曾把 spring-boot-starter-parent 当成项目名）。
+	rePomArtifact  = regexp.MustCompile(`<artifactId>\s*([^<\s]+)\s*</artifactId>`)
+	rePomParentBlk = regexp.MustCompile(`(?s)<parent\b.*?</parent>`)
 )
+
+// extractPomMeta 从 pom.xml 文本里抽 project artifactId 与 java 版本声明。
+// java 版本声明的解析口径在 envreq.go（pomJavaDeclared），画像与符合性检查
+// 必须读出同一个值——同一口径只许一个实现。
+// 解析不到就是空——画像只报客观事实，不猜。
+func extractPomMeta(src string) (artifact, javaVer string) {
+	core := rePomParentBlk.ReplaceAllString(src, "")
+	if m := rePomArtifact.FindStringSubmatch(core); len(m) > 1 {
+		artifact = m[1]
+	}
+	return artifact, pomJavaDeclared(src)
+}
 
 // briefConfigFiles 值得读取示意图 port 线索的配置文件名。
 var briefConfigFiles = map[string]bool{
@@ -78,6 +100,7 @@ var briefConfigFiles = map[string]bool{
 	"webpack.config.js": true, "nuxt.config.js": true, "next.config.js": true,
 	"docker-compose.yml": true, "docker-compose.yaml": true,
 	"application.yml": true, "application.yaml": true, "application.properties": true,
+	"pom.xml":     true,
 	"config.yaml": true, "config.yml": true, "Makefile": true,
 }
 
@@ -151,6 +174,20 @@ func buildProjectBrief(roots []string) projectBrief {
 			}
 			if !b.NodeModules {
 				b.Note = "node_modules 不存在/不在统计范围：npm run 大概率会失败，需先 npm install"
+			}
+		}
+		if data, err := os.ReadFile(filepath.Join(root, "pom.xml")); err == nil {
+			// kinds["maven"] 由下方标志文件表统一登记，这里只做画像解析。
+			// package.json/pom.xml 的 artifactId 都进 Packages——
+			// svcExpectProcs 会拿包名当后端进程候选名，多余的名字无害。
+			if a, jv := extractPomMeta(string(data)); a != "" || jv != "" {
+				if a != "" {
+					b.Packages = append(b.Packages, a)
+					b.MavenArtifact = a
+				}
+				if jv != "" {
+					b.JavaVer = jv
+				}
 			}
 		}
 		for f, kind := range map[string]string{

@@ -183,7 +183,9 @@ try:
         fail.append("chain_guard")
     print("ai.enabled   =", j["ai"]["enabled"])
     print("components   =", [c["name"] for c in j["components"]])
-    if len(j["components"]) != 3:
+    # v3.8 起 dist 模板带 5 个组件（Go/Node/MySQL + JDK/Maven，服务 Java 项目）；
+    # JDK/Maven 未装只显示"未安装"不拦截，所以对 Go-only 用户只是多两行提示。
+    if len(j["components"]) != 5:
         fail.append("components")
 
     print("--- 全文敏感串 ---")

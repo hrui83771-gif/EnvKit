@@ -333,6 +333,11 @@ func svcExpectProcs(target string) []string {
 		return []string{"node.exe", "node"}
 	}
 	names := []string{"main.exe", "main", "go.exe", "go"}
+	// Maven 后端监听端口的进程是 java（spring-boot:run 无论 fork 与否都跑在 JVM 上），
+	// 不把 java 加进预期名单的话，复验会把 8080 当"别人的端口"剔除后判失败。
+	if backendProjectKind(cfg.Projects.BackendDir) == "maven" {
+		names = append(names, "java.exe", "java", "mvn", "mvn.cmd")
+	}
 	var brief projectBrief
 	if raw := aiProjectBriefJSON(); raw != "" {
 		if json.Unmarshal([]byte(raw), &brief) == nil {

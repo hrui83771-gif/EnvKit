@@ -364,6 +364,9 @@ func aiToolCnName(tool string, args map[string]any) string {
 	case "start_service":
 		svc, _ := args["service"].(string)
 		if svc == "backend" {
+			if backendProjectKind(cfg.Projects.BackendDir) == "maven" {
+				return "启动后端（mvn spring-boot:run）"
+			}
 			return "启动后端（go build + go run）"
 		}
 		if svc == "all" {

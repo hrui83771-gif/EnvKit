@@ -96,6 +96,38 @@
       "check_regex": "8\\.0",
       "special": "mysql",
       "extra_env": null
+    },
+    {
+      "name": "JDK",
+      "version": "17.0.12",
+      "url": "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/17/jdk/x64/windows/OpenJDK17U-jdk_x64_windows_hotspot_17.0.12_7.zip",
+      "zip_top": "jdk-17.0.12+7",
+      "bin_rel": "bin",
+      "bin_exe": "java.exe",
+      "check_cmd": "java",
+      "check_args": [
+        "-version"
+      ],
+      "check_regex": "version \"",
+      "special": "",
+      "extra_env": {
+        "JAVA_HOME": "<install>/jdk-17.0.12+7"
+      }
+    },
+    {
+      "name": "Maven",
+      "version": "3.9.9",
+      "url": "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip",
+      "zip_top": "apache-maven-3.9.9",
+      "bin_rel": "bin",
+      "bin_exe": "mvn.cmd",
+      "check_cmd": "mvn",
+      "check_args": [
+        "-v"
+      ],
+      "check_regex": "Apache Maven",
+      "special": "",
+      "extra_env": null
     }
   ],
   "ai": {

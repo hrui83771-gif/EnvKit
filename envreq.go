@@ -72,9 +72,41 @@ var goModGoRe = regexp.MustCompile(`(?m)^\s*go\s+(\d+\.\d+(?:\.\d+)?)`)
 // 上限（<19）刻意不判——上限极少写且容易误判。
 var nodeEnginesRe = regexp.MustCompile(`(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
 
+// javaVerOutputRe 从 `java -version` 的输出里取版本号。
+// JDK 的版本信息打在 **stderr**（runVersionCmd 用 CombinedOutput 所以拿得到），
+// 形如：openjdk version "17.0.9" 2023-10-17 LTS / java version "1.8.0_392"
+var javaVerOutputRe = regexp.MustCompile(`version "(\d[\d._]*)"`)
+
+// normalizeJavaVer 归一 Java 版本号：JDK 8 时代的 "1.8.0_392" 截掉构建号取
+// "1.8.0"（verTriple 按 "." 分段，下划线会让 Atoi 失败）；"17" 保持原样。
+// 这是纯文本规整，判不出就原样返回，由 compareReq 兜底报"无法解析版本号"。
+func normalizeJavaVer(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '_'); i > 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+// extractJavaVersion 从任意含版本引号的输出里抽 Java 版本号，抽不到返回空。
+func extractJavaVersion(s string) string {
+	m := javaVerOutputRe.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return normalizeJavaVer(m[1])
+}
+
 // checkGoReq 比对 Go 版本与 go.mod 要求。
 func checkGoReq(backendDir string, actual string) EnvReq {
 	r := EnvReq{Component: "go", Actual: actual}
+	// Maven 后端项目先于"未安装"判定：**先问项目要不要 Go，再问机器有没有 Go**。
+	// 顺序反了的后果是纯 Java 项目没装 Go 也报 not_install——那不是问题，是误报。
+	if backendProjectKind(backendDir) == "maven" {
+		r.Status = reqNA
+		r.Why = "后端是 Maven 项目（检测到 pom.xml/mvnw），不检查 Go 版本"
+		return r
+	}
 	if strings.TrimSpace(actual) == "" {
 		r.Status = reqNotInstall
 		r.Why = "未检测到 Go"
@@ -105,21 +137,28 @@ func checkGoReq(backendDir string, actual string) EnvReq {
 // checkNodeReq 比对 Node 版本与 package.json engines 要求。
 func checkNodeReq(frontendDir string, actual string) EnvReq {
 	r := EnvReq{Component: "node", Actual: actual}
+	// 同 checkGoReq 的顺序原则：先看项目要不要 Node，再看机器装没装。
+	// 纯 Java 后端项目没配前端目录时，Node 装没装都无所谓，不该报"未安装"。
+	if strings.TrimSpace(frontendDir) == "" {
+		r.Status = reqUndeclared
+		r.Why = "未配置前端目录，无法读取 package.json"
+		return r
+	}
+	if _, err := os.Stat(filepath.Join(frontendDir, "package.json")); err != nil {
+		r.Status = reqUndeclared
+		r.Why = "前端目录没有 package.json（非 Node 项目）"
+		return r
+	}
 	if strings.TrimSpace(actual) == "" {
 		r.Status = reqNotInstall
 		r.Why = "未检测到 Node.js"
 		r.Action = "在「环境安装」里安装 Node.js"
 		return r
 	}
-	if strings.TrimSpace(frontendDir) == "" {
-		r.Status = reqUndeclared
-		r.Why = "未配置前端目录，无法读取 package.json"
-		return r
-	}
 	b, err := os.ReadFile(filepath.Join(frontendDir, "package.json"))
 	if err != nil {
 		r.Status = reqUndeclared
-		r.Why = "前端目录没有 package.json（非 Node 项目）"
+		r.Why = "package.json 读取失败：" + err.Error()
 		return r
 	}
 	engines := parseEnginesNode(string(b))
@@ -261,7 +300,9 @@ func verStr(v [3]int) string {
 
 func init() {
 	aiToolRegistry["check_env_req"] = aiTool{
-		Desc: "检查**当前环境是否满足项目的版本要求**（读 go.mod 的 go 指令与 package.json 的 engines.node）。" +
+		Desc: "检查**当前环境是否满足项目的版本要求**（读 go.mod 的 go 指令、package.json 的 engines.node、" +
+			"以及 Maven 项目 pom.xml 的 java.version；各组件只对该组件对应的栈说话——" +
+			"Maven 后端不检查 Go/Node，非 Maven 项目不检查 Java）。" +
 			"装了组件不等于够用——项目可能要求更高版本，这时编译会直接失败。" +
 			"用户报「编译报错说版本不对」「装完还是跑不了」时用它。" +
 			"三种结果要分清：ok=够用、too_low=**版本不够，需要处理**、undeclared=项目没声明要求" +
@@ -292,10 +333,11 @@ func orNone(s string) string {
 
 // checkAllEnvReq 查全部组件。返回里只有"不够用"和"没装"的才需要用户动手。
 func checkAllEnvReq() []EnvReq {
-	goVer, nodeVer := installedVersions()
+	goVer, nodeVer, javaVer := installedVersions()
 	return []EnvReq{
 		checkGoReq(cfg.Projects.BackendDir, goVer),
 		checkNodeReq(cfg.Projects.FrontendDir, nodeVer),
+		checkJavaReq(cfg.Projects.BackendDir, javaVer),
 		// v3.1：config.toml 链地址一致性。权威源 = 链端路由配置
 		// （ChainHost:ChainPort），检测纯客观比对，不经过 AI。
 		// n_a（非链项目）时 Why 会说明"不视为问题"。
@@ -303,11 +345,62 @@ func checkAllEnvReq() []EnvReq {
 	}
 }
 
+// checkJavaReq 比对 JDK 版本与 pom.xml 的 java.version 要求。
+// 非 Maven 后端项目返回 n_a（不是问题）——与链项目 n_a 同一哲学：
+// 环境符合性检查只对"项目真的需要的东西"说话。
+func checkJavaReq(backendDir string, actual string) EnvReq {
+	r := EnvReq{Component: "java", Actual: actual}
+	if strings.TrimSpace(backendDir) == "" {
+		r.Status = reqNA
+		r.Why = "未配置后端目录，无法读取 pom.xml"
+		return r
+	}
+	if backendProjectKind(backendDir) != "maven" {
+		r.Status = reqNA
+		r.Why = "后端不是 Maven 项目，不检查 Java 版本"
+		return r
+	}
+	b, err := os.ReadFile(filepath.Join(backendDir, "pom.xml"))
+	if err != nil {
+		r.Status = reqNA
+		r.Why = "pom.xml 读取失败：" + err.Error()
+		return r
+	}
+	declared := pomJavaDeclared(string(b))
+	if declared == "" {
+		r.Status = reqUndeclared
+		r.Why = "pom.xml 未声明 java.version（说明它不挑版本）"
+		return r
+	}
+	r.Required = declared
+	if strings.TrimSpace(actual) == "" {
+		r.Status = reqNotInstall
+		r.Why = "项目要求 JDK " + declared + "，但未检测到 JDK"
+		r.Action = "安装 JDK " + declared + " 或更高版本，并配置 JAVA_HOME / PATH"
+		return r
+	}
+	// actual 可能带 JDK8 构建号（1.8.0_392）：归一是同一条口径，
+	// 不论版本来自检测结果、组件探测还是调用方直传，进 compareReq 前都要规整。
+	return compareReq(r, normalizeJavaVer(actual), "pom.xml 声明 java.version "+declared)
+}
+
+// pomJavaDeclared 取 pom.xml 里声明的 Java 版本（<java.version> 或
+// maven.compiler.source/release），规整后返回；没声明返回空。
+var rePomJavaDeclared = regexp.MustCompile(`<(?:java\.version|maven\.compiler\.source|maven\.compiler\.release)>\s*([^<\s]+)\s*</`)
+
+func pomJavaDeclared(src string) string {
+	m := rePomJavaDeclared.FindStringSubmatch(src)
+	if len(m) < 2 {
+		return ""
+	}
+	return normalizeJavaVer(m[1])
+}
+
 // installedVersions 取实际装了的版本。
 //
 // 优先读已有检测结果；没跑过检测就**只做只读探测**（不安装任何东西）——
 // 环境符合性检查是回答"够不够用"，不是"顺手把环境装好"。
-func installedVersions() (goVer, nodeVer string) {
+func installedVersions() (goVer, nodeVer, javaVer string) {
 	resultsMu.Lock()
 	has := len(results) > 0
 	if has {
@@ -317,12 +410,14 @@ func installedVersions() (goVer, nodeVer string) {
 				goVer = v.Version
 			case "node", "node.js", "nodejs":
 				nodeVer = strings.TrimPrefix(v.Version, "v")
+			case "java", "jdk", "java runtime":
+				javaVer = extractJavaVersion(v.Version)
 			}
 		}
 	}
 	resultsMu.Unlock()
-	if has {
-		return goVer, nodeVer
+	if has && goVer != "" && nodeVer != "" && javaVer != "" {
+		return goVer, nodeVer, javaVer
 	}
 	// 现场探测：先走组件定义（能复用项目配置的安装路径），
 	// 失败再直接问 PATH —— 因为 cfg.Components 在没装过 EnvKit 的机器上
@@ -345,6 +440,10 @@ func installedVersions() (goVer, nodeVer string) {
 				if nodeVer == "" {
 					nodeVer = strings.TrimPrefix(r.Version, "v")
 				}
+			case "java", "jdk", "java runtime":
+				if javaVer == "" {
+					javaVer = extractJavaVersion(r.Version)
+				}
 			}
 		}
 	}
@@ -354,7 +453,10 @@ func installedVersions() (goVer, nodeVer string) {
 	if nodeVer == "" {
 		nodeVer = probeVersionOf("node")
 	}
-	return goVer, nodeVer
+	if javaVer == "" {
+		javaVer = probeJavaVersion()
+	}
+	return goVer, nodeVer, javaVer
 }
 
 // probeVersionOf 直接问 PATH 里的可执行文件版本号。只读，不改任何东西。
@@ -381,6 +483,17 @@ func probeVersionOf(exe string) string {
 		return verStr(v)
 	}
 	return ""
+}
+
+// probeJavaVersion 直接问 PATH 里的 java 版本。与 probeVersionOf 分开实现：
+// java 只认 `-version`（--version 会直接报错退出），且版本打在 stderr、
+// 带引号——runVersionCmd 的 CombinedOutput 拿得到 stderr，正则抽取即可。
+func probeJavaVersion() string {
+	p := findExe("java.exe", "java")
+	if p == "" {
+		return ""
+	}
+	return extractJavaVersion(runVersionCmd(p, "-version"))
 }
 
 // runVersionCmd 跑一次版本查询。查不到返回空串（不是错误——版本探测失败不该报故障）。
