@@ -226,7 +226,10 @@
   button.ghost:hover{background:var(--hover)}
   button.warn{background:var(--warn)}
   button:disabled{opacity:.45;cursor:not-allowed}
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:10px}
+  /* 组件检测/安装卡片：一行排开 + 横向滚动。组件从 3 个加到 5 个（+JDK/Maven）
+     后 auto-fill grid 必然折成两行，顶栏高度不稳；单行滚动保持一屏一行的扫读节奏。 */
+  .cards{display:flex;gap:12px;margin-top:10px;overflow-x:auto;padding-bottom:4px}
+  .cards>.comp{flex:0 0 auto;min-width:210px}
   .comp{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:11px}
   .comp .name{font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:15px}
   .badge{font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap}

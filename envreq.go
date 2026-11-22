@@ -332,17 +332,26 @@ func orNone(s string) string {
 }
 
 // checkAllEnvReq 查全部组件。返回里只有"不够用"和"没装"的才需要用户动手。
+//
+// 按后端项目栈裁剪（v3.x）：后端只对"项目真的用的那个栈"说话——
+// Maven 项目不返回 go 行、Go 项目不返回 java 行。n_a 语义仍保留在
+// 单组件函数里（checkGoReq/checkJavaReq 各自的闸门不变），这里只裁
+// 最终清单：满屏 n_a 等于没说，与 envReqSummary 的克制同一哲学。
+// backendProjectKind("") 返回 "go"，所以未配置后端目录时仍保留 go 行
+// （提示去配置），java 行不出现——它本来也是 n_a。
 func checkAllEnvReq() []EnvReq {
 	goVer, nodeVer, javaVer := installedVersions()
-	return []EnvReq{
-		checkGoReq(cfg.Projects.BackendDir, goVer),
-		checkNodeReq(cfg.Projects.FrontendDir, nodeVer),
-		checkJavaReq(cfg.Projects.BackendDir, javaVer),
-		// v3.1：config.toml 链地址一致性。权威源 = 链端路由配置
-		// （ChainHost:ChainPort），检测纯客观比对，不经过 AI。
-		// n_a（非链项目）时 Why 会说明"不视为问题"。
-		chainIPCheckReq(),
+	reqs := []EnvReq{checkNodeReq(cfg.Projects.FrontendDir, nodeVer)}
+	if backendProjectKind(cfg.Projects.BackendDir) == "maven" {
+		reqs = append(reqs, checkJavaReq(cfg.Projects.BackendDir, javaVer))
+	} else {
+		reqs = append(reqs, checkGoReq(cfg.Projects.BackendDir, goVer))
 	}
+	// v3.1：config.toml 链地址一致性。权威源 = 链端路由配置
+	// （ChainHost:ChainPort），检测纯客观比对，不经过 AI。
+	// n_a（非链项目）时 Why 会说明"不视为问题"。
+	reqs = append(reqs, chainIPCheckReq())
+	return reqs
 }
 
 // checkJavaReq 比对 JDK 版本与 pom.xml 的 java.version 要求。

@@ -378,6 +378,59 @@ func TestResolveMavenCmdOrder(t *testing.T) {
 	}
 }
 
+// TestCheckAllEnvReqFiltersByBackendKind 符合性清单按后端栈裁剪：
+// Maven 项目不出 go 行、Go 项目不出 java 行——"先问项目要不要"要落到
+// 清单层面，不要的栈连 n_a 都不该有。变异点：checkAllEnvReq 里删掉
+// kind 分支回退成"两个都放"，本测试三个场景全红。
+func TestCheckAllEnvReqFiltersByBackendKind(t *testing.T) {
+	oldFE, oldBE := cfg.Projects.FrontendDir, cfg.Projects.BackendDir
+	t.Cleanup(func() { cfg.Projects.FrontendDir, cfg.Projects.BackendDir = oldFE, oldBE })
+	cfg.Projects.FrontendDir = t.TempDir() // 无 package.json → node undeclared，不干扰断言
+
+	has := func(reqs []EnvReq, comp string) bool {
+		for _, r := range reqs {
+			if r.Component == comp {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Maven 项目：java 在、go 不在
+	cfg.Projects.BackendDir = writeMavenFixture(t, pomTCM)
+	mavenReqs := checkAllEnvReq()
+	if !has(mavenReqs, "java") {
+		t.Error("Maven 项目必须有 java 符合性结论")
+	}
+	if has(mavenReqs, "go") {
+		t.Error("Maven 项目不得出现 go 行（项目不要的栈，连 n_a 都不该有）")
+	}
+
+	// Go 项目：go 在、java 不在
+	goDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(goDir, "go.mod"), []byte("module x\n\ngo 1.24\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Projects.BackendDir = goDir
+	goReqs := checkAllEnvReq()
+	if !has(goReqs, "go") {
+		t.Error("Go 项目必须有 go 符合性结论")
+	}
+	if has(goReqs, "java") {
+		t.Error("Go 项目不得出现 java 行")
+	}
+
+	// 后端目录未配置：go 行保留（引导用户去配置），java 行不出现
+	cfg.Projects.BackendDir = ""
+	emptyReqs := checkAllEnvReq()
+	if !has(emptyReqs, "go") {
+		t.Error("未配置后端目录时 go 行应保留（引导用户配置）")
+	}
+	if has(emptyReqs, "java") {
+		t.Error("未配置后端目录时不得出现 java 行")
+	}
+}
+
 // TestMavenStartEnvSwitch JAVA_HOME 错配修正：JAVA_HOME 指着 JDK8、
 // 项目要求 17、PATH 的 java 够用 → 只对本次启动切 JAVA_HOME；
 // 任何一边不满足都不动——能不切就不切，切也只切子进程环境。
