@@ -981,6 +981,75 @@ func opStartBackend(dir, actor string) OpResult {
 	return opStartBackendGo(dir, actor, fin)
 }
 
+// probeJavaVer 独立成变量只为测试注入；生产恒为 javaVerOf。
+var probeJavaVer = javaVerOf
+
+// javaVerOf 探测一个 java.exe 的版本。java -version 打在 stderr，
+// runVersionCmd 用 CombinedOutput 拿得到（见 envreq.go 同款判据）。
+func javaVerOf(javaPath string) string {
+	if javaPath == "" || !hasFile(javaPath) {
+		return ""
+	}
+	return extractJavaVersion(runVersionCmd(javaPath, "-version"))
+}
+
+// javaHomeOf 从 java.exe 全路径推 JDK home：解析符号链接后取 <home>\bin\java.exe
+// 的上两级。javapath（Oracle 的 PATH 转发目录）是符号链接，解出真身后同样成立。
+func javaHomeOf(javaPath string) string {
+	if javaPath == "" {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(javaPath); err == nil && r != "" {
+		javaPath = r
+	}
+	bin := filepath.Dir(javaPath)
+	if !strings.EqualFold(filepath.Base(bin), "bin") {
+		return "" // 不是 <home>\bin\java.exe 形态，宁可不切也不猜
+	}
+	return filepath.Dir(bin)
+}
+
+// mavenRequiredJava 读后端目录 pom.xml 声明的 java.version。
+// 与符合性检查同一口径（pomJavaDeclared），画像/检查/启动读出同一个值。
+func mavenRequiredJava(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, "pom.xml"))
+	if err != nil {
+		return ""
+	}
+	return pomJavaDeclared(string(b))
+}
+
+// mavenStartEnv 决定 Maven 启动要不要改写 JAVA_HOME（只作用于本次启动的子进程）。
+//
+// Maven 用 JAVA_HOME 选 JDK，而 java -version 探测走 PATH——两者指向不同
+// JDK 时会出现"检测说 17 够用、一跑编译却报 release 17 不支持"的分裂。
+// 只有"JAVA_HOME 的版本 < 项目要求 且 PATH 的 java 满足要求"才切：
+// 能不切就不切，切就只切子进程环境，用户的系统变量一个字节不动。
+func mavenStartEnv(dir, javaPath string) map[string]string {
+	req := mavenRequiredJava(dir)
+	if req == "" || javaPath == "" {
+		return nil
+	}
+	jh := strings.TrimSpace(os.Getenv("JAVA_HOME"))
+	if jh == "" {
+		return nil
+	}
+	jhVer := probeJavaVer(filepath.Join(jh, "bin", "java.exe"))
+	if jhVer == "" {
+		// JAVA_HOME 里探测不到 java：不乱动，让 Maven 自己把错报出来
+		return nil
+	}
+	pathVer := probeJavaVer(javaPath)
+	if pathVer == "" || !javaVerLess(jhVer, req) || javaVerLess(pathVer, req) {
+		return nil
+	}
+	home := javaHomeOf(javaPath)
+	if home == "" {
+		return nil
+	}
+	return map[string]string{"JAVA_HOME": home}
+}
+
 // opStartBackendMaven Maven 后端执行体：JDK 前置 → mvn 编译快速失败 → spring-boot:run。
 //
 // 与 go 路径同构：build 阶段 streamed（编译错误当场报，不拖进后台日志），
@@ -1006,25 +1075,30 @@ func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpR
 			"dir="+dir, "need=java")
 	}
 	// Maven：项目自带 mvnw.cmd 优先（不依赖全局安装，CI/换机都不炸），
-	// 否则找 PATH 里的 mvn。Windows 上 os/exec 对 .cmd 自动走 cmd /c。
-	mvnPath := ""
-	if hasFile(filepath.Join(dir, "mvnw.cmd")) {
-		mvnPath = filepath.Join(dir, "mvnw.cmd")
-		infoS(scStart, "backend", "后端", "使用项目自带 Maven 包装器 mvnw.cmd")
-	} else {
-		mvnPath = findExe("mvn.cmd", "mvn")
-	}
-	if mvnPath == "" {
+	// 其次 PATH/组件 bin，最后 mvnw 发行版缓存——"没装 Maven"的机器上
+	// 常有一套历史上 wrapper 下载的完整发行版（同一口径：检测也是这么判的）。
+	mvnPath := resolveMavenCmd(dir)
+	switch {
+	case mvnPath == "":
 		setProg("backend-start", false, false, "未找到 Maven")
 		failS(scStart, "backend", "后端", "未找到 Maven（mvn）")
 		fin(resFail, "未找到 Maven")
 		return opFail("start_service", "backend", errKindMissingDep,
 			"未找到 Maven：请安装 Maven 并加入 PATH，或在后端目录提供 mvnw.cmd",
 			"dir="+dir, "need=maven")
+	case mvnPath == filepath.Join(dir, "mvnw.cmd"):
+		infoS(scStart, "backend", "后端", "使用项目自带 Maven 包装器 mvnw.cmd")
+	case strings.Contains(strings.ToLower(mvnPath), filepath.Join(".m2", "wrapper", "dists")):
+		infoS(scStart, "backend", "后端", "使用 mvnw 发行版缓存：%s", mvnPath)
 	}
+	// JAVA_HOME 错配修正：Maven 用 JAVA_HOME 里的 JDK 编译运行，而 java -version
+	// 探测走 PATH——JAVA_HOME 指着 JDK8、项目要求 17 时，直接跑必然
+	// "release version 17 not supported"。此时若 PATH 的 java 满足要求，
+	// 就只对本次启动把 JAVA_HOME 切到 PATH java 的安装目录（不动用户环境变量）。
+	envExtra := mavenStartEnv(dir, javaPath)
 	infoS(scStart, "backend", "后端", "Maven 编译 @ %s", dir)
 	// -q 只压 info 日志，编译错误照常输出；首次跑会拉依赖，耗时与 npm install 同级。
-	if err := execStreamed(scStart, "backend", "后端", dir, nil, mvnPath, "-q", "compile"); err != nil {
+	if err := execStreamed(scStart, "backend", "后端", dir, envExtra, mvnPath, "-q", "compile"); err != nil {
 		setProg("backend-start", false, false, err.Error())
 		failS(scStart, "backend", "后端", "Maven 编译失败：%v", err)
 		fin(resFail, err.Error())
@@ -1033,7 +1107,7 @@ func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpR
 			"dir="+dir, "hint=查看「程序启动」日志中的编译错误；首次运行需下载依赖，失败也可能是网络问题")
 	}
 	infoS(scStart, "backend", "后端", "mvn spring-boot:run")
-	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, nil, mvnPath, "spring-boot:run"); err != nil {
+	if err := execBackground(scStart, "backend", "backend-start", "后端", dir, envExtra, mvnPath, "spring-boot:run"); err != nil {
 		setProg("backend-start", false, false, err.Error())
 		failS(scStart, "backend", "后端", "mvn spring-boot:run 失败：%v", err)
 		fin(resFail, err.Error())

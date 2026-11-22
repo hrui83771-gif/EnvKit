@@ -39,6 +39,15 @@ func detectComponent(c Component) CheckResult {
 		ver := getVersion(p, c)
 		return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
 	}
+	// mvnw 缓存回退（仅 Maven）：历史项目用 wrapper 启动过的话，
+	// ~/.m2/wrapper/dists 里有一套能用的发行版。与启动路径 resolveMavenCmd
+	// 同一口径——不能"检测说未安装、启动却能跑"，两个事实打架最伤信任。
+	if c.CheckCmd == "mvn" {
+		if p := probeMavenCache(); p != "" {
+			ver := getVersion(p, c)
+			return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
+		}
+	}
 	return CheckResult{Name: c.Name, Installed: false}
 }
 

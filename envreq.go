@@ -381,7 +381,32 @@ func checkJavaReq(backendDir string, actual string) EnvReq {
 	}
 	// actual 可能带 JDK8 构建号（1.8.0_392）：归一是同一条口径，
 	// 不论版本来自检测结果、组件探测还是调用方直传，进 compareReq 前都要规整。
-	return compareReq(r, normalizeJavaVer(actual), "pom.xml 声明 java.version "+declared)
+	return compareReq(r, javaModernForm(normalizeJavaVer(actual)), "pom.xml 声明 java.version "+declared)
+}
+
+// javaModernForm 把 JDK 的 1.x 历史版本形态平移成现代口径：1.8.0 → 8.0。
+// JDK8 及更早的 java -version 报 1.8.0，而 pom 里声明的是 8——不做这层
+// 平移，"pom 要 8、装的就是 JDK8" 会被误判成 too_low（1 < 8）。
+// 非 1.x 形态原样返回。解析不了也原样返回（交给下游的 undeclared 判定）。
+func javaModernForm(v string) string {
+	v = normalizeJavaVer(v) // 自带构建号截断：1.8.0_392 → 1.8.0
+	t, ok := verTriple(v)
+	if !ok || t[0] != 1 || t[1] <= 0 {
+		return v
+	}
+	return strconv.Itoa(t[1]) + "." + strconv.Itoa(t[2])
+}
+
+// javaVerLess Java 版本比较 a<b，两侧都过 javaModernForm 口径。
+// 供 mavenStartEnv 做"JAVA_HOME 的 JDK 够不够项目要求"的判断——
+// 与 checkJavaReq 必须读出同一个答案，不能一处认 1.8.0≡8、一处不认。
+func javaVerLess(a, b string) bool {
+	av, aok := verTriple(javaModernForm(a))
+	bv, bok := verTriple(javaModernForm(b))
+	if !aok || !bok {
+		return false
+	}
+	return verLess(av, bv)
 }
 
 // pomJavaDeclared 取 pom.xml 里声明的 Java 版本（<java.version> 或

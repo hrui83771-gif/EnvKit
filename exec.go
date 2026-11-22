@@ -3,11 +3,13 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,86 @@ func findExe(names ...string) string {
 		}
 	}
 	return ""
+}
+
+// ---------- Maven 定位 ----------
+//
+// 三级回退：项目 mvnw.cmd → PATH/组件 bin → mvnw 发行版缓存。
+// 为什么要第三级：很多机器"没装 Maven"（PATH 没有、MAVEN_HOME 空），但历史上
+// 有项目用 mvnw 启动过，wrapper 自动把完整发行版下载到了 ~/.m2/wrapper/dists——
+// 那是一套能跑的 Maven，不用白不用。缓存目录名长且嵌套不定，
+// 一律按目录遍历处理，绝不按字符串切路径。
+
+// probeMavenCache 独立成变量只为测试注入；生产恒为 mavenWrapperCacheCmd。
+var probeMavenCache = mavenWrapperCacheCmd
+
+// reMavenCacheVer 从缓存目录路径里抽 Maven 版本号（选最高版本用）。
+var reMavenCacheVer = regexp.MustCompile(`(?i)apache-maven-(\d+(?:\.\d+)*)`)
+
+type mavenCacheHit struct{ path, ver string }
+
+// resolveMavenCmd 按优先级定位一个可执行的 Maven。
+// projectDir 为空时跳过 mvnw 步骤（组件检测场景没有"项目"）。
+func resolveMavenCmd(projectDir string) string {
+	if projectDir != "" && hasFile(filepath.Join(projectDir, "mvnw.cmd")) {
+		return filepath.Join(projectDir, "mvnw.cmd")
+	}
+	if p := findExe("mvn.cmd", "mvn"); p != "" {
+		return p
+	}
+	return probeMavenCache()
+}
+
+// mavenWrapperCacheCmd 在用户级 wrapper 缓存里找 Maven 发行版。
+func mavenWrapperCacheCmd() string {
+	home := strings.TrimSpace(os.Getenv("USERPROFILE"))
+	if home == "" {
+		return ""
+	}
+	return mavenWrapperCacheCmdIn(filepath.Join(home, ".m2", "wrapper", "dists"))
+}
+
+// mavenWrapperCacheCmdIn 遍历缓存根，收集所有 mvn.cmd，取版本最高的。
+// 遍历中遇到的任何错误（怪字符、权限）都跳过不中断——这里是在"捡漏"，
+// 一部分子树读不了不应该让整次查找失败。
+func mavenWrapperCacheCmdIn(root string) string {
+	var hits []mavenCacheHit
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		// 防御：本地仓库（repository）可能巨大，不在查找范围
+		if d.IsDir() && strings.EqualFold(d.Name(), "repository") {
+			return fs.SkipAll
+		}
+		if d.IsDir() || !strings.EqualFold(d.Name(), "mvn.cmd") {
+			return nil
+		}
+		ver := ""
+		if m := reMavenCacheVer.FindStringSubmatch(p); len(m) > 1 {
+			ver = m[1]
+		}
+		hits = append(hits, mavenCacheHit{p, ver})
+		return nil
+	})
+	if len(hits) == 0 {
+		return ""
+	}
+	// 版本号解析不了的排最后；同版本谁先遍历到用谁（确定性由 WalkDir 字典序保证）
+	sort.Slice(hits, func(i, j int) bool { return verLessParts(hits[j].ver, hits[i].ver) })
+	return hits[0].path
+}
+
+// verLessParts 比较两段点分版本号（Maven/JDK 通用） a<b。解析不了的参与方让比较恒 false
+// （不引入随机序，也不会把"未知版本"误判成"旧版本"）。
+func verLessParts(a, b string) bool {
+	av, aok := verTriple(a)
+	bv, bok := verTriple(b)
+	if !aok || !bok {
+		return false
+	}
+	return av[0] < bv[0] ||
+		av[0] == bv[0] && (av[1] < bv[1] || av[1] == bv[1] && av[2] < bv[2])
 }
 
 // ---------- npm 解析（v3.3） ----------

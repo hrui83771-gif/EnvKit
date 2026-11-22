@@ -112,6 +112,29 @@ func TestNormalizeJavaVer(t *testing.T) {
 	}
 }
 
+func TestJavaModernForm(t *testing.T) {
+	cases := map[string]string{
+		"1.8.0":     "8.0", // JDK8 历史形态 → 现代口径
+		"1.8.0_392": "8.0", // 带构建号也先截（normalizeJavaVer 在上游）
+		"17.0.11":   "17.0.11",
+		"1":         "1", // 1.x 但次段为 0（1.0）不是 JDK8 形态，原样
+		"1.0":       "1.0",
+		"":          "",
+		"abc":       "abc", // 解析不了原样交下游
+	}
+	for in, want := range cases {
+		if got := javaModernForm(in); got != want {
+			t.Errorf("javaModernForm(%q)=%q，要 %q", in, got, want)
+		}
+	}
+	if javaVerLess("1.8.0", "8") {
+		t.Error("1.8.0 与 8 是同一个 Java，不应判 less")
+	}
+	if !javaVerLess("1.8.0", "17") {
+		t.Error("JDK8 < 17 应成立")
+	}
+}
+
 func TestExtractJavaVersion(t *testing.T) {
 	cases := map[string]string{
 		"openjdk version \"17.0.9\" 2023-10-17 LTS": "17.0.9",
@@ -141,6 +164,11 @@ func TestJavaReq(t *testing.T) {
 	// 声明 17 实际 1.8（JDK8 归一后 1.8.0 < 17）→ too_low
 	if r := checkJavaReq(writeMavenFixture(t, strings.Replace(pomTCM, "<java.version>17<", "<java.version>21<", 1)), "1.8.0_392"); r.Status != reqTooLow {
 		t.Errorf("JDK8 跑要 21 的项目应 too_low：status=%s why=%s", r.Status, r.Why)
+	}
+	// pom 声明 8、实际 JDK8（报 1.8.0 历史形态）→ 必须 ok。
+	// 变异哨兵：删掉 javaModernForm 的 1.x 平移后，1.8.0 < 8 会被误判 too_low。
+	if r := checkJavaReq(writeMavenFixture(t, strings.Replace(pomTCM, "<java.version>17<", "<java.version>8<", 1)), "1.8.0_392"); r.Status != reqOK {
+		t.Errorf("JDK8 跑声明 8 的项目应 ok（1.8.0≡8）：status=%s why=%s", r.Status, r.Why)
 	}
 	// pom 未声明 → undeclared（不是问题）
 	pomNoProps := `<?xml version="1.0" encoding="UTF-8"?>
@@ -287,5 +315,160 @@ func TestOpStartBackendMavenMissingDeps(t *testing.T) {
 	// 这条会走到 go 路径报"未找到 go"，Msg 里没有 JDK —— 精确红。
 	if !strings.Contains(res.Msg, "JDK") {
 		t.Errorf("缺依赖信息没指向 JDK：%s", res.Msg)
+	}
+}
+
+// TestMavenWrapperCachePickHighest 缓存回退要挑"完整且版本最高"的那套，
+// 且对长而怪的 hash 目录名免疫（真实机器上缓存嵌套就是不定长的）。
+func TestMavenWrapperCachePickHighest(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "dists")
+	mk := func(rel ...string) string {
+		p := filepath.Join(append([]string{root}, rel...)...)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("@echo off"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	mk("apache-maven-3.6.2-bin", "hashA", "apache-maven-3.6.2", "bin", "mvn.cmd")
+	mk("apache-maven-3.9.9-bin", "hashB", "apache-maven-3.9.9", "bin", "mvn.cmd")
+	// 解压到一半的空壳（有版本号目录但没有 bin）：绝不能选中
+	mk("apache-maven-3.11.0-bin", "hashC", "apache-maven-3.11.0", "README.txt")
+	// 长而怪的 hash 名 + 最高版本：必须能走通并选中
+	weird := mk("apache-maven-4.0.0-bin", "795eh28tki48bv3l67maojf0ra-and-even-longer", "apache-maven-4.0.0", "bin", "mvn.cmd")
+
+	if got := mavenWrapperCacheCmdIn(root); got != weird {
+		t.Errorf("缓存回退选中 %q，要版本最高且完整的 %q", got, weird)
+	}
+	// 不存在的根：返回空，绝不能 panic 或瞎猜
+	if got := mavenWrapperCacheCmdIn(filepath.Join(t.TempDir(), "nope")); got != "" {
+		t.Errorf("缓存根不存在应返回空，得 %q", got)
+	}
+}
+
+// TestResolveMavenCmdOrder 三级回退的优先级：项目 mvnw > PATH > wrapper 缓存。
+func TestResolveMavenCmdOrder(t *testing.T) {
+	origComp := cfg.Components
+	origPath := os.Getenv("PATH")
+	origCache := probeMavenCache
+	t.Cleanup(func() {
+		cfg.Components = origComp
+		os.Setenv("PATH", origPath)
+		probeMavenCache = origCache
+	})
+	cfg.Components = nil
+	os.Setenv("PATH", t.TempDir()) // LookPath 全瞎
+	sentinel := filepath.Join(t.TempDir(), "cache-mvn.cmd")
+	probeMavenCache = func() string { return sentinel }
+
+	dir := t.TempDir()
+	if got := resolveMavenCmd(dir); got != sentinel {
+		t.Errorf("无 mvnw 无 PATH 应回退到缓存，得 %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte("@echo off"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveMavenCmd(dir); got != filepath.Join(dir, "mvnw.cmd") {
+		t.Errorf("项目自带 mvnw 应最优先，得 %q", got)
+	}
+	if got := resolveMavenCmd(""); got != sentinel {
+		t.Errorf("projectDir 为空应跳过 mvnw 走缓存（组件检测场景），得 %q", got)
+	}
+}
+
+// TestMavenStartEnvSwitch JAVA_HOME 错配修正：JAVA_HOME 指着 JDK8、
+// 项目要求 17、PATH 的 java 够用 → 只对本次启动切 JAVA_HOME；
+// 任何一边不满足都不动——能不切就不切，切也只切子进程环境。
+func TestMavenStartEnvSwitch(t *testing.T) {
+	origJH := os.Getenv("JAVA_HOME")
+	origProbe := probeJavaVer
+	t.Cleanup(func() {
+		os.Setenv("JAVA_HOME", origJH)
+		probeJavaVer = origProbe
+	})
+
+	base := t.TempDir()
+	jdk8 := filepath.Join(base, "jdk8")
+	if err := os.MkdirAll(filepath.Join(jdk8, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jdk8, "bin", "java.exe"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pathJava := filepath.Join(base, "jdk17", "bin", "java.exe")
+	if err := os.MkdirAll(filepath.Dir(pathJava), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pathJava, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	probeJavaVer = func(p string) string {
+		if strings.Contains(p, "jdk8") {
+			return "1.8.0"
+		}
+		if strings.Contains(p, "jdk17") {
+			return "17.0.11"
+		}
+		return ""
+	}
+	os.Setenv("JAVA_HOME", jdk8)
+
+	// 要 17：JAVA_HOME=8 < 17，PATH 的 17.0.11 够 → 切到 PATH java 的 home
+	env := mavenStartEnv(writeMavenFixture(t, pomTCM), pathJava)
+	wantHome := filepath.Dir(filepath.Dir(pathJava))
+	if env == nil || env["JAVA_HOME"] != wantHome {
+		t.Errorf("应把 JAVA_HOME 切到 %s，得 %v", wantHome, env)
+	}
+	// 要 8：JAVA_HOME=1.8.0 已满足 → 不切（能不切就不切）
+	pom8 := strings.Replace(pomTCM, "<java.version>17<", "<java.version>8<", 1)
+	if env := mavenStartEnv(writeMavenFixture(t, pom8), pathJava); env != nil {
+		t.Errorf("JAVA_HOME 已满足要求不应切换：%v", env)
+	}
+	// PATH java 探测不到版本 → 不切（宁缺毋乱，让 Maven 自己把错报出来）
+	probeJavaVer = func(p string) string {
+		if strings.Contains(p, "jdk8") {
+			return "1.8.0"
+		}
+		return ""
+	}
+	if env := mavenStartEnv(writeMavenFixture(t, pomTCM), pathJava); env != nil {
+		t.Errorf("PATH java 版本未知不应切换：%v", env)
+	}
+	// pom 没声明 java.version → 没有依据，不切
+	if env := mavenStartEnv(t.TempDir(), pathJava); env != nil {
+		t.Errorf("pom 未声明要求不应切换：%v", env)
+	}
+}
+
+// TestDetectComponentMavenCache 组件检测与启动同口径：PATH 里没有 mvn 时，
+// wrapper 缓存回退要把"未安装"翻成"已安装（缓存位置）"。
+func TestDetectComponentMavenCache(t *testing.T) {
+	origComp := cfg.Components
+	origPath := os.Getenv("PATH")
+	origCache := probeMavenCache
+	t.Cleanup(func() {
+		cfg.Components = origComp
+		os.Setenv("PATH", origPath)
+		probeMavenCache = origCache
+	})
+	cfg.Components = nil
+	os.Setenv("PATH", t.TempDir())
+	stub := filepath.Join(t.TempDir(), "mvn.cmd")
+	if err := os.WriteFile(stub, []byte("@echo Apache Maven 3.9.9 (mock)\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	probeMavenCache = func() string { return stub }
+
+	r := detectComponent(Component{Name: "Maven", CheckCmd: "mvn", CheckArgs: []string{"-v"}})
+	if !r.Installed {
+		t.Fatalf("缓存回退没被检测用到：%+v", r)
+	}
+	if !strings.Contains(r.Version, "3.9.9") {
+		t.Errorf("版本没读出来：%q", r.Version)
+	}
+	if r.Location != stub {
+		t.Errorf("Location=%q，要缓存路径 %q", r.Location, stub)
 	}
 }
