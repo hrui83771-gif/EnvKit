@@ -33,26 +33,13 @@ func scanPortsOnce(ports []int) []portOcc {
 	}
 	occ := map[int][]int{} // port -> pids
 	ctx, cancel := cmdContext(20 * time.Second)
-	out, err := exec.CommandContext(ctx, "netstat", "-ano", "-p", "tcp").CombinedOutput()
+	// 不带 -p：netstat -ano 同时给出 IPv4（TCP）与 IPv6（TCPv6 也标 "TCP"）
+	// 的监听行。带 -p tcp 只看 IPv4——Node 17+ / vite 默认绑 [::1]，
+	// 只扫 v4 会把"明明 ready 了"的前端判成端口未监听（真实缺陷，已踩）。
+	out, err := exec.CommandContext(ctx, "netstat", "-ano").CombinedOutput()
 	cancel()
 	if err == nil {
-		for _, ln := range strings.Split(string(out), "\n") {
-			f := strings.Fields(strings.TrimSpace(ln))
-			// 典型行：TCP 0.0.0.0:3306 0.0.0.0:0 LISTENING 3308
-			if len(f) < 5 || !strings.EqualFold(f[0], "TCP") || !strings.EqualFold(f[3], "LISTENING") {
-				continue
-			}
-			idx := strings.LastIndexByte(f[1], ':')
-			if idx < 0 {
-				continue
-			}
-			p, err1 := strconv.Atoi(f[1][idx+1:])
-			pid, err2 := strconv.Atoi(f[4])
-			if err1 != nil || err2 != nil {
-				continue
-			}
-			occ[p] = append(occ[p], pid)
-		}
+		occ = parseNetstatListeners(string(out))
 	}
 	names := pidNames()
 	for _, p := range ports {
@@ -66,6 +53,34 @@ func scanPortsOnce(ports []int) []portOcc {
 		res = append(res, row)
 	}
 	return res
+}
+
+// parseNetstatListeners 解析 netstat -ano 输出里的 TCP LISTENING 行，
+// 返回 port -> pids。纯函数：单测可直接喂合成输出，不依赖真实机器状态。
+//
+// IPv4 行：TCP    0.0.0.0:3306    0.0.0.0:0    LISTENING    3308
+// IPv6 行：TCP    [::1]:5173      [::]:0       LISTENING    24700
+// 两种形态端口都在最后一个冒号之后（LastIndexByte 对 [::x]:port 同样成立）；
+// UDP 行（4 列、协议名不是 TCP）与非 LISTENING 行一律跳过。
+func parseNetstatListeners(out string) map[int][]int {
+	occ := map[int][]int{}
+	for _, ln := range strings.Split(out, "\n") {
+		f := strings.Fields(strings.TrimSpace(ln))
+		if len(f) < 5 || !strings.EqualFold(f[0], "TCP") || !strings.EqualFold(f[3], "LISTENING") {
+			continue
+		}
+		idx := strings.LastIndexByte(f[1], ':')
+		if idx < 0 {
+			continue
+		}
+		p, err1 := strconv.Atoi(f[1][idx+1:])
+		pid, err2 := strconv.Atoi(f[4])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		occ[p] = append(occ[p], pid)
+	}
+	return occ
 }
 
 // pidNames 一次 tasklist 拉全表，返回 pid -> 进程名。

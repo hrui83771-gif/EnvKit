@@ -428,13 +428,19 @@ func firstListeningPortExcept(ports []int, excluded map[int]string) int {
 	return 0
 }
 
+// dialLocal 本机 TCP 拨测：先 127.0.0.1 再 [::1]。
+// Node 17+（含 vite dev server）默认把 localhost 解析成 IPv6 绑 [::1]，
+// 只拨 v4 会把"服务已就绪"误判成端口未监听——复验假阴性的真实来源。
 func dialLocal(port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), verifyDialTimeout)
-	if err != nil {
-		return false
+	for _, host := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), verifyDialTimeout)
+		if err != nil {
+			continue
+		}
+		_ = conn.Close()
+		return true
 	}
-	_ = conn.Close()
-	return true
+	return false
 }
 
 // portOwner 端口占用者进程名（netstat + tasklist），查不到返回空串（按"未知"处理，不冤枉）。
@@ -454,15 +460,27 @@ var portOwner = func(port int) string {
 
 // httpProbe 首页握手探测：能拿到 HTTP 响应（哪怕 404/401）就证明有 HTTP 服务在。
 // 走 httpDirect 强制直连：用户配了代理时，共享 client 会把 127.0.0.1 也发给代理而误判失败。
+// v4 不通时再探 [::1]——vite/Node 17+ 默认绑 IPv6 回环，只探 v4 会把就绪服务判成未响应。
 //
 // 提成 var 与 webaseFetch / lifecycleAlive / svcPortsFn 同一模式：
 // 单测要注入"HTTP 503"这种真实环境里难复现的响应——G12「说谎服务」场景
 // （eval/fixtures/sandbox-backend 的 liar 开关）要求复验层对 5xx 有确定行为，
 // 而 CI 里没有真返回 503 的服务。
 var httpProbe = func(port int) string {
-	resp, err := httpDirect.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
+	if s := httpProbeAt("127.0.0.1", port); s != "" {
+		return s
+	}
+	if s := httpProbeAt("::1", port); s != "" {
+		return s
+	}
+	return "HTTP 未响应（127.0.0.1 与 [::1] 均未得到响应）"
+}
+
+// httpProbeAt 探测指定回环主机的 HTTP 握手；失败返回空串（由调用方汇总）。
+func httpProbeAt(host string, port int) string {
+	resp, err := httpDirect.Get("http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/")
 	if err != nil {
-		return "HTTP 未响应（" + firstLines(err.Error(), 60) + "）"
+		return ""
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
