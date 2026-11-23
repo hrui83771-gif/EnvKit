@@ -535,21 +535,64 @@ func handleBackendTidy(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = cfg.Projects.BackendDir
 	}
-	h, granted := beginTaskH("后端 go mod tidy", true)
+	kind := backendProjectKind(dir)
+	taskLabel := "后端依赖整理"
+	if kind == "maven" {
+		taskLabel = "后端 Maven 依赖解析"
+	}
+	h, granted := beginTaskH(taskLabel, true)
 	if !granted {
 		http.Error(w, "有任务正在执行，请稍候", 409)
 		return
 	}
 	go func() {
 		defer h.Done()
-		fin := auditStart(actUser, "backend_tidy", dir, "go mod tidy")
-		setProg("backend-tidy", true, false, "go mod tidy 中...")
 		if dir == "" {
 			setProg("backend-tidy", false, false, "未指定后端目录")
 			fail(scConfig, "后端", "未指定后端目录")
-			fin(resFail, "未指定后端目录")
 			return
 		}
+		// Maven 项目没有 go.mod，跑 go mod tidy 只会得到"找不到 go.mod"；
+		// 依赖整理改为 dependency:resolve（等价于把 pom 里的依赖全部拉齐）。
+		if kind == "maven" {
+			fin := auditStart(actUser, "backend_tidy", dir, "mvn dependency:resolve")
+			setProg("backend-tidy", true, false, "mvn dependency:resolve 中...")
+			javaPath := findExe("java.exe", "java")
+			if javaPath == "" {
+				if jh := strings.TrimSpace(os.Getenv("JAVA_HOME")); jh != "" {
+					cand := filepath.Join(jh, "bin", "java.exe")
+					if hasFile(cand) {
+						javaPath = cand
+					}
+				}
+			}
+			if javaPath == "" {
+				setProg("backend-tidy", false, false, "未找到 JDK")
+				fail(scConfig, "后端", "未找到 JDK，请先安装 JDK")
+				fin(resFail, "未找到 JDK")
+				return
+			}
+			mvnPath := resolveMavenCmd(dir)
+			if mvnPath == "" {
+				setProg("backend-tidy", false, false, "未找到 Maven")
+				fail(scConfig, "后端", "未找到 Maven，请先安装 Maven")
+				fin(resFail, "未找到 Maven")
+				return
+			}
+			info(scConfig, "后端", "mvn dependency:resolve @ %s", dir)
+			if err := execStreamed(scConfig, "", "后端", dir, mavenStartEnv(dir, javaPath), mvnPath, "-q", "dependency:resolve"); err != nil {
+				setProg("backend-tidy", false, false, err.Error())
+				fail(scConfig, "后端", "mvn dependency:resolve 失败：%v", err)
+				fin(resFail, err.Error())
+			} else {
+				setProg("backend-tidy", false, true, "成功")
+				ok(scConfig, "后端", "Maven 依赖解析完成")
+				fin(resOK, dir)
+			}
+			return
+		}
+		fin := auditStart(actUser, "backend_tidy", dir, "go mod tidy")
+		setProg("backend-tidy", true, false, "go mod tidy 中...")
 		exe := findExe("go.exe", "go")
 		if exe == "" {
 			setProg("backend-tidy", false, false, "未找到 go")
@@ -596,6 +639,13 @@ func handleWebStart(w http.ResponseWriter, r *http.Request) {
 	res := webStartTask(dir, script, actUser)
 	if !res.Ok {
 		http.Error(w, res.String(), 409)
+		return
+	}
+	if res.SkipVerify {
+		writeJSON(w, map[string]any{
+			"started": true, "verified": false, "external": true,
+			"message": res.Msg,
+		})
 		return
 	}
 	// v2.5：与后端端点同一个修复——点「启动」后当场复验。
@@ -698,6 +748,34 @@ func svcStartSkip(target string) (OpResult, bool) {
 	}
 	svcMu.Unlock()
 	if !running {
+		// EnvKit 没在管，但端口观察器可能看到外部实例。这里不派生新进程：
+		// 用户已经在别的终端跑起来时，重复启动只会撞端口/产生孤儿。
+		if o, ok := observeSnapshot(target); ok {
+			switch o.State {
+			case "external":
+				r := opOK("start_service", target,
+					fmt.Sprintf("检测到%s外部实例（PID %d，端口 %d）：EnvKit 未托管，未重复启动；可直接使用，停止请到原终端",
+						svcLabel(target), o.PID, o.Port),
+					fmt.Sprintf("pid=%d port=%d source=external", o.PID, o.Port),
+					"hint=如需由 EnvKit 管理，请先停止外部实例再启动")
+				r.SkipVerify = true
+				return r, true
+			case "unknown":
+				return opFail("start_service", target, errKindPortConflict,
+					fmt.Sprintf("%s候选端口 %d 有监听，但无法确认是本项目；未启动，避免与未知进程抢端口",
+						svcLabel(target), o.Port),
+					fmt.Sprintf("pid=%d port=%d owner=%s source=unknown", o.PID, o.Port, nonEmptyStr(o.OwnerName, "未知")),
+					"hint=到「端口诊断」核对命令行/路径后再决定"), true
+			case "foreign":
+				if o.PortConfidence >= 60 {
+					return opFail("start_service", target, errKindPortConflict,
+						fmt.Sprintf("%s启动前置失败：端口 %d 被 %s（PID %d）占着，且不像本项目",
+							svcLabel(target), o.Port, nonEmptyStr(o.OwnerName, "未知进程"), o.PID),
+						fmt.Sprintf("port=%d pid=%d owner=%s source=foreign", o.Port, o.PID, nonEmptyStr(o.OwnerName, "未知")),
+						"hint="+lifecycleHint(errKindPortConflict)), true
+				}
+			}
+		}
 		return OpResult{}, false
 	}
 	if svcSnapshot(target).Verified {
@@ -727,6 +805,10 @@ func progSetSkip(key string, r OpResult) {
 	switch {
 	case !r.Ok:
 		st = progFail
+	case r.SkipVerify:
+		// 外部实例：启动动作被有意跳过，但它确实在跑。
+		// 不能落 progWarn（界面会说"已启动 · 未通过复验"，像是 EnvKit 启动失败）。
+		st = progExternal
 	case r.Verified:
 		st = progOK
 	}
@@ -777,7 +859,7 @@ func opStartWeb(dir, script, actor string) OpResult {
 		// （endStartFlag 见 Running=false 会直接 return）。
 		// 于是界面卡片是绿的、这份状态是红的，两个读数打架。
 		progSetSkip("web-start", res)
-		fin(resOK, "幂等跳过："+res.Msg)
+		fin(rrRes(res), "启动前置："+res.Msg)
 		return res
 	}
 	if dir == "" {
@@ -851,7 +933,7 @@ func opStartWeb(dir, script, actor string) OpResult {
 	// 复位点在 verifyService —— 那是所有启动路径（按钮 / AI / 守护）的共同收口。
 	// 早期版本在成功路径就复位、失败路径不复位，两边都错；
 	// 另一版只在进程退出时复位，于是只要进程活着，界面永远停在「启动中」。
-	return opOK("start_service", "web", "npm run "+script+" 进程已派生（尚未做服务可用性复验）",
+	return opOK("start_service", "web", "npm run "+script+" 进程已派生",
 		"dir="+dir, "script="+script)
 }
 
@@ -871,6 +953,13 @@ func handleBackendStart(w http.ResponseWriter, r *http.Request) {
 	res := backendStartTask(dir, actUser)
 	if !res.Ok {
 		http.Error(w, res.String(), 409)
+		return
+	}
+	if res.SkipVerify {
+		writeJSON(w, map[string]any{
+			"started": true, "verified": false, "external": true,
+			"message": res.Msg,
+		})
 		return
 	}
 	// v2.5：用户点「启动」后**当场复验**，不只报"进程已派生"。
@@ -959,7 +1048,7 @@ func opStartBackend(dir, actor string) OpResult {
 	// 它先停旧再起新，不存在半新半旧的中间态。
 	if res, hit := svcStartSkip("backend"); hit {
 		progSetSkip("backend-start", res)
-		fin(resOK, "幂等跳过："+res.Msg)
+		fin(rrRes(res), "启动前置："+res.Msg)
 		return res
 	}
 	if dir == "" {
@@ -1117,7 +1206,7 @@ func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpR
 	}
 	okS(scStart, "backend", "后端", "已启动（mvn spring-boot:run）")
 	fin(resOK, "backend")
-	return opOK("start_service", "backend", "后端进程已派生（Maven 编译通过，尚未做服务可用性复验）", "dir="+dir)
+	return opOK("start_service", "backend", "后端进程已派生（Maven 编译通过）", "dir="+dir)
 }
 
 func opStartBackendGo(dir, actor string, fin func(result, detail string)) OpResult {
@@ -1162,7 +1251,7 @@ func opStartBackendGo(dir, actor string, fin func(result, detail string)) OpResu
 	fin(resOK, "backend")
 	// 与前端同理：此处只证明"构建通过且进程已派生"，端口/HTTP 可用性复验见 v2.0 P2。
 	// "backend-start" 标志同理由 verifyService 复位（详见 opStartWeb 同处注释）。
-	return opOK("start_service", "backend", "后端进程已派生（go build 通过，尚未做服务可用性复验）", "dir="+dir)
+	return opOK("start_service", "backend", "后端进程已派生（go build 通过）", "dir="+dir)
 }
 
 func handleStop(w http.ResponseWriter, r *http.Request) {
@@ -1174,25 +1263,66 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 		Key string `json:"key"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	// 停服务时清掉全部运行时记录（端口漂移 / 复验结论 / 崩溃历史）：
-	// 服务停了就不再处于"崩溃中"，留着记录会让状态中心显示陈旧结论。
+	// 停止权限边界：只停 EnvKit 自己派生的 activeProcs。
+	// 外部实例（source=external）不归我们管，接口也不能假装"已停止"。
+	var external []string
+	noteExternal := func(key string) {
+		if managedServiceRunning(key) {
+			return
+		}
+		if o, ok := observeSnapshot(key); ok && (o.State == "external" || o.State == "unknown") {
+			external = append(external, fmt.Sprintf("%s(PID %d, 端口 %d)", svcLabel(key), o.PID, o.Port))
+		}
+	}
 	switch body.Key {
 	case "web":
+		managed := managedServiceRunning("web")
+		noteExternal("web")
 		stopByKey(scStart, "web", "web-start")
-		svcReset("web")
+		if managed {
+			svcReset("web")
+		}
 		auditNow(actUser, "stop_service", "web", "", resOK, "")
 	case "backend":
+		managed := managedServiceRunning("backend")
+		noteExternal("backend")
 		stopByKey(scStart, "backend", "backend-start")
-		svcReset("backend")
+		if managed {
+			svcReset("backend")
+		}
 		auditNow(actUser, "stop_service", "backend", "", resOK, "")
 	default:
+		managedWeb := managedServiceRunning("web")
+		managedBackend := managedServiceRunning("backend")
+		noteExternal("web")
+		noteExternal("backend")
 		stopByKey(scStart, "web", "web-start")
 		stopByKey(scStart, "backend", "backend-start")
-		svcReset("web")
-		svcReset("backend")
+		if managedWeb {
+			svcReset("web")
+		}
+		if managedBackend {
+			svcReset("backend")
+		}
 		auditNow(actUser, "stop_service", "all", "", resOK, "")
 	}
-	_, _ = w.Write([]byte(`{"ok":true}`))
+	kickPortObserver()
+	msg := ""
+	if len(external) > 0 {
+		msg = "EnvKit 只停止了由自己启动的服务；以下外部实例未受管，未停止：" + strings.Join(external, "、")
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":       true,
+		"external": external,
+		"msg":      msg,
+	})
+}
+
+func managedServiceRunning(target string) bool {
+	svcMu.Lock()
+	defer svcMu.Unlock()
+	return svcState[target] != nil && svcState[target].Running
 }
 
 // handleProgramExit 网页端「退出程序」。stop_services=false：只退出 EnvKit，

@@ -608,6 +608,7 @@ func execBackground(scope, key, progKey, step, dir string, extra map[string]stri
 	s.PID = cmd.Process.Pid
 	s.Since = time.Now().Format("15:04:05")
 	svcMu.Unlock()
+	kickPortObserver() // 新进程刚派生，立刻刷新一次观察器（不依赖 5 秒 tick）
 	go func() {
 		for attempt := 0; ; attempt++ {
 			err := cmd.Wait()
@@ -863,4 +864,5 @@ func stopByKey(scope, key, progKey string) {
 	svcMu.Unlock()
 	setProgStatus(progKey, false, progStopped, "已停止")
 	infoS(scope, key, "停止", "已发送停止信号")
+	kickPortObserver()
 }

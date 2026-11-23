@@ -81,7 +81,16 @@ func loadConfig() {
 	decryptConfig(&cfg)
 }
 
-func applyConfigDefaults() {
+// applyConfigDefaults 把默认值落到全局配置：只在加载/迁移路径调用。
+func applyConfigDefaults() { applyDefaultsTo(&cfg) }
+
+// applyDefaultsTo 把默认值落到给定配置。
+//
+// 为什么要参数化：导入配置时原来调的是 applyConfigDefaults()，它写的是全局 cfg——
+// 结果"给导入文件补默认值"变成了"无锁改正在运行的内存配置"（还让随后的
+// 空密码保留逻辑拿到已经补过默认值的字段）。这里参数名沿用 cfg 遮蔽全局变量，
+// 函数体里的 cfg.X 全部落在实参上，语义从"改全局"变成"改这份配置"。
+func applyDefaultsTo(cfg *Config) {
 	if cfg.InstallDir == "" {
 		cfg.InstallDir = `C:\EnvKit\tools`
 	}
@@ -247,6 +256,9 @@ var configFilePath = func() string {
 }
 
 func saveExternalConfig(c Config) {
+	// 落盘前先深拷贝：normalizeConfig 会就地改 Components 等切片元素，
+	// 若调用方传的是全局配置的值拷贝，那等于无锁改全局底层数组。
+	c = cloneConfigDeep(c)
 	path := configFilePath()
 	normalizeConfig(&c)
 	c.SchemaVersion = configSchemaVersion
@@ -291,11 +303,38 @@ func decryptField(v string) string {
 	return "" // 换机/换用户解不开 → 置空，等用户重填
 }
 
-// cloneConfigDeep 值拷贝 Config，并对指针段（AI 含 Quirks map、Dev）做深拷贝。
-// Config 是值类型但 AI/Dev 是指针 —— 直接 `c := cfg` 后改 c.AI.APIKey 会把全局
-// 内存密钥一起改掉（真实事故：导出诊断包脱敏后 AI 助手当场失联）；
-// Dev 同理：落盘前 normalizeConfig 的钳制不该顺手改到全局内存（还有并发读）。
+// cloneConfigDeep 值拷贝 Config，并对**所有引用类型字段**做深拷贝：
+// 指针段（AI / Dev / Lan / MCP / Update / Notify）、切片（Projects 的端口清单与
+// 收藏脚本、Services / Components）、map（AI.Quirks、Component.ExtraEnv）。
+//
+// 为什么必须全：Config 是值类型但内部到处是指针与切片。直接 `c := cfg` 后
+// 改 c.AI.APIKey 会把全局内存密钥一起改掉（真实事故：导出诊断包脱敏后 AI
+// 助手当场失联）；更隐蔽的是 normalizeConfig 会就地改 c.Components[i].URL ——
+// 浅拷贝下那是在**无锁改全局配置的底层数组**，并发的 GET /api/config 会读到
+// 半截状态。新增引用字段时同步这里与 TestCloneConfigDeepIsolated。
 func cloneConfigDeep(c Config) Config {
+	c.Projects.ScanPorts = cloneIntSlice(c.Projects.ScanPorts)
+	c.Projects.WebScripts = cloneStringSlice(c.Projects.WebScripts)
+
+	if c.Services != nil {
+		out := make([]Service, len(c.Services))
+		for i, s := range c.Services {
+			s.DependsOn = cloneStringSlice(s.DependsOn)
+			s.Probe = cloneProbeSpec(s.Probe)
+			s.Verify.Evidence = cloneStringSlice(s.Verify.Evidence)
+			out[i] = s
+		}
+		c.Services = out
+	}
+	if c.Components != nil {
+		out := make([]Component, len(c.Components))
+		for i, comp := range c.Components {
+			comp.CheckArgs = cloneStringSlice(comp.CheckArgs)
+			out[i] = comp
+		}
+		c.Components = out
+	}
+
 	if c.AI != nil {
 		ai := *c.AI
 		if ai.Quirks != nil {
@@ -311,7 +350,78 @@ func cloneConfigDeep(c Config) Config {
 		dv := *c.Dev
 		c.Dev = &dv
 	}
+	if c.Lan != nil {
+		l := *c.Lan
+		l.Enabled = cloneBoolPtr(l.Enabled)
+		l.Port = cloneIntPtr(l.Port)
+		l.AllowShot = cloneBoolPtr(l.AllowShot)
+		l.AllowClip = cloneBoolPtr(l.AllowClip)
+		l.AllowTerm = cloneBoolPtr(l.AllowTerm)
+		l.RequireOTP = cloneBoolPtr(l.RequireOTP)
+		if l.Devices != nil {
+			l.Devices = append([]LanDevice(nil), l.Devices...)
+		}
+		c.Lan = &l
+	}
+	if c.MCP != nil {
+		m := *c.MCP
+		m.Enabled = cloneBoolPtr(m.Enabled)
+		c.MCP = &m
+	}
+	if c.Update != nil {
+		u := *c.Update
+		u.Enabled = cloneBoolPtr(u.Enabled)
+		u.IntervalHours = cloneIntPtr(u.IntervalHours)
+		c.Update = &u
+	}
+	if c.Notify != nil {
+		n := *c.Notify
+		c.Notify = &n
+	}
+	c.Mission.Enabled = cloneBoolPtr(c.Mission.Enabled)
 	return c
+}
+
+func cloneStringSlice(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	return append([]string(nil), s...)
+}
+
+func cloneIntSlice(s []int) []int {
+	if s == nil {
+		return nil
+	}
+	return append([]int(nil), s...)
+}
+
+func cloneBoolPtr(p *bool) *bool {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneIntPtr(p *int) *int {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+// cloneProbeSpec 递归复制 composite 探针的 Parts（ProbeSpec 自引用）。
+func cloneProbeSpec(p ProbeSpec) ProbeSpec {
+	if len(p.Parts) > 0 {
+		parts := make([]ProbeSpec, len(p.Parts))
+		for i, sub := range p.Parts {
+			parts[i] = cloneProbeSpec(sub)
+		}
+		p.Parts = parts
+	}
+	return p
 }
 
 func encryptConfig(c Config) Config {

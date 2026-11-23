@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +18,72 @@ import (
 )
 
 // ---------- 程序配置：MySQL 建库 / 生效 SQL ----------
-func mysqlClient() string { return findExe("mysql.exe", "mysql") }
+
+// mysqlClient 依次尝试：EnvKit 组件目录 / PATH → Windows 服务 ImagePath →
+// 常见安装目录。只靠前两者会漏掉"用户自己装的 MySQL"：本机 MySQL80 服务在跑、
+// 客户端在 C:\Program Files\MySQL\...，但两个位置都不在 PATH，AI 的 db_check
+// 就会报"未找到 mysql 客户端"，模型据此得出"MySQL 完全没有安装"的错结论。
+func mysqlClient() string {
+	if exe := findExe("mysql.exe", "mysql"); exe != "" {
+		return exe
+	}
+	return mysqlClientFromInstall()
+}
+
+// mysqlClientFromInstall 从服务注册表与常见目录里找回 mysql.exe。
+func mysqlClientFromInstall() string {
+	if p := mysqlServiceExe(); p != "" {
+		cli := filepath.Join(filepath.Dir(p), "mysql.exe")
+		if hasFile(cli) {
+			return cli
+		}
+	}
+	for _, root := range []string{
+		`C:\Program Files\MySQL`,
+		`C:\Program Files (x86)\MySQL`,
+		`D:\Program Files\MySQL`,
+		`D:\MySQL`,
+	} {
+		matches, _ := filepath.Glob(filepath.Join(root, "MySQL Server *", "bin", "mysql.exe"))
+		if len(matches) > 0 {
+			// 多版本并存时取路径里版本号最大的那个；Glob 结果有序，倒序取第一个。
+			return matches[len(matches)-1]
+		}
+	}
+	return ""
+}
+
+var mysqlSvcPathRe = regexp.MustCompile(`(?i)"([^"]*mysqld\.exe)"`)
+var mysqlSvcBareRe = regexp.MustCompile(`(?i)([A-Z]:\\[^\r\n"]*?mysqld\.exe)`)
+
+// mysqlServiceExe 从服务 ImagePath 里取 mysqld.exe 的真实路径。
+// ImagePath 形如 "C:\Program Files\...\mysqld.exe" --defaults-file=...
+func mysqlServiceExe() string {
+	name := strings.TrimSpace(cfg.MySQL.ServiceName)
+	if name == "" {
+		name = "MySQL80"
+	}
+	out, err := exec.Command("reg", "query",
+		`HKLM\SYSTEM\CurrentControlSet\Services\`+name, "/v", "ImagePath").Output()
+	if err != nil {
+		return ""
+	}
+	if p := parseMysqlServiceExe(string(out)); p != "" && hasFile(p) {
+		return p
+	}
+	return ""
+}
+
+// parseMysqlServiceExe 从 reg query 的输出里抽 mysqld.exe 路径（供单测直接验证）。
+func parseMysqlServiceExe(out string) string {
+	if m := mysqlSvcPathRe.FindStringSubmatch(out); len(m) >= 2 {
+		return strings.TrimSpace(m[1])
+	}
+	if m := mysqlSvcBareRe.FindStringSubmatch(out); len(m) >= 2 {
+		return strings.TrimSpace(m[1])
+	}
+	return ""
+}
 
 // 用 MYSQL_PWD 传密码，避免命令行警告污染输出（也更安全）
 func mysqlEnv() map[string]string {

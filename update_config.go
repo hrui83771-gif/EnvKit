@@ -113,65 +113,66 @@ func handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cfgMu.Lock()
-	base := UpdateConfig{}
-	if cfg.Update != nil {
-		base = *cfg.Update
-	}
-	next := base
+	// 读改写整段进 cfgUpdate：回调里不能再取 cfgMu（自锁），
+	// 返回值是深拷贝快照，落盘不会碰到全局内存里的其它段。
 	var changed []string
+	saved := cfgUpdate(func(c *Config) {
+		base := UpdateConfig{}
+		if c.Update != nil {
+			base = *c.Update
+		}
+		next := base
 
-	if body.Enabled != nil {
-		was := next.on()
-		if was != *body.Enabled {
-			changed = append(changed, "自更新检查开关")
+		if body.Enabled != nil {
+			was := next.on()
+			if was != *body.Enabled {
+				changed = append(changed, "自更新检查开关")
+			}
+			v := *body.Enabled
+			next.Enabled = &v
 		}
-		v := *body.Enabled
-		next.Enabled = &v
-	}
-	if body.IntervalHours != nil {
-		v := *body.IntervalHours
-		if v < 0 {
-			v = 0
+		if body.IntervalHours != nil {
+			v := *body.IntervalHours
+			if v < 0 {
+				v = 0
+			}
+			// 上限一周：再稀就失去"及时知道"的意义，不如直接关掉检查。
+			if v > 168 {
+				v = 168
+			}
+			// 和「生效值」比而不是和「存的值」比：原本 nil（=默认 72）时，
+			// 用户把它改成 72 不该算一次改动，也不该因此触发重查。
+			if next.interval() != v {
+				changed = append(changed, "复查间隔")
+			}
+			next.IntervalHours = &v
 		}
-		// 上限一周：再稀就失去"及时知道"的意义，不如直接关掉检查。
-		if v > 168 {
-			v = 168
+		if body.IgnoreVersion != nil {
+			v := strings.TrimSpace(*body.IgnoreVersion)
+			if rs := []rune(v); len(rs) > 40 {
+				v = string(rs[:40])
+			}
+			if next.IgnoreVersion != v {
+				changed = append(changed, "忽略版本")
+			}
+			next.IgnoreVersion = v
 		}
-		// 和「生效值」比而不是和「存的值」比：原本 nil（=默认 72）时，
-		// 用户把它改成 72 不该算一次改动，也不该因此触发重查。
-		if next.interval() != v {
-			changed = append(changed, "复查间隔")
-		}
-		next.IntervalHours = &v
-	}
-	if body.IgnoreVersion != nil {
-		v := strings.TrimSpace(*body.IgnoreVersion)
-		if rs := []rune(v); len(rs) > 40 {
-			v = string(rs[:40])
-		}
-		if next.IgnoreVersion != v {
-			changed = append(changed, "忽略版本")
-		}
-		next.IgnoreVersion = v
-	}
 
-	nv := next
-	cfg.Update = &nv
-	// 更新地址和它一起写：URL 在 Config 顶层（老字段），行为开关在 update 段，
-	// 但界面上是同一张卡、同一个保存动作，分开写只会多出"一半生效"的中间态。
-	if body.URL != nil {
-		u := strings.TrimSpace(*body.URL)
-		if rs := []rune(u); len(rs) > 500 {
-			u = string(rs[:500])
+		nv := next
+		c.Update = &nv
+		// 更新地址和它一起写：URL 在 Config 顶层（老字段），行为开关在 update 段，
+		// 但界面上是同一张卡、同一个保存动作，分开写只会多出"一半生效"的中间态。
+		if body.URL != nil {
+			u := strings.TrimSpace(*body.URL)
+			if rs := []rune(u); len(rs) > 500 {
+				u = string(rs[:500])
+			}
+			if c.UpdateURL != u {
+				changed = append(changed, "更新地址")
+			}
+			c.UpdateURL = u
 		}
-		if cfg.UpdateURL != u {
-			changed = append(changed, "更新地址")
-		}
-		cfg.UpdateURL = u
-	}
-	saved := cfg
-	cfgMu.Unlock()
+	})
 
 	if len(changed) > 0 {
 		saveExternalConfig(saved)

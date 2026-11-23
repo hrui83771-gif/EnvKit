@@ -104,9 +104,19 @@ jobs:
           python tools/web_build.py --check
           python tools/i18n_gap.py --check
 
-      - name: Go 单元测试
-        run: go test -count=1 ./...
-        timeout-minutes: 20
+      # -race 不是"更严格一点的测试"，是这个项目的必需品：config 是包级全局值，
+      # 各 handler 靠手工 cfgMu 维持纪律，普通 go test 抓不到漏锁/浅拷贝导致的
+      # 并发读写。依赖 gcc：windows-latest 的 Strawberry Perl 自带 MinGW-w64 且已在 PATH。
+      - name: Go 单元测试（主包，含 race）
+        run: go test -race -count=1 .
+        timeout-minutes: 25
+
+      # platform 包是 Windows API 胶水（DPAPI / 控制台 / Job 对象），测试二进制
+      # 会直接载入系统 DLL；在部分 MinGW 工具链上 race 版启动即 0xc0000139
+      # （ENTRYPOINT_NOT_FOUND），与代码无关。它的测试是确定性的单线程调用，
+      # 普通模式跑即可；主包的 -race 已覆盖全局配置的并发面。
+      - name: 平台胶水测试（不启用 race）
+        run: go test -count=1 ./internal/platform
 
       # third_party/systray 是被 go.mod replace 指向的**独立模块**，
       # 主模块的 go test ./... 根本不会跑到它；托盘图标恢复决策的

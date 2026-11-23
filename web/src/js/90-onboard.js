@@ -1125,6 +1125,11 @@
   function finish(){
     if(mode === 'first') mark();
     close();
+    /* 首屏演示结束后，项目接入向导在 95-project-setup.js 里监听这个事件。
+       不用 ek-guide-v1 做标记：演示看过 ≠ 项目已接入，两件事分开记。 */
+    try{
+      document.dispatchEvent(new CustomEvent('ek:onboard-finish', {detail:{mode: mode}}));
+    }catch(e){}
   }
 
   /* ---------- P1-4：主界面控件高亮教学，只指不点 ----------

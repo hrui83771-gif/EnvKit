@@ -43,6 +43,12 @@ func TestProgSetSkipIsNotFailure(t *testing.T) {
 		t.Fatalf("未复验的幂等跳过应落 %q，实际 %q", progWarn, got.Status)
 	}
 
+	// 外部实例的跳过：服务在跑，但不是 EnvKit 启动的 → external，不是 warn。
+	progSetSkip("web-start", OpResult{Ok: true, SkipVerify: true, Msg: "检测到前端外部实例（PID 1，端口 5173）"})
+	if got := progOf("web-start"); got.Status != progExternal {
+		t.Fatalf("外部实例跳过应落 %q，实际 %q", progExternal, got.Status)
+	}
+
 	// 已复验的跳过：ok。
 	progSetSkip("web-start", OpResult{Ok: true, Verified: true, Msg: "已在运行且复验通过"})
 	if got := progOf("web-start"); got.Status != progOK || !got.Ok {

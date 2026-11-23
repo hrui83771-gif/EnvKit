@@ -46,6 +46,9 @@
          顶栏只留"我是谁"和状态，避免一排同权重按钮抢注意力。 -->
     <div class="hactions">
       <span class="chip admin" id="chip-admin" style="display:none">管理员</span>
+      <button class="hdr-setup" id="btn-project-setup" type="button" title="接入已有项目：识别前后端、端口和数据库配置">
+        <span class="hdr-setup-dot"></span><span class="hdr-setup-t">接入项目</span>
+      </button>
       <!-- 搜索入口：不是第二个搜索实现，只是 Ctrl+K 命令面板的可见把手。
            点击/按键都走 EKCmd.open()，索引仍是"页面里真实存在的控件现扫"。 -->
       <button class="hdr-search" id="btn-search" type="button" title="搜索页面、按钮、章节（Ctrl+K）">
@@ -277,10 +280,14 @@
             <input id="cfg_web_script" data-cfg placeholder="如 dev / serve / start（留空自动推断）" />
             <div class="hint" style="margin-top:4px">必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝</div>
           </div>
-          <div>
+          <div id="backend-entry-go">
             <label>后端入口</label>
-            <input id="cfg_backend_file" data-cfg placeholder="如 main.go 或 cmd/server/main.go（留空自动推断）" />
-            <div class="hint" style="margin-top:4px">相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断</div>
+            <input id="cfg_backend_file" data-cfg placeholder="如 main.go 或 cmd/server/main.go；Maven 项目无需填写（留空自动推断）" />
+            <div class="hint" style="margin-top:4px">Go 项目：相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断</div>
+          </div>
+          <div id="backend-entry-maven" style="display:none">
+            <label>后端入口</label>
+            <div class="hint" style="margin-top:4px">Maven 项目：入口为 pom.xml，由 spring-boot-maven-plugin 决定；启动方式 mvn spring-boot:run，无需填写 main.go。</div>
           </div>
         </div>
         <div id="launch-cands" class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"></div>
@@ -348,7 +355,7 @@
         <div class="head"><div class="title">依赖</div><span class="status idle" id="st-web-install">前端 未执行</span></div>
         <div class="row">
           <button id="btn-web-install">前端 npm install</button>
-          <button class="ghost" id="btn-backend-tidy">后端 go mod tidy</button>
+          <button class="ghost" id="btn-backend-tidy">后端依赖整理</button>
           <span class="hint" id="h-deps"></span>
         </div>
         <div class="muted" style="margin-top:6px">状态：<span id="dep-state">—</span></div>
@@ -1199,7 +1206,7 @@
         <span class="svc-title">运行状态</span>
         <span class="svc-actions">
           <button class="mini" id="btn-stop-all">停止全部</button>
-          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、mvn/go run、java 等后台进程">清理进程</button>
         </span>
       </div>
       <div class="svcitem">

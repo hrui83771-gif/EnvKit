@@ -65,6 +65,7 @@ func aiProjectBriefJSON() string {
 // projectBriefInvalidate 清画像缓存。配置里的项目目录变了必须调用，
 // 否则用户换项目后 2 分钟内看到的是上一个项目的画像。
 func projectBriefInvalidate() {
+	projectProfileInvalidate()
 	briefMu.Lock()
 	briefCache, briefKey, briefAt = "", "", time.Time{}
 	briefMu.Unlock()

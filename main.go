@@ -26,8 +26,8 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.8.0"
-	buildDate  = "2026-11-01"
+	appVersion = "3.8.1"
+	buildDate  = "2026-11-22"
 )
 
 //go:embed web/index.html
@@ -191,6 +191,8 @@ func main() {
 	http.HandleFunc("/docs.html", serveDocs)
 	http.HandleFunc("/", serveIndex)
 	http.HandleFunc("/api/config", handleConfig)
+	http.HandleFunc("/api/project/inspect", handleProjectInspect)
+	http.HandleFunc("/api/project/apply", handleProjectApply)
 	http.HandleFunc("/api/check", handleCheck)
 	http.HandleFunc("/api/pet/weather", handlePetWeather)
 	http.HandleFunc("/api/pet/config", handlePetConfig) // 桌宠开关（天气默认关闭）
@@ -361,6 +363,8 @@ func main() {
 	}
 	// 本机 API 鉴权：/api/* 需携带随机令牌（页面注入），防浏览器内其它网页 CSRF
 	startTaskWatchdog()
+	// 端口观察器：只读发现用户在 EnvKit 之外启动的前后端实例。
+	startPortObserver()
 	// 服务放到后台跑：Windows 的托盘消息循环必须占用主 goroutine
 	//（systray 在 init 里 LockOSThread），否则托盘图标会出现但点击无反应。
 	serveErr := make(chan error, 1)

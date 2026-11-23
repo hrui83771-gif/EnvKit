@@ -30,7 +30,10 @@ const (
 	// 混在一类里用户会以为是文件损坏，而真正原因是缺了触发器之类。
 	errKindRestoreFail = "restore_fail"
 	errKindTimeout     = "timeout" // 被看门狗超时终止
-	errKindUnknown     = "unknown"
+	// errKindPortConflict 启动前置发现候选端口被别的进程占着。
+	// 与 spawn_fail 分开：还没派进程，失败在"位置被占"，不是"起不来"。
+	errKindPortConflict = "port_conflict"
+	errKindUnknown      = "unknown"
 )
 
 // OpResult 一次操作的完整结果：成功与否 + 失败归类 + 证据链。
@@ -48,6 +51,9 @@ type OpResult struct {
 	Verified bool `json:"verified"`
 	// Artifact 本次操作的产物路径（备份文件等），供后续复验直接取用。
 	Artifact string `json:"artifact,omitempty"`
+	// SkipVerify 外部实例专用：动作没有派生/停止任何 EnvKit 管理的进程，
+	// 调用方不要再跑 verifyService（那会把"别人已经在跑"误判成 spawn_fail）。
+	SkipVerify bool `json:"skip_verify,omitempty"`
 }
 
 // opOK 动作已执行但尚未复验（诚实态：不许被当成"环境已恢复"）。

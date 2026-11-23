@@ -80,6 +80,40 @@ func TestAIMatchIntent_Negative(t *testing.T) {
 	}
 }
 
+func TestAIMatchIntent_NegatedClauses(t *testing.T) {
+	// 真实翻车（2026-11-23，真实实例 + 真实模型复现）：
+	// 「只做只读检查，不要启动或停止任何服务」被 stop_service 规则命中，
+	// AI 在模型调用前就弹出「停止后端服务」确认卡。
+	// 否定词必须让同一子句里的动作词失效，但不能把「不要忘记重启」这类
+	// 祈使句也吞掉。
+	// 长句里只要求"不触发写操作"：读类意图（如 db_check）可以命中，
+	// 危险的是 stop/start 这种写操作先于模型弹卡。
+	long := "查一下当前环境：前端、后端、数据库各是什么状态？只做只读检查，不要启动或停止任何服务。给我一句话结论。"
+	if tool, args, isWrite := aiMatchIntent(long); isWrite {
+		t.Errorf("长句只读请求被误判为写操作：%q(args=%v)", tool, args)
+	}
+	for _, s := range []string{
+		"不要启动后端",
+		"别停后端",
+		"服务不要停",
+		"先别重启服务",
+	} {
+		if tool, args, _ := aiMatchIntent(s); tool != "" {
+			t.Errorf("aiMatchIntent(%q) = %q(args=%v), want 空（否定句不应触发写操作）", s, tool, args)
+		}
+	}
+	// 否定只作用于自己的子句：转折后的明确指令仍然要认出来。
+	if tool, args, _ := aiMatchIntent("不要启动前端，只停止后端"); tool != "stop_service" {
+		t.Errorf("否定子句之后的停止没被识别：tool=%q args=%v", tool, args)
+	} else if svc, _ := args["service"].(string); svc != "backend" {
+		t.Errorf("service=%q, want backend", svc)
+	}
+	// “不要忘记重启”是祈使句，不是否定。
+	if tool, _, _ := aiMatchIntent("不要忘记重启后端"); tool != "restart_service" {
+		t.Errorf("「不要忘记重启后端」被当成否定：tool=%q", tool)
+	}
+}
+
 func TestAIBareAffirm(t *testing.T) {
 	for _, s := range []string{"好", "好的", "嗯", "可以", "确认", "行吧", "OK", "开始吧", "好。", "麻烦了",
 		"需要", "需要呀", "需要吧", "要", "要吧", "当然", "当然可以", "走起", "就这么办"} {

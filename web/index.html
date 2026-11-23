@@ -144,6 +144,7 @@
   .chip.err{background:var(--errbg);color:var(--err)}
   .chip.off{background:var(--off);color:var(--muted)}
   .chip.admin{background:var(--infobg);color:var(--info);cursor:default}
+  .chip.info{background:var(--infobg);color:var(--info)}
   /* 「按旧配置算的」——不换配色（结论本身没变），只把实线边改虚线，
      扫一眼就能看出这条还没按新配置复核过 */
   .chip.stale{border-style:dashed;border-color:currentColor;opacity:.9}
@@ -356,6 +357,7 @@
   .svc .svcstate.ok{background:var(--okbg);color:var(--ok)}
   .svc .svcstate.warn{background:var(--warnbg);color:var(--warn)}
   .svc .svcstate.err{background:var(--errbg);color:var(--err)}
+  .svc .svcstate.info{background:var(--infobg);color:var(--info)}
   .svclink{display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:none;color:var(--info);font-size:12px;font-weight:600;text-decoration:none;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .svclink:hover{text-decoration:underline}
   /* 服务进程资源：一行小字 + 迷你走势。数值全部来自后端采样快照，
@@ -2447,6 +2449,192 @@
   .heal-badge.err{background:var(--errbg);color:var(--err)}
   .heal-badge.info{background:var(--infobg);color:var(--info)}
 
+
+/* ============================================================
+   项目接入向导（95-project-setup.js）
+   ============================================================ */
+.hdr-setup{display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;
+  background:var(--brand-weak);color:var(--brand);font-size:12.5px;font-weight:600;cursor:pointer;transition:.18s;white-space:nowrap}
+.hdr-setup:hover{background:var(--card);border-color:var(--brand2);transform:translateY(-1px)}
+.hdr-setup-dot{width:7px;height:7px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 16%,transparent);flex:none}
+.hdr-setup.on{background:var(--brand);color:#fff}
+.hdr-setup.on .hdr-setup-dot{background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.28)}
+@media(max-width:920px){ .hdr-setup-t{display:none} .hdr-setup{padding:5px 6px} }
+
+body.pws-open{overflow:hidden}
+.pws{position:fixed;inset:0;z-index:70;display:none}
+.pws.show{display:block}
+.pws-mask{position:absolute;inset:0;background:rgba(28,26,24,.38);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);animation:pws-fade .25s ease both}
+.pws-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(840px,calc(100vw - 36px));
+  max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--card);border:1px solid color-mix(in srgb,var(--line) 75%,transparent);
+  border-radius:20px;box-shadow:0 30px 90px rgba(24,20,15,.28),0 0 0 1px rgba(255,255,255,.24) inset;
+  overflow:hidden;animation:pws-in .36s cubic-bezier(.18,.82,.22,1) both}
+.pws-top{position:relative;display:flex;align-items:center;gap:14px;padding:20px 24px 14px;flex:none}
+.pws-top::after{content:"";position:absolute;left:24px;right:24px;bottom:0;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.pws-brand{display:flex;align-items:center;gap:12px;min-width:0}
+.pws-logo{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none;
+  font:700 11px/1 -apple-system,"Segoe UI",sans-serif;letter-spacing:.06em;color:#fff;
+  background:linear-gradient(145deg,var(--brand),var(--brand2));box-shadow:0 8px 18px color-mix(in srgb,var(--brand) 28%,transparent)}
+.pws-brand b{display:block;font-size:15px;letter-spacing:.01em}
+.pws-brand p{margin:3px 0 0;font-size:12px;color:var(--muted)}
+.pws-x{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:var(--soft);color:var(--muted);
+  font-size:20px;line-height:1;cursor:pointer;transition:.15s}
+.pws-x:hover{background:var(--hover);color:var(--text)}
+.pws-progress{display:flex;align-items:center;gap:8px;padding:12px 24px;flex:none;background:linear-gradient(180deg,var(--soft),transparent)}
+.pws-progress span{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;font-size:11.5px;color:var(--muted);
+  border:1px solid transparent;transition:.25s}
+.pws-progress span b{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
+  background:var(--off);font-size:10px;font-weight:700;color:var(--muted);transition:.25s}
+.pws-progress span.on{color:var(--brand);background:var(--brand-weak);border-color:color-mix(in srgb,var(--brand) 18%,transparent)}
+.pws-progress span.on b{background:var(--brand);color:#fff}
+.pws-progress i{width:34px;height:1px;background:var(--line)}
+.pws-body{padding:8px 24px 0;overflow-y:auto;min-height:0;flex:1;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.pws-view{display:none;padding-bottom:4px}
+.pws-view.on{display:block;animation:pws-view .28s ease both}
+.pws-kicker{font:600 10.5px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.1em;color:var(--brand);text-transform:uppercase;margin-bottom:8px}
+.pws-hero{padding:14px 0 6px}
+.pws-hero h2,.pws-resulthead h2{margin:0;font-size:23px;line-height:1.25;letter-spacing:-.02em;color:var(--text)}
+.pws-lead{margin:9px 0 0;max-width:660px;color:var(--muted);font-size:12.5px;line-height:1.75}
+.pws-dirs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0 2px}
+.pws-field{display:flex;flex-direction:column;gap:7px;padding:13px;border:1px solid var(--line);border-radius:13px;background:var(--soft);transition:.18s}
+.pws-field:focus-within{border-color:var(--brand2);background:var(--card);box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 8%,transparent)}
+.pws-field>span{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600}
+.pws-field>span em{font-style:normal;font-size:10.5px;font-weight:500;color:var(--muted);padding:1px 6px;border-radius:4px;background:var(--off)}
+.pws-inputrow{display:flex;gap:6px}
+.pws-inputrow input{flex:1;min-width:0;font-size:12.5px;padding:8px 10px;border-radius:8px}
+.pws-pick{flex:none;padding:0 11px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:12px;cursor:pointer}
+.pws-pick:hover{border-color:var(--brand2);background:var(--brand-weak);color:var(--brand)}
+.pws-field small{font-size:11px;color:var(--muted);line-height:1.5}
+.pws-err{min-height:0;margin:10px 0 0;padding:0;color:var(--err);font-size:12px;line-height:1.6;white-space:pre-wrap}
+.pws-err.on{padding:9px 11px;border-radius:9px;background:var(--errbg);border:1px solid color-mix(in srgb,var(--err) 18%,transparent)}
+.pws-foot{display:flex;align-items:center;gap:8px;padding:15px 24px 18px;border-top:1px solid var(--line);background:var(--card);flex:none;margin-top:18px}
+.pws-note{flex:1;font-size:11.5px;color:var(--muted);line-height:1.55}
+.pws-later{padding:8px 12px;border:0;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;border-radius:8px}
+.pws-later:hover{background:var(--soft2);color:var(--text)}
+.pws-primary{display:flex;align-items:center;gap:8px;padding:9px 16px;border:0;border-radius:10px;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;
+  background:linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand2) 85%,var(--brand)));box-shadow:0 8px 18px color-mix(in srgb,var(--brand) 24%,transparent);transition:.18s}
+.pws-primary:hover{transform:translateY(-1px);box-shadow:0 11px 24px color-mix(in srgb,var(--brand) 32%,transparent)}
+.pws-primary:disabled{opacity:.55;cursor:wait;transform:none}
+.pws-primary span{font-size:15px;line-height:1;opacity:.8}
+
+/* 检查动画 */
+.pws-scan{display:grid;grid-template-columns:210px 1fr;gap:24px;padding:18px 0 8px;min-height:420px}
+.pws-orb{position:relative;display:flex;align-items:center;justify-content:center;height:390px;align-self:start}
+.pws-orb::before{content:"";position:absolute;width:206px;height:206px;border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--brand) 9%,transparent),transparent 68%)}
+.pws-orb-ring{position:absolute;width:178px;height:178px;border-radius:50%;
+  background:conic-gradient(from -90deg,var(--brand) 0 calc(var(--p,0) * 1%),var(--line) calc(var(--p,0) * 1%) 100%);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 9px),#000 calc(100% - 8px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 9px),#000 calc(100% - 8px));
+  transition:background .35s ease}
+.pws-orb.run .pws-orb-ring{animation:pws-breathe 2.1s ease-in-out infinite}
+.pws-orb-core{position:relative;z-index:2;width:128px;height:128px;border-radius:50%;background:var(--card);
+  border:1px solid var(--line);box-shadow:0 12px 30px rgba(24,20,15,.08),0 0 0 10px color-mix(in srgb,var(--card) 70%,transparent);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.pws-orb-core span{font:600 31px/1 ui-monospace,Consolas,monospace;letter-spacing:-.04em;color:var(--brand)}
+.pws-orb-core small{font-size:10.5px;color:var(--muted);letter-spacing:.04em}
+.pws-orb .pws-dot{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--brand2);opacity:.7;z-index:3}
+.pws-orb.run .pws-dot{animation:pws-orbit 3.8s linear infinite}
+.pws-orb .d1{left:24px;top:104px}
+.pws-orb.run .d1{animation-delay:0s}
+.pws-orb .d2{right:18px;top:188px;background:var(--ob-lilac)}
+.pws-orb.run .d2{animation-delay:-1.27s}
+.pws-orb .d3{left:52px;bottom:72px;background:var(--ob-glow)}
+.pws-orb.run .d3{animation-delay:-2.55s}
+.pws-steplist{display:flex;flex-direction:column;gap:4px;padding:4px 0}
+.pws-step{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;opacity:.52;transform:translateX(4px);transition:.18s}
+.pws-step.active{opacity:1;background:var(--brand-weak);transform:none}
+.pws-step.done,.pws-step.warn,.pws-step.err,.pws-step.skip{opacity:1;transform:none}
+.pws-step .pws-si{width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font:700 10.5px/1 ui-monospace,Consolas,monospace;background:var(--off);color:var(--muted);transition:.2s}
+.pws-step.active .pws-si{background:var(--brand);color:#fff;animation:pws-pulse 1.2s ease-in-out infinite}
+.pws-step.done .pws-si{background:var(--okbg);color:var(--ok);border:1px solid color-mix(in srgb,var(--brand) 22%,transparent)}
+.pws-step.warn .pws-si{background:var(--warnbg);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 22%,transparent)}
+.pws-step.err .pws-si{background:var(--errbg);color:var(--err);border:1px solid color-mix(in srgb,var(--err) 22%,transparent)}
+.pws-step .pws-si{font-size:11px}
+.pws-step b{display:block;font-size:12.5px;font-weight:600;line-height:1.35}
+.pws-step em{display:block;margin-top:2px;font-style:normal;font-size:11px;color:var(--muted);line-height:1.5}
+.pws-step.done em{color:color-mix(in srgb,var(--text) 62%,var(--muted))}
+
+/* 结果 */
+.pws-resulthead{display:flex;align-items:flex-start;gap:16px;padding:14px 0 4px}
+.pws-resulthead>div:first-child{flex:1;min-width:0}
+.pws-seal{flex:none;width:86px;height:86px;border-radius:24px;background:var(--brand-weak);border:1px solid color-mix(in srgb,var(--brand) 18%,transparent);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;animation:pws-seal .55s cubic-bezier(.18,.82,.22,1) both}
+.pws-seal span{font-size:27px;line-height:1;color:var(--brand)}
+.pws-seal small{font-size:10px;color:var(--muted);letter-spacing:.03em}
+.pws-seal.warn{background:var(--warnbg);border-color:color-mix(in srgb,var(--warn) 24%,transparent)}
+.pws-seal.warn span{color:var(--warn)}
+.pws-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+.pws-card{padding:15px 16px;border:1px solid var(--line);border-radius:14px;background:var(--soft);animation:pws-rise .5s cubic-bezier(.18,.82,.22,1) both;animation-delay:calc(var(--i) * 70ms)}
+.pws-cardtop{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.pws-cardtop span{font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--brand)}
+.pws-chip{margin-left:auto;font-style:normal;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px}
+.pws-chip.ok{background:var(--okbg);color:var(--ok)}
+.pws-chip.warn{background:var(--warnbg);color:var(--warn)}
+.pws-chip.muted{background:var(--off);color:var(--muted)}
+.pws-row{display:flex;gap:10px;align-items:baseline;padding:3px 0;font-size:11.5px}
+.pws-row span{flex:0 0 58px;color:var(--muted)}
+.pws-row b{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pws-row b.pws-path{direction:rtl;text-align:left;font-weight:500;font-size:11px;color:color-mix(in srgb,var(--text) 72%,var(--muted))}
+.pws-row b.pws-mono{font:500 11px ui-monospace,Consolas,monospace;color:var(--brand)}
+.pws-portmeta{margin:3px 0 0 68px;font-size:10.5px;color:var(--muted)}
+.pws-dbwrap{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card);animation:pws-rise .5s cubic-bezier(.18,.82,.22,1) .18s both}
+.pws-dbhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pws-dbhead>div:first-child{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.pws-dbicon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:var(--brand-weak);color:var(--brand);
+  font:700 9.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.04em}
+.pws-dbhead b{font-size:12.5px}
+.pws-dbhint{font-size:11px;color:var(--warn);margin-left:4px}
+.pws-dbuse{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none}
+.pws-dblist{display:flex;flex-direction:column;gap:7px}
+.pws-dbrow{display:flex;gap:10px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--soft);cursor:pointer;transition:.16s}
+.pws-dbrow:has(input:checked){border-color:color-mix(in srgb,var(--brand) 45%,var(--line));background:var(--brand-weak);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 7%,transparent)}
+.pws-dbrow input{margin-top:2px;accent-color:var(--brand);flex:none}
+.pws-dbrow input:disabled{opacity:.35}
+.pws-dbmain{flex:1;min-width:0}
+.pws-dbtitle{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pws-dbtitle b{font-size:13px}
+.pws-dbtitle span{font:500 11px ui-monospace,Consolas,monospace;color:var(--brand)}
+.pws-dbmeta{margin-top:3px;font-size:11px;color:var(--muted);line-height:1.55}
+.pws-dbsrc{margin-top:2px;font-size:10.5px;color:var(--muted);opacity:.85}
+.pws-dbnote{margin-top:4px;font-size:10.5px;color:color-mix(in srgb,var(--brand) 74%,var(--muted))}
+.pws-dbprivacy{margin-top:8px;font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.pws-dbprivacy::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none}
+.pws-empty{padding:14px;border:1px dashed var(--line);border-radius:10px;font-size:11.5px;color:var(--muted);line-height:1.65;background:var(--soft)}
+
+@keyframes pws-fade{from{opacity:0}to{opacity:1}}
+@keyframes pws-in{from{opacity:0;transform:translate(-50%,-46%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes pws-view{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes pws-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pws-seal{from{opacity:0;transform:scale(.72) rotate(-8deg)}to{opacity:1;transform:none}}
+@keyframes pws-breathe{0%,100%{filter:drop-shadow(0 0 0 transparent)}50%{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--brand) 24%,transparent))}}
+@keyframes pws-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--brand) 24%,transparent)}50%{box-shadow:0 0 0 6px transparent}}
+@keyframes pws-orbit{from{transform:rotate(0deg) translateX(98px) rotate(0deg)}to{transform:rotate(360deg) translateX(98px) rotate(-360deg)}}
+
+@media(max-width:760px){
+  .pws-panel{width:calc(100vw - 20px);max-height:calc(100vh - 20px);border-radius:16px}
+  .pws-top{padding:16px 16px 12px}.pws-progress{padding:10px 16px}.pws-body{padding:6px 16px 0}.pws-foot{padding:13px 16px 15px;flex-wrap:wrap}
+  .pws-foot .pws-note{flex-basis:100%;order:3}
+  .pws-dirs,.pws-cards{grid-template-columns:1fr}
+  .pws-scan{grid-template-columns:1fr;gap:6px;min-height:0}
+  .pws-orb{height:176px}
+  .pws-orb::before{width:160px;height:160px}.pws-orb-ring{width:142px;height:142px}.pws-orb-core{width:104px;height:104px}
+  .pws-orb-core span{font-size:25px}.pws-orb .pws-dot{display:none}
+  .pws-resulthead h2{font-size:19px}.pws-seal{width:66px;height:66px;border-radius:18px}.pws-seal span{font-size:21px}
+  .pws-seal small{font-size:9px}
+  .pws-step{padding:7px 8px}
+  .pws-row span{flex-basis:50px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .pws-panel,.pws-mask,.pws-view,.pws-card,.pws-seal,.pws-orb.run .pws-orb-ring,.pws-orb.run .pws-dot,.pws-step.active .pws-si{animation:none!important}
+  .pws-orb.run .pws-dot{display:none}
+}
+
+/* 全局 input 有 width:100%；向导里的单选/复选必须收回自身宽度，
+   否则 radio 会撑满整行，把数据库候选正文挤成 0 宽。 */
+.pws input[type="radio"],.pws input[type="checkbox"]{width:auto;height:auto;min-width:0;padding:0;flex:none}
 </style>
 <link rel="stylesheet" href="/xterm/xterm.css" />
 <script>window.__EK_TOKEN__="__TOKEN__";</script>
@@ -2489,6 +2677,9 @@
          顶栏只留"我是谁"和状态，避免一排同权重按钮抢注意力。 -->
     <div class="hactions">
       <span class="chip admin" id="chip-admin" style="display:none">管理员</span>
+      <button class="hdr-setup" id="btn-project-setup" type="button" title="接入已有项目：识别前后端、端口和数据库配置">
+        <span class="hdr-setup-dot"></span><span class="hdr-setup-t">接入项目</span>
+      </button>
       <!-- 搜索入口：不是第二个搜索实现，只是 Ctrl+K 命令面板的可见把手。
            点击/按键都走 EKCmd.open()，索引仍是"页面里真实存在的控件现扫"。 -->
       <button class="hdr-search" id="btn-search" type="button" title="搜索页面、按钮、章节（Ctrl+K）">
@@ -2720,10 +2911,14 @@
             <input id="cfg_web_script" data-cfg placeholder="如 dev / serve / start（留空自动推断）" />
             <div class="hint" style="margin-top:4px">必须是 dev / serve / start 这类启动服务的脚本；build / deploy / migrate 等一律拒绝</div>
           </div>
-          <div>
+          <div id="backend-entry-go">
             <label>后端入口</label>
-            <input id="cfg_backend_file" data-cfg placeholder="如 main.go 或 cmd/server/main.go（留空自动推断）" />
-            <div class="hint" style="margin-top:4px">相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断</div>
+            <input id="cfg_backend_file" data-cfg placeholder="如 main.go 或 cmd/server/main.go；Maven 项目无需填写（留空自动推断）" />
+            <div class="hint" style="margin-top:4px">Go 项目：相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断</div>
+          </div>
+          <div id="backend-entry-maven" style="display:none">
+            <label>后端入口</label>
+            <div class="hint" style="margin-top:4px">Maven 项目：入口为 pom.xml，由 spring-boot-maven-plugin 决定；启动方式 mvn spring-boot:run，无需填写 main.go。</div>
           </div>
         </div>
         <div id="launch-cands" class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"></div>
@@ -2791,7 +2986,7 @@
         <div class="head"><div class="title">依赖</div><span class="status idle" id="st-web-install">前端 未执行</span></div>
         <div class="row">
           <button id="btn-web-install">前端 npm install</button>
-          <button class="ghost" id="btn-backend-tidy">后端 go mod tidy</button>
+          <button class="ghost" id="btn-backend-tidy">后端依赖整理</button>
           <span class="hint" id="h-deps"></span>
         </div>
         <div class="muted" style="margin-top:6px">状态：<span id="dep-state">—</span></div>
@@ -3642,7 +3837,7 @@
         <span class="svc-title">运行状态</span>
         <span class="svc-actions">
           <button class="mini" id="btn-stop-all">停止全部</button>
-          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、go run 等后台进程">清理进程</button>
+          <button class="mini" id="btn-clean-proc" title="结束项目目录下遗留的 node/webpack、mvn/go run、java 等后台进程">清理进程</button>
         </span>
       </div>
       <div class="svcitem">
@@ -4783,12 +4978,17 @@ function ekIconFill(root){
    因此新增界面文案只要补进 I18N_EN 即可（tools/i18n_inventory.py 可查漏）。 */
 const I18N_EN = {
   "\n\n……输出较长，只显示前 6000 字": "\n\n…output is long; showing the first 6000 characters",
+  "%s候选端口有监听，但无法确认是本项目（端口 %d，PID %d）": "%s candidate port is listening but cannot be confirmed as this project (port %d, PID %d)",
+  "%s外部实例（PID %d，端口 %d）HTTP 5xx：进程在，但服务端自报异常": "%s external instance (PID %d, port %d) HTTP 5xx: process is alive, but the server reports an error",
+  "%s端口冲突：%d 被 %s（PID %d）占用": "%s port conflict: %d is held by %s (PID %d)",
   "- 内容 | 标签": "- Content | Tags",
   "0 = 只在启动时查一次": "0 = check once at startup only",
   "0 行": "0 lines",
   "01 / 08 · 开场": "01 / 08 · Opening",
+  "01 / 接入项目": "01 / Connect a project",
   "02 / 08 · 为什么存在": "02 / 08 · Why it exists",
   "03 / 08 · 主流程": "03 / 08 · The main flow",
+  "03 / 检查结果": "03 / Check results",
   "04 / 08 · 状态看得见": "04 / 08 · Visible status",
   "05 / 08 · 日志分区": "05 / 08 · Log scopes",
   "06 / 08 · AI 助手与桌宠": "06 / 08 · AI assistant and pet",
@@ -4830,9 +5030,11 @@ const I18N_EN = {
   "EnvKit 已退出": "EnvKit has exited",
   "EnvKit 已重启，本页令牌已过期，点击确定自动刷新页面。": "EnvKit restarted and this page's token expired. Click OK to refresh.",
   "EnvKit 环境助手": "EnvKit Assistant",
+  "EnvKit 管理": "Managed by EnvKit",
   "FISCO 节点": "FISCO node",
   "FISCO 节点 · WeBASE": "FISCO node · WeBASE",
   "GOPROXY（Go 代理）": "GOPROXY (Go mirror)",
+  "Go 项目：相对后端目录填写。留空时按 main.go → cmd/*/main.go 顺序推断": "Go project: relative to the backend directory. When blank, detected as main.go, then cmd/*/main.go",
   "HTTP 代理": "HTTP proxy",
   "HTTPS 代理": "HTTPS proxy",
   "HTTPS 证书异常：检查地址与系统时间": "HTTPS certificate problem: check the URL and your system clock",
@@ -4841,8 +5043,10 @@ const I18N_EN = {
   "Key 被拒（HTTP {0}）：检查 API Key 是否正确": "Key rejected (HTTP {0}): check that your API key is correct",
   "MB": "MB",
   "MB；前后端 stdout 更碎，默认给得更宽": "MB; frontend/backend stdout is choppier, so the default is wider",
+  "MCP 工具服务": "MCP tool service",
   "MCP 工具服务已关闭": "MCP tool service disabled",
   "MCP 工具服务已开启": "MCP tool service enabled",
+  "Maven 项目：入口为 pom.xml，由 spring-boot-maven-plugin 决定；启动方式 mvn spring-boot:run，无需填写 main.go。": "Maven project: the entry is pom.xml, decided by spring-boot-maven-plugin; started with mvn spring-boot:run, no need to fill in main.go.",
   "MySQL root 密码": "MySQL root password",
   "MySQL 服务名": "MySQL service name",
   "MySQL 端口": "MySQL port",
@@ -4906,6 +5110,7 @@ const I18N_EN = {
   "http://127.0.0.1:7890（留空 = 直连）": "http://127.0.0.1:7890 (empty = direct)",
   "https://api.deepseek.com 或完整 .../v1/chat/completions（都支持）": "https://api.deepseek.com or a full .../v1/chat/completions (both work)",
   "max_tokens 字段": "max_tokens field",
+  "node_modules 已存在": "node_modules present",
   "npm registry（Node 代理）": "npm registry (Node mirror)",
   "npm run 脚本名（可输入自定义）": "npm run script name (custom allowed)",
   "npm 源": "npm registry",
@@ -4919,9 +5124,12 @@ const I18N_EN = {
   "usage 字段是 v2.7 才加的，此前的对话没有记录": "The usage field was added in v2.7; earlier conversations have none",
   "v2.7 起才记录": "Recorded since v2.7",
   "{0} {1} km/h": "{0} {1} km/h",
+  "{0} · EnvKit 管理": "{0} · managed by EnvKit",
   "{0} · v{1}": "{0} · v{1}",
   "{0} · {1} · {2} 秒 · {3} 行": "{0} · {1} · {2}s · {3} lines",
+  "{0} · 外部启动": "{0} · started externally",
   "{0} · 已 {1} 秒{2}": "{0} · {1}s elapsed{2}",
+  "{0} · 身份未确认": "{0} · identity unconfirmed",
   "{0} 个存活": "{0} alive",
   "{0} 个节点": "{0} steps",
   "{0} 个被占用": "{0} in use",
@@ -4945,8 +5153,10 @@ const I18N_EN = {
   "{0} 轮 / {1} 份报告": "{0} runs / {1} reports",
   "{0} 项": "{0} items",
   "{0} 项不通过": "{0} failed",
+  "{0} 项留意": "{0} to review",
   "{0} 项通过": "{0} checks passed",
   "{0} 项通过 / {1} 项不通过 / {2} 项跳过": "{0} passed / {1} failed / {2} skipped",
+  "{0} 项需要留意": "{0} to review",
   "{0}°，{1}，正合适。": "{0}°, {1} — just right.",
   "{0}°，{1}，还算舒服。": "{0}°, {1} — comfortable enough.",
   "{0}°，冷，多穿一件。": "{0}°, cold. Wear one more layer.",
@@ -5123,6 +5333,8 @@ const I18N_EN = {
   "使用上方 MySQL 连接配置；纯只读，不提供任何写操作": "Uses the MySQL connection above; strictly read-only, no write operations",
   "使用文档": "Docs",
   "使用本软件所产生的任何后果（含环境配置失败、数据丢失、服务中断、端口 / 进程异常、链端操作失误、误操作等）均由使用者自行承担，作者不承担任何直接或间接的责任。": "Any consequence of using this software (failed environment setup, data loss, service interruption, port/process issues, chain operation mistakes, misoperation, etc.) is borne solely by the user; the author accepts no direct or indirect liability.",
+  "例如 D:\\project\\server": "e.g. D:\\project\\server",
+  "例如 D:\\project\\web": "e.g. D:\\project\\web",
   "依据：{0}": "evidence: {0}",
   "依次打勾": "Check them off",
   "依赖": "Dependencies",
@@ -5131,6 +5343,7 @@ const I18N_EN = {
   "依赖 未执行": "Deps not run",
   "依赖 未检测": "Deps not checked",
   "保存中…": "Saving…",
+  "保存只写入前后端目录；勾选数据库时会一起写入，密码只在本机加密保存。": "Saving writes only the frontend/backend directories; if database is checked, it is saved too. The password is encrypted and stored locally only.",
   "保存后会同步到「程序启动」的目录显示。": "Saved folders also show up on the Launch page.",
   "保存城市": "Save city",
   "保存基础设置": "Save basics",
@@ -5139,13 +5352,16 @@ const I18N_EN = {
   "保存失败：HTTP ": "Save failed: HTTP ",
   "保存失败：HTTP {0}": "Save failed: HTTP {0}",
   "保存失败：{0}": "Save failed: {0}",
+  "保存并进入主界面": "Save and enter the console",
   "保存开发者配置": "Save developer settings",
+  "候选": "candidate",
   "停止": "Stop",
   "停止全部": "Stop all",
   "停止失败：": "Stop failed: ",
   "停止服务": "stop services",
   "停止生成": "Stop generating",
   "停用": "Disable",
+  "允许 MCP 客户端连接": "Allow MCP clients to connect",
   "允许写操作": "Allow writes",
   "允许外部 HTTP 触发": "Allow external HTTP trigger",
   "允许查询天气": "Allow weather lookups",
@@ -5156,6 +5372,7 @@ const I18N_EN = {
   "先执行 npm install，否则 npm run 必然失败": "Run npm install first, or npm run will fail",
   "先收起来，需要时悬停右下角找我": "Tucked away — hover the corner when you need me",
   "先看检测": "Start with detection",
+  "先结束占用者或在「程序配置」改端口；EnvKit 不会自动杀第三方进程": "Stop the occupant first or change the port in Program Config; EnvKit will not kill third-party processes",
   "先跑「程序配置」，再复核链端": "Run program config first, then recheck the chain",
   "先跑一次体检再复制": "Run a health check before copying",
   "先跑一次体检再导出": "Run a health check before exporting",
@@ -5191,6 +5408,7 @@ const I18N_EN = {
   "关联压制": "Cascade suppressed",
   "关闭": "Off",
   "关闭后 AI 对话与桌面助手均不可用": "When off, AI chat and the desktop assistant are both unavailable",
+  "其他进程": "Other process",
   "其它": "Other",
   "内存 {0} MB": "Memory {0} MB",
   "内容 | 标签": "text | tags",
@@ -5209,6 +5427,7 @@ const I18N_EN = {
   "冻结时间": "Frozen at",
   "准备中": "Getting ready",
   "准备好了": "Ready to go",
+  "准备检查": "Preparing check",
   "凭什么说修好了": "Why we can say it's fixed",
   "出去玩了，发布新模型什么的以后再说": "Out to play — the new model can wait",
   "出错了…点我看日志": "Something failed… click me for the log",
@@ -5324,6 +5543,9 @@ const I18N_EN = {
   "只读": "Read-only",
   "只读 · 需手改 config.json": "Read-only · edit config.json by hand",
   "只读截图。你桌面上开着什么，手机上就看到什么。": "Read-only screenshot — whatever is on your desktop shows up on the phone.",
+  "只读检查": "Read-only check",
+  "只需要告诉它前后端在哪。EnvKit 会自己识别项目类型、启动方式、端口和数据库配置，不会启动服务、不会安装依赖、不会杀进程。": "Just tell it where the frontend and backend are. EnvKit will detect project types, launch commands, ports and database config. It will not start services, install dependencies or kill processes.",
+  "可以接入了": "Ready to connect",
   "可用": "Available",
   "可达": "Reachable",
   "可达 · {0}ms": "Reachable · {0}ms",
@@ -5343,6 +5565,7 @@ const I18N_EN = {
   "同一把尺子，": "The same ruler,",
   "同一标题的冷却（秒）": "Cooldown per title (seconds)",
   "同时停止由本程序启动的前端 / 后端服务": "Also stop the frontend / backend services started by EnvKit",
+  "同时写入数据库配置": "Also save database config",
   "同步链地址到 config.toml": "Sync chain address into config.toml",
   "后台守护": "Background guard",
   "后台守护：定时检测并自动拉起（挂机用）": "Background guardian: periodically checks and restarts automatically (for unattended runs)",
@@ -5352,6 +5575,7 @@ const I18N_EN = {
   "后端 {0}": "Backend {0}",
   "后端依赖整理": "Backend deps tidy",
   "后端入口": "Backend entry",
+  "后端入口：pom.xml（由 spring-boot-maven-plugin 决定，无需填写 main.go）": "Backend entry: pom.xml (decided by spring-boot-maven-plugin; no need to fill in main.go)",
   "后端在跑、前端在跑，链端两项校验都过了。要我把最近十条日志摘出来吗？": "Backend and frontend are running, and both chain checks passed. Want the last ten log lines?",
   "后端日志": "Backend log",
   "后端服务": "Backend service",
@@ -5420,6 +5644,7 @@ const I18N_EN = {
   "在「程序配置」执行建库": "Create the database in Settings",
   "在「程序配置」选择前端目录": "Choose the frontend directory in Settings",
   "在「程序配置」选择后端目录": "Choose the backend directory in Settings",
+  "在「端口诊断」核对该进程命令行/路径；确认后再决定是否手工停止": "Check the process command line/path in Port Diagnostics; decide whether to stop it manually only after confirming",
   "在「链端校验」查看详情": "See details in Chain Check",
   "在只读基础上能跑检测、读数据库结构与抽样数据。不需要确认，仍然不写入。": "On top of read-only: run checks, read schema and sample rows. No confirm, still no writes.",
   "在只读基础上能跑检测、读数据库结构与抽样数据；不需要确认，仍不写入。": "Adds checks and read-only database structure/sample queries; no confirmation needed, still no writes.",
@@ -5453,6 +5678,7 @@ const I18N_EN = {
   "复制失败：": "Copy failed: ",
   "复制结论": "Copy conclusion",
   "复制网址": "Copy URL",
+  "复制连接配置": "Copy connection config",
   "复查间隔（小时）": "Re-check interval (hours)",
   "复验": "Verify",
   "复验 / 诊断": "Verify / diagnose",
@@ -5465,6 +5691,8 @@ const I18N_EN = {
   "复验通过率": "Verification pass rate",
   "复验：{0}": "verify: {0}",
   "外观": "Appearance",
+  "外部启动": "Started externally",
+  "外部实例，EnvKit 未托管": "External instance, not managed by EnvKit",
   "外面在下雨，伞带上。": "It's raining. Take an umbrella.",
   "外面有{0}，窗户关一下。": "There's {0} outside — shut the window.",
   "夜深了，注意休息": "It's late — get some rest",
@@ -5493,6 +5721,7 @@ const I18N_EN = {
   "如 3.5.0，留空 = 不忽略": "e.g. 3.5.0; empty = do not ignore",
   "如 dev / serve / start（留空自动推断）": "e.g. dev / serve / start (blank = auto)",
   "如 main.go 或 cmd/server/main.go（留空自动推断）": "e.g. main.go or cmd/server/main.go (blank = auto)",
+  "如 main.go 或 cmd/server/main.go；Maven 项目无需填写（留空自动推断）": "e.g. main.go or cmd/server/main.go; not needed for Maven (blank = auto)",
   "如：ls -l /opt/fisco": "e.g. ls -l /opt/fisco",
   "子进程重试次数": "Child-process retries",
   "字段多且互相约束，集中在一处改更安全": "Many interdependent fields; editing them in one place is safer",
@@ -5524,8 +5753,13 @@ const I18N_EN = {
   "审计趋势": "Audit trends",
   "客户端版本": "Client version",
   "密码": "Password",
+  "密码 {0}": "Password {0}",
+  "密码只在本机加密保存；不会写日志、不会发给 AI。": "The password is encrypted and stored locally only; it is never logged or sent to AI.",
+  "密码已找到（脱敏）": "Password found (masked)",
   "密码已清除": "Password cleared",
   "密码已设置，手机上可以用它代替配对码": "Password set — your phone can use it instead of the pairing code",
+  "密码未解析": "Password unresolved",
+  "密码来自 {0}": "Password from {0}",
   "密码至少 6 位": "Password must be at least 6 characters",
   "对比「已安装 / 配置目标 / 官方最新」，可一键升级到最新版": "Compares installed / configured / latest upstream, and upgrades in one click",
   "对话": "Chats",
@@ -5633,6 +5867,7 @@ const I18N_EN = {
   "已恢复上次的对话（{0} 条）": "Restored previous conversation ({0} messages)",
   "已打开": "Open",
   "已执行·未确认": "Executed, not confirmed",
+  "已找到（脱敏）": "Found (masked)",
   "已拉取 {0} 个模型，已在「模型」下拉框中回填": "Fetched {0} models, filled into the Model dropdown",
   "已拒绝": "Declined",
   "已拒绝，让助手换个做法…": "Declined — asking the assistant for another way…",
@@ -5652,6 +5887,7 @@ const I18N_EN = {
   "已清空为默认（点「保存」生效）": "Cleared to defaults (takes effect on Save)",
   "已生成新密钥，请用口令器重新扫码": "New key generated — re-scan it with your authenticator",
   "已用批量授权执行：{0}（剩余 {1} 次）": "Executed under batch grant: {0} ({1} left)",
+  "已确认目录": "Directory confirmed",
   "已确认，继续执行…": "Confirmed — continuing…",
   "已移除该设备": "Device removed",
   "已等 {0}s": "Waited {0}s",
@@ -5668,7 +5904,9 @@ const I18N_EN = {
   "已设置密码（可与配对码二选一）": "Password set (use either it or the pairing code)",
   "已设置（DPAPI 加密存储）": "Set (encrypted with DPAPI)",
   "已设鼠标穿透，点不到我了；刷新页面或从托盘打开控制台即可恢复": "Click-through is on, so you can't click me now. Refresh the page or open the console from the tray to restore.",
+  "已识别": "Detected",
   "已请求停止：{0}": "Stop requested: {0}",
+  "已读取 package.json": "Read package.json",
   "已读取最新配置（{0}）": "Latest config loaded ({0})",
   "已读取（{0}）": "Loaded ({0})",
   "已载入 {0} 张图片，回车发送": "{0} images attached — press Enter to send",
@@ -5715,13 +5953,16 @@ const I18N_EN = {
   "开始安装缺失组件，进度看下方安装日志": "Installing missing components — see progress in the install log below",
   "开始导览": "Start the tour",
   "开始执行": "Start",
+  "开始检查": "Start check",
   "开始清理": "Clean",
   "开始清除": "Start cleanup",
   "开始演练": "Start drill",
   "开始评测：{0}": "Start evaluation: {0}",
   "开始重装": "Reinstall",
   "开始（需确认）": "Start (needs confirmation)",
+  "引用变量，未解析": "Variable reference, unresolved",
   "归位": "Send home",
+  "归属": "Owner",
   "当前 :{0}": "Now :{0}",
   "当前 :{0}（设定 {1}）": "Now :{0} (configured {1})",
   "当前不在熔断态，无需复位": "Not tripped — nothing to reset",
@@ -5818,6 +6059,7 @@ const I18N_EN = {
   "执行完不算完成，同一判据要再过一遍。": "Running it is not finishing it. The same criterion has to pass again.",
   "执行计划（{0}）": "Execution plan ({0})",
   "扫描中…": "Scanning…",
+  "扫描了 {0} 个配置文件": "Scanned {0} config files",
   "扫描失败": "Scan failed",
   "扫描失败：{0}": "Scan failed: {0}",
   "扫描端口": "Scan ports",
@@ -5825,8 +6067,10 @@ const I18N_EN = {
   "批量导入": "Bulk import",
   "批量授权 · 剩 {0} 次": "Batch grant · {0} left",
   "批量授权执行：{0}（剩余 {1} 次）": "Ran under batch grant: {0} ({1} left)",
+  "找到 {0} 组数据库配置": "Found {0} database config(s)",
   "把散落的工具收成一个": "Turn scattered tools into one",
   "把这次的步骤序列存成可复用预案": "Save this run's step sequence as a reusable playbook",
+  "把项目交给 EnvKit": "Hand the project to EnvKit",
   "投喂": "Feed",
   "投喂 🐟": "Feed 🐟",
   "折叠": "Collapse",
@@ -5850,6 +6094,8 @@ const I18N_EN = {
   "授权": "Grant",
   "排队中": "Queued",
   "探测方式": "Probe",
+  "接入已有项目：识别前后端、端口和数据库配置": "Connect an existing project: detect frontend/backend, ports and database config",
+  "接入项目": "Connect project",
   "控制台端口": "Console port",
   "描述要让助手做什么…": "Describe what you want the assistant to do…",
   "描述里提到：{0}": "Mentions: {0}",
@@ -5903,6 +6149,7 @@ const I18N_EN = {
   "数据保留": "Data retention",
   "数据库": "Database",
   "数据库 :3306": "MySQL :3306",
+  "数据库 {0}": "Database {0}",
   "数据库 就绪": "DB ready",
   "数据库 未建库": "DB missing",
   "数据库 未检测": "DB not checked",
@@ -5986,7 +6233,10 @@ const I18N_EN = {
   "最近的日志里没有发现错误": "No errors found in recent logs",
   "最近错误": "Recent errors",
   "最长约 {0}s · 已等 {1}s": "Up to ~{0}s · waited {1}s",
+  "有 package.json / vite.config 的目录": "Directory with package.json / vite.config",
+  "有 pom.xml / go.mod / main.go 的目录": "Directory with pom.xml / go.mod / main.go",
   "有任务正在执行，请稍候": "Another task is running — please wait",
+  "有多组候选，请挑一组再保存。": "Multiple candidates found; choose one before saving.",
   "有异常": "has issues",
   "有改动，待保存…": "Unsaved changes…",
   "有新版本 {0}": "Version {0} available",
@@ -5998,7 +6248,10 @@ const I18N_EN = {
   "服务 异常": "Service error",
   "服务 未启动": "Services stopped",
   "服务 未复验": "Services unverified",
+  "服务 端口冲突": "Services · port conflict",
+  "服务 身份待确认": "Services · identity unconfirmed",
   "服务 运行中": "Services running",
+  "服务 运行中（外部 {0}）": "Services running (external {0})",
   "服务与端口": "Services & ports",
   "服务启停": "Service start/stop",
   "服务商": "Provider",
@@ -6015,7 +6268,9 @@ const I18N_EN = {
   "未发生": "Not yet",
   "未启动": "Not started",
   "未启用": "Not enabled",
+  "未命名库": "Unnamed database",
   "未复验": "unverified",
+  "未安装 node_modules": "node_modules not installed",
   "未定位（评测脚本只在仓库目录下）": "Not found (eval scripts only live in the repo)",
   "未就绪": "Not ready",
   "未开启": "Off",
@@ -6026,6 +6281,11 @@ const I18N_EN = {
   "未执行": "NOT EXECUTED",
   "未找到": "Not found",
   "未指定：用 exe 同级的 backups 目录": "Not set: use the backups folder next to the exe",
+  "未提供": "Not provided",
+  "未提供前端，跳过": "No frontend provided, skipped",
+  "未提供后端，跳过": "No backend provided, skipped",
+  "未提供，跳过前端": "Not provided; frontend skipped",
+  "未提供，跳过后端": "Not provided; backend skipped",
   "未收口自动记 expired": "Auto-marked expired when never closed",
   "未放行 TCP/{0}": "TCP/{0} not allowed",
   "未检测": "Not checked",
@@ -6039,10 +6299,14 @@ const I18N_EN = {
   "未知设备": "Unknown device",
   "未知进程": "Unknown process",
   "未缓存输入": "Uncached input",
+  "未解析：{0}": "Unresolved: {0}",
   "未设置": "Not set",
   "未设置密码": "No password set",
   "未证明恢复": "Recovery unproven",
   "未识别": "Not detected",
+  "未识别出前端类型": "Frontend type not recognized",
+  "未识别出构建系统": "Build system not recognized",
+  "未识别账号": "User not detected",
   "未识别，不可自动启动": "not detected, cannot auto-start",
   "未运行": "Not running",
   "未选 SQL：将只建库": "No SQL selected: create the database only",
@@ -6065,6 +6329,7 @@ const I18N_EN = {
   "本机": "Local",
   "本机与外观": "This PC & appearance",
   "本机体检": "Health check",
+  "本机集成": "Local integration",
   "本次只恢复了最近 {0} 条消息，历史可能不完整——这会让助手\"忘事\"，也会让缓存命中率封顶。": "Only the last {0} message(s) were recovered; the history may be incomplete — the assistant will \"forget\" and cache hit rate is capped.",
   "本次请求内容未完整到达（可能被代理/容器截断），已用最近 {0} 条消息恢复；如需完整上下文请重发一次。": "This request arrived without its full payload (a proxy or container likely dropped it); recovered the last {0} message(s). Resend if the context matters.",
   "本轮": "This turn",
@@ -6113,13 +6378,19 @@ const I18N_EN = {
   "标签（可选，逗号分隔）": "Tags (optional, comma separated)",
   "样本规模": "Sample size",
   "核心功能": "Key features",
+  "框架默认": "framework default",
   "桌宠": "Desktop pet",
   "桌宠也在主界面上": "The pet lives on the main UI too",
   "桌宠天气": "Pet weather",
   "桌宠设置没保存成功": "Couldn't save the pet setting",
   "桌面助手": "Desktop assistant",
+  "检查": "Check",
   "检查 FISCO-BCOS 节点与 WeBASE-Front 是否在、区块高度和客户端版本是否正常。": "Check that the FISCO-BCOS node and WeBASE-Front are up, and read block height and client version.",
   "检查 MySQL 服务是否运行、账号密码是否正确": "Check that MySQL is running and the account/password are correct",
+  "检查中…": "Checking…",
+  "检查失败": "Check failed",
+  "检查失败：{0}": "Check failed: {0}",
+  "检查完成": "Check complete",
   "检查新版本": "Check for new versions",
   "检查更新": "Check for updates",
   "检查更新会对比「已安装 / 配置目标 / 官方最新」，可一键升级。": "Version check compares installed / configured target / latest upstream, with one-click upgrade.",
@@ -6186,12 +6457,20 @@ const I18N_EN = {
   "沙箱内测得：无人值守场景下恒为 0，仅作对照": "Measured in the sandbox: always 0 in unattended runs, for reference only",
   "没拿到天气数据": "No weather data came back",
   "没接到文件呢": "Hmm, no file received",
+  "没有 package.json，改用目录特征": "No package.json; using directory markers",
   "没有匹配的控件": "No matching controls",
+  "没有发现数据库候选": "No database candidate found",
   "没有可导出的数据": "Nothing to export",
   "没有可打开的目录": "No folder to open",
+  "没有可汇总的信息": "Nothing to summarize",
+  "没有可用的启动方式，请在后端目录补 main.go / pom.xml": "No launch command; add main.go / pom.xml to the backend directory",
   "没有命中": "No matches",
+  "没有在项目里找到数据库配置。可以稍后在「程序配置」里填写，或现在先只接入前后端。": "No database config found in the project. You can fill it later in Program Config, or connect only the frontend/backend now.",
   "没有已收口的行动可清理": "No settled missions to clean up",
+  "没有找到数据库配置文件": "No database config files found",
+  "没有端口线索，启动时再探": "No port clue; probe at startup",
   "没有符合条件的轨迹": "No traces match the filter",
+  "没有需要检查的工具": "No tools to check",
   "没检测到手机能连上的地址（这台电脑没连 WiFi/网线？）": "No address your phone could reach (is this PC offline?)",
   "注意": "Note",
   "浅色": "Light",
@@ -6276,6 +6555,7 @@ const I18N_EN = {
   "生效 SQL 到数据库": "Apply SQL to database",
   "用口令器扫码": "Scan with your authenticator",
   "用户": "User",
+  "用户 {0}": "User {0}",
   "用户修正率": "User-correction rate",
   "用户彻底怒了，我得乖一点": "The user is furious — better behave",
   "用手机相机扫一扫": "Scan it with your phone camera",
@@ -6300,7 +6580,9 @@ const I18N_EN = {
   "留空则用默认城市（上海）": "Leave blank to use the default city (Shanghai)",
   "登录": "Login",
   "白名单内的启停": "whitelisted start/stop",
+  "目录": "Directory",
   "目录 · 数据库 · 依赖": "Directories · Database · Deps",
+  "目录不可用，请检查路径": "Directory unavailable. Check the path.",
   "目录与库": "Directories & DB",
   "目标": "Target",
   "目标主机与 SSH": "Target host & SSH",
@@ -6313,6 +6595,7 @@ const I18N_EN = {
   "看看它能做什么": "See what it does",
   "看运行状态": "read status",
   "看错误": "Show error",
+  "真实读取项目文件。检查很快完成时，画面会放慢到约 4 秒，方便你看清每一步。": "Reads real project files. If the check finishes quickly, the animation slows to about 4 seconds so you can follow each step.",
   "真赶不走啊你！": "You really don't take a hint!",
   "知道了": "Got it",
   "知道了（演示）": "Got it (demo)",
@@ -6344,6 +6627,7 @@ const I18N_EN = {
   "程序启动": "Launch",
   "程序配置": "Configure",
   "程序配置 · 连接、建库、导入导出都在这一页": "App config · connect, schema, import/export on one page",
+  "稍后再说": "Later",
   "空目录": "Empty directory",
   "空闲": "Free",
   "穿透已解除": "Click-through is off",
@@ -6355,12 +6639,16 @@ const I18N_EN = {
   "立即检测": "Check now",
   "章节": "Sections",
   "端口": "Port",
+  "端口 %d 被 %s（PID %d）占用，不是本项目的服务": "Port %d is held by %s (PID %d), which is not this project's service",
   "端口 8888 被占用": "Port 8888 is in use",
   "端口 :8888": "Port :8888",
   "端口与链信息": "Ports & chain info",
+  "端口冲突": "Port conflict",
   "端口占用诊断": "Port diagnostics",
   "端口已保存": "Port saved",
   "端口已保存，重启 EnvKit 后生效": "Port saved; it takes effect after EnvKit restarts",
+  "端口有监听 · 身份未确认": "Listening · identity unconfirmed",
+  "端口有监听，但身份未确认": "Port is listening, but identity is unconfirmed",
   "端口没在监听：手机访问的开关可能已关闭，或端口被别的程序占了": "Nothing is listening on the port: mobile access may be off, or another program took the port",
   "端口线索": "Port hints",
   "端口被占用：8888 被上一个实例占着。先结束残留进程，再点启动。": "Port in use: 8888 is held by the previous instance. Kill the leftover process, then hit start.",
@@ -6405,6 +6693,7 @@ const I18N_EN = {
   "结束失败：{0}": "Kill failed: {0}",
   "结束进程": "Kill process",
   "结束项目目录下遗留的 node/webpack、go run 等后台进程": "Kill leftover node/webpack, go run processes under the project dirs",
+  "结束项目目录下遗留的 node/webpack、mvn/go run、java 等后台进程": "Stop leftover node/webpack, mvn/go run, java and other background processes under the project directory",
   "结构示意 · 数值不是本次运行结果": "Structure illustration · values are not from a live run",
   "结果": "Result",
   "结论": "Conclusion",
@@ -6434,6 +6723,7 @@ const I18N_EN = {
   "网络代理": "Network proxy",
   "网络错误：": "Network error: ",
   "置信度": "Confidence",
+  "置信度 {0}%": "Confidence {0}%",
   "置信度由这条经验自身的成败次数算出（同项目内统计）：": "Confidence is computed from this lesson's own success/failure counts (within the same project): ",
   "群组": "Group",
   "翻页": "page",
@@ -6464,6 +6754,8 @@ const I18N_EN = {
   "自身单文件上限": "Own per-file limit",
   "自身归档份数": "Own archive count",
   "至少保留条数": "Min messages kept",
+  "至少填一个目录；只填后端也可以。": "Fill at least one directory; backend-only is fine.",
+  "至少选择前端或后端目录": "Choose at least a frontend or backend directory",
   "节点/WeBASE 宕机时，一键检测自动尝试重启链端": "On node/WeBASE outage, Quick check tries to restart the chain",
   "节点未运行": "Node down",
   "节点正常·WeBASE未运行": "Node OK · WeBASE down",
@@ -6518,12 +6810,17 @@ const I18N_EN = {
   "评测日志": "Evaluation log",
   "识别不出前端启动脚本": "Cannot detect the frontend start script",
   "识别不出后端入口": "Cannot detect the backend entry",
+  "识别为 Go（go.mod / main.go）": "Detected Go (go.mod / main.go)",
+  "识别为 Maven（pom.xml）": "Detected Maven (pom.xml)",
+  "识别为 {0}": "Detected {0}",
   "诊断": "Diagnose",
   "诊断失败：{0}": "Diagnostics failed: {0}",
   "诊断报告": "Diagnostic report",
   "诊断报告 AI 解读": "AI analysis of diagnostic report",
   "诊断报告解读与对话能力见「关于」": "Report analysis and chat are described in About",
   "该地址与已保存的服务商不一致，为防密钥外发未附带 Key——先保存配置再拉取": "This URL differs from the saved provider, so no API key was attached (to avoid leaking it to an unknown host) — save the config first, then fetch",
+  "该实例不是 EnvKit 启动的，停止请到原终端": "This instance was not started by EnvKit; stop it in its original terminal",
+  "该实例不是 EnvKit 启动的，请到原终端查看；不要在这里重复启动": "This instance was not started by EnvKit; check it in its original terminal and do not start it again here",
   "该模型不支持工具调用（已降级为纯问答）": "model does not support tool calls (degraded to plain Q&A)",
   "该端口已在列表中": "Port already in the list",
   "详情 / 复验结论": "Detail / verification",
@@ -6538,6 +6835,7 @@ const I18N_EN = {
   "请求失败": "Request failed",
   "请求失败：": "Request failed: ",
   "请输入要执行的命令": "Type a command to run",
+  "请选择一组数据库配置，或取消勾选写入": "Choose one database config, or uncheck saving it",
   "读取不到事件日志：{0}": "Cannot read the event log: {0}",
   "读取中": "Loading",
   "读取中…": "Reading…",
@@ -6573,6 +6871,7 @@ const I18N_EN = {
   "跟着做一遍：{0} 步控件教学": "Walk through {0} control steps",
   "跟随鼠标": "Follow cursor",
   "跳过": "Skipped",
+  "身份未确认": "Identity unconfirmed",
   "车头 = 当前查看的判据 · 读数为结构示意": "The train marks the criterion you are viewing · readings are illustrative",
   "轨迹": "Trace",
   "轨迹 / 审计 / 用量": "Trace / Audit / Usage",
@@ -6585,6 +6884,10 @@ const I18N_EN = {
   "过滤目录": "Filter contents",
   "运行": "Run",
   "运行中": "Running",
+  "运行中 · 外部启动": "Running · external",
+  "运行中 · 外部启动（异常）": "Running · external (error)",
+  "运行中 · 外部启动（未验证）": "Running · external (unverified)",
+  "运行中 · 外部启动（需鉴权）": "Running · external (auth)",
   "运行中 · 已复验": "Running · verified",
   "运行中 · 未复验": "Running · not verified",
   "运行中 · 未通过复验": "Running · not verified yet",
@@ -6597,6 +6900,7 @@ const I18N_EN = {
   "近 7 天": "Last 7 days",
   "近 {0} 天": "Last {0} days",
   "近 {0} 天：{1} 条收口行动 · 完成 {2} · 失败 {3} · 取消 {4} · 过期 {5}": "Last {0} days: {1} closed missions · done {2} · failed {3} · canceled {4} · expired {5}",
+  "返回修改": "Back to edit",
   "返回列表": "Back to list",
   "还原": "Restore",
   "还原数据库": "Restore database",
@@ -6670,6 +6974,7 @@ const I18N_EN = {
   "选择文件夹": "Choose folder",
   "选择文件引用": "Attach file reference",
   "选择此文件夹": "Use this folder",
+  "选目录，剩下的交给检查": "Pick directories; the check handles the rest",
   "通知已恢复": "Notifications restored",
   "通过": "Pass",
   "通过 {0} / {1} 次复验": "{0} of {1} verifications passed",
@@ -6769,8 +7074,12 @@ const I18N_EN = {
   "顶栏那条导航不是装饰：走到哪一步、上一步给了什么，都写在界面上。": "The top nav is not decoration: where you are and what the last step produced are both on screen.",
   "项检测": " checks",
   "项目与路径": "Project & paths",
+  "项目名": "Project name",
+  "项目已接入，配置已保存": "Project connected and config saved",
+  "项目接入向导": "Project setup wizard",
   "项目目录": "Project folders",
   "项目目录与数据库": "Project directories & database",
+  "项目类型": "Project type",
   "项目配置": "Project settings",
   "顺延上界": "Scan upper bound",
   "预案命中率": "Playbook hit rate",
@@ -6833,6 +7142,10 @@ const I18N_EN = {
   "：数据库连接检测、建库 + 建表一步到位、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（支持脱敏分享）、环境诊断报告": ": connection test, one-step DB+table creation, one-click backup/restore (auto-retry), frontend npm install / backend go mod tidy, config import/export (sanitized sharing), environment diagnostic report",
   "：自然语言查询日志与环境状态，执行数据库备份、组件检测、前后端启停 / 重启、清理进程、加 Defender 白名单（共 26 个工具）": ": natural-language queries of logs and environment state, plus database backup, component checks, frontend/backend start/stop/restart, process cleanup, and Defender whitelisting (26 tools in total)",
   "；%d 秒后放行一次探针重启": "; a probe restart is allowed in %d s",
+  "；HTTP 5xx，服务端自报异常": "; HTTP 5xx, the server reports an error",
+  "；HTTP 有响应，可临时使用": "; HTTP responds, usable for now",
+  "；HTTP 需要鉴权，服务有响应": "; HTTP requires auth, service responds",
+  "；健康未验证": "; health unverified",
   "；每次切到本页都会重新读取最新值，两边不会各存一份。": " with Configure and Chain Check; every visit re-reads the latest values, so neither page keeps its own copy.",
 };
 
@@ -8439,7 +8752,16 @@ async function loadLaunchPlan(){
   const L = [];
   L.push(t('前端：{0}', p.web_script ? ('npm run ' + p.web_script + t('（{0}）', launchSrc(p.web_source)))
                                      : t('未识别，不可自动启动')));
-  L.push(t('后端：{0}', p.backend_file ? ('go run ' + p.backend_file) : t('未识别，不可自动启动')));
+  const isMvn = p.backend_kind === 'maven';
+  const backendCmd = isMvn ? 'mvn spring-boot:run'
+                           : (p.backend_file ? ('go run ' + p.backend_file) : '');
+  L.push(t('后端：{0}', backendCmd || t('未识别，不可自动启动')));
+  if(isMvn) L.push(t('后端入口：pom.xml（由 spring-boot-maven-plugin 决定，无需填写 main.go）'));
+  // 后端入口只对 Go 项目有意义：Maven 项目的入口在 pom.xml 里，填 main.go 反而误导。
+  const goBox = document.getElementById('backend-entry-go');
+  const mvnBox = document.getElementById('backend-entry-maven');
+  if(goBox) goBox.style.display = isMvn ? 'none' : '';
+  if(mvnBox) mvnBox.style.display = isMvn ? '' : 'none';
   if(p.note) L.push(p.note);
   brief.textContent = L.join('\n');
   brief.style.whiteSpace = 'pre-line';
@@ -8690,8 +9012,8 @@ async function pollHealth(){
   /* 服务卡：同样以 verified 为条件 */
   const w=h.services.web, b=h.services.backend;
   const sw=$('#su-web'), sb=$('#su-backend');
-  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w);
-  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b);
+  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w); sw.title = (w&&w.last_verify)||'';
+  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b); sb.title = (b&&b.last_verify)||'';
   const lw=$('#sl-web');
   if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 ↗'); lw.title=w.url; }
   else { lw.style.display='none'; }
@@ -8700,7 +9022,13 @@ async function pollHealth(){
   else { lb.style.display='none'; }
   applyBreaker('web', w);
   applyBreaker('backend', b);
-  $('#btn-stop-all').disabled = !svcState.running;
+  /* 停止权限只属于 managed。外部/未知/冲突实例一律禁用停止按钮，
+     避免用户以为点了就能停掉别人的进程。 */
+  const stopDisabled = s => !s || !s.running || s.source==='external' || s.source==='unknown' || s.source==='foreign';
+  const bw=$('#btn-web-stop'), bstopB=$('#btn-backend-stop');
+  if(bw){ bw.disabled = stopDisabled(w); bw.title = stopDisabled(w) ? t('该实例不是 EnvKit 启动的，停止请到原终端') : ''; }
+  if(bstopB){ bstopB.disabled = stopDisabled(b); bstopB.title = stopDisabled(b) ? t('该实例不是 EnvKit 启动的，停止请到原终端') : ''; }
+  $('#btn-stop-all').disabled = !svcState.managedRunning;
   $('#db-test-msg').textContent = h.db.connected ? (h.db.Version||'') + (h.db.dbExists?' · 库已存在':' · 库不存在') : (h.db.msg||'');
   updateChain(h.chain);
   /* 问题清单（状态源算好的，含「该怎么办」） */
@@ -8767,6 +9095,9 @@ document.querySelectorAll('[data-brk]').forEach(btn=>{
  * 后端 ServiceState.phase 已给出五态，这里只做映射，不再自己推断。 */
 function svcDotCls(s){
   if(!s) return '';
+  if(s.source==='foreign' || s.phase==='conflict') return ' err';
+  if(s.source==='unknown') return ' warn';
+  if(s.source==='external') return s.health==='fail' ? ' warn' : ' info';
   if(s.phase==='failed') return ' err';
   if(s.phase==='degraded') return ' warn';   // 进程在但未通过复验
   if(s.phase==='starting') return ' warn';
@@ -8775,9 +9106,19 @@ function svcDotCls(s){
 }
 
 /* svcLabel 服务状态文案。**degraded 必须说清是「没验过」**，
- * 显示「运行中」等于把未验证说成已验证。 */
+ * 显示「运行中」等于把未验证说成已验证。
+ * 外部实例单独一档：它确实在跑，但不是 EnvKit 启动的，不能用"已复验"，
+ * 也不能因为 verified=false 就显示成"未通过复验"（会让人以为是 EnvKit 的失败）。 */
 function svcLabel(s){
   if(!s) return t('未启动');
+  if(s.source==='foreign' || s.phase==='conflict') return t('端口冲突');
+  if(s.source==='unknown') return t('端口有监听 · 身份未确认');
+  if(s.source==='external'){
+    if(s.health==='fail') return t('运行中 · 外部启动（异常）');
+    if(s.health==='auth') return t('运行中 · 外部启动（需鉴权）');
+    if(s.health==='ok') return t('运行中 · 外部启动');
+    return t('运行中 · 外部启动（未验证）');
+  }
   switch(s.phase){
     case 'running': return s.verified ? t('运行中 · 已复验') : t('运行中 · 未复验');
     case 'starting': return t('启动中');
@@ -8788,17 +9129,25 @@ function svcLabel(s){
 }
 
 /* aggregateSvcState 汇总两个服务成一个顶部灯。
- * 口径：**全部已复验才绿**；有跑着的但没验过 → 黄；全停 → 灰。 */
+ * 口径：**全部已复验才绿**；有外部实例 → 信息蓝（在跑但不归 EnvKit 管）；
+ * 有跑着的但没验过 → 黄；全停 → 灰。 */
 function aggregateSvcState(services){
   const list = [services && services.web, services && services.backend].filter(Boolean);
-  if(!list.length) return {cls:'off', label:t('服务 未启动'), running:false};
+  if(!list.length) return {cls:'off', label:t('服务 未启动'), running:false, managedRunning:false};
   const running = list.some(s => s.running);
+  const managedRunning = list.some(s => s.running && s.source!=='external' && s.source!=='unknown');
+  const external = list.filter(s => s.source==='external').length;
+  const conflict = list.some(s => s.source==='foreign' || s.phase==='conflict');
+  const unknown = list.some(s => s.source==='unknown');
   const failed  = list.some(s => s.phase === 'failed');
   const allVerified = list.every(s => s.verified);
-  if(failed) return {cls:'err', label:t('服务 异常'), running:running};
-  if(running && allVerified) return {cls:'ok', label:t('服务 已就绪'), running:true};
-  if(running) return {cls:'warn', label:t('服务 未复验'), running:true};
-  return {cls:'off', label:t('服务 未启动'), running:false};
+  if(conflict) return {cls:'err', label:t('服务 端口冲突'), running:running, managedRunning:managedRunning};
+  if(failed) return {cls:'err', label:t('服务 异常'), running:running, managedRunning:managedRunning};
+  if(unknown) return {cls:'warn', label:t('服务 身份待确认'), running:running, managedRunning:managedRunning};
+  if(external) return {cls:'info', label:t('服务 运行中（外部 {0}）', String(external)), running:true, managedRunning:managedRunning};
+  if(running && allVerified) return {cls:'ok', label:t('服务 已就绪'), running:true, managedRunning:true};
+  if(running) return {cls:'warn', label:t('服务 未复验'), running:true, managedRunning:managedRunning};
+  return {cls:'off', label:t('服务 未启动'), running:false, managedRunning:false};
 }
 
 /* renderIssues 渲染状态源算好的问题清单。
@@ -9017,9 +9366,9 @@ $('#btn-quick-both').onclick = ()=>{ $('#btn-quick-web').click(); setTimeout(()=
 /* ---------- 端口占用诊断 + 自定义启动脚本 ---------- */
 function psPorts(){
   if(!cfg.projects) cfg.projects={};
-  if(!Array.isArray(cfg.projects.scan_ports) || !cfg.projects.scan_ports.length) cfg.projects.scan_ports=[8080,8888];
+  if(!Array.isArray(cfg.projects.scan_ports) || !cfg.projects.scan_ports.length) cfg.projects.scan_ports=[8080,8888,5173,4173,3000];
   var spj=cfg.projects.scan_ports.slice().sort(function(a,b){return a-b;}).join();
-  if(spj==='20200,3306,8080'||spj==='20200,8080') cfg.projects.scan_ports=[8080,8888]; // 旧默认迁移（3306/20200 → 8888）
+  if(spj==='20200,3306,8080'||spj==='20200,8080') cfg.projects.scan_ports=[8080,8888,5173,4173,3000]; // 旧默认迁移（3306/20200 → 8888）
   return cfg.projects.scan_ports;
 }
 function psRenderChips(){
@@ -9048,6 +9397,20 @@ async function psScan(){
     psSetSt(occ>0 ? t('{0} 个被占用', occ) : t('全部空闲'), occ>0 ? 'warn' : 'ok');
   }catch(e){ psSetSt(t('扫描失败'),'fail'); toast(t('扫描失败：{0}', e.message),'err'); }
 }
+function psOwnerLabel(r){
+  const name = r.service==='web' ? t('前端') : (r.service==='backend' ? t('后端') : '');
+  if(r.source==='managed') return name ? t('{0} · EnvKit 管理', name) : t('EnvKit 管理');
+  if(r.source==='external') return name ? t('{0} · 外部启动', name) : t('外部启动');
+  if(r.source==='unknown') return name ? t('{0} · 身份未确认', name) : t('身份未确认');
+  if(r.source==='foreign') return t('其他进程');
+  return '—';
+}
+function psOwnerColor(r){
+  if(r.source==='foreign') return 'var(--err)';
+  if(r.source==='unknown') return 'var(--warn)';
+  if(r.source==='external' || r.source==='managed') return 'var(--info)';
+  return '';
+}
 function psRenderResult(rows){
   const box=$('#ps-result'); box.textContent='';
   if(!rows.length) return;
@@ -9055,7 +9418,7 @@ function psRenderResult(rows){
   const mk=(txt,head,color)=>{ const c=document.createElement(head?'th':'td'); c.textContent=txt;
     c.style.cssText=(head?'text-align:left;':'')+'padding:4px 8px;'; if(color) c.style.color=color; else if(head) c.style.color='var(--muted)'; return c; };
   const hr=document.createElement('tr');
-  [t('端口'),t('状态'),'PID',t('进程名'),''].forEach(x=>hr.appendChild(mk(x,true)));
+  [t('端口'),t('状态'),'PID',t('进程名'),t('归属'),''].forEach(x=>hr.appendChild(mk(x,true)));
   tbl.appendChild(hr);
   rows.forEach(r=>{
     const tr=document.createElement('tr');
@@ -9063,12 +9426,13 @@ function psRenderResult(rows){
     if(r.state==='LISTENING'){
       tr.appendChild(mk(t('占用'), false, 'var(--err)'));
       tr.appendChild(mk(r.pid)); tr.appendChild(mk(r.name||'—'));
+      tr.appendChild(mk(psOwnerLabel(r), false, psOwnerColor(r)));
       const td=document.createElement('td'); td.style.padding='4px 8px';
       const b=document.createElement('button'); b.className='warn'; b.style.padding='2px 10px'; b.textContent=t('结束');
       b.onclick=()=>psKill(r); td.appendChild(b); tr.appendChild(td);
     } else {
       tr.appendChild(mk(t('空闲'), false, 'var(--ok)'));
-      tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk(''));
+      tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk(''));
     }
     tbl.appendChild(tr);
   });
@@ -9296,6 +9660,7 @@ function renderProg(st){
        warn = 已执行但没验到（例如还在编译），stopped = 正常停止：
        这两种以前都会被画成红色"失败"，用户会去修一个没坏的服务。 */
     if(state.running) cls='run';
+    else if(state.status==='external') cls='run';
     else if(state.status==='ok') cls='ok';
     else if(state.status==='stopped') cls='idle';
     else if(state.status==='warn') cls='warn';
@@ -9316,6 +9681,7 @@ function stateLabel(s){
   if(!s) return '未运行';
   if(s.running) return '运行中';
   /* 停止/未复验都是正常结局，只有真失败才说"失败"（详见后端 ProgStatus.Status）。 */
+  if(s.status==='external') return t('运行中 · 外部启动');
   if(s.status==='stopped') return t('已停止');
   if(s.status==='warn') return t('已启动 · 未通过复验');
   return s.ok?t('已启动'):t('失败');
@@ -17481,6 +17847,11 @@ async function ekSetSaveUpdate(recheck){
   function finish(){
     if(mode === 'first') mark();
     close();
+    /* 首屏演示结束后，项目接入向导在 95-project-setup.js 里监听这个事件。
+       不用 ek-guide-v1 做标记：演示看过 ≠ 项目已接入，两件事分开记。 */
+    try{
+      document.dispatchEvent(new CustomEvent('ek:onboard-finish', {detail:{mode: mode}}));
+    }catch(e){}
   }
 
   /* ---------- P1-4：主界面控件高亮教学，只指不点 ----------
@@ -17721,6 +18092,505 @@ async function ekSetSaveUpdate(recheck){
     playBrand();
   }
   try{ bootBrand(); }catch(e){}
+})();
+/* web/src/js/95-project-setup.js —— 首屏之后的项目接入向导。
+ *
+ * 只做三件事：选目录 → 只读检查 → 保存 + 可选写入数据库配置。
+ * 检查接口是 /api/project/inspect，保存接口是 /api/project/apply；
+ * 密码永不出现在 inspect 响应里，保存时由后端按候选 ID 重新解析后落盘。
+ */
+(function(){
+  'use strict';
+
+  var WIZ_KEY = 'ek-project-wizard-v1';
+  var STEPS = [
+    { id: 'front-dir',     title: '检查前端目录',     desc: '目录存在、可读、有项目特征' },
+    { id: 'back-dir',      title: '检查后端目录',     desc: '目录存在、可读、有构建文件' },
+    { id: 'package',       title: '读取 package.json', desc: '启动脚本与依赖线索' },
+    { id: 'front-kind',    title: '识别前端框架',     desc: 'Vite / Next / Vue CLI / CRA / Node' },
+    { id: 'front-port',    title: '解析前端端口',     desc: '配置声明、脚本参数、框架默认' },
+    { id: 'back-build',    title: '识别后端构建系统', desc: 'Maven / Go' },
+    { id: 'back-launch',   title: '识别后端启动方式', desc: 'mvn spring-boot:run / go run' },
+    { id: 'back-port',     title: '解析后端端口',     desc: '配置声明、框架默认、端口候选' },
+    { id: 'db-files',      title: '扫描数据库配置',   desc: 'application / .env / config / compose' },
+    { id: 'db-parse',      title: '解析数据库候选',   desc: '库名、账号、密码占位符' },
+    { id: 'tools',         title: '检查工具链与依赖', desc: 'Node / Go / JDK / Maven' },
+    { id: 'summary',       title: '汇总项目画像',     desc: '端口占用与最终结果' }
+  ];
+
+  var modal = null, state = { view: 1, data: null, checking: false, seq: 0, auto: false };
+  var lastFocus = null, built = false;
+
+  function q(sel){ return modal ? modal.querySelector(sel) : null; }
+  function qa(sel){ return modal ? Array.prototype.slice.call(modal.querySelectorAll(sel)) : []; }
+  function wait(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+  function reduced(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function pathName(p){ p = String(p || ''); var parts = p.replace(/\\/g, '/').split('/'); return parts[parts.length - 1] || p; }
+  function pct(n){ n = Math.max(0, Math.min(100, Math.round(n))); return n + '%'; }
+
+  function kindLabel(kind, target, files){
+    if(kind === 'vite') return 'Vite';
+    if(kind === 'next') return 'Next.js';
+    if(kind === 'nuxt') return 'Nuxt';
+    if(kind === 'vue-cli') return 'Vue CLI';
+    if(kind === 'cra') return 'React (CRA)';
+    if(kind === 'node') return 'Node 脚本';
+    if(kind === 'go') return 'Go';
+    if(kind === 'maven'){
+      var f = (files || []).some(function(x){ return String(x).indexOf('application') >= 0; });
+      return f ? 'Spring Boot / Maven' : 'Maven';
+    }
+    return target === 'web' ? '未识别前端' : '未识别后端';
+  }
+
+  function portText(ports){
+    if(!ports || !ports.length) return '';
+    var p = ports[0];
+    var src = String(p.source || '');
+    if(src === '框架默认端口') src = t('框架默认');
+    return p.port + ' · ' + src + (p.confidence ? ' · ' + p.confidence + '%' : '');
+  }
+
+  function mk(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
+
+  /* ---------- 弹层骨架 ---------- */
+
+  function build(){
+    if(built) return;
+    built = true;
+    modal = document.createElement('div');
+    modal.className = 'pws';
+    modal.id = 'project-wizard';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML =
+      '<div class="pws-mask" data-pws-close></div>' +
+      '<div class="pws-panel" role="dialog" aria-modal="true" aria-labelledby="pws-title">' +
+        '<div class="pws-top">' +
+          '<div class="pws-brand"><span class="pws-logo">EK</span><div><b id="pws-title">' + esc(t('项目接入向导')) + '</b><p>' + esc(t('选目录，剩下的交给检查')) + '</p></div></div>' +
+          '<button class="pws-x" type="button" data-pws-close aria-label="' + esc(t('关闭')) + '">×</button>' +
+        '</div>' +
+        '<div class="pws-progress" aria-hidden="true">' +
+          '<span data-pill="1"><b>1</b>' + esc(t('目录')) + '</span><i></i>' +
+          '<span data-pill="2"><b>2</b>' + esc(t('检查')) + '</span><i></i>' +
+          '<span data-pill="3"><b>3</b>' + esc(t('结果')) + '</span>' +
+        '</div>' +
+        '<div class="pws-body">' +
+          '<section class="pws-view" data-view="1"></section>' +
+          '<section class="pws-view" data-view="2"></section>' +
+          '<section class="pws-view" data-view="3"></section>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    q('[data-view="1"]').innerHTML =
+      '<div class="pws-hero">' +
+        '<div class="pws-kicker">' + esc(t('01 / 接入项目')) + '</div>' +
+        '<h2>' + esc(t('把项目交给 EnvKit')) + '</h2>' +
+        '<p class="pws-lead">' + esc(t('只需要告诉它前后端在哪。EnvKit 会自己识别项目类型、启动方式、端口和数据库配置，不会启动服务、不会安装依赖、不会杀进程。')) + '</p>' +
+      '</div>' +
+      '<div class="pws-dirs">' +
+        '<label class="pws-field"><span>' + esc(t('前端目录')) + '<em>' + esc(t('可选')) + '</em></span>' +
+          '<div class="pws-inputrow"><input id="pws-fe" autocomplete="off" spellcheck="false" placeholder="' + esc(t('例如 D:\\project\\web')) + '"><button type="button" class="pws-pick" data-pws-pick="pws-fe">' + esc(t('选择')) + '</button></div>' +
+          '<small>' + esc(t('有 package.json / vite.config 的目录')) + '</small></label>' +
+        '<label class="pws-field"><span>' + esc(t('后端目录')) + '<em>' + esc(t('可选')) + '</em></span>' +
+          '<div class="pws-inputrow"><input id="pws-be" autocomplete="off" spellcheck="false" placeholder="' + esc(t('例如 D:\\project\\server')) + '"><button type="button" class="pws-pick" data-pws-pick="pws-be">' + esc(t('选择')) + '</button></div>' +
+          '<small>' + esc(t('有 pom.xml / go.mod / main.go 的目录')) + '</small></label>' +
+      '</div>' +
+      '<div class="pws-err" id="pws-err1"></div>' +
+      '<div class="pws-foot"><span class="pws-note">' + esc(t('至少填一个目录；只填后端也可以。')) + '</span>' +
+        '<button class="pws-later" type="button" data-pws-close>' + esc(t('稍后再说')) + '</button>' +
+        '<button class="pws-primary" id="pws-start" type="button">' + esc(t('开始检查')) + '<span>→</span></button></div>';
+
+    q('[data-view="2"]').innerHTML =
+      '<div class="pws-scan">' +
+        '<div class="pws-orb" id="pws-orb"><div class="pws-orb-ring"></div><div class="pws-orb-core"><span id="pws-pct">0%</span><small id="pws-phase">' + esc(t('准备检查')) + '</small></div><i class="pws-dot d1"></i><i class="pws-dot d2"></i><i class="pws-dot d3"></i></div>' +
+        '<div class="pws-steplist" id="pws-steps"></div>' +
+      '</div>' +
+      '<div class="pws-err" id="pws-err2"></div>' +
+      '<div class="pws-foot"><span class="pws-note" id="pws-scan-note">' + esc(t('真实读取项目文件。检查很快完成时，画面会放慢到约 4 秒，方便你看清每一步。')) + '</span>' +
+        '<button class="pws-later" type="button" id="pws-back1">' + esc(t('返回修改')) + '</button></div>';
+
+    q('[data-view="3"]').innerHTML =
+      '<div class="pws-resulthead"><div><div class="pws-kicker">' + esc(t('03 / 检查结果')) + '</div><h2 id="pws-result-title">' + esc(t('可以接入了')) + '</h2><p class="pws-lead" id="pws-sum"></p></div><div class="pws-seal" id="pws-seal"><span>✓</span><small>' + esc(t('只读检查')) + '</small></div></div>' +
+      '<div class="pws-cards" id="pws-cards"></div>' +
+      '<div class="pws-dbwrap" id="pws-dbwrap"></div>' +
+      '<div class="pws-err" id="pws-err3"></div>' +
+      '<div class="pws-foot"><span class="pws-note">' + esc(t('保存只写入前后端目录；勾选数据库时会一起写入，密码只在本机加密保存。')) + '</span>' +
+        '<button class="pws-later" type="button" data-pws-close>' + esc(t('稍后再说')) + '</button>' +
+        '<button class="pws-primary" id="pws-save" type="button">' + esc(t('保存并进入主界面')) + '</button></div>';
+
+    bind();
+    resetSteps();
+  }
+
+  function bind(){
+    modal.addEventListener('click', function(ev){
+      var close = ev.target.closest('[data-pws-close]');
+      if(close){ closeWizard(true); }
+      var pick = ev.target.closest('[data-pws-pick]');
+      if(pick){
+        var id = pick.getAttribute('data-pws-pick');
+        var input = document.getElementById(id);
+        openBrowser('dir', input.value || '', '', 'dir', function(p){
+          input.value = p;
+          clearErr();
+          input.focus();
+        }, true);
+      }
+    });
+    q('#pws-start').onclick = startInspect;
+    q('#pws-back1').onclick = function(){ state.seq++; state.checking = false; showView(1); };
+    q('#pws-save').onclick = save;
+    modal.querySelectorAll('input').forEach(function(inp){
+      inp.addEventListener('input', clearErr);
+    });
+  }
+
+  function clearErr(){
+    ['#pws-err1','#pws-err2','#pws-err3'].forEach(function(id){ var e = q(id); if(e){ e.textContent = ''; e.classList.remove('on'); } });
+  }
+
+  function showErr(id, msg){
+    var e = q(id);
+    if(!e) return;
+    e.textContent = msg;
+    e.classList.add('on');
+  }
+
+  function showView(n){
+    state.view = n;
+    qa('.pws-view').forEach(function(v){ v.classList.toggle('on', Number(v.getAttribute('data-view')) === n); });
+    qa('[data-pill]').forEach(function(p){ p.classList.toggle('on', Number(p.getAttribute('data-pill')) <= n); });
+    q('#pws-scan-note').style.display = n === 2 ? '' : 'none';
+    clearErr();
+    if(n === 1){ setTimeout(function(){ var i = q('#pws-fe'); if(i) i.focus(); }, 60); }
+  }
+
+  function resetSteps(){
+    var host = q('#pws-steps');
+    if(!host) return;
+    host.innerHTML = '';
+    STEPS.forEach(function(s, i){
+      var row = mk('div', 'pws-step', '<span class="pws-si">' + (i + 1) + '</span><div><b>' + esc(t(s.title)) + '</b><em>' + esc(t(s.desc)) + '</em></div>');
+      row.setAttribute('data-step', i);
+      host.appendChild(row);
+    });
+  }
+
+  function setStep(i, status, detail){
+    var row = q('.pws-step[data-step="' + i + '"]');
+    if(!row) return;
+    row.className = 'pws-step' + (status ? ' ' + status : '');
+    var icon = row.querySelector('.pws-si');
+    if(icon) icon.textContent = status === 'done' ? '✓' : status === 'err' ? '×' : status === 'warn' ? '!' : (status === 'skip' ? '—' : (i + 1));
+    var de = row.querySelector('em');
+    if(de && detail) de.textContent = detail;
+  }
+
+  function setPct(n, phase){
+    var p = q('#pws-pct'); if(p) p.textContent = pct(n);
+    var o = q('#pws-orb'); if(o) o.style.setProperty('--p', String(Math.max(0, Math.min(100, n))));
+    if(phase){ var ph = q('#pws-phase'); if(ph) ph.textContent = phase; }
+  }
+
+  function stepDetail(i, d){
+    var f = d.frontend || {}, b = d.backend || {}, db = d.database || {};
+    switch(STEPS[i].id){
+      case 'front-dir':
+        if(!f.provided) return t('未提供，跳过前端');
+        return f.valid ? t('已确认目录') : t('目录不可用，请检查路径');
+      case 'back-dir':
+        if(!b.provided) return t('未提供，跳过后端');
+        return b.valid ? t('已确认目录') : t('目录不可用，请检查路径');
+      case 'package':
+        if(!f.provided) return t('未提供前端，跳过');
+        return f.package_json ? t('已读取 package.json') : t('没有 package.json，改用目录特征');
+      case 'front-kind':
+        if(!f.provided) return t('未提供前端，跳过');
+        return f.kind ? t('识别为 {0}', kindLabel(f.kind, 'web', f.config_files)) : t('未识别出前端类型');
+      case 'front-port':
+        if(!f.provided) return t('未提供前端，跳过');
+        return f.ports && f.ports.length ? portText(f.ports) : t('没有端口线索，启动时再探');
+      case 'back-build':
+        if(!b.provided) return t('未提供后端，跳过');
+        return b.kind === 'maven' ? t('识别为 Maven（pom.xml）') : b.kind === 'go' ? t('识别为 Go（go.mod / main.go）') : t('未识别出构建系统');
+      case 'back-launch':
+        if(!b.provided) return t('未提供后端，跳过');
+        return b.launch ? b.launch : t('没有可用的启动方式，请在后端目录补 main.go / pom.xml');
+      case 'back-port':
+        if(!b.provided) return t('未提供后端，跳过');
+        return b.ports && b.ports.length ? portText(b.ports) : t('没有端口线索，启动时再探');
+      case 'db-files':
+        return db.files && db.files.length ? t('扫描了 {0} 个配置文件', db.files.length) : t('没有找到数据库配置文件');
+      case 'db-parse':
+        if(!db.found) return t('没有发现数据库候选');
+        var c0 = db.candidates[0];
+        return (c0.name || t('未命名库')) + ' · ' + (c0.user || t('未识别账号')) + ' · ' + (c0.has_password ? t('密码已找到（脱敏）') : t('密码未解析'));
+      case 'tools':
+        return (d.tools || []).map(function(x){ return x.name + (x.found ? (x.version ? ' ' + x.version : ' ✓') : ' ' + t('未找到')) + (x.warn ? ' · ⚠ ' + x.warn : ''); }).join(' · ') || t('没有需要检查的工具');
+      case 'summary':
+        var parts = [];
+        if(f.provided) parts.push(t('前端') + ' ' + kindLabel(f.kind, 'web', f.config_files));
+        if(b.provided) parts.push(t('后端') + ' ' + kindLabel(b.kind, 'backend', b.config_files));
+        if(db.found) parts.push(t('数据库') + ' ' + (db.candidates[0].name || t('候选')));
+        return parts.join(' · ') || t('没有可汇总的信息');
+    }
+    return '';
+  }
+
+  function stepStatus(i, d){
+    var f = d.frontend || {}, b = d.backend || {}, db = d.database || {};
+    switch(STEPS[i].id){
+      case 'front-dir': return !f.provided ? 'skip' : f.valid ? 'done' : 'err';
+      case 'back-dir': return !b.provided ? 'skip' : b.valid ? 'done' : 'err';
+      case 'package': return !f.provided || !f.package_json ? 'warn' : 'done';
+      case 'front-kind': return !f.provided ? 'skip' : (f.kind && f.kind !== 'none') ? 'done' : 'warn';
+      case 'front-port': return !f.provided ? 'skip' : (f.ports && f.ports.length) ? 'done' : 'warn';
+      case 'back-build': return !b.provided ? 'skip' : b.kind ? 'done' : 'warn';
+      case 'back-launch': return !b.provided ? 'skip' : b.launch ? 'done' : 'warn';
+      case 'back-port': return !b.provided ? 'skip' : (b.ports && b.ports.length) ? 'done' : 'warn';
+      case 'db-files': return db.files && db.files.length ? 'done' : 'warn';
+      case 'db-parse': return db.found ? 'done' : 'warn';
+      case 'tools': return ((d.tools || []).every(function(x){ return x.found && !x.warn; })) ? 'done' : 'warn';
+      case 'summary': return 'done';
+    }
+    return 'done';
+  }
+
+  /* ---------- 检查流程 ---------- */
+
+  async function startInspect(){
+    var f = (q('#pws-fe').value || '').trim();
+    var b = (q('#pws-be').value || '').trim();
+    if(!f && !b){ showErr('#pws-err1', t('至少选择前端或后端目录')); return; }
+    state.data = null;
+    state.checking = true;
+    var seq = ++state.seq;
+    resetSteps();
+    setPct(2, t('准备检查'));
+    showView(2);
+    q('#pws-orb').classList.add('run');
+    var t0 = Date.now();
+    try{
+      var r = await fetch('/api/project/inspect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({frontend_dir: f, backend_dir: b})
+      });
+      if(!r.ok) throw new Error(await r.text());
+      state.data = await r.json();
+    }catch(e){
+      if(seq !== state.seq) return;
+      state.checking = false;
+      q('#pws-orb').classList.remove('run');
+      setPct(0, t('检查失败'));
+      showErr('#pws-err2', t('检查失败：{0}', e.message || e));
+      return;
+    }
+    if(seq !== state.seq) return;
+    var elapsed = Date.now() - t0;
+    var delay = reduced() ? 18 : (elapsed < 1800 ? 300 : (elapsed < 4500 ? 220 : 120));
+    for(var i = 0; i < STEPS.length; i++){
+      if(seq !== state.seq) return;
+      setStep(i, 'active', t('读取中…'));
+      setPct((i / STEPS.length) * 92 + 4, t('检查中…'));
+      await wait(delay);
+      if(seq !== state.seq) return;
+      setStep(i, stepStatus(i, state.data), stepDetail(i, state.data));
+      setPct(((i + 1) / STEPS.length) * 92 + 4, t('检查中…'));
+    }
+    state.checking = false;
+    q('#pws-orb').classList.remove('run');
+    setPct(100, t('检查完成'));
+    await wait(reduced() ? 50 : 520);
+    if(seq !== state.seq) return;
+    renderResult(state.data);
+    showView(3);
+  }
+
+  /* ---------- 结果 ---------- */
+
+  function serviceCard(title, svc, target, i){
+    var f = svc || {};
+    var ok = f.provided && f.valid;
+    var chip = !f.provided ? ['muted', t('未提供')] : (ok ? ['ok', t('已识别')] : ['warn', t('未识别')]);
+    var rows = '';
+    rows += '<div class="pws-row"><span>' + esc(t('项目类型')) + '</span><b>' + esc(kindLabel(f.kind, target, f.config_files)) + '</b></div>';
+    if(f.label) rows += '<div class="pws-row"><span>' + esc(t('项目名')) + '</span><b>' + esc(f.label) + '</b></div>';
+    rows += '<div class="pws-row"><span>' + esc(t('目录')) + '</span><b class="pws-path" title="' + esc(f.dir || '') + '">' + esc(f.dir || '—') + '</b></div>';
+    rows += '<div class="pws-row"><span>' + esc(t('启动方式')) + '</span><b class="pws-mono">' + esc(f.launch || '—') + '</b></div>';
+    rows += '<div class="pws-row"><span>' + esc(t('端口')) + '</span><b>' + (f.ports && f.ports.length ? esc(String(f.ports[0].port)) : '—') + '</b></div>';
+    if(f.ports && f.ports.length){
+      rows += '<div class="pws-portmeta">' + esc(String(f.ports[0].source || '')) + ' · ' + esc(t('置信度 {0}%', f.ports[0].confidence)) + '</div>';
+    }
+    if(target === 'web'){
+      rows += '<div class="pws-row"><span>' + esc(t('依赖')) + '</span><b>' + esc(f.node_modules ? t('node_modules 已存在') : (f.provided ? t('未安装 node_modules') : '—')) + '</b></div>';
+    }
+    return '<article class="pws-card" style="--i:' + i + '"><div class="pws-cardtop"><span>' + esc(title) + '</span><em class="pws-chip ' + chip[0] + '">' + esc(chip[1]) + '</em></div>' + rows + '</article>';
+  }
+
+  function dbHTML(db){
+    if(!db || !db.found || !db.candidates || !db.candidates.length){
+      return '<div class="pws-empty">' + esc(t('没有在项目里找到数据库配置。可以稍后在「程序配置」里填写，或现在先只接入前后端。')) + '</div>';
+    }
+    var rows = db.candidates.map(function(c, i){
+      var checked = db.candidates.length === 1;
+      var title = c.name || t('未命名库');
+      var pwd = c.has_password ? t('已找到（脱敏）') : (c.unresolved && c.unresolved.indexOf('password') >= 0 ? t('引用变量，未解析') : t('未找到'));
+      var extra = '';
+      if(c.has_password && c.password_source && c.password_source !== c.source){ extra = ' · ' + t('密码来自 {0}', c.password_source); }
+      if(c.unresolved && c.unresolved.length){ extra += ' · ' + t('未解析：{0}', c.unresolved.join('、')); }
+      var note = c.notes && c.notes.length ? '<div class="pws-dbnote">' + esc(c.notes[0]) + '</div>' : '';
+      return '<label class="pws-dbrow"><input type="radio" name="pws-db-choice" value="' + esc(c.id) + '"' + (checked ? ' checked' : '') + '>' +
+        '<div class="pws-dbmain"><div class="pws-dbtitle"><b>' + esc(title) + '</b><span>' + esc(c.host || '—') + ':' + esc(String(c.port || 3306)) + '</span></div>' +
+        '<div class="pws-dbmeta">' + esc(t('用户 {0}', c.user || '—')) + ' · ' + esc(t('密码 {0}', pwd)) + extra + '</div>' +
+        '<div class="pws-dbsrc">' + esc(c.source) + ' · ' + esc(t('置信度 {0}%', c.confidence)) + '</div>' + note + '</div></label>';
+    }).join('');
+    var hint = db.candidates.length > 1 ? '<span class="pws-dbhint">' + esc(t('有多组候选，请挑一组再保存。')) + '</span>' : '';
+    return '<div class="pws-dbhead"><div><span class="pws-dbicon">DB</span><b>' + esc(t('找到 {0} 组数据库配置', db.candidates.length)) + '</b>' + hint + '</div>' +
+      '<label class="pws-dbuse"><input type="checkbox" id="pws-db-use" checked>' + esc(t('同时写入数据库配置')) + '</label></div>' +
+      '<div class="pws-dblist" id="pws-dblist">' + rows + '</div>' +
+      '<div class="pws-dbprivacy">' + esc(t('密码只在本机加密保存；不会写日志、不会发给 AI。')) + '</div>';
+  }
+
+  function renderResult(d){
+    var f = d.frontend || {}, b = d.backend || {}, db = d.database || {};
+    var cards = serviceCard(t('前端'), f, 'web', 0) + serviceCard(t('后端'), b, 'backend', 1);
+    q('#pws-cards').innerHTML = cards;
+    var dbwrap = q('#pws-dbwrap');
+    dbwrap.innerHTML = dbHTML(db);
+    if(dbwrap.querySelector('#pws-db-use')){
+      dbwrap.querySelector('#pws-db-use').addEventListener('change', function(e){
+        dbwrap.querySelectorAll('input[type="radio"]').forEach(function(x){ x.disabled = !e.target.checked; });
+      });
+    }
+    var parts = [];
+    if(f.provided && f.valid) parts.push(t('前端 {0}', kindLabel(f.kind, 'web', f.config_files)));
+    if(b.provided && b.valid) parts.push(t('后端 {0}', kindLabel(b.kind, 'backend', b.config_files)));
+    if(db.found && db.candidates[0] && db.candidates[0].name) parts.push(t('数据库 {0}', db.candidates[0].name));
+    var warn = (d.warnings || []).length;
+    q('#pws-sum').textContent = parts.join(' · ') + (warn ? '　·　' + t('{0} 项需要留意', warn) : '');
+    q('#pws-seal').classList.toggle('warn', warn > 0);
+    q('#pws-seal').querySelector('small').textContent = warn ? t('{0} 项留意', warn) : t('只读检查');
+  }
+
+  async function save(){
+    var f = (q('#pws-fe').value || '').trim();
+    var b = (q('#pws-be').value || '').trim();
+    if(!f && !b){ showErr('#pws-err3', t('至少选择前端或后端目录')); return; }
+    var use = false, id = '';
+    var useBox = q('#pws-db-use');
+    if(useBox && useBox.checked){
+      use = true;
+      var chosen = q('input[name="pws-db-choice"]:checked');
+      if(!chosen){ showErr('#pws-err3', t('请选择一组数据库配置，或取消勾选写入')); return; }
+      id = chosen.value;
+    }
+    var btn = q('#pws-save');
+    btn.disabled = true;
+    var old = btn.textContent;
+    btn.textContent = t('保存中…');
+    try{
+      var r = await fetch('/api/project/apply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({frontend_dir: f, backend_dir: b, use_database: use, db_id: id})
+      });
+      if(!r.ok){
+        var msg = await r.text();
+        try{
+          var j = JSON.parse(msg);
+          if(j.problems && j.problems.length) msg = j.problems.map(function(p){ return (p.field || '') + ' → ' + (p.msg || ''); }).join('\n');
+        }catch(e){}
+        throw new Error(msg);
+      }
+      markSeen();
+      closeWizard(false);
+      toast(t('项目已接入，配置已保存'), 'ok');
+      try{ await loadConfig(); refreshGuards(); pollHealth(); }catch(e){}
+    }catch(e){
+      showErr('#pws-err3', t('保存失败：{0}', e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  }
+
+  /* ---------- 打开/关闭 ---------- */
+
+  function markSeen(){ try{ localStorage.setItem(WIZ_KEY, '1'); }catch(e){} }
+  function seen(){ try{ return localStorage.getItem(WIZ_KEY) === '1'; }catch(e){ return false; } }
+
+  function openWizard(opts){
+    build();
+    state.auto = !!(opts && opts.auto);
+    state.seq++;
+    state.checking = false;
+    state.data = null;
+    lastFocus = document.activeElement;
+    var f = '', b = '';
+    try{ if(typeof cfg !== 'undefined' && cfg && cfg.projects){ f = cfg.projects.frontend_dir || ''; b = cfg.projects.backend_dir || ''; } }catch(e){}
+    q('#pws-fe').value = f;
+    q('#pws-be').value = b;
+    clearErr();
+    resetSteps();
+    setPct(0, t('准备检查'));
+    showView(1);
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('pws-open');
+  }
+
+  function closeWizard(mark){
+    if(!modal) return;
+    if(state.checking) state.seq++;
+    state.checking = false;
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('pws-open');
+    if(mark) markSeen();
+    if(lastFocus && typeof lastFocus.focus === 'function'){ try{ lastFocus.focus(); }catch(e){} }
+    lastFocus = null;
+  }
+
+  function shouldAuto(){
+    if(seen()) return false;
+    var empty = true;
+    try{
+      if(typeof cfg !== 'undefined' && cfg && cfg.projects){
+        empty = !(cfg.projects.frontend_dir || cfg.projects.backend_dir);
+      }
+    }catch(e){}
+    return empty;
+  }
+
+  function autoOpen(){
+    if(!shouldAuto()) return;
+    if(modal && modal.classList.contains('show')) return;
+    setTimeout(function(){ if(shouldAuto()) openWizard({auto: true}); }, 650);
+  }
+
+  /* 首屏演示结束（90-onboard.js 的 finish）后自动弹一次；
+     老用户已经看过演示、但目录仍为空时，加载后也补一次。
+     只自动弹一次，跳过/关闭后靠顶栏「接入项目」常驻入口。 */
+  document.addEventListener('ek:onboard-finish', autoOpen);
+  setTimeout(function(){
+    try{
+      if(window.EKOnboard && EKOnboard.hasSeen && EKOnboard.hasSeen()) autoOpen();
+    }catch(e){}
+  }, 1800);
+
+  var btn = document.getElementById('btn-project-setup');
+  if(btn) btn.onclick = function(){ openWizard({}); };
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && modal && modal.classList.contains('show')){
+      e.preventDefault();
+      closeWizard(true);
+    }
+  });
+
+  window.EKProjectSetup = { open: openWizard, close: closeWizard, seen: seen };
 })();
 </script>
 </body>

@@ -62,8 +62,29 @@ func aiPromisedAction(text string) bool {
 
 // aiMatchIntent 确定性意图识别（不依赖模型，保证"说了就执行"）。
 // 返回 (工具名, 参数, 是否写操作)。用于预检快通道与模型不发起调用时的兜底。
+// aiDropNegatedActions 去掉带否定词的动作子句，避免"不要停止服务"被当成
+// "停止服务"。删除范围止于标点：否定只作用于自己所在的那一小句，
+// 「不要启动前端，只停止后端」里的后半句仍然要能被识别。
+//
+// 只列动作相关否定，不用裸「别」：裸「别」会误伤「区别」「特别」这类词。
+func aiDropNegatedActions(text string) string {
+	t := strings.ReplaceAll(text, "不要忘记", "记得")
+	t = strings.ReplaceAll(t, "不要忘了", "记得")
+	t = strings.ReplaceAll(t, "别忘了", "记得")
+	neg := reOf(`(不要|不用|无需|不必|禁止|不准|不许|不能|先别|暂时别|千万别|别启动|别停止|别停|别关|别重启|别动|别弄|别跑|别开|别备份|别删除|别改)[^，。；！？：\n]{0,24}`)
+	return strings.TrimSpace(neg.ReplaceAllString(t, ""))
+}
+
 func aiMatchIntent(text string) (string, map[string]any, bool) {
 	t := aiUserIntentText(text)
+	// 否定子句先剔除，再交给动作规则匹配。
+	//
+	// 真实事故（2026-11-23 实测）：用户说「只做只读检查，不要启动或停止任何服务」，
+	// 「停止…服务」被 stop 规则命中，模型还没被调用，界面就先弹了「停止后端服务」
+	// 的确认卡——用户一句"别动"反而制造了一个写操作。
+	//
+	// "不要忘记重启后端" 这类祈使句不是否定，先归一化成"记得…"再处理。
+	t = aiDropNegatedActions(t)
 	if t == "" {
 		return "", nil, false
 	}

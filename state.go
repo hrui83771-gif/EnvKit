@@ -343,6 +343,9 @@ const (
 	// 启动校验等待窗口（verify.go 的 verifyWaitWeb()/verifyWaitBackend() 用它）
 	devDefaultVerifyWaitWeb     = 45
 	devDefaultVerifyWaitBackend = 25
+	// Maven/Spring Boot 的下限：mvn 先起自己的 JVM，再 fork 应用 JVM，
+	// 冷启动实测 30s 上下；25s 的默认窗口会在 Tomcat 监听前就判"未观察到端口"。
+	devDefaultVerifyWaitMaven = 60
 
 	// 子进程"零输出秒退"重试（retry.go 的 subprocRetry() 用它）
 	devDefaultSubprocRetries = 3
@@ -489,6 +492,9 @@ const (
 	progWarn    = "warn"    // 已执行但未通过复验（不是失败）
 	progFail    = "fail"    // 确实失败
 	progStopped = "stopped" // 用户主动停止（正常结局，不是失败）
+	// 外部实例：服务确实在跑，但不是 EnvKit 派生的。它既不是"我们启动成功"，
+	// 也不是"未通过复验的失败"；单独一档，前端显示"运行中 · 外部启动"。
+	progExternal = "external"
 )
 
 type LogMsg struct {
@@ -508,6 +514,7 @@ type DBHealth struct {
 type SvcInfo struct {
 	Running bool   `json:"running"`
 	URL     string `json:"url"`
+	Port    int    `json:"port,omitempty"`
 	PID     int    `json:"pid"`
 	Since   string `json:"since"`
 
@@ -521,6 +528,15 @@ type SvcInfo struct {
 	// 追加而不替换：旧字段原样保留，既有 CDP 测试与外部调用零影响。
 	Phase    ServicePhase `json:"phase,omitempty"`
 	Verified bool         `json:"verified"`
+	// 来源与外部观察（v3.8.2 自适应）：同样 running，source 决定 EnvKit 能否停它。
+	// verified 继续只表示"EnvKit 自己的复验通过"；外部实例用 health 表达健康。
+	Source         ServiceSource `json:"source,omitempty"`
+	Health         string        `json:"health,omitempty"`
+	PortSource     string        `json:"port_source,omitempty"`
+	PortConfidence int           `json:"port_confidence,omitempty"`
+	OwnerName      string        `json:"owner_name,omitempty"`
+	ObservedAt     string        `json:"observed_at,omitempty"`
+	Evidence       []string      `json:"evidence,omitempty"`
 	// LastVerify 是人类可读的复验结论，用于在卡上直接显示
 	// 「端口被其他进程占用」这类具体原因，而不是只显示一个颜色。
 	LastVerify string `json:"last_verify,omitempty"`
@@ -554,6 +570,29 @@ var (
 
 	isAdminFlag = false
 )
+
+// cfgSnapshot 返回配置的一致快照（深拷贝）：调用方可以脱离 cfgMu 慢慢读/序列化。
+//
+// 为什么不是 `cfgMu.Lock(); c := cfg; cfgMu.Unlock()`：Config 里到处是指针与切片，
+// 值拷贝只复制了头，底层数组仍归全局所有 —— 锁一放就又成了无锁读全局配置
+// （并发的配置保存会当场改掉它，normalizeConfig 甚至会就地改 Components[i]）。
+func cfgSnapshot() Config {
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
+	return cloneConfigDeep(cfg)
+}
+
+// cfgUpdate 在锁内改全局配置，并返回改完后的独立快照（可直接交给 saveExternalConfig）。
+//
+// fn 里不得再取 cfgMu，也不得调用内部会取 cfgMu 的函数（devSnap / mcpOn /
+// notifyMuted / aiSnap 等），否则是自锁。需要读别的段时，先 cfgSnapshot() 拿到
+// 副本再进 cfgUpdate，别在回调里回头取锁。
+func cfgUpdate(fn func(*Config)) Config {
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
+	fn(&cfg)
+	return cloneConfigDeep(cfg)
+}
 
 // ---------- 任务模型 ----------
 // 旧模型是"全局单锁 + 一个字符串"，问题：卡死任务只能放锁不能收尸，

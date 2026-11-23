@@ -16,7 +16,23 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+// sameFileDir 判断两个目录路径是否指向同一处。
+//
+// Windows 上同一目录可能有两种写法：8.3 短名（用户名含撇号/空格时
+// t.TempDir() 会给 C:\Users\HEN'R'~1\…）与 EvalSymlinks 展开的长名。
+// 产品侧 javaHomeOf 走 EvalSymlinks 返回规范长路径是对的，测试不能拿
+// 短路径去比字面量 —— 否则只有"用户名特殊"的机器会红（CI 绿、本机红）。
+func sameFileDir(a, b string) bool {
+	if strings.EqualFold(filepath.Clean(a), filepath.Clean(b)) {
+		return true
+	}
+	ra, ea := filepath.EvalSymlinks(a)
+	rb, eb := filepath.EvalSymlinks(b)
+	return ea == nil && eb == nil && strings.EqualFold(ra, rb)
+}
 
 // writeMavenFixture 造一个最小 Maven 项目目录（pom.xml 可带自定义内容）。
 func writeMavenFixture(t *testing.T, pomContent string) string {
@@ -320,6 +336,39 @@ func TestOpStartBackendMavenMissingDeps(t *testing.T) {
 
 // TestMavenWrapperCachePickHighest 缓存回退要挑"完整且版本最高"的那套，
 // 且对长而怪的 hash 目录名免疫（真实机器上缓存嵌套就是不定长的）。
+// TestMavenVerifyWaitFloor 复验窗口不能比 Maven 冷启动短。
+//
+// 实测：tcm-inventory（Spring Boot 3.5.5 + JDK 17）用 mvnw spring-boot:run
+// 启动，Maven 自己的 JVM + fork 出的应用 JVM 一共 ~30s 才让 Tomcat 监听 8080；
+// 默认 25s 窗口会在端口出现前就判"未观察到端口监听"，把成功写成 warn。
+func TestMavenVerifyWaitFloor(t *testing.T) {
+	oldBE := cfg.Projects.BackendDir
+	t.Cleanup(func() { cfg.Projects.BackendDir = oldBE })
+
+	mv := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mv, "pom.xml"), []byte("<project/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Projects.BackendDir = mv
+	if got := verifyWaitBackend(); got < time.Duration(devDefaultVerifyWaitMaven)*time.Second {
+		t.Fatalf("Maven 复验窗口 %s，不得短于 %ds", got, devDefaultVerifyWaitMaven)
+	}
+}
+
+func TestMavenVerifyWaitFloor_GoKeepsDefault(t *testing.T) {
+	oldBE := cfg.Projects.BackendDir
+	t.Cleanup(func() { cfg.Projects.BackendDir = oldBE })
+
+	goDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(goDir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Projects.BackendDir = goDir
+	if got := verifyWaitBackend(); got >= time.Duration(devDefaultVerifyWaitMaven)*time.Second {
+		t.Fatalf("Go 后端的复验窗口不应被 Maven 下限抬高：%s", got)
+	}
+}
+
 func TestMavenWrapperCachePickHighest(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "dists")
 	mk := func(rel ...string) string {
@@ -471,7 +520,7 @@ func TestMavenStartEnvSwitch(t *testing.T) {
 	// 要 17：JAVA_HOME=8 < 17，PATH 的 17.0.11 够 → 切到 PATH java 的 home
 	env := mavenStartEnv(writeMavenFixture(t, pomTCM), pathJava)
 	wantHome := filepath.Dir(filepath.Dir(pathJava))
-	if env == nil || env["JAVA_HOME"] != wantHome {
+	if env == nil || !sameFileDir(env["JAVA_HOME"], wantHome) {
 		t.Errorf("应把 JAVA_HOME 切到 %s，得 %v", wantHome, env)
 	}
 	// 要 8：JAVA_HOME=1.8.0 已满足 → 不切（能不切就不切）
@@ -523,5 +572,12 @@ func TestDetectComponentMavenCache(t *testing.T) {
 	}
 	if r.Location != stub {
 		t.Errorf("Location=%q，要缓存路径 %q", r.Location, stub)
+	}
+	// BinExe 为空的组件只能走 PATH：安装目录存在也不能判成"已安装"。
+	// （默认 InstallDir 在开发机上通常真实存在，不设这道闸会报"已安装 · 空版本"。）
+	// 先把缓存回退也堵上，否则测的还是"缓存命中"而不是"PATH 未命中"。
+	probeMavenCache = func() string { return "" }
+	if r := detectComponent(Component{Name: "Maven", CheckCmd: "mvn"}); r.Installed {
+		t.Errorf("BinExe 为空且 PATH 无 mvn 时不应判已安装：%+v", r)
 	}
 }

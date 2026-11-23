@@ -32,6 +32,11 @@ const chainIPTomlName = "config.toml"
 // 这样注释行也能被**读出来**（报告里说明"注释行不动"），但不会被改写。
 var nodeURLRe = regexp.MustCompile(`^(\s*)NodeURL\s*=\s*"([^"]*)"(.*)$`)
 
+// nodeURLRewriteRe 与 nodeURLRe 同构，但把 `NodeURL = ` 这段（含用户写的空格）
+// 整段捕获：改写只换引号里的地址，`NodeURL = "x"` 这种写法不会被顺手改成
+// `NodeURL="x"`——承诺是"其它字节一概不碰"，格式也属于别的字节。
+var nodeURLRewriteRe = regexp.MustCompile(`^(\s*NodeURL\s*=\s*)"([^"]*)"(.*)$`)
+
 type nodeURLLine struct {
 	idx    int    // 行号（0 起）
 	indent string // 原样保留的前导空白
@@ -307,16 +312,16 @@ func mismatchCount(lines []nodeURLLine, wantHost, wantPort string) int {
 // 用 submatch 拼装，**不整行重写**——行尾可能有 `# 注释`，
 // 整行重写会把注释吃掉（那是对用户文件的无声破坏）。
 func rebuildNodeURLLine(line, wantHost, wantPort string) string {
-	m := nodeURLRe.FindStringSubmatch(line)
+	m := nodeURLRewriteRe.FindStringSubmatch(line)
 	if m == nil {
 		return line
 	}
 	if _, _, err := net.SplitHostPort(m[2]); err == nil {
 		// 原行带端口 → 写全地址（对齐权威源的 host 与端口）
-		return m[1] + `NodeURL="` + net.JoinHostPort(wantHost, wantPort) + `"` + m[3]
+		return m[1] + `"` + net.JoinHostPort(wantHost, wantPort) + `"` + m[3]
 	}
 	// 原行只有 host（无端口形态）→ 保持无端口形态，只对齐 host
-	return m[1] + `NodeURL="` + wantHost + `"` + m[3]
+	return m[1] + `"` + wantHost + `"` + m[3]
 }
 
 // nowFilestamp 文件名安全的时间戳（冒号在 Windows 文件名里非法）。

@@ -356,11 +356,12 @@ var aiToolRegistry = map[string]aiTool{
 			// start 已派生新进程，监控 goroutine 把"已退出"写到新进程头上。
 			// 同组互斥把这类竞态在结构上消掉。
 			groups, name := []string{grpWeb}, "停止前端"
+			targets := []string{"web"}
 			switch svc {
 			case "backend":
-				groups, name = []string{grpBackend}, "停止后端"
+				groups, name, targets = []string{grpBackend}, "停止后端", []string{"backend"}
 			case "all":
-				groups, name = []string{grpBackend, grpWeb}, "停止前后端"
+				groups, name, targets = []string{grpBackend, grpWeb}, "停止前后端", []string{"backend", "web"}
 			case "web":
 			default:
 				return "", fmt.Errorf("service 必须是 web/backend/all")
@@ -372,20 +373,23 @@ var aiToolRegistry = map[string]aiTool{
 			defer h.Done()
 			// 写操作必须留痕（此前 AI 停服务不落审计，与按钮路径不一致）
 			fin := auditStart(actAI, "stop_service", svc, "")
-			switch svc {
-			case "web":
-				stopByKey(scStart, "web", "web-start")
-				svcReset("web")
-			case "backend":
-				stopByKey(scStart, "backend", "backend-start")
-				svcReset("backend")
-			case "all":
-				stopByKey(scStart, "web", "web-start")
-				stopByKey(scStart, "backend", "backend-start")
-				svcReset("web")
-				svcReset("backend")
+			// 停止权限边界：只停 EnvKit 自己派生的进程。外部实例只报告，不 reset。
+			var external []string
+			for _, target := range targets {
+				if !managedServiceRunning(target) {
+					if o, ok := observeSnapshot(target); ok && (o.State == "external" || o.State == "unknown") {
+						external = append(external, fmt.Sprintf("%s(PID %d, 端口 %d)", svcLabel(target), o.PID, o.Port))
+					}
+					continue
+				}
+				stopByKey(scStart, target, target+"-start")
+				svcReset(target)
 			}
 			fin(resOK, "")
+			if len(external) > 0 {
+				return "EnvKit 只停止由自己启动的服务；以下外部实例未受管，未停止：" + strings.Join(external, "、") +
+					"。请让用户到原终端停止，EnvKit 不会杀第三方进程。", nil
+			}
 			return "已停止", nil
 		},
 	},
@@ -401,14 +405,25 @@ var aiToolRegistry = map[string]aiTool{
 			//（旧实现 stopByKey 后裸调 webStartTask，中间空档里并发 stop
 			// 会把新进程的"已退出"写进旧监控 goroutine）。整段持组锁。
 			groups, name := []string{grpWeb}, "重启前端"
+			restartTargets := []string{"web"}
 			switch svc {
 			case "backend":
-				groups, name = []string{grpBackend}, "重启后端"
+				groups, name, restartTargets = []string{grpBackend}, "重启后端", []string{"backend"}
 			case "all":
-				groups, name = []string{grpBackend, grpWeb}, "重启前后端"
+				groups, name, restartTargets = []string{grpBackend, grpWeb}, "重启前后端", []string{"backend", "web"}
 			case "web":
 			default:
 				return "", fmt.Errorf("service 必须是 web/backend/all")
+			}
+			for _, target := range restartTargets {
+				if managedServiceRunning(target) {
+					continue
+				}
+				if o, ok := observeSnapshot(target); ok && o.State != "" {
+					return "", fmt.Errorf("%s不是 EnvKit 启动的（PID %d，端口 %d）：不能由 EnvKit 重启。"+
+						"请让用户到原终端停止后，再在 EnvKit 里启动；EnvKit 不会自动杀第三方进程",
+						svcLabel(target), o.PID, o.Port)
+				}
 			}
 			h, granted := beginTaskHG(name, groups, true)
 			if !granted {
@@ -557,12 +572,29 @@ func svcAIView(target string, si SvcInfo) map[string]any {
 		"pid":     st.PID,
 		"since":   st.Since,
 		"phase":   st.Phase,
+		"source":  st.Source,
+	}
+	if st.Health != "" {
+		view["health"] = st.Health
+	}
+	if st.Source != srcNone && st.Source != srcManaged {
+		view["managed_by_envkit"] = false
+		view["source_note"] = externalVerifyText(observedService{
+			State: string(st.Source), Port: st.Port, PID: st.PID,
+			OwnerName: st.OwnerName, Health: st.Health,
+		})
 	}
 	if si.URL != "" {
 		view["url"] = si.URL
 	}
 	if st.Port > 0 {
 		view["port"] = st.Port
+	}
+	if st.OwnerName != "" {
+		view["owner_name"] = st.OwnerName
+	}
+	if len(st.Evidence) > 0 {
+		view["evidence"] = st.Evidence
 	}
 	// 曾成功过吗 —— 这是区分 (a) 与 (b) 的唯一依据
 	everVerified := false
@@ -585,6 +617,23 @@ func svcAIView(target string, si SvcInfo) map[string]any {
 	// 判据按 phase 走而不是按 running：degraded（进程在、没验过）和
 	// failed（崩了/退了）对用户是完全不同的两件事，混成一句"没在正常运行"
 	// 会让模型把"还在编译"当成"启动失败"去排查编译错误。
+	view["verified"] = false
+	switch st.Source {
+	case srcExternal:
+		view["verified"] = false
+		if st.Health == "ok" || st.Health == "auth" {
+			view["what_to_do"] = "外部实例正在运行且有 HTTP 响应；直接使用它，不要重复启动。需要停止时请用户到原终端操作"
+		} else {
+			view["what_to_do"] = "外部实例在监听但健康未确认；不要重复启动，先到「端口诊断」核对进程和端口"
+		}
+		return view
+	case srcUnknown:
+		view["what_to_do"] = "候选端口有监听但身份未确认；不要启动/停止，先让用户到「端口诊断」核对占用者"
+		return view
+	case srcForeign:
+		view["what_to_do"] = "端口被其他项目占用；不要启动本服务，也不要结束时第三方进程；先让用户在「端口诊断」确认或改端口"
+		return view
+	}
 	switch st.Phase {
 	case phRunning:
 		view["what_to_do"] = "服务在运行且复验通过（phase=running）。**状态正常，不要报告故障**。" +

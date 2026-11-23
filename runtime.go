@@ -51,26 +51,54 @@ const (
 	phRunning  ServicePhase = "running"
 	phDegraded ServicePhase = "degraded" // 进程在但未通过复验
 	phFailed   ServicePhase = "failed"   // 崩溃或复验失败
+	// phConflict 候选端口被第三方占着：不是本服务，也不由 EnvKit 管理。
+	// 与 failed 分开——失败是"我们没起来"，冲突是"别人占着位置"。
+	phConflict ServicePhase = "conflict"
+)
+
+// ServiceSource 服务运行来源。这是与 Phase 正交的另一个维度：
+// 同样 phase=running，EnvKit 能不能停它取决于 source。
+type ServiceSource string
+
+const (
+	srcNone     ServiceSource = "none"
+	srcManaged  ServiceSource = "managed"  // EnvKit 派生的进程树，可停
+	srcExternal ServiceSource = "external" // 用户在其他终端启动，只观察
+	srcUnknown  ServiceSource = "unknown"  // 端口在听，但身份证据不足
+	srcForeign  ServiceSource = "foreign"  // 端口被别的项目占着
 )
 
 // ServiceState 服务完整状态。布尔值表达不了"启动中/降级/反复重启"，
 // 而状态中心与 AI 都需要这些信息。
 type ServiceState struct {
-	Phase       ServicePhase `json:"phase"`
-	Running     bool         `json:"running"`
-	PID         int          `json:"pid"`
-	Port        int          `json:"port,omitempty"`
-	Since       string       `json:"since,omitempty"`
-	UptimeSec   int64        `json:"uptime_sec,omitempty"`
-	Restarts    int          `json:"restarts,omitempty"` // 连续失败次数
-	Backoff     string       `json:"backoff,omitempty"`  // 建议退避与原因
-	LastErr     string       `json:"last_err,omitempty"` // 最近一次失败的结论
-	LastErrKind string       `json:"last_err_kind,omitempty"`
-	LastErrAt   string       `json:"last_err_at,omitempty"`
-	LastVerify  string       `json:"last_verify,omitempty"` // 最近一次复验结论
-	Verified    bool         `json:"verified"`
-	VerifyAt    string       `json:"verify_at,omitempty"`
-	Crashes     []CrashEvent `json:"crashes,omitempty"` // 崩溃历史（新在前）
+	Phase       ServicePhase  `json:"phase"`
+	Running     bool          `json:"running"`
+	PID         int           `json:"pid"`
+	Port        int           `json:"port,omitempty"`
+	URL         string        `json:"url,omitempty"`
+	Since       string        `json:"since,omitempty"`
+	UptimeSec   int64         `json:"uptime_sec,omitempty"`
+	Restarts    int           `json:"restarts,omitempty"` // 连续失败次数
+	Backoff     string        `json:"backoff,omitempty"`  // 建议退避与原因
+	LastErr     string        `json:"last_err,omitempty"` // 最近一次失败的结论
+	LastErrKind string        `json:"last_err_kind,omitempty"`
+	LastErrAt   string        `json:"last_err_at,omitempty"`
+	LastVerify  string        `json:"last_verify,omitempty"` // 最近一次复验结论
+	Verified    bool          `json:"verified"`
+	VerifyAt    string        `json:"verify_at,omitempty"`
+	Crashes     []CrashEvent  `json:"crashes,omitempty"` // 崩溃历史（新在前）
+	Source      ServiceSource `json:"source"`
+
+	// 以下字段来自 portobserver.go 的只读观察。Source=external/unknown/foreign 时有值。
+	// Verified 继续只表示"EnvKit 自己的复验通过"；外部实例的健康用 Health 表达，
+	// 不能因为 HTTP 200 就伪造 verified=true——那会误导"可停"的权限判断。
+	Health         string   `json:"health,omitempty"` // ok | auth | fail | unknown
+	PortSource     string   `json:"port_source,omitempty"`
+	PortConfidence int      `json:"port_confidence,omitempty"`
+	OwnerName      string   `json:"owner_name,omitempty"`
+	ObservedAt     string   `json:"observed_at,omitempty"`
+	Evidence       []string `json:"evidence,omitempty"`
+
 	// v3.0 T1.9：崩溃循环断路器状态（plan §3.2.3）。熔断中 = 自动重启
 	// 已被拒绝，前端要显示出来并给人工复位入口——否则用户看到的是
 	// "重启没反应"，而不知道是产品在故意拒绝。
@@ -221,6 +249,11 @@ func runtimeService(target string) ServiceState {
 		PID:     si.PID,
 		Since:   started,
 		Port:    portFromURL(si.URL),
+		URL:     si.URL,
+		Source:  srcNone,
+	}
+	if si.Running {
+		st.Source = srcManaged
 	}
 	if started != "" {
 		if t, err := time.ParseInLocation("2006-01-02 15:04:05", started, time.Local); err == nil {
@@ -275,10 +308,73 @@ func runtimeService(target string) ServiceState {
 	if rec.Restarts > 0 && !si.Running && st.Phase == phStopped {
 		st.Phase = phFailed
 	}
-	if st.Phase == phRunning && !st.Verified {
+
+	// 外部观察：EnvKit 没管理它，但机器上确实在监听。
+	// 关键边界：只观察，不写 svcState、不写复验结论、不把 verified 伪造成 true。
+	// verified 仍只表示"EnvKit 自己的复验通过"——停止权限和信任关系挂在这上面。
+	if !si.Running {
+		if o, ok := observeSnapshot(target); ok {
+			st.Port = o.Port
+			st.PID = o.PID
+			st.Source = ServiceSource(o.State)
+			st.Health = o.Health
+			st.PortSource = o.PortSource
+			st.PortConfidence = o.PortConfidence
+			st.OwnerName = o.OwnerName
+			st.ObservedAt = o.ObservedAt
+			st.Evidence = append([]string(nil), o.Evidence...)
+			st.LastVerify = externalVerifyText(o)
+			st.VerifyAt = o.ObservedAt
+			st.Verified = false
+			st.Since = o.Since
+			switch o.State {
+			case "external":
+				st.Running = true
+				st.Phase = phRunning
+				// 外部实例不是 EnvKit 启动的，但它是本项目的服务：仍给出访问地址。
+				// 只把 URL 指向已确认的端口，不伪造 Host/路径；unknown 不给链接，
+				// 因为那个端口上可能是任何东西。
+				st.URL = fmt.Sprintf("http://127.0.0.1:%d/", o.Port)
+				if o.Health == "fail" {
+					st.Phase = phDegraded
+				}
+			case "unknown":
+				// 端口在听，但命令行/HTTP 证据不足以确认是本项目。
+				// 不判绿，也不判"未启动"——单独一档，让用户去端口诊断看占用者。
+				st.Running = true
+				st.Phase = phDegraded
+			default:
+				// foreign：端口被别的项目占着。running=false 是有意的：
+				// 不能把别人的服务当成"我们的服务已启动"，也不能给出"打开"链接。
+				st.Running = false
+				st.Phase = phConflict
+			}
+		}
+	}
+	if st.Phase == phRunning && !st.Verified && st.Source == srcManaged {
 		st.Phase = phDegraded
 	}
 	return st
+}
+
+func externalVerifyText(o observedService) string {
+	if o.State == "foreign" {
+		return fmt.Sprintf("端口 %d 被 %s（PID %d）占用，不是本项目的服务", o.Port, nonEmptyStr(o.OwnerName, "未知进程"), o.PID)
+	}
+	head := "外部实例，EnvKit 未托管"
+	if o.State == "unknown" {
+		head = "端口有监听，但身份未确认"
+	}
+	if o.Health == "ok" {
+		head += "；HTTP 有响应，可临时使用"
+	} else if o.Health == "auth" {
+		head += "；HTTP 需要鉴权，服务有响应"
+	} else if o.Health == "fail" {
+		head += "；HTTP 5xx，服务端自报异常"
+	} else {
+		head += "；健康未验证"
+	}
+	return head
 }
 
 // ===== issues 计算 =====
@@ -348,6 +444,27 @@ func runtimeIssues(env *EnvInfo, proj ProjInfo, svcs map[string]ServiceState, db
 		name := "后端"
 		if key == "web" {
 			name = "前端"
+		}
+		switch s.Source {
+		case srcExternal:
+			// 外部实例不归 EnvKit 管：不要走到下面的 degraded/failed 文案，
+			// 否则会把"别人起的服务 HTTP 5xx"说成"EnvKit 启动失败"。
+			if s.Health == "fail" {
+				add(rtIssWarn, "service",
+					fmt.Sprintf("%s外部实例（PID %d，端口 %d）HTTP 5xx：进程在，但服务端自报异常", name, s.PID, s.Port),
+					"该实例不是 EnvKit 启动的，请到原终端查看；不要在这里重复启动", "ports")
+			}
+			continue
+		case srcUnknown:
+			add(rtIssWarn, "service",
+				fmt.Sprintf("%s候选端口有监听，但无法确认是本项目（端口 %d，PID %d）", name, s.Port, s.PID),
+				"在「端口诊断」核对该进程命令行/路径；确认后再决定是否手工停止", "ports")
+			continue
+		case srcForeign:
+			add(rtIssError, "service",
+				fmt.Sprintf("%s端口冲突：%d 被 %s（PID %d）占用", name, s.Port, nonEmptyStr(s.OwnerName, "未知进程"), s.PID),
+				"先结束占用者或在「程序配置」改端口；EnvKit 不会自动杀第三方进程", "ports")
+			continue
 		}
 		switch s.Phase {
 		case phDegraded:
@@ -509,6 +626,7 @@ func handleRuntimeState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	markUIPoll()
 	writeJSON(w, map[string]any{"ok": true, "state": currentRuntimeState()})
 }
 

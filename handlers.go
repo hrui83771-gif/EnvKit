@@ -17,9 +17,8 @@ func handleConfigExport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	cfgMu.Lock()
-	data, _ := json.MarshalIndent(cfg, "", "  ")
-	cfgMu.Unlock()
+	// 导出只碰快照：深拷贝后不再持锁序列化，避免大配置把 cfgMu 占着不放。
+	data, _ := json.MarshalIndent(cfgSnapshot(), "", "  ")
 	sanitized := r.URL.Query().Get("sanitize") == "1"
 	if sanitized {
 		var c Config
@@ -69,20 +68,24 @@ func handleConfigImport(w http.ResponseWriter, r *http.Request) {
 	for _, s := range steps {
 		info(scSys, "配置", "导入迁移：%s", s)
 	}
-	applyConfigDefaults()
-	cfgMu.Lock()
+	// 空密码字段保留本机已有密码（兼容脱敏导出的文件）。
+	// 判空必须发生在 applyDefaultsTo **之前**：补默认值会把 Projects.MySQLPass
+	// 填成 123456，补完就分不清"导出时脱敏了"与"文件里就写了 123456"。
+	missingMySQLPass := in.Projects.MySQLPass == ""
+	missingSSHPass := in.Chain.SSHPassword == ""
+	applyDefaultsTo(&in)
+	cur := cfgSnapshot()
 	if in.MySQL.Password == "" {
-		in.MySQL.Password = cfg.MySQL.Password
+		in.MySQL.Password = cur.MySQL.Password
 	}
-	if in.Projects.MySQLPass == "" {
-		in.Projects.MySQLPass = cfg.Projects.MySQLPass
+	if missingMySQLPass {
+		in.Projects.MySQLPass = cur.Projects.MySQLPass
 	}
-	if in.Chain.SSHPassword == "" {
-		in.Chain.SSHPassword = cfg.Chain.SSHPassword
+	if missingSSHPass {
+		in.Chain.SSHPassword = cur.Chain.SSHPassword
 	}
-	cfg = in
-	cfgMu.Unlock()
-	saveExternalConfig(in)
+	saved := cfgUpdate(func(g *Config) { *g = in })
+	saveExternalConfig(saved)
 	auditNow(actUser, "config_import", "config.json", fmt.Sprintf("schema v%d", in.SchemaVersion), resOK, "")
 	info(scSys, "配置", "已从导入文件恢复配置")
 	_, _ = w.Write([]byte(`{"ok":true}`))
@@ -91,9 +94,7 @@ func handleConfigImport(w http.ResponseWriter, r *http.Request) {
 func handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if r.Method == http.MethodGet {
-		cfgMu.Lock()
-		_ = json.NewEncoder(w).Encode(cfg)
-		cfgMu.Unlock()
+		_ = json.NewEncoder(w).Encode(cfgSnapshot())
 		return
 	}
 	if r.Method == http.MethodPost {
@@ -105,9 +106,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 		// 页面表单只提交"界面上有的字段"：缺失的整段必须沿用原值。
 		// （曾经的坑：直接 cfg = c，导致在「程序配置」里动一下输入框触发自动保存，
 		//  就把 AI 配置连同 API Key 一起抹掉了。）
-		cfgMu.Lock()
-		c = mergeFormConfig(c, cfg)
-		cfgMu.Unlock()
+		c = mergeFormConfig(c, cfgSnapshot())
 		normalizeConfig(&c)
 		// 硬错误直接拒绝：让用户在输入框旁边就看到原因，而不是等到"安装失败/连不上库"再倒查。
 		if hard := hardProblems(checkConfig(c)); len(hard) > 0 {
@@ -121,10 +120,8 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "problems": hard})
 			return
 		}
-		cfgMu.Lock()
-		cfg = c
-		cfgMu.Unlock()
-		saveExternalConfig(c)
+		saved := cfgUpdate(func(g *Config) { *g = c })
+		saveExternalConfig(saved)
 		// 这次是「改配置」，立刻把「按旧配置算的」标记落盘。
 		// 放在后端而不是前端：刷新页面 / 重启程序都读得回来，前端那个 let 活不过一次刷新。
 		setCfgStale(true)
@@ -281,6 +278,7 @@ func setProgStatus(key string, running bool, status, msg string) {
 // 同一件事算三遍，且"哪里有问题"没有统一答案。
 // 现在改为从唯一状态源取数，响应格式与字段名保持不变（CDP 测试不必改）。
 func handleHealth(w http.ResponseWriter, r *http.Request) {
+	markUIPoll()
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	st := currentRuntimeState()
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -307,6 +305,8 @@ func healthServicesCompat(m map[string]ServiceState) map[string]SvcInfo {
 	for k, s := range m {
 		info := SvcInfo{
 			Running:           s.Running,
+			URL:               s.URL,
+			Port:              s.Port,
 			PID:               s.PID,
 			Since:             s.Since,
 			Phase:             s.Phase,
@@ -315,8 +315,17 @@ func healthServicesCompat(m map[string]ServiceState) map[string]SvcInfo {
 			Restarts:          s.Restarts,
 			BreakerTripped:    s.BreakerTripped,
 			BreakerRemainSecs: s.BreakerRemainSecs,
+			Source:            s.Source,
+			Health:            s.Health,
+			PortSource:        s.PortSource,
+			PortConfidence:    s.PortConfidence,
+			OwnerName:         s.OwnerName,
+			ObservedAt:        s.ObservedAt,
+			Evidence:          append([]string(nil), s.Evidence...),
 		}
-		if s.Port > 0 {
+		if s.URL != "" {
+			info.URL = s.URL
+		} else if s.Port > 0 {
 			info.URL = fmt.Sprintf("http://127.0.0.1:%d", s.Port)
 		}
 		out[k] = info

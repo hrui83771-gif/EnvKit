@@ -30,10 +30,15 @@ func runCheck() {
 }
 
 func detectComponent(c Component) CheckResult {
-	toolPath := filepath.Join(componentBinDir(c), c.BinExe)
-	if _, err := os.Stat(toolPath); err == nil {
-		ver := getVersion(toolPath, c)
-		return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: toolPath}
+	// BinExe 为空 = 只按 CheckCmd 走 PATH 检测。不能把"安装目录存在"当成
+	// "组件已装"：默认 InstallDir 在任何装过组件的机器上都存在，否则会报出
+	// "已安装 · 版本为空 · 位置=安装目录"这种假阳性（老测试里真实撞到过）。
+	if strings.TrimSpace(c.BinExe) != "" {
+		toolPath := filepath.Join(componentBinDir(c), c.BinExe)
+		if _, err := os.Stat(toolPath); err == nil {
+			ver := getVersion(toolPath, c)
+			return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: toolPath}
+		}
 	}
 	if p, err := exec.LookPath(c.CheckCmd); err == nil {
 		ver := getVersion(p, c)

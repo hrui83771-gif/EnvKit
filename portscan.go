@@ -9,20 +9,49 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// defaultScanPorts 默认诊断端口：前端 devServer / 本地后端
-var defaultScanPorts = []int{8080, 8888}
+// systemExecutable 取 Windows 系统命令的绝对路径。
+// 为什么需要它：EnvKit 可能被从受限 PowerShell / 安装器 / 计划任务拉起，
+// 继承到的 PATH 里没有 System32，`exec.Command("netstat")` 会直接失败，
+// 观察器于是"什么都看不见"——这不是观察逻辑错，是环境缺 PATH。
+// 与 mysql.exe 的服务 ImagePath 回退同源：不能假设 PATH 完整。
+func systemExecutable(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	if root := os.Getenv("SystemRoot"); root != "" {
+		if filepath.Ext(name) == "" {
+			name += ".exe"
+		}
+		p := filepath.Join(root, "System32", name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return name
+}
+
+// defaultScanPorts 默认诊断端口：常见前端 devServer + 本地后端。
+// 前端 Vite（5173/4173）与 Next/CRA（3000）不在旧表里，导致"外部起在前端"
+// 长期不可见；这里补成一张覆盖默认框架的常用表。真正的按项目候选由
+// projectprofile.go 的 ProjectProfile 提供，这张表只用于"没有项目画像时"的兜底。
+var defaultScanPorts = []int{8080, 8888, 5173, 4173, 3000}
 
 type portOcc struct {
 	Port  int    `json:"port"`
 	State string `json:"state"` // LISTENING / FREE
 	PID   int    `json:"pid,omitempty"`
 	Name  string `json:"name,omitempty"`
+	// 归属只做展示：managed / external / unknown / foreign。
+	// 端口诊断与右侧栏看的是同一份观察结果，用户不必在两个页面对照 PID。
+	Source  string `json:"source,omitempty"`
+	Service string `json:"service,omitempty"`
 }
 
 // scanPortsOnce 执行一次端口扫描（同步返回结果，供 handler 与 AI 工具复用）。
@@ -31,17 +60,7 @@ func scanPortsOnce(ports []int) []portOcc {
 	if len(ports) == 0 {
 		return res
 	}
-	occ := map[int][]int{} // port -> pids
-	ctx, cancel := cmdContext(20 * time.Second)
-	// 不带 -p：netstat -ano 同时给出 IPv4（TCP）与 IPv6（TCPv6 也标 "TCP"）
-	// 的监听行。带 -p tcp 只看 IPv4——Node 17+ / vite 默认绑 [::1]，
-	// 只扫 v4 会把"明明 ready 了"的前端判成端口未监听（真实缺陷，已踩）。
-	out, err := exec.CommandContext(ctx, "netstat", "-ano").CombinedOutput()
-	cancel()
-	if err == nil {
-		occ = parseNetstatListeners(string(out))
-	}
-	names := pidNames()
+	occ, names := scanAllListeners()
 	for _, p := range ports {
 		row := portOcc{Port: p, State: "FREE"}
 		if pids, ok := occ[p]; ok && len(pids) > 0 {
@@ -53,6 +72,22 @@ func scanPortsOnce(ports []int) []portOcc {
 		res = append(res, row)
 	}
 	return res
+}
+
+// scanAllListeners 一次 netstat + 一次 tasklist，返回全部 TCP LISTENING 端口。
+// 观察器每轮只调一次它，避免为每个候选端口重复起两个子进程。
+func scanAllListeners() (map[int][]int, map[int]string) {
+	occ := map[int][]int{}
+	ctx, cancel := cmdContext(20 * time.Second)
+	// 不带 -p：netstat -ano 同时给出 IPv4（TCP）与 IPv6（TCPv6 也标 "TCP"）
+	// 的监听行。带 -p tcp 只看 IPv4——Node 17+ / vite 默认绑 [::1]，
+	// 只扫 v4 会把"明明 ready 了"的前端判成端口未监听（真实缺陷，已踩）。
+	out, err := exec.CommandContext(ctx, systemExecutable("netstat"), "-ano").CombinedOutput()
+	cancel()
+	if err == nil {
+		occ = parseNetstatListeners(string(out))
+	}
+	return occ, pidNames()
 }
 
 // parseNetstatListeners 解析 netstat -ano 输出里的 TCP LISTENING 行，
@@ -87,7 +122,7 @@ func parseNetstatListeners(out string) map[int][]int {
 func pidNames() map[int]string {
 	m := map[int]string{}
 	ctx, cancel := cmdContext(20 * time.Second)
-	out, err := exec.CommandContext(ctx, "tasklist", "/fo", "csv", "/nh").CombinedOutput()
+	out, err := exec.CommandContext(ctx, systemExecutable("tasklist"), "/fo", "csv", "/nh").CombinedOutput()
 	cancel()
 	if err != nil {
 		return m
@@ -131,7 +166,32 @@ func handlePortScan(w http.ResponseWriter, r *http.Request) {
 		ports = ports[:32]
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write([]byte(mustJSON(map[string]any{"ports": scanPortsOnce(ports)})))
+	rows := scanPortsOnce(ports)
+	annotatePortOwners(rows)
+	_, _ = w.Write([]byte(mustJSON(map[string]any{"ports": rows})))
+}
+
+// annotatePortOwners 给端口扫描结果补上「这是谁」。
+//
+// 端口诊断原本只有 PID/进程名，用户还得回右侧栏对照；外部实例在服务卡上
+// 显示「运行中 · 外部启动」，到这里却只剩一个 node.exe——两个面板各说各话。
+// 这里复用唯一状态源的结论（managed）与观察器快照（external/unknown/foreign），
+// 不重新判定身份，也不改停止权限。
+func annotatePortOwners(rows []portOcc) {
+	for i := range rows {
+		if rows[i].State != "LISTENING" || rows[i].PID == 0 {
+			continue
+		}
+		for _, key := range []string{"web", "backend"} {
+			st := runtimeService(key)
+			if st.Port != rows[i].Port || st.PID != rows[i].PID || st.Source == srcNone {
+				continue
+			}
+			rows[i].Source = string(st.Source)
+			rows[i].Service = key
+			break
+		}
+	}
 }
 
 // portKillTask 结束占用端口的进程（供按钮复用）；同步等待。

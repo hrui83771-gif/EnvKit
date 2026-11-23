@@ -680,7 +680,16 @@ async function loadLaunchPlan(){
   const L = [];
   L.push(t('前端：{0}', p.web_script ? ('npm run ' + p.web_script + t('（{0}）', launchSrc(p.web_source)))
                                      : t('未识别，不可自动启动')));
-  L.push(t('后端：{0}', p.backend_file ? ('go run ' + p.backend_file) : t('未识别，不可自动启动')));
+  const isMvn = p.backend_kind === 'maven';
+  const backendCmd = isMvn ? 'mvn spring-boot:run'
+                           : (p.backend_file ? ('go run ' + p.backend_file) : '');
+  L.push(t('后端：{0}', backendCmd || t('未识别，不可自动启动')));
+  if(isMvn) L.push(t('后端入口：pom.xml（由 spring-boot-maven-plugin 决定，无需填写 main.go）'));
+  // 后端入口只对 Go 项目有意义：Maven 项目的入口在 pom.xml 里，填 main.go 反而误导。
+  const goBox = document.getElementById('backend-entry-go');
+  const mvnBox = document.getElementById('backend-entry-maven');
+  if(goBox) goBox.style.display = isMvn ? 'none' : '';
+  if(mvnBox) mvnBox.style.display = isMvn ? '' : 'none';
   if(p.note) L.push(p.note);
   brief.textContent = L.join('\n');
   brief.style.whiteSpace = 'pre-line';
@@ -931,8 +940,8 @@ async function pollHealth(){
   /* 服务卡：同样以 verified 为条件 */
   const w=h.services.web, b=h.services.backend;
   const sw=$('#su-web'), sb=$('#su-backend');
-  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w);
-  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b);
+  sw.textContent = svcLabel(w); sw.className = 'svcstate' + svcDotCls(w); sw.title = (w&&w.last_verify)||'';
+  sb.textContent = svcLabel(b); sb.className = 'svcstate' + svcDotCls(b); sb.title = (b&&b.last_verify)||'';
   const lw=$('#sl-web');
   if(w.running && w.url){ lw.style.display=''; lw.href=w.url; lw.textContent=t('打开 ↗'); lw.title=w.url; }
   else { lw.style.display='none'; }
@@ -941,7 +950,13 @@ async function pollHealth(){
   else { lb.style.display='none'; }
   applyBreaker('web', w);
   applyBreaker('backend', b);
-  $('#btn-stop-all').disabled = !svcState.running;
+  /* 停止权限只属于 managed。外部/未知/冲突实例一律禁用停止按钮，
+     避免用户以为点了就能停掉别人的进程。 */
+  const stopDisabled = s => !s || !s.running || s.source==='external' || s.source==='unknown' || s.source==='foreign';
+  const bw=$('#btn-web-stop'), bstopB=$('#btn-backend-stop');
+  if(bw){ bw.disabled = stopDisabled(w); bw.title = stopDisabled(w) ? t('该实例不是 EnvKit 启动的，停止请到原终端') : ''; }
+  if(bstopB){ bstopB.disabled = stopDisabled(b); bstopB.title = stopDisabled(b) ? t('该实例不是 EnvKit 启动的，停止请到原终端') : ''; }
+  $('#btn-stop-all').disabled = !svcState.managedRunning;
   $('#db-test-msg').textContent = h.db.connected ? (h.db.Version||'') + (h.db.dbExists?' · 库已存在':' · 库不存在') : (h.db.msg||'');
   updateChain(h.chain);
   /* 问题清单（状态源算好的，含「该怎么办」） */
@@ -1008,6 +1023,9 @@ document.querySelectorAll('[data-brk]').forEach(btn=>{
  * 后端 ServiceState.phase 已给出五态，这里只做映射，不再自己推断。 */
 function svcDotCls(s){
   if(!s) return '';
+  if(s.source==='foreign' || s.phase==='conflict') return ' err';
+  if(s.source==='unknown') return ' warn';
+  if(s.source==='external') return s.health==='fail' ? ' warn' : ' info';
   if(s.phase==='failed') return ' err';
   if(s.phase==='degraded') return ' warn';   // 进程在但未通过复验
   if(s.phase==='starting') return ' warn';
@@ -1016,9 +1034,19 @@ function svcDotCls(s){
 }
 
 /* svcLabel 服务状态文案。**degraded 必须说清是「没验过」**，
- * 显示「运行中」等于把未验证说成已验证。 */
+ * 显示「运行中」等于把未验证说成已验证。
+ * 外部实例单独一档：它确实在跑，但不是 EnvKit 启动的，不能用"已复验"，
+ * 也不能因为 verified=false 就显示成"未通过复验"（会让人以为是 EnvKit 的失败）。 */
 function svcLabel(s){
   if(!s) return t('未启动');
+  if(s.source==='foreign' || s.phase==='conflict') return t('端口冲突');
+  if(s.source==='unknown') return t('端口有监听 · 身份未确认');
+  if(s.source==='external'){
+    if(s.health==='fail') return t('运行中 · 外部启动（异常）');
+    if(s.health==='auth') return t('运行中 · 外部启动（需鉴权）');
+    if(s.health==='ok') return t('运行中 · 外部启动');
+    return t('运行中 · 外部启动（未验证）');
+  }
   switch(s.phase){
     case 'running': return s.verified ? t('运行中 · 已复验') : t('运行中 · 未复验');
     case 'starting': return t('启动中');
@@ -1029,17 +1057,25 @@ function svcLabel(s){
 }
 
 /* aggregateSvcState 汇总两个服务成一个顶部灯。
- * 口径：**全部已复验才绿**；有跑着的但没验过 → 黄；全停 → 灰。 */
+ * 口径：**全部已复验才绿**；有外部实例 → 信息蓝（在跑但不归 EnvKit 管）；
+ * 有跑着的但没验过 → 黄；全停 → 灰。 */
 function aggregateSvcState(services){
   const list = [services && services.web, services && services.backend].filter(Boolean);
-  if(!list.length) return {cls:'off', label:t('服务 未启动'), running:false};
+  if(!list.length) return {cls:'off', label:t('服务 未启动'), running:false, managedRunning:false};
   const running = list.some(s => s.running);
+  const managedRunning = list.some(s => s.running && s.source!=='external' && s.source!=='unknown');
+  const external = list.filter(s => s.source==='external').length;
+  const conflict = list.some(s => s.source==='foreign' || s.phase==='conflict');
+  const unknown = list.some(s => s.source==='unknown');
   const failed  = list.some(s => s.phase === 'failed');
   const allVerified = list.every(s => s.verified);
-  if(failed) return {cls:'err', label:t('服务 异常'), running:running};
-  if(running && allVerified) return {cls:'ok', label:t('服务 已就绪'), running:true};
-  if(running) return {cls:'warn', label:t('服务 未复验'), running:true};
-  return {cls:'off', label:t('服务 未启动'), running:false};
+  if(conflict) return {cls:'err', label:t('服务 端口冲突'), running:running, managedRunning:managedRunning};
+  if(failed) return {cls:'err', label:t('服务 异常'), running:running, managedRunning:managedRunning};
+  if(unknown) return {cls:'warn', label:t('服务 身份待确认'), running:running, managedRunning:managedRunning};
+  if(external) return {cls:'info', label:t('服务 运行中（外部 {0}）', String(external)), running:true, managedRunning:managedRunning};
+  if(running && allVerified) return {cls:'ok', label:t('服务 已就绪'), running:true, managedRunning:true};
+  if(running) return {cls:'warn', label:t('服务 未复验'), running:true, managedRunning:managedRunning};
+  return {cls:'off', label:t('服务 未启动'), running:false, managedRunning:false};
 }
 
 /* renderIssues 渲染状态源算好的问题清单。
@@ -1258,9 +1294,9 @@ $('#btn-quick-both').onclick = ()=>{ $('#btn-quick-web').click(); setTimeout(()=
 /* ---------- 端口占用诊断 + 自定义启动脚本 ---------- */
 function psPorts(){
   if(!cfg.projects) cfg.projects={};
-  if(!Array.isArray(cfg.projects.scan_ports) || !cfg.projects.scan_ports.length) cfg.projects.scan_ports=[8080,8888];
+  if(!Array.isArray(cfg.projects.scan_ports) || !cfg.projects.scan_ports.length) cfg.projects.scan_ports=[8080,8888,5173,4173,3000];
   var spj=cfg.projects.scan_ports.slice().sort(function(a,b){return a-b;}).join();
-  if(spj==='20200,3306,8080'||spj==='20200,8080') cfg.projects.scan_ports=[8080,8888]; // 旧默认迁移（3306/20200 → 8888）
+  if(spj==='20200,3306,8080'||spj==='20200,8080') cfg.projects.scan_ports=[8080,8888,5173,4173,3000]; // 旧默认迁移（3306/20200 → 8888）
   return cfg.projects.scan_ports;
 }
 function psRenderChips(){
@@ -1289,6 +1325,20 @@ async function psScan(){
     psSetSt(occ>0 ? t('{0} 个被占用', occ) : t('全部空闲'), occ>0 ? 'warn' : 'ok');
   }catch(e){ psSetSt(t('扫描失败'),'fail'); toast(t('扫描失败：{0}', e.message),'err'); }
 }
+function psOwnerLabel(r){
+  const name = r.service==='web' ? t('前端') : (r.service==='backend' ? t('后端') : '');
+  if(r.source==='managed') return name ? t('{0} · EnvKit 管理', name) : t('EnvKit 管理');
+  if(r.source==='external') return name ? t('{0} · 外部启动', name) : t('外部启动');
+  if(r.source==='unknown') return name ? t('{0} · 身份未确认', name) : t('身份未确认');
+  if(r.source==='foreign') return t('其他进程');
+  return '—';
+}
+function psOwnerColor(r){
+  if(r.source==='foreign') return 'var(--err)';
+  if(r.source==='unknown') return 'var(--warn)';
+  if(r.source==='external' || r.source==='managed') return 'var(--info)';
+  return '';
+}
 function psRenderResult(rows){
   const box=$('#ps-result'); box.textContent='';
   if(!rows.length) return;
@@ -1296,7 +1346,7 @@ function psRenderResult(rows){
   const mk=(txt,head,color)=>{ const c=document.createElement(head?'th':'td'); c.textContent=txt;
     c.style.cssText=(head?'text-align:left;':'')+'padding:4px 8px;'; if(color) c.style.color=color; else if(head) c.style.color='var(--muted)'; return c; };
   const hr=document.createElement('tr');
-  [t('端口'),t('状态'),'PID',t('进程名'),''].forEach(x=>hr.appendChild(mk(x,true)));
+  [t('端口'),t('状态'),'PID',t('进程名'),t('归属'),''].forEach(x=>hr.appendChild(mk(x,true)));
   tbl.appendChild(hr);
   rows.forEach(r=>{
     const tr=document.createElement('tr');
@@ -1304,12 +1354,13 @@ function psRenderResult(rows){
     if(r.state==='LISTENING'){
       tr.appendChild(mk(t('占用'), false, 'var(--err)'));
       tr.appendChild(mk(r.pid)); tr.appendChild(mk(r.name||'—'));
+      tr.appendChild(mk(psOwnerLabel(r), false, psOwnerColor(r)));
       const td=document.createElement('td'); td.style.padding='4px 8px';
       const b=document.createElement('button'); b.className='warn'; b.style.padding='2px 10px'; b.textContent=t('结束');
       b.onclick=()=>psKill(r); td.appendChild(b); tr.appendChild(td);
     } else {
       tr.appendChild(mk(t('空闲'), false, 'var(--ok)'));
-      tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk(''));
+      tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk('—')); tr.appendChild(mk(''));
     }
     tbl.appendChild(tr);
   });
@@ -1537,6 +1588,7 @@ function renderProg(st){
        warn = 已执行但没验到（例如还在编译），stopped = 正常停止：
        这两种以前都会被画成红色"失败"，用户会去修一个没坏的服务。 */
     if(state.running) cls='run';
+    else if(state.status==='external') cls='run';
     else if(state.status==='ok') cls='ok';
     else if(state.status==='stopped') cls='idle';
     else if(state.status==='warn') cls='warn';
@@ -1557,6 +1609,7 @@ function stateLabel(s){
   if(!s) return '未运行';
   if(s.running) return '运行中';
   /* 停止/未复验都是正常结局，只有真失败才说"失败"（详见后端 ProgStatus.Status）。 */
+  if(s.status==='external') return t('运行中 · 外部启动');
   if(s.status==='stopped') return t('已停止');
   if(s.status==='warn') return t('已启动 · 未通过复验');
   return s.ok?t('已启动'):t('失败');

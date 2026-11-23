@@ -178,6 +178,8 @@ func lifecycleHint(kind string) string {
 		return "崩溃说明进程起来了但没能持续运行：先看「程序启动」日志的最后几行（通常是依赖缺失、配置错误或内存不足），修完再重启"
 	case errKindSpawnFail:
 		return "进程没能启动：常见原因是端口被占用、依赖缺失或编译产物崩溃"
+	case errKindPortConflict:
+		return "启动前发现候选端口被别的进程占着：先到「端口诊断」确认占用者；是旧实例就手工停止，是本项目外部实例就直接使用它，EnvKit 不会自动杀第三方"
 	}
 	return ""
 }

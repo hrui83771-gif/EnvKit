@@ -54,9 +54,14 @@ func verifyWaitWeb() time.Duration {
 }
 
 // verifyWaitBackend 后端校验窗口。go build 已在启动阶段完成，run 起来很快，
-// 所以默认比前端短。
+// 所以默认比前端短；Maven 项目例外——mvn 要先起 Maven 自己的 JVM 再 fork
+// 应用 JVM，25s 常常在 Tomcat 监听之前就到期，因此给一个不短于 60s 的下限。
 func verifyWaitBackend() time.Duration {
-	return time.Duration(devOr(devSnap().VerifyWaitBackendSecs, devDefaultVerifyWaitBackend)) * time.Second
+	secs := devOr(devSnap().VerifyWaitBackendSecs, devDefaultVerifyWaitBackend)
+	if backendProjectKind(cfg.Projects.BackendDir) == "maven" && secs < devDefaultVerifyWaitMaven {
+		secs = devDefaultVerifyWaitMaven
+	}
+	return time.Duration(secs) * time.Second
 }
 
 // webaseFetch 链端只读查询的唯一出入口。抽成变量是为了让单测能在不碰真实链的前提下
@@ -272,43 +277,81 @@ func svcExcludedNote(excluded map[int]string) string {
 }
 
 // svcPortsFn 候选端口的可替换点。抽出来是为了让单测能完全隔离环境——
-// 候选表来自 scan_ports / 项目画像 / 内置默认 {8080,8888}，而开发机上
+// 候选表来自运行时 URL / 项目画像 / scan_ports / 内置默认，而开发机上
 // 8080/8888 常常真有个 node 在跑（自己的前端/后端）。不隔离的话
 // TestVerifyServiceListening 会随开发机状态随机假失败或假通过。
 var svcPortsFn = func(target string) []int { return svcPortCandidates(target) }
 
-// svcPortCandidates 候选端口，按可信度排序后去重：
-// 子进程日志里解析出的 URL > 用户配置的 scan_ports > 项目画像的端口线索 > 内置默认。
-// 顺序不重要（逐个探测），但来源齐全才不会"明明起了却找不到端口"。
+// svcPortCandidates 候选端口，按置信度降序、同置信度按端口升序：
+// 运行时日志 URL（95）> 项目配置声明（85）> 脚本参数（75）> scan_ports（60）> 框架默认（50/30）。
+//
+// 与旧实现的关键差别：**按服务拆开**。旧版把 web/backend 的线索混成一锅，
+// 前端复验会先命中后端的 8080；现在 web 只拿前端画像，backend 只拿后端画像。
 func svcPortCandidates(target string) []int {
-	var out []int
-	add := func(p int) {
-		if p > 0 && p < 65536 && !containsInt(out, p) {
-			out = append(out, p)
+	hints := svcPortHintList(target)
+	out := make([]int, 0, len(hints))
+	for _, h := range hints {
+		if !containsInt(out, h.Port) {
+			out = append(out, h.Port)
 		}
+	}
+	return out
+}
+
+func serviceFallbackPorts(target string) []int {
+	if target == "web" {
+		return []int{5173, 4173, 3000, 8080}
+	}
+	return []int{8080, 8888}
+}
+
+// svcPortHintList 某服务的全部端口线索（带来源与置信度）。
+func svcPortHintList(target string) []svcPortHint {
+	var hints []svcPortHint
+	add := func(port int, source string, confidence int, evidence string) {
+		if !isServicePort(port) {
+			return
+		}
+		hints = append(hints, svcPortHint{
+			Port: port, Source: source, Confidence: confidence,
+			Service: target, Evidence: evidence,
+		})
 	}
 	svcMu.Lock()
 	if s := svcState[target]; s != nil {
-		add(portFromURL(s.URL))
+		add(portFromURL(s.URL), "runtime-url", 95, "EnvKit 启动日志里的真实 URL")
 	}
 	svcMu.Unlock()
-	cfgMu.Lock()
-	for _, p := range cfg.Projects.ScanPorts {
-		add(p)
+
+	p := currentProjectProfile()
+	for _, h := range p.service(target).PortHints {
+		add(h.Port, h.Source, h.Confidence, h.Evidence)
 	}
-	cfgMu.Unlock()
-	var brief projectBrief
-	if raw := aiProjectBriefJSON(); raw != "" {
-		if json.Unmarshal([]byte(raw), &brief) == nil {
-			for _, p := range brief.PortHints {
-				add(p)
-			}
+
+	c := cfgSnapshot()
+	for _, port := range c.Projects.ScanPorts {
+		add(port, "scan_ports", 60, "用户配置的端口诊断列表；只用于观察，不用于阻断启动")
+	}
+	// 兜底表只在项目画像没给出高置信线索时补充；即便有，也保留为低置信候选，
+	// 这样"项目画像漏了某个真实端口"时仍有机会发现。
+	// 按服务分开：5173/4173/3000 是前端默认，不该成为后端的候选，
+	// 否则同一个 Vite 会被后端误认成"端口有监听、身份未确认"。
+	for _, port := range serviceFallbackPorts(target) {
+		add(port, "builtin-default", 30, "内置常用端口兜底")
+	}
+
+	// 去重：同端口保留置信度最高的来源。
+	best := map[int]svcPortHint{}
+	for _, h := range hints {
+		if cur, ok := best[h.Port]; !ok || h.Confidence > cur.Confidence {
+			best[h.Port] = h
 		}
 	}
-	for _, p := range defaultScanPorts {
-		add(p)
+	out := make([]svcPortHint, 0, len(best))
+	for _, h := range best {
+		out = append(out, h)
 	}
-	sort.Ints(out)
+	sortPortHints(out)
 	return out
 }
 
@@ -393,7 +436,7 @@ func pidAlive(pid int) bool {
 	}
 	if runtime.GOOS == "windows" {
 		ctx, cancel := cmdContext(8 * time.Second)
-		out, err := exec.CommandContext(ctx, "tasklist", "/FI", "PID eq "+strconv.Itoa(pid), "/NH").CombinedOutput()
+		out, err := exec.CommandContext(ctx, systemExecutable("tasklist"), "/FI", "PID eq "+strconv.Itoa(pid), "/NH").CombinedOutput()
 		cancel()
 		if err != nil {
 			return false
@@ -1175,6 +1218,11 @@ func aiVerifyText(r OpResult) string {
 // 进程已派生只是第一层事实，端口 + HTTP 才是"真的起来了"的证据。
 func aiStartVerify(target string, r OpResult, wait time.Duration) OpResult {
 	if !r.Ok {
+		return r
+	}
+	// 外部实例跳过复验：不是 EnvKit 启动的，verifyService 找不到自有进程，
+	// 会把它误判成 spawn_fail/verify_fail。状态以观察器的 external 为准。
+	if r.SkipVerify {
 		return r
 	}
 	vr := verifyService(target, wait)
