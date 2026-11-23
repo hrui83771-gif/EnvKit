@@ -58,7 +58,9 @@ func verifyWaitWeb() time.Duration {
 // 应用 JVM，25s 常常在 Tomcat 监听之前就到期，因此给一个不短于 60s 的下限。
 func verifyWaitBackend() time.Duration {
 	secs := devOr(devSnap().VerifyWaitBackendSecs, devDefaultVerifyWaitBackend)
-	if backendProjectKind(cfg.Projects.BackendDir) == "maven" && secs < devDefaultVerifyWaitMaven {
+	// 走快照而不是直接读全局 cfg：配置保存/热重载会持 cfgMu 整体换掉 cfg，
+	// 复验可能在任意 goroutine 上跑，裸读就是数据竞争。
+	if backendProjectKind(cfgSnapshot().Projects.BackendDir) == "maven" && secs < devDefaultVerifyWaitMaven {
 		secs = devDefaultVerifyWaitMaven
 	}
 	return time.Duration(secs) * time.Second
@@ -378,7 +380,7 @@ func svcExpectProcs(target string) []string {
 	names := []string{"main.exe", "main", "go.exe", "go"}
 	// Maven 后端监听端口的进程是 java（spring-boot:run 无论 fork 与否都跑在 JVM 上），
 	// 不把 java 加进预期名单的话，复验会把 8080 当"别人的端口"剔除后判失败。
-	if backendProjectKind(cfg.Projects.BackendDir) == "maven" {
+	if backendProjectKind(cfgSnapshot().Projects.BackendDir) == "maven" {
 		names = append(names, "java.exe", "java", "mvn", "mvn.cmd")
 	}
 	var brief projectBrief

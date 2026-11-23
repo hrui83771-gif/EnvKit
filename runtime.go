@@ -32,9 +32,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -332,9 +334,14 @@ func runtimeService(target string) ServiceState {
 				st.Running = true
 				st.Phase = phRunning
 				// 外部实例不是 EnvKit 启动的，但它是本项目的服务：仍给出访问地址。
-				// 只把 URL 指向已确认的端口，不伪造 Host/路径；unknown 不给链接，
-				// 因为那个端口上可能是任何东西。
-				st.URL = fmt.Sprintf("http://127.0.0.1:%d/", o.Port)
+				// Host 用 HTTP 握手实际命中的那个（vite/Node17+ 常只绑 [::1]），
+				// 硬编码 127.0.0.1 会给出打不开的链接；没探到就退回 v4。
+				// 端口已确认，不伪造路径；unknown 不给链接。
+				host := o.Host
+				if host == "" {
+					host = "127.0.0.1"
+				}
+				st.URL = "http://" + net.JoinHostPort(host, strconv.Itoa(o.Port)) + "/"
 				if o.Health == "fail" {
 					st.Phase = phDegraded
 				}

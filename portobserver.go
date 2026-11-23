@@ -27,11 +27,14 @@ import (
 )
 
 type observedService struct {
-	Service        string   `json:"service"`
-	State          string   `json:"state"` // external | unknown | foreign
-	Port           int      `json:"port,omitempty"`
-	PID            int      `json:"pid,omitempty"`
-	OwnerName      string   `json:"owner_name,omitempty"`
+	Service   string `json:"service"`
+	State     string `json:"state"` // external | unknown | foreign
+	Port      int    `json:"port,omitempty"`
+	PID       int    `json:"pid,omitempty"`
+	OwnerName string `json:"owner_name,omitempty"`
+	// Host 是 HTTP 握手实际命中的回环地址（127.0.0.1 或 ::1）。
+	// 外部实例链接必须用它：Node17+/vite 默认只绑 [::1]，硬编码 v4 会给出打不开的地址。
+	Host           string   `json:"host,omitempty"`
 	Health         string   `json:"health,omitempty"` // ok | auth | fail | unknown
 	PortSource     string   `json:"port_source,omitempty"`
 	PortConfidence int      `json:"port_confidence,omitempty"`
@@ -93,12 +96,12 @@ func portObserverLoop() {
 		select {
 		case <-timer.C:
 		case <-observedKick:
-		if !timer.Stop() {
-			select {
-			case <-timer.C:
-			default:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
-		}
 		}
 		observePortsNow()
 		timer.Reset(interval())
@@ -187,8 +190,9 @@ func observePortsNow() {
 					best.Port = port
 					best.ObservedAt = nowText()
 					best.Evidence = append(best.Evidence, fmt.Sprintf("port_drift=%d→%d（同一 PID 换端口）", old.Port, port))
-					probe, code := probeServicePort(port, svc.HealthPaths)
+					probe, code, host := probeServicePort(port, svc.HealthPaths)
 					best.Health = healthFromProbe(probe, code, target)
+					best.Host = host
 				}
 			}
 		}
@@ -354,11 +358,13 @@ func classifyOccupant(target string, hint svcPortHint, pid int, name string, exp
 	dirMatch := dir != "" && strings.Contains(cmdNorm, dir)
 	marker := occupantMarker(target, cmdAll, svc)
 
-	probe, code := "", 0
+	probe, code, host := "", 0, ""
 	if family || dirMatch || marker {
-		probe, code = probeServicePort(hint.Port, svc.HealthPaths)
+		probe, code, host = probeServicePort(hint.Port, svc.HealthPaths)
 	}
-	return classifyEvidence(target, hint, pid, name, meta, family, dirMatch, marker, svc, probe, code)
+	ob, score := classifyEvidence(target, hint, pid, name, meta, family, dirMatch, marker, svc, probe, code)
+	ob.Host = host // 握手命中 v6 时给 UI 的链接用 [::1]，不用硬编码 v4
+	return ob, score
 }
 
 // classifyEvidence 是纯判定：进程命令行、父链、HTTP 指纹进来，状态与分数出去。
@@ -475,9 +481,12 @@ var obsHTTP = &http.Client{
 	},
 }
 
-func probeServicePort(port int, paths []string) (string, int) {
+// probeServicePort 探测端口的 HTTP 指纹，返回 (指纹, 状态码, 命中 host)。
+// 命中 host 必须一起返回：v4 不通而 v6 通是 Node17+/vite 的常态，
+// 调用方要用它拼外部实例链接，否则 UI 给出打不开的 127.0.0.1 地址。
+func probeServicePort(port int, paths []string) (string, int, string) {
 	if port <= 0 {
-		return "", 0
+		return "", 0, ""
 	}
 	if len(paths) == 0 {
 		paths = []string{"/"}
@@ -495,10 +504,10 @@ func probeServicePort(port int, paths []string) (string, int) {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 			_ = resp.Body.Close()
 			snippet := strings.ReplaceAll(strings.ReplaceAll(string(body), "\r", ""), "\n", " ")
-			return fmt.Sprintf("HTTP %d · %s", resp.StatusCode, firstChars(snippet, 120)), resp.StatusCode
+			return fmt.Sprintf("HTTP %d · %s", resp.StatusCode, firstChars(snippet, 120)), resp.StatusCode, host
 		}
 	}
-	return "", 0
+	return "", 0, ""
 }
 
 func healthFromProbe(probe string, code int, target string) string {

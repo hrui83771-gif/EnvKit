@@ -115,3 +115,41 @@ func TestHTTPProbeIPv6Only(t *testing.T) {
 		t.Errorf("只绑 [::1]:%d 的 HTTP 服务必须被探到，实际 %q", port, got)
 	}
 }
+
+// TestProbeServicePortRecordsHitHost 观察器握手必须带回命中的 host。
+// 只绑 [::1] 的服务上，v4 必不通、v6 必通——返回值第三项就是 UI 链接的依据。
+func TestProbeServicePortRecordsHitHost(t *testing.T) {
+	ln, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skipf("本机 IPv6 回环不可用，跳过：%v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("vite"))
+	})
+	srv := &http.Server{Handler: mux}
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close(); <-errCh })
+
+	_, code, host := probeServicePort(port, []string{"/"})
+	if code != 200 || host != "::1" {
+		t.Errorf("只绑 [::1]:%d 的服务应命中 v6：code=%d host=%q", port, code, host)
+	}
+}
+
+// TestRuntimeServiceExternalURLUsesHitHost 外部实例链接用握手命中的 host。
+// 2026-11-23 缺陷：vite 只绑 [::1]，链接却硬编码 127.0.0.1，UI 点开打不开。
+func TestRuntimeServiceExternalURLUsesHitHost(t *testing.T) {
+	withObservedForTest(t, "web", observedInternal{observedService: observedService{
+		Service: "web", State: "external", Port: 5173, PID: 4242,
+		OwnerName: "node.exe", Health: "ok", Host: "::1",
+	}})
+	withManagedStateForTest(t, "web", &SvcInfo{})
+
+	st := runtimeService("web")
+	if st.URL != "http://[::1]:5173/" {
+		t.Errorf("url=%q, want http://[::1]:5173/（握手命中的 v6 地址）", st.URL)
+	}
+}

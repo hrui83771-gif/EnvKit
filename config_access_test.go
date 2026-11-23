@@ -50,7 +50,20 @@ func TestCloneConfigDeepIsolated(t *testing.T) {
 			Enabled: &yes,
 		},
 	}
-	pristine := cloneConfigDeep(src)
+	// want 必须由独立于 cloneConfigDeep 的路径得到：JSON round-trip。
+	// 不能拿 cloneConfigDeep(src) 当基准——浅拷贝下 src/want/c 共享同一底层
+	// 对象，改 c 时三者一起变，"两个克隆互比"结构性恒真，改坏了也绿。
+	raw, err := json.Marshal(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want Config
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(src, want) {
+		t.Fatalf("JSON 快照基准与源不一致，本测试不可用\n源: %+v\n基准: %+v", src, want)
+	}
 
 	c := cloneConfigDeep(src)
 	c.Projects.ScanPorts[0] = 9999
@@ -73,8 +86,11 @@ func TestCloneConfigDeepIsolated(t *testing.T) {
 	c.Notify.Muted = false
 	*c.Mission.Enabled = false
 
-	if !reflect.DeepEqual(src, pristine) {
-		t.Fatalf("深拷贝不彻底：改副本影响到了原配置\n原: %+v\n后: %+v", pristine, src)
+	if reflect.DeepEqual(c, want) {
+		t.Fatal("副本修改没生效，测试夹具本身无效")
+	}
+	if !reflect.DeepEqual(src, want) {
+		t.Fatalf("深拷贝不彻底：改副本影响到了原配置\n原: %+v\n后: %+v", want, src)
 	}
 }
 

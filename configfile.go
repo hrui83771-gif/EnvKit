@@ -330,6 +330,7 @@ func cloneConfigDeep(c Config) Config {
 		out := make([]Component, len(c.Components))
 		for i, comp := range c.Components {
 			comp.CheckArgs = cloneStringSlice(comp.CheckArgs)
+			comp.ExtraEnv = cloneStringMap(comp.ExtraEnv)
 			out[i] = comp
 		}
 		c.Components = out
@@ -394,6 +395,17 @@ func cloneIntSlice(s []int) []int {
 		return nil
 	}
 	return append([]int(nil), s...)
+}
+
+func cloneStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func cloneBoolPtr(p *bool) *bool {
