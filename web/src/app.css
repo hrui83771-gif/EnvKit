@@ -339,10 +339,11 @@
   summary{cursor:pointer;color:var(--info);font-size:12px;user-select:none}
   /* 高级/按需扩展默认折叠：普通用户不展开就看不到 MCP 等扩展入口 */
   .adv-fold{margin-top:10px}
-  .adv-fold>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;list-style:none;background:var(--soft2);border-radius:8px;color:var(--text);font-size:13px}
+  .adv-fold>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;list-style:none;background:var(--soft2);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer}
   .adv-fold>summary::-webkit-details-marker{display:none}
   .adv-fold>summary::before{content:'▸';font-size:10px;color:var(--muted);transition:transform .15s}
   .adv-fold[open]>summary::before{transform:rotate(90deg)}
+  .adv-fold .set-card{margin-top:8px}
   .grp{border:1px dashed var(--line);border-radius:8px;padding:12px;margin-top:10px}
   .svc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
   .svc-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
@@ -1064,13 +1065,17 @@
      「安装与分发」(100px) 挨着「手机访问」(340px) 时空出 240px；末行
      「界面」独占左列、右列整块空白。改成一列一个 flex 容器后，同列内
      卡片首尾相接，只可能在整页最底部留一点落差（肉眼几乎看不出）。 */
-  .set-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
-  @media (max-width:900px){ .set-cols{grid-template-columns:1fr} }
-  .set-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  /* 设置卡用多栏瀑布流，不再按左右两列硬分组。
+     旧版两列各自 flex 堆叠，卡片高度差一大就留下整块空白；
+     多栏会按内容高度自动配平，窄屏再退回两栏/单栏。 */
+  .set-cols{display:block;column-count:2;column-gap:8px}
+  @media (min-width:1600px){ .set-cols{column-count:3} }
+  @media (max-width:760px){ .set-cols{column-count:1} }
+  .set-col{display:contents}
   /* 卡片在 flex 列里默认 min-width:auto，内含长路径/长 URL 的输入框会把列撑破
      （全局 input{width:100%} 也救不了）。必须逐张卡压回 0。 */
   .set-col > .set-card{min-width:0}
-  .set-card{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .set-card{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;break-inside:avoid;margin-bottom:7px}
   .set-card-head{display:flex;align-items:center;gap:8px;margin:0 0 2px}
   .set-card-head .t{font-size:13px;font-weight:700;color:var(--text)}
   .set-card-head .tag{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);background:var(--off);border-radius:999px;padding:2px 8px}

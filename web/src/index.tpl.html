@@ -908,58 +908,6 @@
             <ul class="h-issues" id="s_health_issues"></ul>
           </div>
 
-          <div class="set-card" id="set-contract-doctor">
-            <div class="set-card-head"><span class="t">环境契约 Doctor</span><span class="tag">只读</span></div>
-            <div class="hint" style="margin:2px 0 8px">把 envkit.yaml 与当前环境逐项比对。只读诊断：不启动、不停止、不修复，也不执行契约里的任意命令。</div>
-            <div class="row">
-              <button class="ghost" id="btn-doctor-run">运行诊断</button>
-              <span class="status idle" id="st-doctor">未运行</span>
-              <span class="hint" id="h-doctor" style="margin-left:auto"></span>
-            </div>
-            <div class="ro-list" id="doctor-meta" style="margin-top:8px"></div>
-            <div class="doc-sum" id="doctor-sum"></div>
-            <div class="doc-checks" id="doctor-checks"></div>
-          </div>
-
-          <div class="set-card" id="set-contract-apply">
-            <div class="set-card-head"><span class="t">环境事务</span><span class="tag">事务化</span></div>
-            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。readonly 只能预览；enforce 才允许执行，执行前自动快照，任一动作失败即停止，可回滚到执行前。</div>
-            <div class="row">
-              <button class="ghost" id="btn-apply-plan">生成修复计划</button>
-              <span class="status idle" id="st-apply">未生成</span>
-              <span class="hint" id="h-apply" style="margin-left:auto"></span>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <span class="status idle" id="st-contract-mode">契约模式未加载</span>
-              <button class="ghost" id="btn-contract-enforce">启用执行（enforce）</button>
-              <button class="ghost" id="btn-contract-readonly">切回只读</button>
-              <span class="hint">切换后仍需逐项勾选；导入 schema 仍会二次确认。</span>
-            </div>
-            <div class="doc-sum" id="apply-sum"></div>
-            <div class="doc-checks" id="apply-actions"></div>
-            <div class="row" id="apply-run-row" style="display:none;margin-top:8px">
-              <button id="btn-apply-run">执行选中项</button>
-              <span class="hint">执行前自动快照；失败会停止后续动作，并提供回滚入口。</span>
-            </div>
-            <div class="doc-checks" id="apply-result" style="margin-top:8px"></div>
-
-            <div class="set-subhead" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
-              <b>最小环境快照</b>
-              <span class="tag" style="margin-left:8px">checkpoint</span>
-            </div>
-            <div class="hint" style="margin:2px 0 8px">保存契约副本、本机配置（DPAPI 加密）、可选数据库 dump 和服务/端口现场。恢复不覆盖项目里的 envkit.yaml，只把快照副本放到旁边供对照。</div>
-            <div class="row">
-              <input id="cp-label" placeholder="快照标签，如 升级前" style="max-width:220px" />
-              <label class="ckrow" style="margin:0;gap:6px">
-                <input type="checkbox" id="cp-db" />
-                <span class="hint">包含数据库</span>
-              </label>
-              <button class="ghost" id="btn-cp-create">立即快照</button>
-              <span class="status idle" id="st-cp">未创建</span>
-            </div>
-            <div class="cp-list" id="cp-list"></div>
-          </div>
-
           <div class="set-card">
             <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
             <div class="ckrow" style="margin-top:0">
@@ -1045,8 +993,60 @@
         </div>
 
         <details class="adv-fold" id="set-adv-ext">
-          <summary><b>高级 / 按需扩展</b><span class="tag">默认关闭</span></summary>
-          <div class="hint" style="margin:6px 0 8px">这里的扩展默认不参与检测、不进入 Apply；只有本机确实需要时才开启。工具链切换与其他服务适配器尚未在 4.0 开放，遇到具体项目再按需接入。</div>
+          <summary><b>高级 / 环境契约与扩展</b><span class="tag">默认收起</span></summary>
+          <div class="hint" style="margin:6px 0 8px">契约诊断、环境事务、最小快照、MCP 与按需扩展默认收在这里，不占基础设置版面。契约仍按 readonly 运行；只有切到 enforce 才会执行写操作。</div>
+
+          <div class="set-card" id="set-contract-doctor">
+            <div class="set-card-head"><span class="t">环境契约 Doctor</span><span class="tag">只读</span></div>
+            <div class="hint" style="margin:2px 0 8px">把 envkit.yaml 与当前环境逐项比对。只读诊断：不启动、不停止、不修复，也不执行契约里的任意命令。</div>
+            <div class="row">
+              <button class="ghost" id="btn-doctor-run">运行诊断</button>
+              <span class="status idle" id="st-doctor">未运行</span>
+              <span class="hint" id="h-doctor" style="margin-left:auto"></span>
+            </div>
+            <div class="ro-list" id="doctor-meta" style="margin-top:8px"></div>
+            <div class="doc-sum" id="doctor-sum"></div>
+            <div class="doc-checks" id="doctor-checks"></div>
+          </div>
+
+          <div class="set-card" id="set-contract-apply">
+            <div class="set-card-head"><span class="t">环境事务与快照</span><span class="tag">事务化</span></div>
+            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。readonly 只能预览；enforce 才允许执行，执行前自动快照，任一动作失败即停止，可回滚到执行前。</div>
+            <div class="row">
+              <button class="ghost" id="btn-apply-plan">生成修复计划</button>
+              <span class="status idle" id="st-apply">未生成</span>
+              <span class="hint" id="h-apply" style="margin-left:auto"></span>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <span class="status idle" id="st-contract-mode">契约模式未加载</span>
+              <button class="ghost" id="btn-contract-enforce">启用执行（enforce）</button>
+              <button class="ghost" id="btn-contract-readonly">切回只读</button>
+              <span class="hint">切换后仍需逐项勾选；导入 schema 仍会二次确认。</span>
+            </div>
+            <div class="doc-sum" id="apply-sum"></div>
+            <div class="doc-checks" id="apply-actions"></div>
+            <div class="row" id="apply-run-row" style="display:none;margin-top:8px">
+              <button id="btn-apply-run">执行选中项</button>
+              <span class="hint">执行前自动快照；失败会停止后续动作，并提供回滚入口。</span>
+            </div>
+            <div class="doc-checks" id="apply-result" style="margin-top:8px"></div>
+
+            <div class="set-subhead" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+              <b>最小环境快照</b>
+              <span class="tag" style="margin-left:8px">checkpoint</span>
+            </div>
+            <div class="hint" style="margin:2px 0 8px">保存契约副本、本机配置（DPAPI 加密）、可选数据库 dump 和服务/端口现场。恢复不覆盖项目里的 envkit.yaml，只把快照副本放到旁边供对照。</div>
+            <div class="row">
+              <input id="cp-label" placeholder="快照标签，如 升级前" style="max-width:220px" />
+              <label class="ckrow" style="margin:0;gap:6px">
+                <input type="checkbox" id="cp-db" />
+                <span class="hint">包含数据库</span>
+              </label>
+              <button class="ghost" id="btn-cp-create">立即快照</button>
+              <span class="status idle" id="st-cp">未创建</span>
+            </div>
+            <div class="cp-list" id="cp-list"></div>
+          </div>
 
           <div class="set-card" style="margin-top:8px">
             <div class="set-card-head"><span class="t">MCP 工具服务</span><span class="tag">本机集成</span></div>

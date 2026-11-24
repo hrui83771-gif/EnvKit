@@ -9,10 +9,12 @@
 //
 // **DOM 结构断言测不出这类问题**：卡片数量、顺序、id 全都对，CSS 一挤就难看。
 // 所以这里的核心是**量盒子**：
-//   - 同一列里相邻两张卡之间的空隙不许 > 9px（有洞就是从前的 240px 回来了）
-//   - 两列总高差 ≤ 120px（否则页面底部一条大空白）
-//   - 整页高度 ≤ 1560（收紧的量化目标；改前 1661）
+//   - 基础区改成多栏瀑布流（.set-cols 不再按左右 flex 分组），窄屏 2 栏、宽屏 3 栏
+//   - 同栏相邻两张卡之间的空隙不许 > 9px（有洞就是从前的 240px 回来了）
+//   - 两栏总高差 ≤ 120px（否则页面底部一条大空白）
+//   - 整页高度 ≤ 1800（高级卡收起后的量化目标）
 //   - 旧的 .set-grid 不许复活（它才是留洞的原因）
+//   - 契约 Doctor / 环境事务 / 快照 / MCP 必须收在「高级」且默认折叠
 //
 // 另外补几条**行为**断言，因为这次同时新接了三个真实配置项：
 //   - 备份目录：点了保存要落盘到 config.json 的 projects.backup_dir
@@ -129,65 +131,78 @@ function seed() {
     await evalJS(`(function(){var b=document.querySelector('[data-set-tab="base"]'); if(b) b.click();})()`);
     await sleep(900);
 
-    // ---- A. 结构：旧布局不许复活 ----
+    // ---- A. 结构：高级能力收起，基础区不再按左右硬分组 ----
     const st = JSON.parse(await evalJS(`(function(){
       var pane = document.querySelector('[data-set-pane="base"]');
+      var setCols = pane.querySelector('.set-cols');
+      var adv = pane.querySelector('#set-adv-ext');
       return JSON.stringify({
         cols: pane.querySelectorAll('.set-cols').length,
         colN: pane.querySelectorAll('.set-col').length,
         legacyGrid: pane.querySelectorAll('.set-grid').length,
-        cards: pane.querySelectorAll('.set-card').length,
-        perCol: [].slice.call(pane.querySelectorAll('.set-col')).map(function(c){ return c.children.length; })
+        baseCards: setCols.querySelectorAll('.set-col > .set-card').length,
+        advCards: adv ? adv.querySelectorAll('.set-card').length : -1,
+        advOpen: adv ? adv.open : null,
+        columnCount: getComputedStyle(setCols).columnCount,
+        totalCards: pane.querySelectorAll('.set-card').length
       });
     })()`));
-    ok(st.cols === 1, '基础区用 .set-cols 两列容器');
+    ok(st.cols === 1, '基础区用 .set-cols 多栏容器');
     ok(st.legacyGrid === 0, '旧的 .set-grid 没复活（它才是"矮卡右边留洞"的来源）→ ' + st.legacyGrid);
-    ok(st.colN === 2, '恰好两列 → ' + st.colN);
-    ok(st.perCol[0] >= 4 && st.perCol[1] >= 4, '两列各 ≥ 4 张卡 → ' + JSON.stringify(st.perCol));
-    // 15 张 = 左 7 + 右 6 + 跨列的「能力开关」「MCP 工具服务」。v3.4.0 加「定时行动」、
-    // v3.8 加「MCP 工具服务」后各滞后过一次——数字写死就得跟着卡片一起改。
-    ok(st.cards === 15, '基础区共 15 张卡（7 + 6 + 能力开关 + MCP）→ ' + st.cards);
+    ok(st.colN === 2, '保留两个语义分组容器（布局交给多栏自动配平）→ ' + st.colN);
+    // 13 张 = 左 7 + 右 6。契约 Doctor / 环境事务 / 快照 / MCP 收进「高级」，
+    // 不再占用基础区版面；此前每加一项都要重算两列配平，数字写死就得同步改。
+    ok(st.baseCards === 13, '基础区 13 张卡（7 + 6）→ ' + st.baseCards);
+    ok(st.advCards === 3, '高级区 3 张卡（契约 Doctor / 事务与快照 / MCP）→ ' + st.advCards);
+    ok(st.advOpen === false, '高级区默认收起 → open=' + st.advOpen);
+    ok(st.columnCount === '2', '1400px 宽时两栏（宽屏自动三栏）→ ' + st.columnCount);
+    ok(st.totalCards === 17, '整页共 17 张卡（13 基础 + 3 高级 + 能力开关）→ ' + st.totalCards);
 
-    // ---- B. 盒子：没有洞、两列配平、整页收紧 ----
+    // ---- B. 盒子：没有洞、多栏配平、整页收紧 ----
     const box = JSON.parse(await evalJS(`(function(){
       var pane = document.querySelector('[data-set-pane="base"]');
-      var cols = [].slice.call(pane.querySelectorAll('.set-col')).map(function(col){
-        var cards = [].slice.call(col.children).map(function(el){
-          var b = el.getBoundingClientRect();
-          return { t:(el.querySelector('.set-card-head .t')||{}).textContent||'?',
-                   y:Math.round(b.top), h:Math.round(b.height) };
-        });
+      var setCols = pane.querySelector('.set-cols');
+      var cards = [].slice.call(setCols.querySelectorAll('.set-col > .set-card')).map(function(el){
+        var b = el.getBoundingClientRect();
+        return { t:(el.querySelector('.set-card-head .t')||{}).textContent||'?',
+                 x:Math.round(b.left), y:Math.round(b.top), h:Math.round(b.height), w:Math.round(b.width) };
+      });
+      var map = {};
+      cards.forEach(function(c){ var k=String(c.x); (map[k]=map[k]||[]).push(c); });
+      var cols = Object.keys(map).sort(function(a,b){return +a-+b;}).map(function(k){
+        var list = map[k].sort(function(a,b){return a.y-b.y;});
         var holes = [];
-        for(var i=1;i<cards.length;i++){
-          var g = cards[i].y - (cards[i-1].y + cards[i-1].h);
-          if(g > 9) holes.push(cards[i-1].t + ' > ' + cards[i].t + ' = ' + g + 'px');
+        for(var i=1;i<list.length;i++){
+          var g = list[i].y - (list[i-1].y + list[i-1].h);
+          if(g > 9) holes.push(list[i-1].t + ' > ' + list[i].t + ' = ' + g + 'px');
         }
-        return { h: Math.round(col.getBoundingClientRect().height), holes: holes, n: cards.length,
-                 list: cards.map(function(c){ return c.t + '=' + c.h; }) };
+        var top = list[0].y, bottom = list[list.length-1].y + list[list.length-1].h;
+        return { x:+k, h:bottom-top, holes:holes, n:list.length,
+                 list:list.map(function(c){ return c.t+'='+c.h; }) };
       });
       var pr = pane.getBoundingClientRect();
-      return JSON.stringify({ cols: cols, paneH: Math.round(pr.height), vw: innerWidth });
+      var adv = pane.querySelector('#set-adv-ext').getBoundingClientRect();
+      return JSON.stringify({ cols: cols, paneH: Math.round(pr.height), advH: Math.round(adv.height),
+                              cardW: cards.map(function(c){return c.w;}), vw: innerWidth });
     })()`));
 
-    ok(box.cols[0].holes.length === 0, '左列同列内没有洞 → ' + JSON.stringify(box.cols[0].holes));
-    ok(box.cols[1].holes.length === 0, '右列同列内没有洞 → ' + JSON.stringify(box.cols[1].holes));
+    ok(box.cols.length === 2, '实际排成两栏 → ' + box.cols.length);
+    box.cols.forEach(function(col, i){
+      ok(col.holes.length === 0, '第 ' + (i+1) + ' 栏同栏内没有洞 → ' + JSON.stringify(col.holes));
+    });
     const dh = Math.abs(box.cols[0].h - box.cols[1].h);
-    ok(dh <= 120, '两列高度配平：' + box.cols[0].h + ' vs ' + box.cols[1].h + '（差 ' + dh + 'px）'
-      + ' 左[' + box.cols[0].list.join(' ') + '] 右[' + box.cols[1].list.join(' ') + ']');
-    // 两列内容各自 1358 / 1470，页头等固定高度约 231 → 理论下限 1701。
-    // v3.8 加了跨列的「MCP 工具服务」卡（约 150px）→ 全宽下限升到约 1851，
-    // 实测 1871。门槛按「当前整页 + 余量」定而不是写死历史数字：
-    // 上限一超就说明又有人把卡堆到一列里（跨列卡是内容高度，不可压缩）。
-    ok(box.paneH <= 1890, '基础区整页 ' + box.paneH + 'px（含 MCP 卡，v3.8 前 1710）');
+    ok(dh <= 120, '两栏高度配平：' + box.cols[0].h + ' vs ' + box.cols[1].h + '（差 ' + dh + 'px）'
+      + ' [' + box.cols.map(function(c){return c.list.join(' ');}).join(' | ') + ']');
+    ok(Math.min.apply(null, box.cardW) >= 380, '卡片宽度不被压扁 → min ' + Math.min.apply(null, box.cardW) + 'px');
+    // 基础区内容 1727；高级区收起后只留一行 summary，不再把契约/事务/MCP 大卡堆在基础页。
+    // 上限按当前实测量留 100px：超标说明又有人把卡片塞回基础区，或栏宽被撑破。
+    ok(box.paneH <= 1800, '基础区整页 ' + box.paneH + 'px（高级区收起 ' + box.advH + 'px）');
 
     // 每张卡都不许宽过列：长路径/长 URL 把列撑破时，卡会横向溢出
     const over = JSON.parse(await evalJS(`(function(){
       var out = [];
-      [].slice.call(document.querySelectorAll('[data-set-pane="base"] .set-col')).forEach(function(col){
-        var cw = col.getBoundingClientRect().width;
-        [].slice.call(col.children).forEach(function(el){
-          if(el.scrollWidth > Math.ceil(cw) + 1) out.push((el.querySelector('.set-card-head .t')||{}).textContent + ':' + el.scrollWidth + '>' + Math.round(cw));
-        });
+      [].slice.call(document.querySelectorAll('[data-set-pane="base"] .set-cols .set-card')).forEach(function(el){
+        if(el.scrollWidth > el.clientWidth + 1) out.push((el.querySelector('.set-card-head .t')||{}).textContent + ':' + el.scrollWidth + '>' + el.clientWidth);
       });
       return JSON.stringify(out);
     })()`));
