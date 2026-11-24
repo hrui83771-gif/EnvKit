@@ -9,6 +9,15 @@ package main
 import "strings"
 
 const (
+	// Go：1.23.6 是旧内置默认版本，项目侧早已普遍要求更高版本。
+	staleGo1236 = "https://golang.google.cn/dl/go1.23.6.windows-amd64.zip"
+	go1274URL   = "https://golang.google.cn/dl/go1.27.4.windows-amd64.zip"
+
+	// Node.js：22.22.0 是旧内置默认版本，升到 24 LTS，避免新项目 Vite/工具链提示版本过低。
+	staleNode2222 = "https://registry.npmmirror.com/-/binary/node/v22.22.0/node-v22.22.0-win-x64.zip"
+	node24223URL  = "https://registry.npmmirror.com/-/binary/node/v24.22.3/node-v24.22.3-win-x64.zip"
+	node24223Top  = "node-v24.22.3-win-x64"
+
 	staleJDK17URL = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/17/jdk/x64/windows/OpenJDK17U-jdk_x64_windows_hotspot_17.0.12_7.zip"
 	staleMaven399 = "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip"
 
@@ -26,6 +35,21 @@ func upgradeStaleComponentSources(c *Config) {
 	for i := range c.Components {
 		comp := &c.Components[i]
 		switch strings.ToLower(strings.TrimSpace(comp.Name)) {
+		case "go":
+			if strings.TrimSpace(comp.URL) != staleGo1236 {
+				continue
+			}
+			comp.Version = "1.27.4"
+			comp.URL = go1274URL
+			comp.SHA256 = ""
+		case "node", "node.js":
+			if strings.TrimSpace(comp.URL) != staleNode2222 {
+				continue
+			}
+			comp.Version = "24.22.3"
+			comp.URL = node24223URL
+			comp.ZipTop = node24223Top
+			comp.SHA256 = ""
 		case "jdk":
 			if strings.TrimSpace(comp.URL) != staleJDK17URL {
 				continue

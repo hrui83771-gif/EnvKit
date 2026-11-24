@@ -58,6 +58,53 @@ func TestUpgradeStaleComponentSources(t *testing.T) {
 	}
 }
 
+func TestUpgradeStaleGoNodeSources(t *testing.T) {
+	c := &Config{Components: []Component{
+		{
+			Name:     "Go",
+			Version:  "1.23.6",
+			URL:      staleGo1236,
+			ZipTop:   "go",
+			SHA256:   "old-go-hash",
+			ExtraEnv: map[string]string{"GOROOT": "<install>/go"},
+		},
+		{
+			Name:    "Node.js",
+			Version: "22.22.0",
+			URL:     staleNode2222,
+			ZipTop:  "node-v22.22.0-win-x64",
+			SHA256:  "old-node-hash",
+		},
+	}}
+
+	upgradeStaleComponentSources(c)
+
+	golang := componentByName(c, "Go")
+	if golang == nil {
+		t.Fatal("Go component missing")
+	}
+	if golang.Version != "1.27.4" || golang.URL != go1274URL {
+		t.Fatalf("Go not upgraded: %+v", golang)
+	}
+	if golang.SHA256 != "" {
+		t.Fatalf("Go SHA256 should be cleared, got %q", golang.SHA256)
+	}
+	if got := golang.ExtraEnv["GOROOT"]; got != "<install>/go" {
+		t.Fatalf("GOROOT = %q", got)
+	}
+
+	node := componentByName(c, "Node.js")
+	if node == nil {
+		t.Fatal("Node.js component missing")
+	}
+	if node.Version != "24.22.3" || node.URL != node24223URL || node.ZipTop != node24223Top {
+		t.Fatalf("Node.js not upgraded: %+v", node)
+	}
+	if node.SHA256 != "" {
+		t.Fatalf("Node.js SHA256 should be cleared, got %q", node.SHA256)
+	}
+}
+
 func TestUpgradeStaleComponentSourcesKeepsCustomSource(t *testing.T) {
 	custom := "https://mirrors.huaweicloud.com/apache/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip"
 	c := &Config{Components: []Component{
