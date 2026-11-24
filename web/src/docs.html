@@ -586,7 +586,60 @@ button,input{font:inherit;color:inherit}
              'config.json                 active config\nconfig.dist.json           clean template\naudit-YYYYMMDD.jsonl       operation audit (kept 30 days)\nenvkit-YYYYMMDD.log        daily rotating log\nmissions.json / playbooks.json / memories.json   actions / playbooks / memory'),''),
       NOTE('API Key 与数据库密码经 Windows DPAPI 加密，只在本机可解密。导出的配置默认脱敏，分享前再确认一次没有带上密钥。',
            'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger'),
-      XLINK([['project','项目接入向导','Project setup wizard'],['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
+      XLINK([['contract','环境契约与事务','Environment contract'],['project','项目接入向导','Project setup wizard'],['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
+    ]},
+
+    {id:'contract', group:z('日常操作','Daily operations'), title:z('环境契约与事务','Environment contract and transactions'), body:[
+      P('4.0 把“装环境”推进为“按契约检查 → 可控修复 → 留快照回滚”。契约文件是项目根目录的 envkit.yaml，只描述期望状态，不保存密码；入口在设置页的「高级 / 环境契约与扩展」，默认折叠，不占基础设置版面。',
+        '4.0 turns “set up an environment” into “check against a contract → repair within limits → keep a snapshot for rollback”. The contract is envkit.yaml in the project root; it describes the expected state and stores no passwords. The entry lives under “Advanced / contract and extensions” in Settings, collapsed by default.'),
+      H3('contract-file','契约写什么','What the contract contains'),
+      P('项目接入向导结果页勾选「同时生成项目级环境契约」会自动写入一份；也可以手写。契约里只允许声明工具版本、本地服务、端口探针、数据库与 schema、密钥引用，不接受任意 shell 命令。',
+        'Tick “also generate a project contract” on the setup wizard result page to write one automatically, or write it by hand. The contract may declare tool versions, local services, port probes, the database and schema, and secret references — never arbitrary shell commands.'),
+      CODE('version: 1\nproject:\n  name: tcm-inventory\n  root: .\ntools:\n  java: ">=17"\nservices:\n  - id: web\n    label: 前端\n    adapter: local\n    risk_tier: low\n    dir: web\n    probe:\n      kind: port\n      port: 5173\n  - id: backend\n    label: 后端\n    adapter: local\n    risk_tier: low\n    dir: server\n    probe:\n      kind: port\n      port: 8080\ndatabase:\n  engine: mysql\n  host: localhost\n  port: 3306\n  name: tcm_inventory\n  user: root\n  schema: schema.sql\n  required_tables:\n    - sys_user\nsecrets:\n  mysql_password: local:mysql_password',
+        'envkit.yaml'),
+      NOTE('密码不进契约：secrets 只写引用名，真实密码仍由本机 DPAPI 或环境变量提供。数据库表清单没声明时 Doctor 报 undeclared，不猜。',
+        'Passwords stay out of the contract: secrets only name a reference; the real value still comes from local DPAPI or environment variables. If the table list is not declared, Doctor reports undeclared instead of guessing.', 'warn'),
+      H3('contract-modes','readonly 与 enforce','readonly and enforce'),
+      TABLE([z('模式','Mode'),z('能做什么','What it can do'),z('不能做什么','What it cannot do')],[
+        [z('readonly（默认）','readonly (default)'),z('读取契约、跑 Doctor、生成修复计划','Read the contract, run Doctor, generate a repair plan'),z('执行 Apply；请求会被 409 拦下，不建快照、不启动服务','Run Apply; the request is blocked with 409, with no snapshot and no service start')],
+        [z('enforce','enforce'),z('执行计划里勾选的白名单动作，执行前自动快照','Run the selected whitelisted actions, snapshotting first'),z('执行计划外动作、导入 schema 免确认、自动切换工具链版本','Run anything outside the plan, import schema without confirmation, or switch toolchain versions')]
+      ]),
+      P('切换到 enforce 需要二次确认；确认后模式才会变。切回 readonly 随时可以，已生成的快照仍保留。',
+        'Switching to enforce requires a second confirmation, and only then does the mode change. Switching back to readonly is always allowed; existing snapshots stay.'),
+      H3('contract-apply','一次事务怎么走','A transaction step by step'),
+      STEPS([
+        z('展开「高级 / 环境契约与扩展」，在「环境契约 Doctor」点「运行诊断」。Doctor 只读：不启动、不停止、不修复。',
+          'Open “Advanced / contract and extensions” and press “Run diagnosis” under “Contract Doctor”. Doctor is read-only: it starts, stops and repairs nothing.'),
+        z('看汇总：ok / drift / unknown / undeclared。drift 才是可执行差异；远程链端保持 unknown，未声明的表清单保持 undeclared。',
+          'Read the summary: ok / drift / unknown / undeclared. Only drift is actionable; remote chain ends stay unknown, and undeclared table lists stay undeclared.'),
+        z('点「生成修复计划」。计划只从 Doctor 偏差里生成白名单动作：建缺失的库、导入契约 schema、启动 web/backend。',
+          'Press “Generate repair plan”. The plan only draws whitelisted actions from Doctor drift: create a missing database, import the contract schema, start web/backend.'),
+        z('勾选要执行的动作。导入 schema 属于 confirm 档，未确认会被 428 拦下；建库和启动服务属于 safe 档。',
+          'Tick the actions to run. Schema import is a confirm-tier action and is blocked with 428 until confirmed; database creation and service start are safe.'),
+        z('需要真正写入时，点「启用执行（enforce）」并确认。执行前会自动拍快照，记录快照 ID、是否包含数据库和回滚提示。',
+          'To allow writes, press “Enable enforce” and confirm. A snapshot is taken before execution, recording its ID, whether it includes the database, and the rollback note.'),
+        z('点「执行选中项」。任一动作失败就停止，后面的动作不执行，结果里标记「前序动作失败，未执行」。',
+          'Press “Run selected”. The first failure stops the transaction; later actions are not run and are marked “skipped after an earlier failure”.'),
+        z('需要撤销时，从快照列表恢复。恢复前会先备份当前配置/数据库，恢复本身还要再确认一次。',
+          'To undo, restore from the snapshot list. The current config/database is backed up first, and the restore itself asks for confirmation again.')
+      ]),
+      H3('contract-rollback','回滚到底能还原什么','What rollback actually restores'),
+      UL([
+        z('配置与服务/端口现场：恢复到快照时保存的本机配置和现场记录。','Config and service/port site: restored to what was recorded when the snapshot was taken.'),
+        z('已存在的数据库：快照含数据库时，恢复会先清空当前库的表/视图，再导入快照 dump，所以快照之后新增的表也会被删除。','An existing database: when the snapshot includes it, restore clears current tables/views before importing the dump, so tables added after the snapshot are removed too.'),
+        z('本次新建的库：建库动作不在快照回滚范围内，回滚不会删除这个新库；提示里会明确写明。','A database created in this transaction: creation is outside snapshot rollback, so rollback does not drop it; the note says so explicitly.'),
+        z('项目里的 envkit.yaml：恢复不覆盖它，只把快照副本放到旁边供对照。','The project envkit.yaml: restore never overwrites it; the snapshot copy is placed beside it for comparison.')
+      ]),
+      NOTE('快照失败 = 不执行；恢复失败或表数量不一致时，会尝试用恢复前刚生成的备份回填，并在消息里标记“已回滚到恢复前备份”。',
+        'A failed snapshot means nothing runs. If restore fails or the table count does not match, EnvKit tries to refill from the backup taken just before restore and says “rolled back to the pre-restore backup”.', 'danger'),
+      H3('contract-boundary','哪些事情仍然不做','What it still will not do'),
+      UL([
+        z('工具链只诊断版本是否满足约束，不自动升级、降级或切换。','Toolchains are only diagnosed against the version constraint; no automatic upgrade, downgrade or switch.'),
+        z('只自动启动 web / backend 两个本地服务；其他本地服务属于按需扩展，默认关闭。','Only the local web and backend services are started automatically; other local services are opt-in extensions, off by default.'),
+        z('不执行任意 shell、不克隆整机、不做 Docker Desktop 整机快照，也不替你决定不可逆修复。','No arbitrary shell, no whole-machine cloning or Docker Desktop snapshot, and no irreversible repair decided for you.'),
+        z('MCP、契约 Doctor、环境事务与快照都在「高级」里，默认收起；不用契约时保持 readonly 即可。','MCP, Contract Doctor, transactions and snapshots all sit under “Advanced”, collapsed by default; if you do not use contracts, leave it in readonly.')
+      ]),
+      XLINK([['config','程序配置','Configuration'],['project','项目接入向导','Project setup wizard'],['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'chain', group:z('日常操作','Daily operations'), title:z('链端校验','Chain checks'), body:[
