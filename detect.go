@@ -44,6 +44,19 @@ func detectComponent(c Component) CheckResult {
 		ver := getVersion(p, c)
 		return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
 	}
+	// 系统安装的 MySQL 默认不在 PATH：服务能跑、数据库能连，但组件检测
+	// 只看 LookPath 会误报“缺少 MySQL”。这里复用数据库侧的服务/安装目录
+	// 定位，保证“能连库”和“检测到 MySQL”是同一个事实。
+	if strings.EqualFold(c.Special, "mysql") || strings.EqualFold(c.CheckCmd, "mysqld") {
+		p := mysqlServiceExe()
+		if p == "" {
+			p = mysqlClientFromInstall()
+		}
+		if p != "" {
+			ver := getVersion(p, c)
+			return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
+		}
+	}
 	// mvnw 缓存回退（仅 Maven）：历史项目用 wrapper 启动过的话，
 	// ~/.m2/wrapper/dists 里有一套能用的发行版。与启动路径 resolveMavenCmd
 	// 同一口径——不能"检测说未安装、启动却能跑"，两个事实打架最伤信任。
