@@ -173,6 +173,7 @@ func applyDefaultsTo(cfg *Config) {
 	}
 	dv := cfg.Dev.resolved()
 	cfg.Dev = &dv
+	upgradeStaleComponentSources(cfg)
 }
 
 // mergeFormConfig 把"页面表单提交的配置"合并到当前配置上：
