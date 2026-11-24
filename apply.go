@@ -63,11 +63,24 @@ type ApplyActionResult struct {
 }
 
 type ApplyRun struct {
-	OK       bool                `json:"ok"`
-	Applied  []ApplyActionResult `json:"applied"`
-	Doctor   DoctorReport        `json:"doctor"`
-	Error    string              `json:"error,omitempty"`
-	Finished string              `json:"finished_at"`
+	OK          bool                `json:"ok"`
+	Applied     []ApplyActionResult `json:"applied"`
+	Skipped     []ApplyActionResult `json:"skipped,omitempty"`
+	Transaction *ApplyTransaction   `json:"transaction,omitempty"`
+	Doctor      DoctorReport        `json:"doctor"`
+	Error       string              `json:"error,omitempty"`
+	Finished    string              `json:"finished_at"`
+}
+
+// ApplyTransaction 执行前自动快照的凭据。回滚复用 Phase 4 的 checkpoint restore，
+// 不新造第二套恢复路径。
+type ApplyTransaction struct {
+	CheckpointID      string         `json:"checkpoint_id"`
+	Checkpoint        CheckpointView `json:"checkpoint"`
+	DatabaseIncluded  bool           `json:"database_included"`
+	RollbackAvailable bool           `json:"rollback_available"`
+	RollbackNote      string         `json:"rollback_note,omitempty"`
+	StartedAt         string         `json:"started_at"`
 }
 
 var contractApplyMu sync.Mutex
@@ -329,8 +342,17 @@ func handleContractApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := cfgSnapshot()
-	if contractModeOf(c) == contractModeOff {
-		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "环境契约为 off 模式；请先在设置里启用 readonly"})
+	switch contractModeOf(c) {
+	case contractModeOff:
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "环境契约为 off 模式；请先在设置里启用契约"})
+		return
+	case contractModeReadOnly:
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "当前是 readonly 模式，只能生成计划；切到 enforce 才允许执行写操作"})
+		return
+	case contractModeEnforce:
+		// ok
+	default:
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "未知契约模式，请检查配置"})
 		return
 	}
 	plan, err := planContractApply(c)
@@ -386,8 +408,45 @@ func handleContractApply(w http.ResponseWriter, r *http.Request) {
 	}
 	defer contractApplyMu.Unlock()
 
-	run := ApplyRun{OK: true, Finished: time.Now().Format(time.RFC3339)}
-	for _, a := range chosen {
+	// 环境事务：先落一份执行前快照，再动任何东西。快照失败 = 不执行，
+	// 否则“回滚”只是口号，用户拿不到执行前的状态。
+	includeDB, stripNote, err := planApplyBackup(plan.contract, chosen)
+	if err != nil {
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	c = cfgSnapshot()
+	m, cpDir, err := createCheckpointSnapshot(c, plan.contract, plan.ContractPath, "Apply 前自动快照", includeDB)
+	if err != nil {
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "执行前快照失败，已中止：" + err.Error()})
+		return
+	}
+	cp := checkpointView(m, dirSize(cpDir))
+	rollbackNote := "配置和端口现场已快照；回滚走下方快照列表，恢复前会先备份当前状态。"
+	if includeDB {
+		rollbackNote = "配置和数据库已快照；回滚会先备份当前库，再恢复这份快照。"
+	}
+	if stripNote != "" {
+		rollbackNote += " " + stripNote
+	}
+	run := ApplyRun{
+		OK: true, Finished: time.Now().Format(time.RFC3339),
+		Transaction: &ApplyTransaction{
+			CheckpointID: m.ID, Checkpoint: cp, DatabaseIncluded: includeDB,
+			RollbackAvailable: true, RollbackNote: rollbackNote,
+			StartedAt: time.Now().Format(time.RFC3339),
+		},
+	}
+	auditNow(actUser, "contract_apply_tx", m.ID, plan.ContractPath, resStart, "执行前自动快照")
+	info(scConfig, "契约 Apply", "事务快照 %s 已创建（数据库=%v）", m.ID, includeDB)
+	writeJSON(w, executeApplyChosen(plan, chosen, run.Transaction))
+}
+
+// executeApplyChosen 是事务执行体：一个动作失败就停，后面的记 skipped，
+// 返回同一个 transaction 凭据供 UI 提供回滚入口。
+func executeApplyChosen(plan ApplyPlan, chosen []ApplyAction, tx *ApplyTransaction) ApplyRun {
+	run := ApplyRun{OK: true, Finished: time.Now().Format(time.RFC3339), Transaction: tx}
+	for i, a := range chosen {
 		var res ApplyActionResult
 		switch a.Op {
 		case "database.create":
@@ -408,12 +467,57 @@ func handleContractApply(w http.ResponseWriter, r *http.Request) {
 			if run.Error == "" {
 				run.Error = res.Msg
 			}
+			// 事务语义：一个动作失败就停，后面的不带着半截状态继续跑。
+			for _, rest := range chosen[i+1:] {
+				run.Skipped = append(run.Skipped, ApplyActionResult{
+					ID: rest.ID, Title: rest.Title, OK: false, Msg: "前序动作失败，未执行",
+				})
+			}
+			if run.Transaction != nil {
+				run.Transaction.RollbackNote += " 有动作失败，可回滚到执行前快照。"
+			}
+			break
 		}
 		run.Applied = append(run.Applied, res)
 	}
 	// 最后重新跑 Doctor：Apply 的验收不是“按钮执行完”，而是“差异是否变了”。
 	run.Doctor = runContractDoctor(cfgSnapshot(), plan.ContractPath)
-	writeJSON(w, run)
+	if run.Transaction != nil {
+		auditNow(actUser, "contract_apply_tx", run.Transaction.CheckpointID, plan.ContractPath, map[bool]string{true: resOK, false: resFail}[run.OK], run.Error)
+	}
+	return run
+}
+
+// planApplyBackup 决定事务快照是否包含数据库。
+// 导入 schema 时库已存在 → 必须带库；库原本不存在 → 只能留配置快照，
+// 并明确告诉用户“回滚不会删除新建库”，不能假装能撤销建库。
+func planApplyBackup(contract *EnvironmentContract, chosen []ApplyAction) (bool, string, error) {
+	if contract == nil || contract.Database == nil {
+		return false, "", nil
+	}
+	for _, a := range chosen {
+		if a.Op != "database.import_schema" {
+			continue
+		}
+		p, err := doctorDBParams(contract.Database)
+		if err != nil {
+			return false, "", fmt.Errorf("数据库连接参数不可用，无法建立事务快照：%w", err)
+		}
+		exists, err := doctorDBExists(context.Background(), p, contract.Database.Name)
+		if err != nil {
+			return false, "", fmt.Errorf("无法确认数据库状态，已中止：%w", err)
+		}
+		if exists {
+			return true, "", nil
+		}
+		return false, "目标库执行前不存在，快照只含配置；回滚不会删除本次新建的库。", nil
+	}
+	for _, a := range chosen {
+		if a.Op == "database.create" {
+			return false, "建库动作不在快照回滚范围内；回滚不会删除本次新建的库。", nil
+		}
+	}
+	return false, "", nil
 }
 
 func applyCreateDatabase(d *DatabaseContract) ApplyActionResult {

@@ -162,6 +162,78 @@ func handleContractValidate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleContractMode 切换契约模式。readonly 只能生成计划和快照；
+// enforce 才允许 Apply 执行。切 enforce 需要一次显式确认（428），
+// 但不等于以后每个动作都放行——导入 schema 仍然逐次确认。
+func handleContractMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		Mode    string `json:"mode"`
+		Confirm bool   `json:"confirm"`
+		Lang    string `json:"lang"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "请求解析失败: "+err.Error(), 400)
+		return
+	}
+	mode := strings.ToLower(strings.TrimSpace(body.Mode))
+	if !contractModeValid(mode) {
+		writeJSONStatus(w, 400, map[string]any{"ok": false, "error": "契约模式必须是 off / readonly / enforce"})
+		return
+	}
+	c := cfgSnapshot()
+	if mode != contractModeOff {
+		if c.Contract == nil {
+			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "还没有契约配置，先生成 envkit.yaml"})
+			return
+		}
+		_, path, err := contractPathOf(c)
+		if err != nil {
+			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		_, problems, err := loadContractFile(path)
+		if err != nil {
+			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "契约不可读：" + err.Error()})
+			return
+		}
+		if len(problems) > 0 {
+			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "契约自身有硬错误：" + strings.Join(problems, "；")})
+			return
+		}
+	}
+	if mode == contractModeEnforce && !body.Confirm {
+		reason := "切换到 enforce 后，环境事务可以执行建库、启动服务和导入 schema。高风险动作仍需逐次确认，执行前会自动快照。"
+		if strings.EqualFold(body.Lang, "en") {
+			reason = "After switching to enforce, environment transactions may create databases, start services and import schemas. High-risk actions still require separate confirmation and a checkpoint is taken first."
+		}
+		needConfirm(w, "contract_mode", mode, reason, true)
+		return
+	}
+	saved := cfgUpdate(func(g *Config) {
+		if g.Contract == nil {
+			g.Contract = &ContractConfig{}
+		}
+		g.Contract.Mode = mode
+	})
+	normalizeConfig(&saved)
+	if hard := hardProblems(checkConfig(saved)); len(hard) > 0 {
+		msgs := []string{}
+		for _, p := range hard {
+			msgs = append(msgs, p.String())
+		}
+		writeJSONStatus(w, 409, map[string]any{"ok": false, "error": strings.Join(msgs, "；")})
+		return
+	}
+	saveExternalConfig(saved)
+	setCfgStale(true)
+	auditNow(actUser, "contract_mode", mode, "", resOK, "")
+	writeJSON(w, map[string]any{"ok": true, "mode": mode})
+}
+
 // handleContractDoctor 只读诊断：GET/POST 都不启动、不停止、不修复。
 func handleContractDoctor(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {

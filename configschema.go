@@ -302,15 +302,14 @@ func checkConfig(c Config) []configProblem {
 	chkDir("备份目录", c.Projects.BackupDir)
 	chkFile("SQL 文件", c.Projects.SQLFile)
 
-	// 环境契约：Phase 1 只允许只读/关闭；enforce 等事务落地后才开放。
+	// 环境契约：off / readonly / enforce。readonly 只能看计划和快照，
+	// enforce 才允许 Apply 执行；高风险动作仍逐次 428，不靠模式一次放行。
 	if c.Contract != nil {
 		switch c.Contract.Mode {
-		case contractModeOff, contractModeReadOnly:
+		case contractModeOff, contractModeReadOnly, contractModeEnforce:
 			// ok
-		case contractModeEnforce:
-			soft("契约模式", "enforce 将在 4.0 事务阶段开放；当前按只读处理")
 		default:
-			hard("契约模式", "必须是 off / readonly，当前「%s」", c.Contract.Mode)
+			hard("契约模式", "必须是 off / readonly / enforce，当前「%s」", c.Contract.Mode)
 		}
 		chkDir("契约项目根", c.Contract.Root)
 		if unsafeContractPath(c.Contract.Path) {

@@ -922,18 +922,24 @@
           </div>
 
           <div class="set-card" id="set-contract-apply">
-            <div class="set-card-head"><span class="t">环境事务</span><span class="tag">只修安全项</span></div>
-            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。工具链升级、密钥补齐、远程链端只给原因，不自动改。</div>
+            <div class="set-card-head"><span class="t">环境事务</span><span class="tag">事务化</span></div>
+            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。readonly 只能预览；enforce 才允许执行，执行前自动快照，任一动作失败即停止，可回滚到执行前。</div>
             <div class="row">
               <button class="ghost" id="btn-apply-plan">生成修复计划</button>
               <span class="status idle" id="st-apply">未生成</span>
               <span class="hint" id="h-apply" style="margin-left:auto"></span>
             </div>
+            <div class="row" style="margin-top:8px">
+              <span class="status idle" id="st-contract-mode">契约模式未加载</span>
+              <button class="ghost" id="btn-contract-enforce">启用执行（enforce）</button>
+              <button class="ghost" id="btn-contract-readonly">切回只读</button>
+              <span class="hint">切换后仍需逐项勾选；导入 schema 仍会二次确认。</span>
+            </div>
             <div class="doc-sum" id="apply-sum"></div>
             <div class="doc-checks" id="apply-actions"></div>
             <div class="row" id="apply-run-row" style="display:none;margin-top:8px">
               <button id="btn-apply-run">执行选中项</button>
-              <span class="hint">导入 schema 会先备份当前库，再走二次确认。</span>
+              <span class="hint">执行前自动快照；失败会停止后续动作，并提供回滚入口。</span>
             </div>
             <div class="doc-checks" id="apply-result" style="margin-top:8px"></div>
 

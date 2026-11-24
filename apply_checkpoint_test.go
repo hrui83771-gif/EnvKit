@@ -136,6 +136,104 @@ func TestContractApplyPlanRefusesOffMode(t *testing.T) {
 	}
 }
 
+func TestContractApplyRefusesReadOnly(t *testing.T) {
+	old := cfgSnapshot()
+	cfgMu.Lock()
+	cfg = Config{Contract: &ContractConfig{Root: `D:\demo`, Path: "envkit.yaml", Mode: contractModeReadOnly}}
+	cfgMu.Unlock()
+	defer func() { cfgMu.Lock(); cfg = old; cfgMu.Unlock() }()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/contract/apply", strings.NewReader(`{"selected":["apply.database.create"]}`))
+	handleContractApply(rr, req)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "readonly") {
+		t.Fatalf("readonly apply status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPlanApplyBackupKeepsCreateDatabaseOutOfRollback(t *testing.T) {
+	contract := applyTestContract()
+	include, note, err := planApplyBackup(contract, []ApplyAction{{Op: "database.create"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if include {
+		t.Fatal("建库前不可能有数据库快照")
+	}
+	if !strings.Contains(note, "不会删除") {
+		t.Fatalf("note=%q", note)
+	}
+	if include, note, err := planApplyBackup(nil, nil); err != nil || include || note != "" {
+		t.Fatalf("nil contract: include=%v note=%q err=%v", include, note, err)
+	}
+}
+
+func TestExecuteApplyChosenStopsOnFirstFailure(t *testing.T) {
+	tx := &ApplyTransaction{CheckpointID: "cp-20261124-120000-test", RollbackNote: "执行前快照"}
+	plan := ApplyPlan{ContractPath: filepath.Join(t.TempDir(), "envkit.yaml")}
+	chosen := []ApplyAction{
+		{ID: "apply.test.fail", Title: "会失败的动作", Op: "unknown"},
+		{ID: "apply.services.web.start", Title: "启动前端", Op: "service.start", Service: "web"},
+	}
+	run := executeApplyChosen(plan, chosen, tx)
+	if run.OK || len(run.Applied) != 0 {
+		t.Fatalf("首个动作失败后不应继续: %+v", run)
+	}
+	if len(run.Skipped) != 1 || run.Skipped[0].ID != "apply.services.web.start" {
+		t.Fatalf("后续动作应记为 skipped: %+v", run.Skipped)
+	}
+	if run.Transaction == nil || !strings.Contains(run.Transaction.RollbackNote, "回滚") {
+		t.Fatalf("事务凭据应保留并提示回滚: %+v", run.Transaction)
+	}
+}
+
+func TestContractModeEnforceNeedsConfirmAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	project := filepath.Join(dir, "project")
+	if err := os.MkdirAll(project, 0755); err != nil {
+		t.Fatal(err)
+	}
+	contractText := "version: 1\nproject:\n  name: demo\n  root: \".\"\n"
+	if err := os.WriteFile(filepath.Join(project, "envkit.yaml"), []byte(contractText), 0644); err != nil {
+		t.Fatal(err)
+	}
+	oldCfg, oldPath := cfgSnapshot(), configFilePath
+	configFilePath = func() string { return filepath.Join(dir, "config.json") }
+	defer func() {
+		configFilePath = oldPath
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+	}()
+	cfgMu.Lock()
+	cfg = Config{
+		SchemaVersion: configSchemaVersion, GoProxy: "direct", InstallDir: dir,
+		Projects: Projects{MySQLHost: "127.0.0.1", MySQLUser: "root"},
+		Contract: &ContractConfig{Root: project, Path: "envkit.yaml", Mode: contractModeReadOnly},
+	}
+	cfgMu.Unlock()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/contract/mode", strings.NewReader(`{"mode":"enforce"}`))
+	handleContractMode(rr, req)
+	if rr.Code != http.StatusPreconditionRequired {
+		t.Fatalf("without confirm status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/contract/mode", strings.NewReader(`{"mode":"enforce","confirm":true}`))
+	handleContractMode(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("confirm status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := contractModeOf(cfgSnapshot()); got != contractModeEnforce {
+		t.Fatalf("mode=%s", got)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, "config.json")); err != nil || fi.Size() == 0 {
+		t.Fatalf("mode not persisted: %v", err)
+	}
+}
+
 func TestCheckpointCreateListRestoreConfigOnly(t *testing.T) {
 	dir := t.TempDir()
 	oldCp, oldCfgPath, oldBackup := checkpointDirFn, configFilePath, backupDirFn

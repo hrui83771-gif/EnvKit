@@ -53,8 +53,8 @@ func mysqlClientFromInstall() string {
 	return ""
 }
 
-var mysqlSvcPathRe = regexp.MustCompile(`(?i)"([^"]*mysqld\.exe)"`)
-var mysqlSvcBareRe = regexp.MustCompile(`(?i)([A-Z]:\\[^\r\n"]*?mysqld\.exe)`)
+var mysqlSvcPathRe = regexp.MustCompile(`(?i)"([^"]*mysqld(?:\.exe)?)"`)
+var mysqlSvcBareRe = regexp.MustCompile(`(?i)([A-Z]:\\[^\r\n"]*?mysqld(?:\.exe)?)($|[^\w.])`)
 
 // mysqlServiceExe 从服务 ImagePath 里取 mysqld.exe 的真实路径。
 // ImagePath 形如 "C:\Program Files\...\mysqld.exe" --defaults-file=...
@@ -63,7 +63,7 @@ func mysqlServiceExe() string {
 	if name == "" {
 		name = "MySQL80"
 	}
-	out, err := exec.Command("reg", "query",
+	out, err := exec.Command(system32Exe("reg.exe"), "query",
 		`HKLM\SYSTEM\CurrentControlSet\Services\`+name, "/v", "ImagePath").Output()
 	if err != nil {
 		return ""
@@ -76,13 +76,16 @@ func mysqlServiceExe() string {
 
 // parseMysqlServiceExe 从 reg query 的输出里抽 mysqld.exe 路径（供单测直接验证）。
 func parseMysqlServiceExe(out string) string {
+	var p string
 	if m := mysqlSvcPathRe.FindStringSubmatch(out); len(m) >= 2 {
-		return strings.TrimSpace(m[1])
+		p = strings.TrimSpace(m[1])
+	} else if m := mysqlSvcBareRe.FindStringSubmatch(out); len(m) >= 2 {
+		p = strings.TrimSpace(m[1])
 	}
-	if m := mysqlSvcBareRe.FindStringSubmatch(out); len(m) >= 2 {
-		return strings.TrimSpace(m[1])
+	if p != "" && !strings.HasSuffix(strings.ToLower(p), ".exe") {
+		p += ".exe" // Windows 服务 ImagePath 常写成 ...\mysqld，省略 .exe
 	}
-	return ""
+	return p
 }
 
 // 用 MYSQL_PWD 传密码，避免命令行警告污染输出（也更安全）

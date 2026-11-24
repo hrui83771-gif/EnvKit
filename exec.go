@@ -39,6 +39,21 @@ func findExe(names ...string) string {
 	return ""
 }
 
+// system32Exe 返回 Windows 自带命令的绝对路径。EnvKit 从桌面、计划任务或
+// 受限终端启动时，进程 PATH 可能没有 System32；直接 exec.Command("reg")
+// 会找不到命令。优先用绝对路径，找不到再退回裸名。
+func system32Exe(name string) string {
+	root := strings.TrimSpace(os.Getenv("SystemRoot"))
+	if root == "" {
+		root = `C:\Windows`
+	}
+	p := filepath.Join(root, "System32", name)
+	if hasFile(p) {
+		return p
+	}
+	return name
+}
+
 // ---------- Maven 定位 ----------
 //
 // 三级回退：项目 mvnw.cmd → PATH/组件 bin → mvnw 发行版缓存。

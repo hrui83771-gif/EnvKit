@@ -198,6 +198,7 @@ func main() {
 	http.HandleFunc("/api/contract/generate", handleContractGenerate)
 	http.HandleFunc("/api/contract/validate", handleContractValidate)
 	http.HandleFunc("/api/contract/doctor", handleContractDoctor)
+	http.HandleFunc("/api/contract/mode", handleContractMode)
 	http.HandleFunc("/api/contract/apply/plan", handleContractApplyPlan)
 	http.HandleFunc("/api/contract/apply", handleContractApply)
 	http.HandleFunc("/api/contract/checkpoints", handleContractCheckpointList)

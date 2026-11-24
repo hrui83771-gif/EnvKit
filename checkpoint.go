@@ -195,6 +195,100 @@ func snapshotServiceState(contract *EnvironmentContract) ([]CheckpointService, [
 	return services, ports
 }
 
+// createCheckpointSnapshot 是所有快照入口的唯一实现：手动“立即快照”和
+// Apply 执行前的事务快照都走这里，避免两套清单格式。
+// 调用方负责先校验契约和数据库是否存在；这里只做落盘与校验。
+func createCheckpointSnapshot(c Config, contract *EnvironmentContract, contractPath, label string, includeDB bool) (CheckpointManifest, string, error) {
+	var m CheckpointManifest
+	if contract == nil {
+		return m, "", fmt.Errorf("契约为空，不能创建快照")
+	}
+	id := newCheckpointID()
+	dir, _ := checkpointPath(id)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return m, "", fmt.Errorf("创建快照目录失败：%w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+
+	contractBytes, err := os.ReadFile(contractPath)
+	if err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("读取契约失败：%w", err)
+	}
+	if err := writeFileAtomic(filepath.Join(dir, "contract.yaml"), contractBytes, 0644); err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("保存契约副本失败：%w", err)
+	}
+
+	cfgBytes, err := json.MarshalIndent(encryptConfig(c), "", "  ")
+	if err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("序列化配置失败：%w", err)
+	}
+	configName := "config.json"
+	if err := writeFileAtomic(filepath.Join(dir, configName), cfgBytes, 0600); err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("保存配置快照失败：%w", err)
+	}
+
+	m = CheckpointManifest{
+		Version: 1, ID: id, CreatedAt: time.Now().Format(time.RFC3339),
+		Label: strings.TrimSpace(label), ContractPath: contractPath, ProjectRoot: filepath.Dir(contractPath),
+		ContractFile: "contract.yaml", ContractSHA: fileSHA256Hex(filepath.Join(dir, "contract.yaml")),
+		ConfigFile: configName, ConfigSHA: fileSHA256Hex(filepath.Join(dir, configName)),
+	}
+	if len(m.Label) > 80 {
+		m.Label = m.Label[:80]
+	}
+
+	if includeDB {
+		d := contract.Database
+		if d == nil {
+			cleanup()
+			return m, "", fmt.Errorf("契约没有数据库声明，不能快照数据库")
+		}
+		p, err := doctorDBParams(d)
+		if err != nil {
+			cleanup()
+			return m, "", fmt.Errorf("数据库连接参数不可用：%w", err)
+		}
+		exists, err := doctorDBExists(context.Background(), p, d.Name)
+		if err != nil {
+			cleanup()
+			return m, "", fmt.Errorf("查询数据库失败：%w", err)
+		}
+		if !exists {
+			cleanup()
+			return m, "", fmt.Errorf("数据库 %s 不存在，无法快照", d.Name)
+		}
+		dbFile := d.Name + ".sql"
+		size, sha, err := dumpDatabaseTo(p, d.Name, filepath.Join(dir, dbFile))
+		if err != nil {
+			cleanup()
+			return m, "", fmt.Errorf("数据库快照失败：%w", err)
+		}
+		actual, _ := doctorTableNames(context.Background(), p, d.Name)
+		m.Database = CheckpointDatabase{
+			Included: true, Name: d.Name, File: dbFile, Size: size, SHA256: sha, TableCount: len(actual),
+		}
+	} else {
+		m.Database = CheckpointDatabase{Included: false, Skipped: "未选择数据库"}
+	}
+	m.Services, m.Ports = snapshotServiceState(contract)
+
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("生成清单失败：%w", err)
+	}
+	if err := writeFileAtomic(checkpointManifestPath(dir), data, 0644); err != nil {
+		cleanup()
+		return m, "", fmt.Errorf("写入快照清单失败：%w", err)
+	}
+	pruneCheckpoints(checkpointKeep)
+	return m, dir, nil
+}
+
 func handleContractCheckpointCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", 405)
@@ -230,105 +324,36 @@ func handleContractCheckpointCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.Done()
 
-	id := newCheckpointID()
-	dir, _ := checkpointPath(id)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "创建快照目录失败：" + err.Error()})
-		return
-	}
-	// 清理助手：任何一步失败都不留半份快照误导用户。
-	cleanup := func() { _ = os.RemoveAll(dir) }
-	root := filepath.Dir(contractPath)
-
-	contractBytes, err := os.ReadFile(contractPath)
-	if err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "读取契约失败：" + err.Error()})
-		return
-	}
-	if err := writeFileAtomic(filepath.Join(dir, "contract.yaml"), contractBytes, 0644); err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "保存契约副本失败：" + err.Error()})
-		return
-	}
-
-	cfgBytes, err := json.MarshalIndent(encryptConfig(c), "", "  ")
-	if err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "序列化配置失败：" + err.Error()})
-		return
-	}
-	configName := "config.json"
-	if err := writeFileAtomic(filepath.Join(dir, configName), cfgBytes, 0600); err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "保存配置快照失败：" + err.Error()})
-		return
-	}
-
-	m := CheckpointManifest{
-		Version: 1, ID: id, CreatedAt: time.Now().Format(time.RFC3339),
-		Label: strings.TrimSpace(body.Label), ContractPath: contractPath, ProjectRoot: root,
-		ContractFile: "contract.yaml", ContractSHA: fileSHA256Hex(filepath.Join(dir, "contract.yaml")),
-		ConfigFile: configName, ConfigSHA: fileSHA256Hex(filepath.Join(dir, configName)),
-	}
-	if len(m.Label) > 80 {
-		m.Label = m.Label[:80]
-	}
-
+	// 先做只读预检：数据库不存在是用户可修正的冲突，应该在写目录前返回 409。
 	if body.Database {
 		d := contract.Database
 		if d == nil {
-			cleanup()
 			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "契约没有数据库声明，不能快照数据库"})
 			return
 		}
 		p, err := doctorDBParams(d)
 		if err != nil {
-			cleanup()
 			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "数据库连接参数不可用：" + err.Error()})
 			return
 		}
 		exists, err := doctorDBExists(context.Background(), p, d.Name)
 		if err != nil {
-			cleanup()
 			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "查询数据库失败：" + err.Error()})
 			return
 		}
 		if !exists {
-			cleanup()
 			writeJSONStatus(w, 409, map[string]any{"ok": false, "error": "数据库 " + d.Name + " 不存在，无法快照"})
 			return
 		}
-		dbFile := d.Name + ".sql"
-		size, sha, err := dumpDatabaseTo(p, d.Name, filepath.Join(dir, dbFile))
-		if err != nil {
-			cleanup()
-			writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "数据库快照失败：" + err.Error()})
-			return
-		}
-		actual, _ := doctorTableNames(context.Background(), p, d.Name)
-		m.Database = CheckpointDatabase{
-			Included: true, Name: d.Name, File: dbFile, Size: size, SHA256: sha, TableCount: len(actual),
-		}
-	} else {
-		m.Database = CheckpointDatabase{Included: false, Skipped: "未选择数据库"}
 	}
-	m.Services, m.Ports = snapshotServiceState(contract)
 
-	data, err := json.MarshalIndent(m, "", "  ")
+	m, dir, err := createCheckpointSnapshot(c, contract, contractPath, body.Label, body.Database)
 	if err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "生成清单失败：" + err.Error()})
+		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if err := writeFileAtomic(checkpointManifestPath(dir), data, 0644); err != nil {
-		cleanup()
-		writeJSONStatus(w, 500, map[string]any{"ok": false, "error": "写入快照清单失败：" + err.Error()})
-		return
-	}
-	pruneCheckpoints(checkpointKeep)
-	auditNow(actUser, "checkpoint_create", id, fmt.Sprintf("db=%v", m.Database.Included), resOK, "")
-	info(scConfig, "快照", "已创建环境快照 %s（数据库=%v）", id, m.Database.Included)
+	auditNow(actUser, "checkpoint_create", m.ID, fmt.Sprintf("db=%v", m.Database.Included), resOK, "")
+	info(scConfig, "快照", "已创建环境快照 %s（数据库=%v）", m.ID, m.Database.Included)
 	writeJSON(w, map[string]any{"ok": true, "checkpoint": checkpointView(m, dirSize(dir))})
 }
 

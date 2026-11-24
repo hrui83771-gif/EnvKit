@@ -42,7 +42,30 @@ var backupDirFn = func() string {
 // 用户可通过 projects.backup_dir 显式指定（例如挂到别的盘/网络位置）。
 func backupDir() string { return backupDirFn() }
 
-func mysqlDumpExe() string { return findExe("mysqldump.exe", "mysqldump") }
+func mysqlDumpExe() string {
+	if exe := findExe("mysqldump.exe", "mysqldump"); exe != "" {
+		return exe
+	}
+	// 系统安装的 MySQL 不一定进了当前进程 PATH（尤其是 EnvKit 从桌面/计划任务
+	// 启动时）。mysql 客户端已经能从服务/常见目录找回，dump 直接复用同一个 bin 目录。
+	if cli := mysqlClientFromInstall(); cli != "" {
+		for _, n := range []string{"mysqldump.exe", "mysqldump"} {
+			c := filepath.Join(filepath.Dir(cli), n)
+			if hasFile(c) {
+				return c
+			}
+		}
+	}
+	if p := mysqlServiceExe(); p != "" {
+		for _, n := range []string{"mysqldump.exe", "mysqldump"} {
+			c := filepath.Join(filepath.Dir(p), n)
+			if hasFile(c) {
+				return c
+			}
+		}
+	}
+	return ""
+}
 
 // pruneBackups 保留最近 keep 份备份（按文件名中的时间戳字典序），其余连同校验和一起删除。
 func pruneBackups(dir, dbName string, keep int) int {
