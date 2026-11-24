@@ -20,7 +20,7 @@ import (
 // configSchemaVersion 当前配置结构版本。
 // 约定：任何"字段改名 / 语义变化 / 默认值变化"都必须 +1，并在 configMigrations 补一条迁移；
 // 否则老配置文件会被静默按新语义解析（这类 bug 不会报错，只会算错）。
-const configSchemaVersion = 1
+const configSchemaVersion = 2
 
 // ---------- 迁移 ----------
 
@@ -48,6 +48,13 @@ var configMigrations = []configMigration{
 			if strings.TrimSpace(c.Chain.ChainHost) == "" {
 				c.Chain.ChainHost = strings.TrimSpace(c.Chain.SSHHost)
 			}
+		},
+	},
+	{
+		from: 1,
+		desc: "引入环境契约段（默认关闭，老配置行为不变）",
+		apply: func(c *Config) {
+			c.Contract = nil
 		},
 	},
 }
@@ -111,6 +118,19 @@ func normalizeConfig(c *Config) {
 	p.BackendDir = trimTrailingSep(p.BackendDir)
 	p.BackupDir = trimTrailingSep(p.BackupDir)
 	p.SQLFile = strings.TrimSpace(p.SQLFile)
+
+	if c.Contract != nil {
+		c.Contract.Root = trimTrailingSep(c.Contract.Root)
+		c.Contract.Root = strings.TrimSpace(c.Contract.Root)
+		c.Contract.Path = strings.TrimSpace(c.Contract.Path)
+		if c.Contract.Path == "" {
+			c.Contract.Path = contractFileName
+		}
+		c.Contract.Mode = strings.ToLower(strings.TrimSpace(c.Contract.Mode))
+		if c.Contract.Mode == "" {
+			c.Contract.Mode = contractModeOff
+		}
+	}
 
 	ch := &c.Chain
 	ch.SSHHost = strings.TrimSpace(ch.SSHHost)
@@ -281,6 +301,26 @@ func checkConfig(c Config) []configProblem {
 	chkDir("后端目录", c.Projects.BackendDir)
 	chkDir("备份目录", c.Projects.BackupDir)
 	chkFile("SQL 文件", c.Projects.SQLFile)
+
+	// 环境契约：Phase 1 只允许只读/关闭；enforce 等事务落地后才开放。
+	if c.Contract != nil {
+		switch c.Contract.Mode {
+		case contractModeOff, contractModeReadOnly:
+			// ok
+		case contractModeEnforce:
+			soft("契约模式", "enforce 将在 4.0 事务阶段开放；当前按只读处理")
+		default:
+			hard("契约模式", "必须是 off / readonly，当前「%s」", c.Contract.Mode)
+		}
+		chkDir("契约项目根", c.Contract.Root)
+		if unsafeContractPath(c.Contract.Path) {
+			hard("契约文件", "必须是项目根内的相对路径，当前「%s」", c.Contract.Path)
+		}
+		if !strings.HasSuffix(strings.ToLower(c.Contract.Path), ".yaml") &&
+			!strings.HasSuffix(strings.ToLower(c.Contract.Path), ".yml") {
+			hard("契约文件", "必须是 .yaml 或 .yml，当前「%s」", c.Contract.Path)
+		}
+	}
 
 	// 启动方式覆盖项（v2.1）。留空 = 自动推断，所以只在填了的时候校验。
 	// 前端脚本名过 launchScriptAllowed：用户也可能手滑填了 migrate/reset 这类

@@ -92,11 +92,14 @@ type Config struct {
 	// **空 = 未启用拓扑模型**，此时按旧 Projects/Chain 扁平字段推导出等价清单
 	// （servicesFromLegacy），行为与 v3.0.1 完全一致。
 	// 非空 = 守护循环与 AI 恢复都按这份清单走，适配器由每项的 adapter 指定。
-	Services   []Service   `json:"services,omitempty"`
-	Components []Component `json:"components"`
-	AI         *AIConfig   `json:"ai,omitempty"`
-	Pet        PetConfig   `json:"pet"`
-	Alert      AlertConfig `json:"alerts"`
+	Services []Service `json:"services,omitempty"`
+	// Contract 环境契约（v4.0 Phase 1）。nil = 未启用，完全走 3.x 扁平配置。
+	// 只记录本机侧的位置与开关；项目级期望状态在 envkit.yaml 里。
+	Contract   *ContractConfig `json:"contract,omitempty"`
+	Components []Component     `json:"components"`
+	AI         *AIConfig       `json:"ai,omitempty"`
+	Pet        PetConfig       `json:"pet"`
+	Alert      AlertConfig     `json:"alerts"`
 	// Mission 行动（Agent 闭环 Phase 1，2026-10-26 定案）：
 	// 巡检/晨报类只读能力默认开，入站触发端点默认关。见 mission.go MissionConfig。
 	Mission MissionConfig `json:"missions"`

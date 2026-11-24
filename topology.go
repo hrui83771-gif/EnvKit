@@ -50,62 +50,63 @@ const (
 // Services 为空时按旧字段推导出等价清单（servicesFromLegacy，T2.1），
 // 保证老配置读进来后的行为一个字节都不变。
 type Service struct {
-	ID       string `json:"id"`        // 唯一标识：web / backend / mysql / chain / webase
-	Label    string `json:"label"`     // 人类可读名（UI 与审计里显示）
-	Adapter  string `json:"adapter"`   // local / db / ssh_chain
-	RiskTier string `json:"risk_tier"` // low / high
+	ID       string `json:"id" yaml:"id"`                       // 唯一标识：web / backend / mysql / chain / webase
+	Label    string `json:"label" yaml:"label"`                 // 人类可读名（UI 与审计里显示）
+	Adapter  string `json:"adapter" yaml:"adapter"`             // local / db / ssh_chain
+	RiskTier string `json:"risk_tier" yaml:"risk_tier"`         // low / high
+	Dir      string `json:"dir,omitempty" yaml:"dir,omitempty"` // 项目内相对目录（local/db）
 
 	// Probe 健康检查。Kind 决定用哪种探针（port / http / command / composite）。
-	Probe ProbeSpec `json:"probe"`
+	Probe ProbeSpec `json:"probe" yaml:"probe"`
 
 	// Start / Stop / Restart 命令模板。**模板，不是任意字符串**：
 	// 只接受配置里写死的这几个字段，且执行前过安全规则（R1）。
-	Start   string `json:"start,omitempty"`
-	Stop    string `json:"stop,omitempty"`
-	Restart string `json:"restart,omitempty"`
+	Start   string `json:"start,omitempty" yaml:"start,omitempty"`
+	Stop    string `json:"stop,omitempty" yaml:"stop,omitempty"`
+	Restart string `json:"restart,omitempty" yaml:"restart,omitempty"`
 
 	// DependsOn 依赖的其他 service id。跨节点事件关联的依据（plan §4.3）：
 	// 同一时间窗内多个 service 探针失败时，先查共同依赖是否也失败了。
-	DependsOn []string `json:"depends_on,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 
 	// Recovery 恢复策略引用（strategy.go 那张表的键）。空 = 无自动恢复策略，
 	// 该 service 只在报告里出现，守护循环不碰它。
-	Recovery string `json:"recovery,omitempty"`
+	Recovery string `json:"recovery,omitempty" yaml:"recovery,omitempty"`
 
 	// Guard 守护循环驱动这个 service 时需要的拓扑无关参数。
 	// **这三个字段存在的理由是"保住基线审计条目"**：守护巡检要写审计，
 	// 而审计里的动作名与目标在 v3.0.1 基线里是固定值。把它们提成配置，
 	// 核心循环就不需要知道"链端的审计叫 chain_autorecover"（R5）。
-	Guard GuardSpec `json:"guard,omitempty"`
+	Guard GuardSpec `json:"guard,omitempty" yaml:"guard,omitempty"`
 
 	// Verify 独立复验规范（plan §4.5 的 verify_spec）。
-	Verify VerifySpec `json:"verify"`
+	Verify VerifySpec `json:"verify" yaml:"verify"`
 }
 
 // GuardSpec 守护循环的驱动参数（拓扑无关）。
 type GuardSpec struct {
 	// Group 资源组名（组锁用）。空 = 用 service id 当组名。
 	// 守护与用户的手动操作按组互斥：动链端的动作才需要和链端任务互斥。
-	Group string `json:"group,omitempty"`
+	Group string `json:"group,omitempty" yaml:"group,omitempty"`
 
 	// AuditAction 审计动作名。空 = "<id>_autorecover"。
 	// 显式配置的理由：链端基线里的动作名是 chain_autorecover / webase_autorecover，
 	// 与"<id>_autorecover"约定一致；但将来若有服务的约定不同，改配置即可，
 	// 不必在核心循环里加分支。
-	AuditAction string `json:"audit_action,omitempty"`
+	AuditAction string `json:"audit_action,omitempty" yaml:"audit_action,omitempty"`
 
 	// AuditTarget 审计目标。空 = service id。
 	// 链端基线的目标是 SSH 主机（用户认这个），所以旧字段推导时显式填上。
-	AuditTarget string `json:"audit_target,omitempty"`
+	AuditTarget string `json:"audit_target,omitempty" yaml:"audit_target,omitempty"`
 
 	// IntervalSecs 巡检间隔（秒，最小 30）。0 = 用全局默认。
 	// 为什么是 per-service 而不是全局：不同 service 的合理巡检频率不同
 	// （链节点 30s，数据库可以 5 分钟）。旧代码只有一个 ChainGuardSecs，
 	// 那是因为它只守护一种东西。
-	IntervalSecs int `json:"interval_secs,omitempty"`
+	IntervalSecs int `json:"interval_secs,omitempty" yaml:"interval_secs,omitempty"`
 
 	// Notify 恢复时是否弹桌面通知。
-	Notify bool `json:"notify,omitempty"`
+	Notify bool `json:"notify,omitempty" yaml:"notify,omitempty"`
 }
 
 // auditActionOf 审计动作名：显式配置优先，否则 "<id>_autorecover"。
@@ -142,12 +143,12 @@ const (
 
 // ProbeSpec 健康检查规范。
 type ProbeSpec struct {
-	Kind    string      `json:"kind"`
-	Port    int         `json:"port,omitempty"`    // kind=port
-	URL     string      `json:"url,omitempty"`     // kind=http
-	Command string      `json:"command,omitempty"` // kind=command（只读）
-	Timeout int         `json:"timeout,omitempty"` // 秒，0=内置默认
-	Parts   []ProbeSpec `json:"parts,omitempty"`   // kind=composite
+	Kind    string      `json:"kind" yaml:"kind"`
+	Port    int         `json:"port,omitempty" yaml:"port,omitempty"`       // kind=port
+	URL     string      `json:"url,omitempty" yaml:"url,omitempty"`         // kind=http
+	Command string      `json:"command,omitempty" yaml:"command,omitempty"` // kind=command（只读）
+	Timeout int         `json:"timeout,omitempty" yaml:"timeout,omitempty"` // 秒，0=内置默认
+	Parts   []ProbeSpec `json:"parts,omitempty" yaml:"parts,omitempty"`     // kind=composite
 }
 
 // VerifySpec 独立复验标准（plan §4.5 verify_spec）。
@@ -158,11 +159,11 @@ type ProbeSpec struct {
 type VerifySpec struct {
 	// Target 复验结论记到哪个目标上。**空值会被补成 service id**
 	// （v3.0.1 踩过：备份类 target 为空串，导致"有事件"被判成"没事件"）。
-	Target string `json:"target,omitempty"`
+	Target string `json:"target,omitempty" yaml:"target,omitempty"`
 	// Evidence 期望的客观证据字段清单。
-	Evidence []string `json:"evidence,omitempty"`
+	Evidence []string `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// WaitSecs 复验等待窗口，0=内置默认。
-	WaitSecs int `json:"wait_secs,omitempty"`
+	WaitSecs int `json:"wait_secs,omitempty" yaml:"wait_secs,omitempty"`
 }
 
 // ---------- 代码侧：三个接口 ----------

@@ -212,6 +212,11 @@ func mergeFormConfig(form, cur Config) Config {
 	if form.MCP == nil {
 		form.MCP = cur.MCP
 	}
+	// 契约段（v4.0）走独立入口 /api/contract/generate：老页面 configBody()
+	// 不回传 contract，指针为空就沿用原值，避免一次自动保存把契约开关抹掉。
+	if form.Contract == nil {
+		form.Contract = cur.Contract
+	}
 	if strings.TrimSpace(form.UpdateURL) == "" {
 		form.UpdateURL = cur.UpdateURL // 同上：表单没有该字段，别让保存把它抹成空
 	}
@@ -368,6 +373,10 @@ func cloneConfigDeep(c Config) Config {
 		m := *c.MCP
 		m.Enabled = cloneBoolPtr(m.Enabled)
 		c.MCP = &m
+	}
+	if c.Contract != nil {
+		cc := *c.Contract
+		c.Contract = &cc
 	}
 	if c.Update != nil {
 		u := *c.Update

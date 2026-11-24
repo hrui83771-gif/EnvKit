@@ -1,8 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "app_name": "EnvKit",
   "app_title": "统一开发环境助手",
   "install_dir": "C:\\EnvKit\\tools",
+  "contract": {
+    "root": "",
+    "path": "envkit.yaml",
+    "mode": "off"
+  },
   "proxy": {
     "http": "",
     "https": ""

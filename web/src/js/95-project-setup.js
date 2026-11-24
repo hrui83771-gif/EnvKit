@@ -120,6 +120,10 @@
       '<div class="pws-cards" id="pws-cards"></div>' +
       '<div class="pws-warnings" id="pws-warnings"></div>' +
       '<div class="pws-dbwrap" id="pws-dbwrap"></div>' +
+      '<div class="pws-contractopt">' +
+        '<label class="pws-dbuse"><input type="checkbox" id="pws-contract" checked>' + esc(t('同时生成项目级环境契约')) + '</label>' +
+        '<small>' + esc(t('写入项目根 envkit.yaml，描述工具、服务、端口和数据库期望；不写密码。之后可用 git diff 审阅。')) + '</small>' +
+      '</div>' +
       '<div class="pws-err" id="pws-err3"></div>' +
       '<div class="pws-foot"><span class="pws-note">' + esc(t('保存只写入前后端目录；勾选数据库时会一起写入，密码只在本机加密保存。')) + '</span>' +
         '<button class="pws-later" type="button" data-pws-close>' + esc(t('稍后再说')) + '</button>' +
@@ -528,6 +532,8 @@
     btn.disabled = true;
     var old = btn.textContent;
     var beforeAt = '';
+    var contractNote = '';
+    var contractWarn = '';
     try{
       if(doCreate || doImport){
         try{ beforeAt = ((await progState())['init-db'] || {}).at || ''; }catch(e){}
@@ -549,6 +555,26 @@
         }
         state.applied = true;
       }
+      if(q('#pws-contract') && q('#pws-contract').checked){
+        try{
+          var cr = await fetch('/api/contract/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({frontend_dir: f, backend_dir: b, save: true})
+          });
+          var cj = await cr.json();
+          if(!cr.ok || !cj.ok){
+            var cp = (cj.problems || []).join('；');
+            contractWarn = cp || (cj.error || t('契约未生成'));
+          }else if(cj.written){
+            contractNote = t('环境契约已生成，可 git diff 审阅');
+          }else if(cj.existing){
+            contractNote = t('已有环境契约，未覆盖');
+          }
+        }catch(e){
+          contractWarn = e.message || String(e);
+        }
+      }
       var dbDone = '';
       if(doCreate || doImport){
         btn.textContent = doImport ? t('建库并导入中…') : t('建库中…');
@@ -568,7 +594,10 @@
       }
       markSeen();
       closeWizard(false);
-      toast(dbDone ? t('项目已接入，{0}', dbDone) : t('项目已接入，配置已保存'), 'ok');
+      var doneMsg = dbDone ? t('项目已接入，{0}', dbDone) : t('项目已接入，配置已保存');
+      if(contractNote) doneMsg += ' · ' + contractNote;
+      toast(doneMsg, 'ok');
+      if(contractWarn) toast(t('环境契约未生成：{0}', contractWarn), 'warn');
       try{ await loadConfig(); refreshGuards(); pollHealth(); pollProg(); }catch(e){}
     }catch(e){
       var prefix = state.applied ? t('配置已保存，但数据库操作失败：') : t('保存失败：');
