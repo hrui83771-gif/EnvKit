@@ -2259,6 +2259,11 @@ const I18N_EN = {
   "有动作失败，以下 {0} 项已停止未执行：{1}": "An action failed; the following {0} item(s) were not run: {1}",
   "切回只读": "Switch back to read-only",
   "已切回 readonly，执行按钮已关闭": "Switched back to readonly; execution is disabled",
+  "高级 / 按需扩展": "Advanced / optional extensions",
+  "默认关闭": "Off by default",
+  "这里的扩展默认不参与检测、不进入 Apply；只有本机确实需要时才开启。工具链切换与其他服务适配器尚未在 4.0 开放，遇到具体项目再按需接入。": "Extensions here do not participate in checks or Apply by default; enable only when this machine truly needs them. Toolchain switching and other service adapters are not available in 4.0 yet.",
+  "按需扩展未启用": "Optional extension not enabled",
+  "未启用扩展": "Extension not enabled",
 };
 
 let EK_LANG = 'zh';

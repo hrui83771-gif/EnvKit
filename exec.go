@@ -20,6 +20,15 @@ import (
 
 // ---------- 命令执行 ----------
 func findExe(names ...string) string {
+	// JAVA_HOME 是 JDK 的权威来源。EnvKit 从桌面/计划任务启动时 PATH 可能
+	// 不完整，不能因为 `java` 不在 PATH 就断言没装 JDK。
+	for _, n := range names {
+		if strings.EqualFold(n, "java") || strings.EqualFold(n, "java.exe") {
+			if p := javaHomeExe(); p != "" {
+				return p
+			}
+		}
+	}
 	for _, c := range cfg.Components {
 		d := componentBinDir(c)
 		if _, err := os.Stat(d); err == nil {
@@ -33,6 +42,21 @@ func findExe(names ...string) string {
 	}
 	for _, n := range names {
 		if p, err := exec.LookPath(n); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// javaHomeExe 返回 JAVA_HOME 下的 java.exe；JAVA_HOME 空或文件不存在返回空。
+func javaHomeExe() string {
+	home := strings.TrimSpace(os.Getenv("JAVA_HOME"))
+	if home == "" {
+		return ""
+	}
+	for _, n := range []string{"java.exe", "java"} {
+		p := filepath.Join(home, "bin", n)
+		if hasFile(p) {
 			return p
 		}
 	}

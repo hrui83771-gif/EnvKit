@@ -82,6 +82,43 @@ func TestDoctorMalformedContractIsBlocked(t *testing.T) {
 	}
 }
 
+func TestDoctorExtraLocalServiceStaysExtensionDisabled(t *testing.T) {
+	rep := DoctorReport{}
+	doctorCheckServices(&rep, []Service{{
+		ID: "redis", Label: "缓存", Adapter: AdapterLocal,
+		Dir: "redis", Start: "redis-server", Probe: ProbeSpec{Kind: ProbePort, Port: 6399},
+	}}, t.TempDir())
+	if len(rep.Checks) != 1 {
+		t.Fatalf("非核心本地服务不应继续做目录/探针检查: %+v", rep.Checks)
+	}
+	c := rep.Checks[0]
+	if c.ID != "services.redis" || c.Status != doctorUnknown {
+		t.Fatalf("check=%+v", c)
+	}
+	if !strings.Contains(c.Actual, "未启用扩展") && !strings.Contains(c.Detail, "按需扩展") {
+		t.Fatalf("应明确标成按需扩展未启用: %+v", c)
+	}
+}
+
+func TestExactVersionPinSyntax(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"=1.24.0", true},
+		{"==17", true},
+		{">=17", false},
+		{"17", false},
+		{"1.24.x", false},
+		{"=1.24 <1.25", false},
+	}
+	for _, c := range cases {
+		if _, ok := exactVersionPin(c.in); ok != c.want {
+			t.Errorf("exactVersionPin(%q) ok=%v want %v", c.in, ok, c.want)
+		}
+	}
+}
+
 func TestDoctorFinalize(t *testing.T) {
 	rep := DoctorReport{Checks: []DoctorCheck{
 		{Status: doctorOK},

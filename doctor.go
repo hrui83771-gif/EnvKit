@@ -179,7 +179,22 @@ func doctorCheckTools(rep *DoctorReport, tools map[string]string) {
 		id := "tools." + name
 		if actual == "" {
 			doctorAdd(rep, "tools", id, "工具链 "+name, doctorDrift,
-				constraint, "未检测到", "契约声明了版本，但 PATH 里没有可用的 "+name)
+				constraint, "未检测到", "契约声明了版本，但当前进程里没有可用的 "+name+"；工具链只诊断，不自动安装或切换")
+			continue
+		}
+		// 精确 pin 才要求完全相等；裸版本/>=/范围仍按“满足最低要求”判断，
+		// 避免把“要求 17、实际 21”这种向后兼容的情况误报成不一致。
+		if exact, ok := exactVersionPin(constraint); ok {
+			av, aok := verTriple(actual)
+			ev, eok := verTriple(exact)
+			status := doctorOK
+			why := "契约精确指定 " + exact + "，实际 " + actual + "（精确 pin 要求版本一致）"
+			if !aok || !eok || verLess(av, ev) || verLess(ev, av) {
+				status = doctorDrift
+				why = "契约精确指定 " + exact + "，实际 " + actual + "；工具链只诊断，不自动切换"
+			}
+			doctorAdd(rep, "tools", id, "工具链 "+name, status,
+				constraint, actual, why, "如项目确实需要该精确版本，请手动处理；EnvKit 不会自动改 PATH")
 			continue
 		}
 		r := EnvReq{Component: name, Required: constraint, Actual: actual}
@@ -188,12 +203,33 @@ func doctorCheckTools(rep *DoctorReport, tools map[string]string) {
 		switch r.Status {
 		case reqTooLow, reqNotInstall:
 			status = doctorDrift
+			r.Action = "当前版本与契约不符；工具链只诊断，不自动切换。确认项目确实需要后，再手动处理"
 		case reqUndeclared:
 			status = doctorUnknown
 		}
 		doctorAdd(rep, "tools", id, "工具链 "+name, status,
 			constraint, actual, r.Why, r.Action)
 	}
+}
+
+// exactVersionPin 只认显式精确语法：=1.24、==1.24。
+// 裸写 1.24 仍按“最低版本”处理，保持与既有契约兼容。
+func exactVersionPin(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "==") {
+		s = strings.TrimSpace(s[2:])
+	} else if strings.HasPrefix(s, "=") {
+		s = strings.TrimSpace(s[1:])
+	} else {
+		return "", false
+	}
+	if s == "" || strings.ContainsAny(s, "<>^~ xX*|,") {
+		return "", false
+	}
+	if _, ok := verTriple(s); !ok {
+		return "", false
+	}
+	return s, true
 }
 
 func doctorToolActual(name string) string {
@@ -224,6 +260,17 @@ func doctorCheckServices(rep *DoctorReport, svcs []Service, root string) {
 				"远程链端探针", "Phase 2 不探测远程链端", "远程 SSH/链端检查留到后续阶段；不把未探测当成通过")
 			continue
 		}
+		if svc.Adapter == AdapterDB {
+			// 数据库服务由 database 段单独判定，不重复走 local 服务分支。
+			continue
+		}
+		if !isCoreContractService(svc) {
+			// 4.0 主干只托管 web/backend。其他本地服务（Redis、文档站、worker 等）
+			// 属于按需扩展：默认不识别、不探测、不进 Apply，也不标成必须修复。
+			doctorAdd(rep, "services", id, "服务 "+svcLabelOrID(svc), doctorUnknown,
+				"按需扩展未启用", "未启用扩展", "该本地服务不在 4.0 主干；需要时按项目开启受控适配器")
+			continue
+		}
 		if strings.TrimSpace(svc.Dir) != "" && svc.Dir != "." {
 			abs, err := contractAbsPath(root, svc.Dir)
 			if err != nil {
@@ -250,6 +297,15 @@ func svcLabelOrID(svc Service) string {
 		return svc.Label
 	}
 	return svc.ID
+}
+
+// 4.0 主干只把 web/backend 当作核心本地服务；其他服务一律按需扩展。
+func isCoreContractService(svc Service) bool {
+	switch strings.ToLower(strings.TrimSpace(svc.ID)) {
+	case "web", "backend":
+		return true
+	}
+	return false
 }
 
 func doctorCheckServiceProbe(rep *DoctorReport, svc Service, id string) {

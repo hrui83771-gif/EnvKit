@@ -44,6 +44,13 @@ func detectComponent(c Component) CheckResult {
 		ver := getVersion(p, c)
 		return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
 	}
+	// JDK 同样可能不在 PATH，但 JAVA_HOME 指向它。
+	if strings.EqualFold(c.CheckCmd, "java") || strings.EqualFold(c.CheckCmd, "java.exe") {
+		if p := javaHomeExe(); p != "" {
+			ver := getVersion(p, c)
+			return CheckResult{Name: c.Name, Installed: true, Version: ver, Location: p}
+		}
+	}
 	// 系统安装的 MySQL 默认不在 PATH：服务能跑、数据库能连，但组件检测
 	// 只看 LookPath 会误报“缺少 MySQL”。这里复用数据库侧的服务/安装目录
 	// 定位，保证“能连库”和“检测到 MySQL”是同一个事实。

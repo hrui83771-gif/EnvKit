@@ -23,3 +23,14 @@ func TestDetectComponentFallsBackToSystemMySQL(t *testing.T) {
 		t.Fatalf("检测到安装但位置为空: %+v", r)
 	}
 }
+
+func TestDetectComponentFallsBackToJavaHome(t *testing.T) {
+	if javaHomeExe() == "" {
+		t.Skip("本机没有可用的 JAVA_HOME")
+	}
+	c := Component{Name: "JDK", BinExe: "java.exe", CheckCmd: "java", CheckArgs: []string{"-version"}}
+	r := detectComponent(c)
+	if !r.Installed || r.Location == "" {
+		t.Fatalf("JAVA_HOME 指向 JDK 但检测为未安装: %+v", r)
+	}
+}

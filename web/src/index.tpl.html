@@ -1044,25 +1044,30 @@
           </div>
         </div>
 
-        <div class="set-card" style="margin-top:8px">
-          <div class="set-card-head"><span class="t">MCP 工具服务</span><span class="tag">本机集成</span></div>
-          <div class="grid">
-            <div>
-              <div class="ckrow" style="margin-top:0">
-                <label class="switch"><input type="checkbox" id="s_mcp_on"><span class="sl"></span></label>
-                <div class="cktext"><b>允许 MCP 客户端连接</b></div>
+        <details class="adv-fold" id="set-adv-ext">
+          <summary><b>高级 / 按需扩展</b><span class="tag">默认关闭</span></summary>
+          <div class="hint" style="margin:6px 0 8px">这里的扩展默认不参与检测、不进入 Apply；只有本机确实需要时才开启。工具链切换与其他服务适配器尚未在 4.0 开放，遇到具体项目再按需接入。</div>
+
+          <div class="set-card" style="margin-top:8px">
+            <div class="set-card-head"><span class="t">MCP 工具服务</span><span class="tag">本机集成</span></div>
+            <div class="grid">
+              <div>
+                <div class="ckrow" style="margin-top:0">
+                  <label class="switch"><input type="checkbox" id="s_mcp_on"><span class="sl"></span></label>
+                  <div class="cktext"><b>允许 MCP 客户端连接</b></div>
+                </div>
+                <!-- 生效状态与令牌有效期都写在这行：开关勾上却连不上，
+                     是这类"对外服务"最常被报成 bug 的事，状态必须就地可见 -->
+                <div class="hint" id="h-mcp" style="margin-top:4px">—</div>
+                <div class="dirrow" style="margin-top:6px">
+                  <button class="ghost" id="btn-mcp-copy">复制连接配置</button>
+                </div>
+                <div class="hint" id="h-mcp-snippet" style="margin-top:4px">—</div>
               </div>
-              <!-- 生效状态与令牌有效期都写在这行：开关勾上却连不上，
-                   是这类"对外服务"最常被报成 bug 的事，状态必须就地可见 -->
-              <div class="hint" id="h-mcp" style="margin-top:4px">—</div>
-              <div class="dirrow" style="margin-top:6px">
-                <button class="ghost" id="btn-mcp-copy">复制连接配置</button>
-              </div>
-              <div class="hint" id="h-mcp-snippet" style="margin-top:4px">—</div>
+              <div><div class="ro-list" id="s_mcp_view" style="margin-top:0"></div></div>
             </div>
-            <div><div class="ro-list" id="s_mcp_view" style="margin-top:0"></div></div>
           </div>
-        </div>
+        </details>
 
         <div class="set-savebar">
           <button id="btn-set-save">保存基础设置</button>

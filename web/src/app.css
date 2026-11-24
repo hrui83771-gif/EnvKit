@@ -337,6 +337,12 @@
   .mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--info);word-break:break-all}
   details{margin-top:10px}
   summary{cursor:pointer;color:var(--info);font-size:12px;user-select:none}
+  /* 高级/按需扩展默认折叠：普通用户不展开就看不到 MCP 等扩展入口 */
+  .adv-fold{margin-top:10px}
+  .adv-fold>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;list-style:none;background:var(--soft2);border-radius:8px;color:var(--text);font-size:13px}
+  .adv-fold>summary::-webkit-details-marker{display:none}
+  .adv-fold>summary::before{content:'▸';font-size:10px;color:var(--muted);transition:transform .15s}
+  .adv-fold[open]>summary::before{transform:rotate(90deg)}
   .grp{border:1px dashed var(--line);border-radius:8px;padding:12px;margin-top:10px}
   .svc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
   .svc-head{display:flex;align-items:center;justify-content:space-between;gap:6px}

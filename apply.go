@@ -5,7 +5,7 @@
 //	· 计划只从 Doctor 的 drift 项生成，不扫描不存在的差异；
 //	· 只执行白名单动作（建库、启动 web/backend、导入契约里的 schema）；
 //	· 高风险动作（导入 schema）必须二次确认；
-//	· 不升级工具链、不改契约、不执行契约里的任意 start/stop 命令。
+//	· 工具链只诊断，不升级/切换；其他本地服务属于按需扩展，默认关闭。
 package main
 
 import (
@@ -176,7 +176,7 @@ func buildContractApplyPlan(c Config, contract *EnvironmentContract, root string
 				a.Reason = "Phase 3 只启动 local 服务，远程链端不执行契约命令"
 			case svc.ID != "web" && svc.ID != "backend":
 				a.Risk = applyRiskBlocked
-				a.Reason = "Phase 3 只自动启动 web/backend；其他服务留给 Phase 5 环境事务"
+				a.Reason = "4.0 主干只自动启动 web/backend；其他本地服务属于按需扩展，默认关闭"
 			case !serviceProbeWasDown(svc):
 				a.Risk = applyRiskBlocked
 				a.Reason = "端口已有监听，但健康检查不通过；不自动重启身份不明的实例"
@@ -198,7 +198,7 @@ func buildContractApplyPlan(c Config, contract *EnvironmentContract, root string
 			add(ApplyAction{
 				ID: "apply." + chk.ID, Group: "tools",
 				Title: chk.Title, Target: chk.Actual, Risk: applyRiskBlocked,
-				Reason: "Phase 3 不自动升级/降级工具链；版本变更需要用户自己选定安装包",
+				Reason: "工具链只诊断，不自动升级/降级或切换版本；是否需要处理由用户决定",
 			})
 		case chk.ID == "database.schema":
 			add(ApplyAction{
@@ -223,7 +223,7 @@ func buildContractApplyPlan(c Config, contract *EnvironmentContract, root string
 	if len(p.Actions) == 0 {
 		p.Conclusion = "没有需要 Apply 的 drift 项。"
 	} else {
-		p.Conclusion = "只执行你勾选的白名单动作；导入 schema 属于高风险，需二次确认。"
+		p.Conclusion = "只执行你勾选的白名单动作；执行前自动快照，导入 schema 属于高风险，需二次确认。"
 	}
 	return p
 }
