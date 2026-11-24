@@ -193,6 +193,18 @@ func fileSHA256Hex(path string) string {
 }
 
 func applySQLFile(path, db string) error {
+	p := cfg.Projects
+	params := mysqlConnParams{
+		Host: p.MySQLHost, Port: p.MySQLPort,
+		User: p.MySQLUser, Pass: p.MySQLPass, DB: p.DBName,
+	}
+	return applySQLFileWithParams(path, params, db, true)
+}
+
+// applySQLFileWithParams 用指定连接执行 SQL 文件。
+// 契约 Apply 与快照恢复不能假设目标库等于本机 config 里的库，所以把连接参数
+// 显式传入；普通路径仍由 applySQLFile 走 config，行为不变。
+func applySQLFileWithParams(path string, p mysqlConnParams, db string, recordHistory bool) error {
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("SQL 文件不存在: %s", path)
 	}
@@ -200,19 +212,25 @@ func applySQLFile(path, db string) error {
 	if exe == "" {
 		return fmt.Errorf("未找到 mysql 客户端，请先安装 MySQL")
 	}
-	p := cfg.Projects
-	dbName := db
+	dbName := strings.TrimSpace(db)
 	if dbName == "" {
-		dbName = p.DBName
+		dbName = strings.TrimSpace(p.DB)
 	}
-	// 重复执行检查：同内容文件执行过就醒目提示（仍允许继续，由用户确认）
-	if hash := fileSHA256Hex(path); hash != "" {
-		sqlHistMu.Lock()
-		hist := loadSQLHistory()
-		prev, done := hist[hash]
-		sqlHistMu.Unlock()
-		if done {
-			warn(scConfig, "SQL", "注意：该 SQL 文件（内容一致）已于 %s 执行过（%s），重复执行可能重复建表/覆盖数据", prev.Time, prev.Path)
+	if dbName != "" {
+		if _, err := quoteIdent(dbName); err != nil {
+			return err
+		}
+	}
+	// 重复执行检查：同内容文件执行过就醒目提示（仍允许继续）
+	if recordHistory {
+		if hash := fileSHA256Hex(path); hash != "" {
+			sqlHistMu.Lock()
+			hist := loadSQLHistory()
+			prev, done := hist[hash]
+			sqlHistMu.Unlock()
+			if done {
+				warn(scConfig, "SQL", "注意：该 SQL 文件（内容一致）已于 %s 执行过（%s），重复执行可能重复建表/覆盖数据", prev.Time, prev.Path)
+			}
 		}
 	}
 	info(scConfig, "SQL", "%s（库 %s）", path, dbName)
@@ -221,25 +239,27 @@ func applySQLFile(path, db string) error {
 		return err
 	}
 	defer f.Close()
-	args := []string{"-h", p.MySQLHost, "-P", strconv.Itoa(p.MySQLPort), "-u", p.MySQLUser}
+	args := []string{"-h", p.Host, "-P", strconv.Itoa(p.Port), "-u", p.User}
 	if dbName != "" {
 		args = append(args, dbName)
 	}
 	ctxSQL, cancelSQL := cmdContext(10 * time.Minute)
 	defer cancelSQL()
 	cmd := exec.CommandContext(ctxSQL, exe, args...)
-	cmd.Env = append(toolEnv(nil), "MYSQL_PWD="+p.MySQLPass)
+	cmd.Env = append(toolEnv(nil), "MYSQL_PWD="+p.Pass)
 	cmd.Stdin = f
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v：%s", err, firstLines(string(out), 800))
 	}
-	if hash := fileSHA256Hex(path); hash != "" {
-		sqlHistMu.Lock()
-		hist := loadSQLHistory()
-		hist[hash] = sqlRec{Path: path, Time: time.Now().Format("2006-01-02 15:04:05")}
-		saveSQLHistory(hist)
-		sqlHistMu.Unlock()
+	if recordHistory {
+		if hash := fileSHA256Hex(path); hash != "" {
+			sqlHistMu.Lock()
+			hist := loadSQLHistory()
+			hist[hash] = sqlRec{Path: path, Time: time.Now().Format("2006-01-02 15:04:05")}
+			saveSQLHistory(hist)
+			sqlHistMu.Unlock()
+		}
 	}
 	ok(scConfig, "SQL", "已生效")
 	return nil

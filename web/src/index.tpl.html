@@ -921,6 +921,39 @@
             <div class="doc-checks" id="doctor-checks"></div>
           </div>
 
+          <div class="set-card" id="set-contract-apply">
+            <div class="set-card-head"><span class="t">环境事务</span><span class="tag">只修安全项</span></div>
+            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。工具链升级、密钥补齐、远程链端只给原因，不自动改。</div>
+            <div class="row">
+              <button class="ghost" id="btn-apply-plan">生成修复计划</button>
+              <span class="status idle" id="st-apply">未生成</span>
+              <span class="hint" id="h-apply" style="margin-left:auto"></span>
+            </div>
+            <div class="doc-sum" id="apply-sum"></div>
+            <div class="doc-checks" id="apply-actions"></div>
+            <div class="row" id="apply-run-row" style="display:none;margin-top:8px">
+              <button id="btn-apply-run">执行选中项</button>
+              <span class="hint">导入 schema 会先备份当前库，再走二次确认。</span>
+            </div>
+            <div class="doc-checks" id="apply-result" style="margin-top:8px"></div>
+
+            <div class="set-subhead" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+              <b>最小环境快照</b>
+              <span class="tag" style="margin-left:8px">checkpoint</span>
+            </div>
+            <div class="hint" style="margin:2px 0 8px">保存契约副本、本机配置（DPAPI 加密）、可选数据库 dump 和服务/端口现场。恢复不覆盖项目里的 envkit.yaml，只把快照副本放到旁边供对照。</div>
+            <div class="row">
+              <input id="cp-label" placeholder="快照标签，如 升级前" style="max-width:220px" />
+              <label class="ckrow" style="margin:0;gap:6px">
+                <input type="checkbox" id="cp-db" />
+                <span class="hint">包含数据库</span>
+              </label>
+              <button class="ghost" id="btn-cp-create">立即快照</button>
+              <span class="status idle" id="st-cp">未创建</span>
+            </div>
+            <div class="cp-list" id="cp-list"></div>
+          </div>
+
           <div class="set-card">
             <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
             <div class="ckrow" style="margin-top:0">

@@ -2644,6 +2644,22 @@ body.pws-open{overflow:hidden}
 .doc-detail{font-size:11.5px;line-height:1.55;color:var(--text);margin-top:2px;overflow-wrap:anywhere}
 .doc-evidence{font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .doc-empty{font-size:11.5px;line-height:1.6;color:var(--muted);padding:6px 0}
+/* Phase 3/4：Apply 勾选与快照列表。沿用 Doctor 的卡片密度，不另起一套视觉。 */
+.ap-check{width:auto!important;height:auto!important;min-width:0!important;margin:0 8px 0 0;flex:none;accent-color:var(--brand)}
+.ap-block{width:16px;margin-right:8px;color:var(--muted);text-align:center;flex:none;font-size:11px}
+.cp-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.cp-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.cp-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cp-main b{font-size:12px;overflow-wrap:anywhere}
+.cp-meta{grid-column:1;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.cp-act{grid-column:2;grid-row:1 / span 2;display:flex;align-items:center;gap:6px}
+.cp-item .ghost{padding:5px 9px;font-size:11px}
+#set-contract-apply .ckrow{flex:0 0 auto;white-space:nowrap;gap:6px}
+#set-contract-apply .ckrow .hint{white-space:nowrap}
+@media(max-width:760px){
+  .cp-item{grid-template-columns:1fr}
+  .cp-act{grid-column:1;grid-row:auto}
+}
 .pws-empty{padding:14px;border:1px dashed var(--line);border-radius:10px;font-size:11.5px;color:var(--muted);line-height:1.65;background:var(--soft)}
 
 @keyframes pws-fade{from{opacity:0}to{opacity:1}}
@@ -3593,6 +3609,39 @@ body.pws-open{overflow:hidden}
             <div class="ro-list" id="doctor-meta" style="margin-top:8px"></div>
             <div class="doc-sum" id="doctor-sum"></div>
             <div class="doc-checks" id="doctor-checks"></div>
+          </div>
+
+          <div class="set-card" id="set-contract-apply">
+            <div class="set-card-head"><span class="t">环境事务</span><span class="tag">只修安全项</span></div>
+            <div class="hint" style="margin:2px 0 8px">Apply 只从 Doctor 的偏差里生成白名单动作：建缺失的库、启动 web/backend、导入契约声明的 schema。工具链升级、密钥补齐、远程链端只给原因，不自动改。</div>
+            <div class="row">
+              <button class="ghost" id="btn-apply-plan">生成修复计划</button>
+              <span class="status idle" id="st-apply">未生成</span>
+              <span class="hint" id="h-apply" style="margin-left:auto"></span>
+            </div>
+            <div class="doc-sum" id="apply-sum"></div>
+            <div class="doc-checks" id="apply-actions"></div>
+            <div class="row" id="apply-run-row" style="display:none;margin-top:8px">
+              <button id="btn-apply-run">执行选中项</button>
+              <span class="hint">导入 schema 会先备份当前库，再走二次确认。</span>
+            </div>
+            <div class="doc-checks" id="apply-result" style="margin-top:8px"></div>
+
+            <div class="set-subhead" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+              <b>最小环境快照</b>
+              <span class="tag" style="margin-left:8px">checkpoint</span>
+            </div>
+            <div class="hint" style="margin:2px 0 8px">保存契约副本、本机配置（DPAPI 加密）、可选数据库 dump 和服务/端口现场。恢复不覆盖项目里的 envkit.yaml，只把快照副本放到旁边供对照。</div>
+            <div class="row">
+              <input id="cp-label" placeholder="快照标签，如 升级前" style="max-width:220px" />
+              <label class="ckrow" style="margin:0;gap:6px">
+                <input type="checkbox" id="cp-db" />
+                <span class="hint">包含数据库</span>
+              </label>
+              <button class="ghost" id="btn-cp-create">立即快照</button>
+              <span class="status idle" id="st-cp">未创建</span>
+            </div>
+            <div class="cp-list" id="cp-list"></div>
           </div>
 
           <div class="set-card">
@@ -19034,6 +19083,315 @@ if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', ekDoctorBind);
 }else{
   ekDoctorBind();
+}
+/* ---------- v4.0 Phase 3/4：Apply 与最小快照 ----------
+   Apply 不自造“修复逻辑”：计划完全来自 Doctor drift；
+   前端只负责勾选和安全项确认，执行白名单在后端。
+   快照恢复复用 postConfirm（服务端 428 + 真风险文案）。 */
+
+var ekTxnBusy = false;
+var ekLastApplyPlan = null;
+
+function ekTxnErr(prefix, e){
+  return prefix + '：' + (e && e.message ? e.message : String(e));
+}
+
+async function ekTxnJSON(url, opt){
+  var r = await fetch(url, opt || {});
+  var txt = await r.text();
+  var j = null;
+  try{ j = txt ? JSON.parse(txt) : {}; }catch(e){ throw new Error(txt || ('HTTP ' + r.status)); }
+  if(!r.ok){
+    var err = new Error(j.error || j.reason || ('HTTP ' + r.status));
+    err.status = r.status; err.body = j;
+    throw err;
+  }
+  return j;
+}
+
+function ekTxnBind(){
+  var plan = document.getElementById('btn-apply-plan');
+  if(plan && !plan.__ekBound){ plan.__ekBound = true; plan.addEventListener('click', ekApplyPlan); }
+  var run = document.getElementById('btn-apply-run');
+  if(run && !run.__ekBound){ run.__ekBound = true; run.addEventListener('click', ekApplyRun); }
+  var cp = document.getElementById('btn-cp-create');
+  if(cp && !cp.__ekBound){ cp.__ekBound = true; cp.addEventListener('click', ekCheckpointCreate); }
+  var list = document.getElementById('cp-list');
+  if(list && !list.__ekBound){
+    list.__ekBound = true;
+    list.addEventListener('click', function(ev){
+      var b = ev.target && ev.target.closest ? ev.target.closest('[data-cp-act]') : null;
+      if(!b) return;
+      if(b.getAttribute('data-cp-act') === 'restore') ekCheckpointRestore(b.getAttribute('data-cp-id'));
+      if(b.getAttribute('data-cp-act') === 'delete') ekCheckpointDelete(b.getAttribute('data-cp-id'));
+    });
+  }
+  ekCheckpointList();
+}
+
+function ekApplyBadge(risk){
+  if(risk === 'confirm') return '<span class="doc-badge s-drift">' + esc(t('需确认')) + '</span>';
+  if(risk === 'blocked') return '<span class="doc-badge s-undeclared">' + esc(t('不自动修')) + '</span>';
+  return '<span class="doc-badge s-ok">' + esc(t('安全')) + '</span>';
+}
+
+async function ekApplyPlan(){
+  if(ekTxnBusy) return;
+  ekTxnBusy = true;
+  var btn = document.getElementById('btn-apply-plan');
+  var st = document.getElementById('st-apply');
+  var list = document.getElementById('apply-actions');
+  var sum = document.getElementById('apply-sum');
+  var row = document.getElementById('apply-run-row');
+  var res = document.getElementById('apply-result');
+  if(btn){ btn.disabled = true; btn.textContent = t('生成中…'); }
+  if(st){ st.className = 'status run'; st.textContent = t('生成中'); }
+  if(sum) sum.innerHTML = '';
+  if(res) res.innerHTML = '';
+  if(row) row.style.display = 'none';
+  if(list) list.innerHTML = '<div class="doc-empty">' + esc(t('正在把 Doctor 的偏差翻译成修复计划…')) + '</div>';
+  try{
+    var p = await ekTxnJSON('/api/contract/apply/plan');
+    ekLastApplyPlan = p;
+    ekApplyRenderPlan(p);
+  }catch(e){
+    ekLastApplyPlan = null;
+    if(st){ st.className = 'status fail'; st.textContent = e.status === 409 ? t('不可执行') : t('生成失败'); }
+    if(list) list.innerHTML = '<div class="doc-empty">' + esc(e.message) + '</div>';
+    toast(ekTxnErr(t('生成修复计划失败'), e), 'err');
+  }finally{
+    ekTxnBusy = false;
+    if(btn){ btn.disabled = false; btn.textContent = t('重新生成计划'); }
+  }
+}
+
+function ekApplyRenderPlan(p){
+  p = p || {};
+  var st = document.getElementById('st-apply');
+  var list = document.getElementById('apply-actions');
+  var sum = document.getElementById('apply-sum');
+  var row = document.getElementById('apply-run-row');
+  var actions = p.actions || [];
+  var safe = 0, confirm = 0, blocked = 0;
+  actions.forEach(function(a){
+    if(a.risk === 'blocked' || !a.available) blocked++;
+    else if(a.risk === 'confirm') confirm++;
+    else safe++;
+  });
+  if(st){
+    st.className = 'status ' + (p.ok ? (actions.length ? 'warn' : 'ok') : 'fail');
+    st.textContent = p.ok ? (actions.length ? t('有 {0} 项可处理', actions.length) : t('无需处理')) : t('不可执行');
+  }
+  if(sum){
+    var chips = [];
+    if(safe) chips.push('<span class="s-ok">' + esc(t('安全 {0}', safe)) + '</span>');
+    if(confirm) chips.push('<span class="s-drift">' + esc(t('需确认 {0}', confirm)) + '</span>');
+    if(blocked) chips.push('<span class="s-undeclared">' + esc(t('不自动修 {0}', blocked)) + '</span>');
+    sum.innerHTML = chips.join('');
+  }
+  if(!p.ok){
+    list.innerHTML = '<div class="doc-empty">' + esc(p.error || t('没有可用的契约')) + '</div>';
+    return;
+  }
+  if(!actions.length){
+    list.innerHTML = '<div class="doc-empty">' + esc(p.conclusion || t('没有需要 Apply 的偏差')) + '</div>';
+    return;
+  }
+  list.innerHTML = actions.map(function(a){
+    var selectable = a.available && a.risk !== 'blocked';
+    var box = selectable
+      ? '<input type="checkbox" class="ap-check" data-apply-id="' + esc(a.id) + '"' + (a.risk === 'safe' ? ' checked' : '') + ' />'
+      : '<span class="ap-block">×</span>';
+    var reason = a.reason ? '<div class="doc-detail">' + esc(a.reason) + '</div>' : '';
+    return '<div class="doc-check ' + (selectable ? (a.risk === 'confirm' ? 's-drift' : 's-ok') : 's-undeclared') + '">' +
+      '<div class="doc-top">' + box + '<b style="flex:1">' + esc(a.title) + '</b>' + ekApplyBadge(a.risk) + '</div>' +
+      '<div class="doc-kv">' + esc(t('目标：')) + esc(a.target || '') + '</div>' +
+      reason + '</div>';
+  }).join('');
+  // 绑定勾选变化：没有勾选就禁用执行按钮
+  list.querySelectorAll('.ap-check').forEach(function(cb){
+    cb.addEventListener('change', ekApplySyncRun);
+  });
+  if(row) row.style.display = (safe + confirm > 0) ? '' : 'none';
+  ekApplySyncRun();
+}
+
+function ekApplySelected(){
+  var ids = [];
+  document.querySelectorAll('#apply-actions .ap-check:checked').forEach(function(cb){
+    ids.push(cb.getAttribute('data-apply-id'));
+  });
+  return ids;
+}
+
+function ekApplySyncRun(){
+  var btn = document.getElementById('btn-apply-run');
+  if(!btn) return;
+  var n = ekApplySelected().length;
+  btn.disabled = n === 0 || ekTxnBusy;
+  btn.textContent = n ? t('执行选中项（{0}）', n) : t('执行选中项');
+}
+
+async function ekApplyRun(){
+  if(ekTxnBusy) return;
+  var ids = ekApplySelected();
+  if(!ids.length){ toast(t('请至少勾选一个动作'), 'warn'); return; }
+  var st = document.getElementById('st-apply');
+  var out = document.getElementById('apply-result');
+  ekTxnBusy = true;
+  ekApplySyncRun();
+  if(st){ st.className = 'status run'; st.textContent = t('执行中'); }
+  if(out) out.innerHTML = '<div class="doc-empty">' + esc(t('正在执行并重新诊断…')) + '</div>';
+  try{
+    /* 让服务端决定要不要 428：前端不猜哪项高危，风险文案由后端按真实动作生成。 */
+    var r = await postConfirm('/api/contract/apply', {selected:ids},
+      t('执行环境修复'), t('仅执行选中的白名单动作；不会运行契约里的任意命令。'));
+    if(!r){ // 用户取消二次确认
+      if(st){ st.className = 'status idle'; st.textContent = t('未执行'); }
+      if(out) out.innerHTML = '';
+      return;
+    }
+    var txt = await r.text();
+    var j; try{ j = JSON.parse(txt); }catch(e){ throw new Error(txt || ('HTTP ' + r.status)); }
+    if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    ekApplyRenderResult(j);
+  }catch(e){
+    if(st){ st.className = 'status fail'; st.textContent = t('执行失败'); }
+    if(out) out.innerHTML = '<div class="doc-empty">' + esc(e.message) + '</div>';
+    toast(ekTxnErr(t('环境修复失败'), e), 'err');
+  }finally{
+    ekTxnBusy = false;
+    ekApplySyncRun();
+  }
+}
+
+function ekApplyRenderResult(run){
+  run = run || {};
+  var st = document.getElementById('st-apply');
+  var out = document.getElementById('apply-result');
+  if(st){
+    st.className = 'status ' + (run.ok ? 'ok' : 'fail');
+    st.textContent = run.ok ? t('执行完成') : t('有动作失败');
+  }
+  var steps = run.applied || [];
+  out.innerHTML = steps.map(function(s){
+    var ev = (s.evidence && s.evidence.length)
+      ? '<div class="doc-evidence">' + esc(s.evidence.join(' · ')) + '</div>' : '';
+    return '<div class="doc-check ' + (s.ok ? 's-ok' : 's-drift') + '">' +
+      '<div class="doc-top"><b>' + esc(s.title || s.id) + '</b><span class="doc-badge ' + (s.ok ? 's-ok' : 's-drift') + '">' + esc(s.ok ? t('完成') : t('失败')) + '</span></div>' +
+      '<div class="doc-kv">' + esc(s.msg || '') + '</div>' + ev + '</div>';
+  }).join('');
+  if(run.doctor && typeof ekDoctorRender === 'function') ekDoctorRender(run.doctor);
+}
+
+async function ekCheckpointList(){
+  var list = document.getElementById('cp-list');
+  if(!list) return;
+  try{
+    var j = await ekTxnJSON('/api/contract/checkpoints');
+    var rows = j.checkpoints || [];
+    if(!rows.length){
+      list.innerHTML = '<div class="doc-empty">' + esc(t('还没有快照。先做一个，再改环境。')) + '</div>';
+      return;
+    }
+    list.innerHTML = rows.map(function(c){
+      var db = c.db_included
+        ? t('数据库 {0} · {1} 表 · {2}', c.db_name || '', c.table_count || 0, ekBytes(c.db_size || 0))
+        : t('不含数据库');
+      var svc = t('服务 {0} 个，运行 {1} 个', c.services || 0, c.running || 0);
+      return '<div class="cp-item">' +
+        '<div class="cp-main"><b>' + esc(c.label || c.id) + '</b>' +
+        '<span class="hint">' + esc(String(c.created_at || '').replace('T',' ').slice(0,19)) + ' · ' + esc(ekBytes(c.size || 0)) + '</span></div>' +
+        '<div class="cp-meta">' + esc(db) + ' · ' + esc(svc) + '</div>' +
+        '<div class="cp-act"><button class="ghost" data-cp-act="restore" data-cp-id="' + esc(c.id) + '">' + esc(t('恢复')) + '</button>' +
+        '<button class="ghost danger" data-cp-act="delete" data-cp-id="' + esc(c.id) + '">' + esc(t('删除')) + '</button></div>' +
+        '</div>';
+    }).join('');
+  }catch(e){
+    list.innerHTML = '<div class="doc-empty">' + esc(ekTxnErr(t('读取快照失败'), e)) + '</div>';
+  }
+}
+
+function ekBytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function ekCheckpointCreate(){
+  if(ekTxnBusy) return;
+  ekTxnBusy = true;
+  var btn = document.getElementById('btn-cp-create');
+  var st = document.getElementById('st-cp');
+  var label = (document.getElementById('cp-label') || {}).value || '';
+  var db = !!(document.getElementById('cp-db') || {}).checked;
+  if(btn){ btn.disabled = true; btn.textContent = t('快照中…'); }
+  if(st){ st.className = 'status run'; st.textContent = t('快照中'); }
+  try{
+    var j = await ekTxnJSON('/api/contract/checkpoint', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({label:label.trim(), database:db})
+    });
+    if(st){ st.className = 'status ok'; st.textContent = t('已创建'); }
+    toast(t('快照 {0} 已创建', (j.checkpoint || {}).id || ''), 'ok');
+    ekCheckpointList();
+  }catch(e){
+    if(st){ st.className = 'status fail'; st.textContent = t('创建失败'); }
+    toast(ekTxnErr(t('创建快照失败'), e), 'err');
+  }finally{
+    ekTxnBusy = false;
+    if(btn){ btn.disabled = false; btn.textContent = t('立即快照'); }
+  }
+}
+
+async function ekCheckpointRestore(id){
+  if(!id || ekTxnBusy) return;
+  var st = document.getElementById('st-cp');
+  try{
+    var r = await postConfirm('/api/contract/checkpoint/restore', {id:id},
+      t('恢复快照'), t('将恢复配置和数据库，当前状态会先留备份。'));
+    if(!r) return;
+    var j = await r.json();
+    if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    if(st){ st.className = 'status ' + (j.ok ? 'ok' : 'fail'); st.textContent = j.ok ? t('已恢复') : t('恢复有失败'); }
+    var out = document.getElementById('apply-result');
+    if(out){
+      var steps = j.steps || [];
+      out.innerHTML = steps.map(function(s){
+        return '<div class="doc-check ' + (s.ok ? 's-ok' : 's-drift') + '">' +
+          '<div class="doc-top"><b>' + esc(s.title || s.id) + '</b><span class="doc-badge ' + (s.ok ? 's-ok' : 's-drift') + '">' + esc(s.ok ? t('完成') : t('失败')) + '</span></div>' +
+          '<div class="doc-kv">' + esc(s.msg || '') + '</div></div>';
+      }).join('');
+    }
+    if(j.contract_changed){ toast(j.contract_note || t('契约文件与快照不同，未覆盖'), 'warn'); }
+    if(j.doctor && typeof ekDoctorRender === 'function') ekDoctorRender(j.doctor);
+    toast(j.ok ? t('快照已恢复') : (j.error || t('恢复有失败')), j.ok ? 'ok' : 'err');
+    ekCheckpointList();
+  }catch(e){
+    toast(ekTxnErr(t('恢复快照失败'), e), 'err');
+  }
+}
+
+async function ekCheckpointDelete(id){
+  if(!id || ekTxnBusy) return;
+  try{
+    var r = await postConfirm('/api/contract/checkpoint/delete', {id:id},
+      t('删除快照'), t('删除后不能恢复；当前环境不受影响。'));
+    if(!r) return;
+    var j = await r.json();
+    if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    toast(t('快照已删除'), 'ok');
+    ekCheckpointList();
+  }catch(e){
+    toast(ekTxnErr(t('删除快照失败'), e), 'err');
+  }
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', ekTxnBind);
+}else{
+  ekTxnBind();
 }
 </script>
 </body>
