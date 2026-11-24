@@ -168,6 +168,22 @@ func TestPlanApplyBackupKeepsCreateDatabaseOutOfRollback(t *testing.T) {
 	}
 }
 
+func TestDropObjectsSQLQuotesAndRejectsBadName(t *testing.T) {
+	sql, err := dropObjectsSQL("TABLE", []string{"a9_probe", "b_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sql != "DROP TABLE IF EXISTS `a9_probe`, `b_1`;" {
+		t.Fatalf("sql=%q", sql)
+	}
+	if sql, err := dropObjectsSQL("VIEW", nil); err != nil || sql != "" {
+		t.Fatalf("empty: sql=%q err=%v", sql, err)
+	}
+	if _, err := dropObjectsSQL("TABLE", []string{"bad;name"}); err == nil {
+		t.Fatal("非法标识符应被拒绝")
+	}
+}
+
 func TestExecuteApplyChosenStopsOnFirstFailure(t *testing.T) {
 	tx := &ApplyTransaction{CheckpointID: "cp-20261124-120000-test", RollbackNote: "执行前快照"}
 	plan := ApplyPlan{ContractPath: filepath.Join(t.TempDir(), "envkit.yaml")}

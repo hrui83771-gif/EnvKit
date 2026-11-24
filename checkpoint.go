@@ -622,14 +622,37 @@ func restoreCheckpointDatabase(m CheckpointManifest, d *DatabaseContract, dir st
 			return step, fmt.Errorf("%s", res.Msg)
 		}
 	}
+	// 快照里的空库 dump 只有头部、没有 CREATE TABLE。直接把它导入现有库，
+	// 当前库里新加的表不会被删除，恢复就会“看起来成功、实际没回到执行前”。
+	// 先清掉当前库里的表/视图，再导入快照；失败时用刚做的备份回填。
+	recoverBackup := func() bool {
+		if backup == "" {
+			return false
+		}
+		if err := dropDatabaseObjects(p, m.Database.Name); err != nil {
+			return false
+		}
+		return applySQLFileWithParams(backup, p, m.Database.Name, false) == nil
+	}
+	if err := dropDatabaseObjects(p, m.Database.Name); err != nil {
+		step.Msg = "清理当前库对象失败，已中止：" + firstLines(err.Error(), 400)
+		step.Artifact = backup
+		return step, err
+	}
 	if err := applySQLFileWithParams(dbPath, p, m.Database.Name, true); err != nil {
 		step.Msg = "导入快照数据库失败：" + firstLines(err.Error(), 400)
+		if recoverBackup() {
+			step.Msg += "；已回滚到恢复前备份"
+		}
 		step.Artifact = backup
 		return step, err
 	}
 	actual, err := doctorTableNames(context.Background(), p, m.Database.Name)
-	if err == nil && m.Database.TableCount > 0 && len(actual) != m.Database.TableCount {
+	if err == nil && len(actual) != m.Database.TableCount {
 		step.Msg = fmt.Sprintf("表数量不一致：快照 %d，恢复后 %d", m.Database.TableCount, len(actual))
+		if recoverBackup() {
+			step.Msg += "；已回滚到恢复前备份"
+		}
 		step.Artifact = backup
 		return step, fmt.Errorf("%s", step.Msg)
 	}
@@ -637,6 +660,60 @@ func restoreCheckpointDatabase(m CheckpointManifest, d *DatabaseContract, dir st
 	step.Msg = "数据库已恢复"
 	step.Artifact = backup
 	return step, nil
+}
+
+// dropDatabaseObjects 清空目标库里的视图和表，让随后的 SQL 导入等价于“替换整个库内容”。
+// 顺序必须先是视图再是表：视图依赖表，留着会阻塞表删除。
+func dropDatabaseObjects(p mysqlConnParams, dbName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	q := fmt.Sprintf("SELECT TABLE_NAME, TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA='%s';",
+		strings.ReplaceAll(dbName, "'", "''"))
+	_, rows, err := mysqlReadOnlyQuery(ctx, p, "", q)
+	if err != nil {
+		return err
+	}
+	var views, tables []string
+	for _, row := range rows {
+		if len(row) < 2 {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(row[1]), "VIEW") {
+			views = append(views, row[0])
+		} else {
+			tables = append(tables, row[0])
+		}
+	}
+	if sql, err := dropObjectsSQL("VIEW", views); err != nil {
+		return err
+	} else if sql != "" {
+		if err := mysqlExec(p, dbName, sql); err != nil {
+			return err
+		}
+	}
+	if sql, err := dropObjectsSQL("TABLE", tables); err != nil {
+		return err
+	} else if sql != "" {
+		if err := mysqlExec(p, dbName, sql); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func dropObjectsSQL(kind string, names []string) (string, error) {
+	if len(names) == 0 {
+		return "", nil
+	}
+	quoted := make([]string, 0, len(names))
+	for _, n := range names {
+		q, err := quoteIdent(n)
+		if err != nil {
+			return "", err
+		}
+		quoted = append(quoted, q)
+	}
+	return "DROP " + kind + " IF EXISTS " + strings.Join(quoted, ", ") + ";", nil
 }
 
 // applyRestoredConfig 与 handleConfigRestore 同一条安全路径：硬校验 → 覆盖内存 →
