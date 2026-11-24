@@ -382,25 +382,85 @@ button,input{font:inherit;color:inherit}
       NOTE('验证不过显示「已执行，未验证」；只有客观证据通过，才显示「已完成」。',
            'Failed verification shows “executed, unverified”; only passing objective evidence shows “completed”.', 'warn')
     ]},
-    {id:'quick', group:z('开始使用','Get started'), title:z('四步走完','Four steps'), body:[
-      P('双击 EnvKit.exe 后浏览器自动打开本地控制台，按左侧顺序走一遍即可。顶部状态胶囊会随检测与启动结果实时更新；右下角的鱼是状态出口，不是装饰。',
-        'Double-click EnvKit.exe and the local console opens automatically. Follow the four steps in the sidebar; status chips update live, and the fish at the lower right is a status outlet.'),
-      H3('quick-flow','四步顺序','The four-step order'),
+    {id:'quick', group:z('开始使用','Get started'), title:z('接入项目，再走四步','Set up, then four steps'), body:[
+      P('第一次打开时，如果前后端目录还是空的，EnvKit 会先弹出「项目接入向导」：只需要选目录，剩下的检查交给它。保存以后再按左侧四步走。已经填过目录的用户不会自动弹，随时可以点顶栏「接入项目」重走一遍。',
+        'On first launch, if the front/back-end folders are empty, EnvKit opens the project setup wizard first: choose folders, and it does the checks. After saving, follow the four steps on the left. Users with folders already set do not get it automatically, but can reopen it from “Set up project” in the top bar.'),
+      H3('quick-flow','第一次使用怎么走','First-time flow'),
       STEPS([
-        z('环境安装：检测 Go / Node.js / MySQL 的版本与安装位置，镜像下载带 SHA256 校验与失败重试。',
-          'Environment: detect Go / Node.js / MySQL versions and paths; mirrored downloads with SHA256 checks and retries.'),
-        z('程序配置：填项目目录与数据库连接，建库建表、备份还原都在这一页。',
-          'Configuration: set project paths and database connection; create schema, back up and restore here.'),
+        z('接入项目：选前端 / 后端目录，EnvKit 自动识别项目类型、启动方式、端口和数据库配置。检查是只读的，不会启动服务。',
+          'Set up the project: choose the front/back-end folders and EnvKit works out the project type, start command, ports and database settings. The check is read-only and starts nothing.'),
+        z('环境安装：检测 Go / Node.js / MySQL，Java 后端还会检查 JDK 和 Maven。下载走国内镜像，校验 SHA256，失败会自动换源。',
+          'Environment: check Go / Node.js / MySQL; Java backends also check JDK and Maven. Downloads use domestic mirrors, SHA256 checks and automatic retries.'),
+        z('程序配置：用向导保存后一般不用再填；需要调整目录、数据库或启动方式时再来这一页。',
+          'Configuration: usually nothing to fill after the wizard; come back here only to adjust folders, the database or the start command.'),
         z('链端校验：填 SSH 与链目录，检查节点端口、进程与共识视图。',
-          'Chain: set SSH and chain paths; check node ports, processes and consensus view.'),
-        z('程序启动：先后端再前端；日志按来源分栏，EnvKit 退出时子进程自动回收。',
-          'Start: backend first, then frontend. Logs are split by source; child processes are reaped when EnvKit exits.')
+          'Chain: set SSH and chain folders; check the node port, processes and consensus view.'),
+        z('程序启动：先后端再前端；日志按来源分栏。EnvKit 正常从桌面启动时，退出会带走子进程；从 IDE / 终端启动时可能带不走，见「停止到底停没停」。',
+          'Start: backend first, then frontend. Logs are split by source. When EnvKit runs normally from the desktop, exiting reaps its children; when launched from an IDE or terminal it may not — see “Did stop really stop?”.')
       ]),
       H3('quick-console','控制台与后台','Console and background'),
       NOTE('控制台默认 http://127.0.0.1:18765/ ，端口冲突时自动顺延。那个黑色命令行窗口就是服务本体：关掉它网页就打不开。要从托盘菜单选「隐藏窗口到托盘」，不是结束进程。新版本已把控制台换成纸白底的浅色主题。',
            'The console defaults to http://127.0.0.1:18765/ and shifts ports on conflict. The console window IS the service: closing it kills the page. Use the tray menu to hide it, not to end the process. New builds use a light paper-coloured theme.'),
-      P('打开命令面板、跳转页面、重播导览、地址栏深链的方式，见下一节「快捷键与深链」。',
-        'For the command palette, page jumps, tour replay and URL anchors, see the next section, “Shortcuts & deep links”.')
+      P('第一次接入的细节见下一节「项目接入向导」；快捷键、地址栏深链见「快捷键与深链」。',
+        'For first-time setup details see “Project setup wizard”; for shortcuts and URL deep links see “Shortcuts & deep links”.')
+    ]},
+
+    {id:'project', group:z('开始使用','Get started'), title:z('项目接入向导','Project setup wizard'), body:[
+      P('向导只做三件事：选目录、只读检查、保存配置。它不会启动服务、不会安装依赖、不会结束进程。你要做的只是告诉它前后端在哪里。',
+        'The wizard does three things: choose folders, run a read-only check, save the result. It does not start services, install dependencies or end processes. You only tell it where the front and back ends are.'),
+      H3('project-open','什么时候出现','When it appears'),
+      UL([
+        z('第一次打开，且前后端目录都为空：首屏引导结束后自动弹出。','First launch with both folders empty: it opens after the welcome tour.'),
+        z('已经填过目录：不再自动弹，点顶栏「接入项目」可以随时重走。','Folders already set: it does not auto-open; use “Set up project” in the top bar whenever needed.'),
+        z('点「稍后再说」：这次先跳过，之后不会再反复弹；需要时从顶栏进入。','“Later” skips it for now and stops repeated pop-ups; reopen it from the top bar when ready.'),
+        z('再次进入时，已经保存的目录会预先填好，方便只改其中一项。','On reopen, saved folders are pre-filled so you can change just one item.')
+      ]),
+      H3('project-flow','三步操作','Three steps'),
+      STEPS([
+        z('选目录：前端、后端至少填一个，只填后端也可以。点「选择」打开本机目录，不会走 SSH。',
+          'Choose folders: fill at least one; backend-only is fine. “Choose” opens a local folder picker, not SSH.'),
+        z('开始检查：进度条会显示正在看哪一项，检查很快完成时画面会放慢，方便看清步骤。',
+          'Run the check: the progress panel shows which item is being read; fast checks are slowed down briefly so the steps stay readable.'),
+        z('看结果并保存：确认前后端识别结果，需要的话顺便测试数据库、建库或导入 SQL。',
+          'Review and save: confirm the front/back-end results, and optionally test the database, create it or import SQL.')
+      ]),
+      H3('project-check','它检查什么','What it checks'),
+      TABLE([z('项目','Item'),z('会看什么','What it reads'),z('你能得到什么','What you get')],[
+        [z('前端目录','Frontend folder'),z('目录是否存在；package.json、vite.config、next.config 等特征文件','Folder exists; package.json, vite.config, next.config and similar markers'),z('项目类型、启动脚本、端口线索','Project type, start script and port hints')],
+        [z('前端类型','Frontend type'),z('Vite / Next.js / Nuxt / Vue CLI / React CRA / Node 脚本','Vite / Next.js / Nuxt / Vue CLI / React CRA / Node script'),z('用哪套方式启动','Which start method fits')],
+        [z('后端目录','Backend folder'),z('pom.xml、go.mod、main.go、入口文件','pom.xml, go.mod, main.go and entry files'),z('构建系统、启动命令、端口','Build system, start command and port')],
+        [z('后端类型','Backend type'),z('Spring Boot / Maven / Go','Spring Boot / Maven / Go'),z('例如 mvn spring-boot:run 或 go run','For example mvn spring-boot:run or go run')],
+        [z('数据库配置','Database settings'),z('application*.yml、.env、config、docker-compose 等','application*.yml, .env, config, docker-compose and similar files'),z('host、库名、账号、密码来源','Host, database name, user and where the password came from')],
+        [z('工具链','Toolchain'),z('Node、Go、JDK、Maven 是否可用','Whether Node, Go, JDK and Maven are usable'),z('缺什么会提前提示','Missing tools are flagged before you start')]
+      ]),
+      H3('project-result','结果页怎么看','Reading the result'),
+      UL([
+        z('前后端卡片：先看「识别为」对不对，再看启动方式和端口。','Front/back cards: check the detected type first, then the start command and port.'),
+        z('端口后面的来源和百分比表示“有多确定”，不是硬性结论；没识别到端口也不影响保存，启动时会继续探测。','The source and percentage after a port show how confident the guess is, not a final answer. No port hint does not block saving; start-up will keep probing.'),
+        z('黄色「留意」不是失败：例如没找到 package.json、数据库密码没解析、工具没装。能保存，但启动前最好先处理。','A yellow warning is not a failure: for example no package.json, no database password or a missing tool. You can still save, but fix it before starting if possible.'),
+        z('如果目录选错了，返回第一步改；不需要关闭整个向导。','If a folder is wrong, go back to step one; no need to close the whole wizard.')
+      ]),
+      H3('project-db','数据库：先测试，再建库，再导入','Database: test, create, import'),
+      STEPS([
+        z('先勾选一组数据库候选，点「测试连接」。能看到 MySQL 版本、库是否存在，说明账号和网络没问题。',
+          'Select a database candidate and press “Test connection”. Seeing the MySQL version and whether the database exists means the account and network are fine.'),
+        z('库不存在时，可以勾选「保存后建库」，EnvKit 会创建空库。','If the database is missing, tick “Create after saving” and EnvKit creates an empty database.'),
+        z('需要初始化表结构时，再勾选「建库后导入 SQL」。SQL 文件从项目目录里查找，默认优先 schema.sql。',
+          'To create tables too, tick “Import SQL after creating”. SQL files are found inside the project, with schema.sql preferred.'),
+        z('导入成功后会记住这个 SQL 文件，下次在程序配置里还能看到。','After a successful import, the SQL file is remembered and shown later in Configuration.')
+      ]),
+      NOTE('导入 SQL 会直接执行，不会自动备份。已有数据的库上导入，可能重复建表或覆盖数据；只选你确认过的初始化脚本。同一个文件重复执行时会有历史提示，但仍会继续。',
+           'Importing SQL runs it directly and does not create a backup. On a database that already has data it may duplicate tables or overwrite data; only use an init script you trust. Running the same file again shows a history warning but still proceeds.', 'danger'),
+      H3('project-save','保存后发生了什么','After saving'),
+      UL([
+        z('保存只写前后端目录；勾选数据库时才一起写 host、端口、库名、账号和密码。','Saving writes the folders; database host, port, name, user and password are written only when that option is ticked.'),
+        z('密码只在本机加密保存，不出现在检查结果里，也不会写进日志。','Passwords are encrypted on this machine only; they never appear in check results or logs.'),
+        z('保存后项目画像立即刷新，程序启动页可以直接用新的目录、启动命令和端口。','The project profile refreshes immediately, so the Start page can use the new folders, commands and ports.'),
+        z('想改启动脚本、备份目录这类细节，去「程序配置」；想重新识别项目，点顶栏「接入项目」。','To change the start script or backup folder, use Configuration; to re-detect the project, use “Set up project” in the top bar.')
+      ]),
+      NOTE('检查过程是只读的。向导不会启动前后端、不会 npm install、不会 go mod tidy，也不会杀任何进程；这些动作仍然在程序配置和程序启动页发生。',
+           'The check is read-only. The wizard does not start services, run npm install or go mod tidy, or kill any process; those actions stay on the Configuration and Start pages.', 'ok'),
+      XLINK([['config','程序配置','Configuration'],['start','程序启动与日志','Start and logs']])
     ]},
 
     {id:'shortcuts', group:z('开始使用','Get started'), title:z('快捷键与深链','Shortcuts & deep links'), body:[
@@ -430,6 +490,7 @@ button,input{font:inherit;color:inherit}
         [z('操作系统','OS'),z('Windows 10 / 11 x64','Windows 10 / 11 x64')],
         [z('MySQL 绿色版','Portable MySQL'),z('需要 VC++ 2019 Redistributable (x64)','Requires VC++ 2019 Redistributable (x64)')],
         [z('管理员权限','Administrator'),z('注册 / 启动 MySQL 服务时需要；其余功能不需要','Only for registering / starting the MySQL service')],
+        [z('Java 后端','Java backend'),z('JDK（版本按 pom.xml 要求）+ Maven；向导会检查，缺了会提前提示，但检查阶段不会替你安装','JDK (version from pom.xml) + Maven; the wizard checks them and flags missing tools, but does not install them during the check')],
         [z('网络','Network'),z('首次安装组件约 180 MB，可配下载代理','About 180 MB on first component install; proxy configurable')]
       ]),
       NOTE('如果走的是桌面快捷方式，注意它可能指向 %LOCALAPPDATA%\\EnvKit 里的旧副本。更新后请重新运行 安装.bat，或直接打开仓库根的 EnvKit.exe。',
@@ -442,8 +503,8 @@ button,input{font:inherit;color:inherit}
       NOTE('直接改 web/index.html 会在下次构建时被覆盖；web_build.py --check 只校验产物一致性，不会重新嵌入。',
            'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn'),
       H3('install-cap','环境安装','Environment setup'),
-      P('检测会同时读版本号与安装位置，不只看命令能不能跑。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
-        'Detection reads both version and install path, not just whether a command runs. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
+      P('检测会同时读版本号与安装位置，不只看命令能不能跑。前端需要 Node.js，Go 后端需要 Go，Java 后端还需要符合 pom.xml 要求的 JDK 和 Maven；向导会一并检查。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
+        'Detection reads both version and install path, not just whether a command runs. Front ends need Node.js, Go backends need Go, and Java backends also need a JDK matching pom.xml plus Maven; the wizard checks all of them. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
       TABLE([z('能力','Capability'),z('说明','Detail')],[
         [z('演练安装','Dry run'),z('先列出会下载什么、装到哪里，再决定是否真装','See what would be downloaded and installed before committing')],
         [z('SHA256 校验','SHA256 check'),z('下载完比对摘要，不对就换源重试','Compare hashes after download; retry from another source on mismatch')],
@@ -490,15 +551,18 @@ button,input{font:inherit;color:inherit}
     ]},
 
     {id:'config', group:z('日常操作','Daily operations'), title:z('程序配置','Configuration'), body:[
-      P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
-        'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
+      P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。项目接入向导保存的结果也会写到这里。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
+        'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Results saved by the project setup wizard also land here. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
       H3('config-keys','config.json 关键字段','Key config fields'),
       TABLE([z('字段','Field'),z('默认 / 示例','Default / example'),z('用途','Purpose')],[
         [z('dev.server_port','dev.server_port'),z('18765','18765'),z('控制台端口，冲突时向后扫描到 18815','Console port; shifts up to 18815 on conflict')],
         [z('goproxy','goproxy'),z('goproxy.cn,goproxy.io,direct','goproxy.cn,goproxy.io,direct'),z('Go 组件下载源，逗号分隔按顺序回退','Go component sources, comma-separated fallback order')],
         [z('npm_registry','npm_registry'),z('mirrors.cloud.tencent.com/npm/','mirrors.cloud.tencent.com/npm/'),z('npm 依赖下载源','npm dependency source')],
         [z('mysql.port / service_name','mysql.port / service_name'),z('3306 / MySQL80','3306 / MySQL80'),z('MySQL 绿色版端口与服务名','Port and service name of portable MySQL')],
-        [z('projects.*','projects.*'),z('留空 → 在界面填','empty → fill in UI'),z('前后端目录、MySQL 连接、库名、sql_file 与 backup_dir','Front/back-end paths, MySQL connection, DB name, sql_file and backup_dir')],
+        [z('projects.frontend_dir / backend_dir','projects.frontend_dir / backend_dir'),z('留空 → 首次打开会被向导接走','empty → first launch goes to the wizard'),z('前端、后端的项目根目录，不是某个源文件','Project roots for the front and back ends, not a source file')],
+        [z('projects.web_script','projects.web_script'),z('留空 → 自动推断','empty → auto-detect'),z('想固定前端启动脚本时才填；脚本不存在会自动换回可用项','Fill this only to pin a front-end script; a missing script falls back automatically')],
+        [z('projects.scan_ports','projects.scan_ports'),z('诊断用的端口清单','diagnostic port list'),z('只帮你观察端口，不用来判断“前端端口冲突”','Used only to observe ports, not to decide a front-end conflict')],
+        [z('projects.db_name / sql_file / backup_dir','projects.db_name / sql_file / backup_dir'),z('库名 / 初始化 SQL / backups','database name / init SQL / backups'),z('向导建库或导入 SQL 后会写入 sql_file','The wizard writes sql_file after creating a database or importing SQL')],
         [z('chain.ssh_*','chain.ssh_*'),z('留空 → 在界面填','empty → fill in UI'),z('SSH 主机 / 端口 / 用户 / 密码或私钥 / 主机指纹','SSH host / port / user / password or key / host fingerprint')],
         [z('chain.chain_guard_secs','chain.chain_guard_secs'),z('60（最小 30）','60 (min 30)'),z('后台守护检测间隔（秒）','Background guard interval in seconds')],
         [z('chain.chain_autorecover / guard / notify','chain.chain_autorecover / guard / notify'),z('false','false'),z('一键自动恢复 / 周期守护 / 桌面通知，按需打开','One-click recovery / periodic guard / desktop notification, off until enabled')],
@@ -520,7 +584,7 @@ button,input{font:inherit;color:inherit}
              'config.json                 active config\nconfig.dist.json           clean template\naudit-YYYYMMDD.jsonl       operation audit (kept 30 days)\nenvkit-YYYYMMDD.log        daily rotating log\nmissions.json / playbooks.json / memories.json   actions / playbooks / memory'),''),
       NOTE('API Key 与数据库密码经 Windows DPAPI 加密，只在本机可解密。导出的配置默认脱敏，分享前再确认一次没有带上密钥。',
            'API keys and database passwords are encrypted with Windows DPAPI and decrypt only on this machine. Exported configs are redacted by default — check again before sharing.', 'danger'),
-      XLINK([['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
+      XLINK([['project','项目接入向导','Project setup wizard'],['start','程序启动与日志','Start and logs'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'chain', group:z('日常操作','Daily operations'), title:z('链端校验','Chain checks'), body:[
@@ -560,8 +624,8 @@ button,input{font:inherit;color:inherit}
     ]},
 
     {id:'start', group:z('日常操作','Daily operations'), title:z('程序启动与日志','Start and logs'), body:[
-      P('前后端一键启动（先后端、再前端），访问地址自动解析；日志按来源分栏并清理 ANSI 转义码，支持复制、下载和自动滚动。',
-        'Start backend then frontend with one click; access URLs are resolved automatically. Logs are split by source, stripped of ANSI codes, and support copy, download and auto-scroll.'),
+      P('前后端一键启动（先后端、再前端），访问地址自动解析；日志按来源分栏并清理 ANSI 转义码，支持复制、下载和自动滚动。日志会写到 exe 同目录的 envkit-<日期>.log、envkit-<日期>-web.log 和 envkit-<日期>-backend.log。',
+        'Start backend then frontend with one click; access URLs are resolved automatically. Logs are split by source, stripped of ANSI codes, and support copy, download and auto-scroll. Log files land next to the exe as envkit-<date>.log, envkit-<date>-web.log and envkit-<date>-backend.log.'),
       H3('start-flow','启动顺序','Start order'),
       STEPS([
         z('先在「程序配置」填好前后端目录与数据库连接并测试；目录填的是项目根，不是某个源文件。',
@@ -572,15 +636,38 @@ button,input{font:inherit;color:inherit}
           'Read the Logs page: split into install / config / start / chain / sys, ANSI codes stripped, with copy, download and auto-scroll.'),
         z('验证要用「检测」或 AI 的 verify_environment：看端口、HTTP 握手、进程数，不看启动按钮的反应。',
           'Verify with Check or the AI verify_environment tool: ports, HTTP handshake and process count — not the start button reaction.'),
-        z('停止时看端口占用报告：第三方进程只报告不结束；EnvKit 子进程绑 Job Object，退出时自动回收。',
-          'On stop, read the port-occupancy report: third-party processes are reported, never killed; EnvKit children are reaped via a Job Object.')
+        z('停止后看端口是否真的释放：显示“未完全停止”时先处理残留进程，再重新启动。','After stopping, check that the port is actually free; if “partly stopped” appears, clear the leftover process before restarting.')
       ]),
-      H3('start-limit','边界与审计','Boundaries & audit'),
+      H3('start-script','前端启动脚本怎么选','How the front-end script is chosen'),
+      P('启动页的脚本框留空时，EnvKit 会读 package.json，按 dev → serve → start → watch 的顺序挑一个能用的。你也可以在「程序配置」的 web_script 里固定一个。',
+        'Leave the script box empty and EnvKit reads package.json, preferring dev → serve → start → watch. You can also pin one with web_script in Configuration.'),
       UL([
-        z('停止服务时报告端口占用：第三方进程只报告，不会替你结束。','Stopping reports port occupancy: third-party processes are reported, never killed.'),
-        z('子进程绑定 Job Object，EnvKit 退出时自动回收，避免留下孤儿进程。','Child processes are bound to a Job Object and reaped when EnvKit exits, so no orphans are left behind.'),
-        z('操作审计只追加、不修改、不回滚，按天分文件保留 30 天；密码与 API Key 在入库前已脱敏。','Operation audit is append-only, kept in daily files for 30 days. Passwords and API keys are redacted before being written.')
+        z('配置了脚本名，但 package.json 里没有：EnvKit 会自动换回能用的脚本，不会硬跑一条 Missing script。','If the configured script is missing from package.json, EnvKit falls back to a usable one instead of running a doomed “Missing script”.'),
+        z('程序启动页和 AI 启动用的是同一套判断，不会出现页面跑 serve、AI 跑 dev 的分叉。','The Start page and AI start use the same rule, so one cannot run serve while the other runs dev.'),
+        z('启动日志会写出实际用的脚本和来源，先看这一行再排查其它问题。','The log shows the script actually used and where it came from; read that line before debugging anything else.')
       ]),
+      H3('start-port','端口怎么判断','How ports are decided'),
+      P('前后端端口来自项目配置和启动文件，不是写死的。识别不到时先启动，启动后再继续探测。',
+        'Front and back-end ports come from project config and start files, not hard-coded values. If none is found, start the service and keep probing.'),
+      UL([
+        z('前端卡片应该显示前端自己的端口，例如 Vite 的 5173；后端卡片显示 8080、8888 这类后端端口。','The front-end card should show its own port, for example Vite on 5173; the back-end card shows ports such as 8080 or 8888.'),
+        z('projects.scan_ports 只是“端口线索”，帮你观察，不用来判断前端端口冲突。','projects.scan_ports is only a port hint list for observation; it is not used to decide a front-end port conflict.'),
+        z('看到“8080 被 java.exe 占用”时先确认它是不是后端；不要因此把前端拦下。','If 8080 is held by java.exe, check whether that is the backend first; do not block the front end because of it.'),
+        z('真正要关注的是前端自己的端口有没有被别的进程占住，以及占用者是不是它应该用的进程。','What matters is whether the front-end port itself is taken, and whether the owner is the expected process.')
+      ]),
+      H3('start-stop','停止到底停没停','Did stop really stop?'),
+      UL([
+        z('停止会等端口真正释放再给结论；如果 npm 的 Vite 子进程还占着 5173，会显示“未完全停止”，不会假装成功。','Stop waits for the port to free before reporting; if npm’s Vite child still holds 5173, it says “partly stopped” instead of pretending success.'),
+        z('EnvKit 只停自己启动的进程。外部启动的 Vite、后端或数据库，只报告 PID 和端口，不会替你结束。','EnvKit stops only processes it started. Externally started Vite, backends or databases are reported with PID and port, never killed for you.'),
+        z('确实要结束时，到「端口诊断」核对命令行和路径，再点「结束进程」，会再确认一次。','To end one, check its command line and path in Port Diagnostics, then press “Kill process”; it asks once more.'),
+        z('EnvKit 从 IDE 或终端里启动时，可能已经在别的 Job 里，子进程就无法再绑定自动回收；退出 EnvKit 后如果端口还在，按上一条手工处理。','When EnvKit itself runs from an IDE or terminal, it may already be inside another Job, so children cannot be bound for automatic reaping; if a port remains after exit, use the step above.'),
+        z('操作审计只追加、按天分文件保留 30 天；密码与 API Key 入库前已脱敏。','Operation audit is append-only, kept in daily files for 30 days; passwords and API keys are redacted before writing.')
+      ]),
+      H3('start-jdk','Java 后端和 JDK','Java backends and JDK'),
+      P('Java 后端会先看 pom.xml 要求的 Java 版本。当前 JDK 太旧时，EnvKit 只在这次启动里换一个兼容的 JDK，不会改你的 JAVA_HOME 或系统环境变量。',
+        'For Java backends EnvKit reads the Java version required by pom.xml. If the current JDK is too old, it uses a compatible JDK for this launch only; it does not change JAVA_HOME or system environment variables.'),
+      NOTE('一个 JDK 都找不到时才会报错。看到 UnsupportedClassVersionError，先把 JDK 版本对齐项目要求，不要先去改代码。',
+           'It only errors when no JDK can be found at all. If you see UnsupportedClassVersionError, align the JDK version with the project first; do not start by changing code.', 'warn'),
       H3('start-logfiles','日志文件在哪','Log files on disk'),
       P('除了界面里的日志页，每一天的内容也会落盘成文件，放在 exe 同目录：EnvKit 自身是 envkit-<日期>.log（单文件上限 5 MB，保留 10 份归档）；业务前后端是 envkit-<日期>-web.log 和 envkit-<日期>-backend.log（单文件上限 8 MB，保留 5 份归档）。文件名里的日期形如 20261118，旧文件按顺序编号 .1、.2 轮转。',
         'Besides the in-app Logs page, each day’s output is also written to disk next to the exe: EnvKit itself uses envkit-<date>.log (5 MB per file, 10 archives kept); the business frontend and backend use envkit-<date>-web.log and envkit-<date>-backend.log (8 MB per file, 5 archives kept). The date looks like 20261118; older files rotate as .1, .2 and so on.'),
@@ -594,7 +681,7 @@ button,input{font:inherit;color:inherit}
            '“Download” on the Logs page exports only the current tab, not everything. For material you hand to someone else, prefer the redacted diagnostic report.', 'warn'),
       NOTE('日志停在某一步且没有任何异常，先确认进程是否还在、退出码是什么——历史上 Windows 句柄重复关闭会让进程无声消失。',
            'If a log stops mid-step with no error, check whether the process is still alive and what its exit code was — a double-closed Windows handle has caused silent exits before.', 'warn'),
-      XLINK([['config','程序配置','Configuration'],['upgrade','升级、回滚与卸载','Upgrade, rollback & uninstall'],['troubleshoot','排障索引','Troubleshooting']])
+      XLINK([['project','项目接入向导','Project setup wizard'],['config','程序配置','Configuration'],['upgrade','升级、回滚与卸载','Upgrade, rollback & uninstall'],['troubleshoot','排障索引','Troubleshooting']])
     ]},
 
     {id:'selfheal', group:z('日常操作','Daily operations'), title:z('故障自愈轨迹','Self-healing traces'), body:[
@@ -769,7 +856,10 @@ button,input{font:inherit;color:inherit}
       H3('glossary-terms','词与出处','Terms and where they appear'),
       TABLE([z('术语','Term'),z('人话','In plain words'),z('出处','See')],[
         [z('Agent Runtime','Agent Runtime'),z('模型负责决策，Runtime 管边界，Verification 给结论','The model decides, the Runtime enforces boundaries, Verification concludes'),z('EnvKit 是什么','What EnvKit is')],
-        [z('OpResult','OpResult'),z('工具调用的统一结果结构，失败不会被外层吞掉','Uniform tool result; failures cannot be swallowed upstream'),z('完成 ≠ 结论','Done is not verified')],
+        [z('项目画像','Project profile'),z('从前后端目录读出来的类型、启动方式、端口和数据库线索','Project type, start command, ports and database hints read from the folders'),z('项目接入向导','Project setup wizard')],
+        [z('诊断端口 scan_ports','Port hints scan_ports'),z('帮你观察端口的清单，不是固定启动端口，也不拿来判断冲突','A list for observing ports, not fixed start ports and not a conflict rule'),z('程序启动与日志','Start and logs')],
+        [z('外部实例','External instance'),z('不是 EnvKit 启动的进程；只报告端口和 PID，不自动结束','A process EnvKit did not start; its port and PID are reported, not killed automatically'),z('程序启动与日志','Start and logs')],
+        [z('未完全停止','Partly stopped'),z('父进程停了，但端口还被残留子进程占着；需要先处理再重启','The parent exited but a child still holds the port; clear it before restarting'),z('程序启动与日志','Start and logs')],
         [z('Verification / 复验','Verification / re-check'),z('用端口、进程、HTTP、备份、共识证据再判一次','Use ports, processes, HTTP, backups and consensus evidence to decide again'),z('完成 ≠ 结论','Done is not verified')],
         [z('Policy 四档','Four Policy tiers'),z('按危险程度分级的权限闸门，危险档要人工确认','Permission gates by risk; dangerous tiers need human confirmation'),z('安全边界','Security boundary')],
         [z('Trace','Trace'),z('一次任务的计划、动作、证据、结论流水，用来归因','Plan, actions, evidence and conclusions of one task, for attribution'),z('故障自愈轨迹','Self-healing traces')],
@@ -793,7 +883,7 @@ button,input{font:inherit;color:inherit}
         [z('控制台','Console'),z('18765','18765'),z('只绑回环 127.0.0.1；改配置、跑命令、终端都在这里','Loopback only; config, commands and terminal live here')],
         [z('手机访问','Mobile access'),z('18766','18766'),z('独立 mux + 配对码，只放只读 / 受控路由','Separate mux with a pairing code; read-only / controlled routes only')],
         [z('端口冲突','Port conflict'),z('顺延到 18815','shifts up to 18815'),z('评测脚本硬编码 18765，被占用时会拒绝启动并说明原因','Eval scripts hardcode 18765 and refuse to start when it is taken')],
-        [z('业务后端','Business backend'),z('127.0.0.1:8888','127.0.0.1:8888'),z('FarmTrace 的 server/，不属于 EnvKit','FarmTrace server/, not part of EnvKit')]
+        [z('业务前后端','Business front/back ends'),z('由项目画像决定','from the project profile'),z('常见如前端 5173、后端 8080；不是固定值，以启动页和检测结果为准','Often front-end 5173 and backend 8080, but not fixed; trust the Start page and checks')]
       ]),
       H3('cs-default','默认值','Defaults'),
       TABLE([z('字段','Field'),z('默认','Default'),z('说明','Notes')],[
@@ -801,7 +891,9 @@ button,input{font:inherit;color:inherit}
         [z('自愈守护间隔','Guard interval'),z('60 秒','60 s'),z('最小 30 秒，低于就按 30 算','Minimum 30 s')],
         [z('链节点端口','Chain node port'),z('20200','20200'),z('FISCO-BCOS v2.11 节点','FISCO-BCOS v2.11 node')],
         [z('WeBASE-Front','WeBASE-Front'),z('5002','5002'),z('链端校验的另一半证据来自这里','Where the other half of chain evidence comes from')],
-        [z('备份目录','Backup dir'),z('backups/','backups/'),z('默认 exe 同级，可用 projects.backup_dir 覆盖','Next to the exe; override with projects.backup_dir')]
+        [z('备份目录','Backup dir'),z('backups/','backups/'),z('默认 exe 同级，可用 projects.backup_dir 覆盖','Next to the exe; override with projects.backup_dir')],
+        [z('前端启动脚本','Front-end script'),z('留空 → 自动','empty → auto'),z('按 package.json 推断；写死的脚本不存在会自动回退','Inferred from package.json; a missing pinned script falls back')],
+        [z('端口线索','Port hints'),z('scan_ports','scan_ports'),z('只用来观察，不用来判断前端端口冲突','Observation only; not used to decide front-end conflicts')]
       ]),
       H3('cs-path','文件与日志','Files and logs'),
       TABLE([z('对象','Item'),z('位置','Location'),z('要点','Notes')],[
@@ -822,7 +914,9 @@ button,input{font:inherit;color:inherit}
         [z('TOFU','TOFU'),z('首次连接信任：第一次连 SSH 就记下主机指纹，之后指纹一变直接拒绝','Trust on first use: record the host fingerprint once, reject any later change')],
         [z('共识视图','Consensus view'),z('PBFT 当前轮次，它在推进就说明链活着；块高静止不代表卡死','The current PBFT round; advancing means alive, a static block height is not a stall')],
         [z('428','428'),z('服务端强制确认的状态码，缺确认的写操作到此为止','Server-side forced confirmation; a write without it stops here')],
-        [z('已执行，未验证','Executed, unverified'),z('命令跑了，但端口 / 进程 / HTTP / 备份还没给出客观证据','The command ran, but port / process / HTTP / backup evidence is still missing')]
+        [z('已执行，未验证','Executed, unverified'),z('命令跑了，但端口 / 进程 / HTTP / 备份还没给出客观证据','The command ran, but port / process / HTTP / backup evidence is still missing'),z('完成 ≠ 结论','Done ≠ verified')],
+        [z('项目画像','Project profile'),z('从目录读出的类型、启动命令、端口和数据库线索','Type, start command, ports and database hints read from folders'),z('项目接入向导','Project setup wizard')],
+        [z('未完全停止','Partly stopped'),z('父进程停了，端口还被残留子进程占着','The parent exited but a child still holds the port'),z('程序启动与日志','Start and logs')]
       ]),
       XLINK([['troubleshoot','排障索引','Troubleshooting'],['security','安全边界','Security boundary'],['chain','链端校验','Chain checks']])
     ]},
@@ -832,7 +926,12 @@ button,input{font:inherit;color:inherit}
       H3('ts-symptom','症状 → 先查什么','Symptom → check first'),
       TABLE([z('症状','Symptom'),z('先查什么','Check first'),z('判据 / 详见','Rule / detail')],[
         [z('窗口是黑的，能关吗','Black console window, can I close it'),z('没关：关掉网页就打不开','Do not close: the page dies with it'),z('那是服务本体，用托盘「隐藏窗口到托盘」；见「四步走完」','It is the service; hide to tray; see Four steps')],
-        [z('端口被占用','Port in use'),z('停止页的占用报告','Port-occupancy report on the Stop page'),z('第三方进程只报告不结束；EnvKit 端口自动顺延到 18815','Third-party processes reported only; EnvKit shifts up to 18815')],
+        [z('端口被占用','Port in use'),z('停止页的占用报告 / 端口诊断','Port-occupancy report / Port Diagnostics'),z('第三方进程只报告不结束；EnvKit 控制台端口自动顺延到 18815；业务前后端端口以项目画像为准','Third-party processes are reported, never killed; the EnvKit console shifts up to 18815; business ports come from the project profile')],
+        [z('启动前端报 Missing script: “serve”','Front end fails with Missing script: “serve”'),z('package.json 里有没有这个脚本','Whether package.json has that script'),z('把 web_script 留空自动推断，或改成真实存在的 dev / start；新版会自动回退，不再硬跑','Leave web_script empty to auto-detect, or use a real dev / start script; new builds fall back instead of running it')],
+        [z('前端提示 8080 被 java.exe 占用','Front end says 8080 is held by java.exe'),z('8080 是不是后端，前端真实端口是多少','Whether 8080 is the backend and what the front-end port is'),z('scan_ports 只是诊断线索，不拿它判断前端冲突；看 5173 和项目画像','scan_ports is only a hint, not a front-end conflict rule; check 5173 and the project profile')],
+        [z('停止后 5173 还在','5173 still listening after stop'),z('占用者是不是外部 / 残留的 Vite','Whether the owner is an external or orphaned Vite'),z('EnvKit 只停自己启动的进程；到「端口诊断」核对 PID 后人工结束','EnvKit stops only its own processes; check the PID in Port Diagnostics and end it manually')],
+        [z('Maven 报 UnsupportedClassVersionError','Maven reports UnsupportedClassVersionError'),z('项目要求的 Java 版本和当前 JDK','Required Java version vs. current JDK'),z('装兼容 JDK，或把 JAVA_HOME 指对；EnvKit 启动时会自动挑兼容 JDK','Install a matching JDK or fix JAVA_HOME; EnvKit picks a compatible JDK at start')],
+        [z('向导保存后数据库没建 / SQL 没导入','Database or SQL missing after setup'),z('测试连接、账号权限、库名与 SQL 文件','Connection test, account rights, database name and SQL file'),z('先测连接再建库；导入 SQL 不会自动备份，失败看日志里的 mysql 报错','Test the connection first; SQL import does not back up automatically; read the mysql error in the log')],
         [z('MySQL 服务起不来','MySQL service will not start'),z('是否以管理员身份运行','Whether EnvKit runs as administrator'),z('注册 / 启动服务需要管理员权限，其余功能不需要','Registering/starting needs admin rights; nothing else does')],
         [z('桌宠点不到','Pet ignores clicks'),z('是否开了鼠标穿透','Whether click-through is on'),z('提示气泡约 5 秒自收；刷新页面或从托盘重开控制台','Hint hides after ~5 s; refresh or reopen from tray')],
         [z('显示「已执行，未验证」','“Executed, unverified”'),z('端口 / 进程 / HTTP / 备份校验的证据','Evidence from port/process/HTTP/backup checks'),z('命令返回 0 不算完成；见「完成 ≠ 结论」','Exit code 0 is not completion; see Done ≠ verified')],
@@ -844,7 +943,7 @@ button,input{font:inherit;color:inherit}
         [z('备份生成了，但不敢信','Backup exists but is doubted'),z('sha256 与内容完整性是否复算','Whether sha256 and content were re-checked'),z('文件存在 ≠ 能还原；见「完成 ≠ 结论」','File existence ≠ restorable; see Done ≠ verified')],
         [z('评测结果像是没改过','Evaluation looks unchanged'),z('测的是不是旧构建','Whether it tested an old build'),z('前端 embed 在 exe 里；见「评测与故障注入」','Front end is embedded in the exe; see Evaluation')]
       ]),
-      XLINK([['faq','常见问题','FAQ'],['verify','完成 ≠ 结论','Done ≠ verified'],['eval','评测与故障注入','Evaluation & fault injection']])
+      XLINK([['project','项目接入向导','Project setup wizard'],['faq','常见问题','FAQ'],['verify','完成 ≠ 结论','Done ≠ verified'],['eval','评测与故障注入','Evaluation & fault injection']])
     ]},
     {id:'faq', group:z('参考','Reference'), title:z('常见问题','FAQ'), body:[
       H3('faq-q','问答','Questions'),
@@ -857,6 +956,10 @@ button,input{font:inherit;color:inherit}
         z('显示「已执行，未验证」？—— 命令确实跑了，但端口 / 进程 / HTTP / 备份校验还没给出客观证据，不能算完成。','“Executed, unverified”? The command ran, but port / process / HTTP / backup checks produced no objective evidence yet, so it is not complete.'),
         z('链上区块高度不动是卡死了吗？—— 不一定。空闲链只共识不落盘，判活要看共识视图推进。','Is a static block height a stuck chain? Not necessarily. Idle chains reach consensus without storing blocks; check consensus view progression.'),
         z('自愈态势页是空的？—— 空列表表示尚无守护 / 影子流记录，不等于守护没配置。','Self-healing page empty? An empty list means no guard or shadow-flow records yet, not that guarding is disabled.'),
+        z('项目接入向导会自动启动服务吗？—— 不会。它只读目录、只保存配置；不会安装依赖、不会启动前后端、不会杀进程。','Does the setup wizard start services? No. It only reads folders and saves settings; it does not install dependencies, start services or kill processes.'),
+        z('启动页为什么直接跑 dev？—— 脚本框留空时，EnvKit 会按 package.json 自己挑；dev 最常用，所以优先。想固定就填 web_script。','Why does the Start page run dev? With an empty script box, EnvKit picks from package.json and prefers dev. Pin another one with web_script if needed.'),
+        z('为什么后端 8080 会被算成前端冲突？—— 正常情况下不会。scan_ports 只用于观察；前端应该看自己的 5173。如果还被拦，先确认项目画像里的前端端口。','Why is backend 8080 treated as a front-end conflict? Normally it is not. scan_ports is observation only; the front end should use its own 5173. If it still blocks, check the front-end port in the project profile.'),
+        z('停止后端口还在？—— 可能是外部启动的 Vite，或 npm 已经退出但子进程还在。EnvKit 不会替你杀第三方进程；到「端口诊断」核对 PID 后手工结束。','Port still open after stop? It may be an externally started Vite, or npm exited while its child remained. EnvKit does not kill third-party processes; check the PID in Port Diagnostics and end it manually.'),
         z('改了前端界面没变化？—— 前端资源嵌在 exe 里。要 web_build.py 重拼 + go build 重新嵌入，两步都做。','Changed the front end but nothing changed? Assets are embedded in the exe: run web_build.py AND go build.'),
         z('升级 / 回滚 / 卸载怎么做？—— 见「升级、回滚与卸载」一节：覆盖升级先退实例、config.json 不会被冲掉、卸载脚本不会清理组件目录与 MySQL。','How do I upgrade / roll back / uninstall? See “Upgrade, rollback & uninstall”: quit the running instance first, config.json is preserved, and the uninstall script leaves the components and MySQL in place.'),
         z('文档页怎么单独打开？—— 侧栏「使用文档」会在新标签页打开本页；桌面版地址是 /docs，在线版是 https://hrui83771-gif.github.io/EnvKit/ ，都可以收藏，也可以按 / 聚焦搜索。','How do I open these docs separately? The sidebar “Docs” entry opens a new tab. Desktop address is /docs, online edition is https://hrui83771-gif.github.io/EnvKit/ . Bookmark either, and press / to focus search.')
