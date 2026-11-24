@@ -161,3 +161,14 @@ func handleContractValidate(w http.ResponseWriter, r *http.Request) {
 		"problems": problems,
 	})
 }
+
+// handleContractDoctor 只读诊断：GET/POST 都不启动、不停止、不修复。
+func handleContractDoctor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	c := cfgSnapshot()
+	rep := runContractDoctor(c, "")
+	writeJSON(w, rep)
+}

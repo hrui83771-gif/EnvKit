@@ -82,9 +82,9 @@ func buildContractFromConfig(c Config, front, back string) (*contractBuild, erro
 			}
 		}
 		if strings.TrimSpace(c.Projects.MySQLPass) != "" {
-			res.Contract.Secrets = map[string]string{"mysql_password": "env:ENVKIT_MYSQL_PASSWORD"}
+			res.Contract.Secrets = map[string]string{"mysql_password": "local:mysql_password"}
 			res.Warnings = append(res.Warnings,
-				"数据库密码仍只在本机 DPAPI 保存；契约记录 env:ENVKIT_MYSQL_PASSWORD 引用，不写明文")
+				"数据库密码仍只在本机 DPAPI 保存；契约记录 local:mysql_password，交接时请改成 env: 或 file:")
 		}
 		res.Contract.Database = db
 	}

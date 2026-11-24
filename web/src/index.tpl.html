@@ -908,6 +908,19 @@
             <ul class="h-issues" id="s_health_issues"></ul>
           </div>
 
+          <div class="set-card" id="set-contract-doctor">
+            <div class="set-card-head"><span class="t">环境契约 Doctor</span><span class="tag">只读</span></div>
+            <div class="hint" style="margin:2px 0 8px">把 envkit.yaml 与当前环境逐项比对。只读诊断：不启动、不停止、不修复，也不执行契约里的任意命令。</div>
+            <div class="row">
+              <button class="ghost" id="btn-doctor-run">运行诊断</button>
+              <span class="status idle" id="st-doctor">未运行</span>
+              <span class="hint" id="h-doctor" style="margin-left:auto"></span>
+            </div>
+            <div class="ro-list" id="doctor-meta" style="margin-top:8px"></div>
+            <div class="doc-sum" id="doctor-sum"></div>
+            <div class="doc-checks" id="doctor-checks"></div>
+          </div>
+
           <div class="set-card">
             <div class="set-card-head"><span class="t">更新检查</span><span class="tag">改即保存</span></div>
             <div class="ckrow" style="margin-top:0">

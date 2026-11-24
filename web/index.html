@@ -2619,6 +2619,31 @@ body.pws-open{overflow:hidden}
 .pws-dbprivacy::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none}
 .pws-contractopt{margin-top:12px;padding:11px 13px;border:1px dashed var(--line);border-radius:12px;background:var(--soft);display:flex;flex-direction:column;gap:4px}
 .pws-contractopt small{font-size:10.5px;line-height:1.55;color:var(--muted);padding-left:22px}
+
+/* 环境契约 Doctor：只读结果卡。四态用左侧色条 + 小徽标，不靠颜色单独传达状态。 */
+.doc-sum{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.doc-sum span{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--off);color:var(--muted)}
+.doc-sum .s-ok{background:var(--okbg);color:var(--ok)}
+.doc-sum .s-drift{background:var(--errbg);color:var(--err)}
+.doc-sum .s-undeclared{background:var(--warnbg);color:var(--warn)}
+.doc-sum .s-unknown{background:var(--infobg);color:var(--info)}
+.doc-checks{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:360px;overflow:auto}
+.doc-check{border-left:3px solid var(--line);padding:6px 0 6px 9px}
+.doc-check.s-ok{border-left-color:var(--ok)}
+.doc-check.s-drift{border-left-color:var(--err)}
+.doc-check.s-undeclared{border-left-color:var(--warn)}
+.doc-check.s-unknown{border-left-color:var(--info)}
+.doc-check .doc-top{display:flex;align-items:center;gap:7px}
+.doc-check .doc-top b{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-badge{flex:none;margin-left:auto;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:var(--off);color:var(--muted)}
+.doc-badge.s-ok{background:var(--okbg);color:var(--ok)}
+.doc-badge.s-drift{background:var(--errbg);color:var(--err)}
+.doc-badge.s-undeclared{background:var(--warnbg);color:var(--warn)}
+.doc-badge.s-unknown{background:var(--infobg);color:var(--info)}
+.doc-kv{font-size:11.5px;line-height:1.55;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.doc-detail{font-size:11.5px;line-height:1.55;color:var(--text);margin-top:2px;overflow-wrap:anywhere}
+.doc-evidence{font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.doc-empty{font-size:11.5px;line-height:1.6;color:var(--muted);padding:6px 0}
 .pws-empty{padding:14px;border:1px dashed var(--line);border-radius:10px;font-size:11.5px;color:var(--muted);line-height:1.65;background:var(--soft)}
 
 @keyframes pws-fade{from{opacity:0}to{opacity:1}}
@@ -3555,6 +3580,19 @@ body.pws-open{overflow:hidden}
             <!-- 体检不能只报「N 个警告」：状态源为每条问题都算好了 action，
                  把它丢在接口里等于让用户自己去猜下一步。这里逐条列出「问题 + 建议」。 -->
             <ul class="h-issues" id="s_health_issues"></ul>
+          </div>
+
+          <div class="set-card" id="set-contract-doctor">
+            <div class="set-card-head"><span class="t">环境契约 Doctor</span><span class="tag">只读</span></div>
+            <div class="hint" style="margin:2px 0 8px">把 envkit.yaml 与当前环境逐项比对。只读诊断：不启动、不停止、不修复，也不执行契约里的任意命令。</div>
+            <div class="row">
+              <button class="ghost" id="btn-doctor-run">运行诊断</button>
+              <span class="status idle" id="st-doctor">未运行</span>
+              <span class="hint" id="h-doctor" style="margin-left:auto"></span>
+            </div>
+            <div class="ro-list" id="doctor-meta" style="margin-top:8px"></div>
+            <div class="doc-sum" id="doctor-sum"></div>
+            <div class="doc-checks" id="doctor-checks"></div>
           </div>
 
           <div class="set-card">
@@ -7190,6 +7228,41 @@ const I18N_EN = {
   "；HTTP 需要鉴权，服务有响应": "; HTTP requires auth, service responds",
   "；健康未验证": "; health unverified",
   "；每次切到本页都会重新读取最新值，两边不会各存一份。": " with Configure and Chain Check; every visit re-reads the latest values, so neither page keeps its own copy.",
+  "环境契约 Doctor": "Environment Contract Doctor",
+  "把 envkit.yaml 与当前环境逐项比对。只读诊断：不启动、不停止、不修复，也不执行契约里的任意命令。": "Compares envkit.yaml against the current environment item by item. Read-only: it never starts, stops, repairs, or runs arbitrary commands from the contract.",
+  "运行诊断": "Run diagnosis",
+  "重新诊断": "Run again",
+  "诊断中": "Diagnosing",
+  "诊断中…": "Diagnosing…",
+  "只读；不会改动环境": "Read-only; nothing in the environment is changed",
+  "正在逐项比对契约与实际…": "Comparing contract and actual state item by item…",
+  "诊断失败": "Diagnosis failed",
+  "诊断超时（30 秒）": "Diagnosis timed out (30 s)",
+  "Doctor 诊断失败：{0}": "Doctor failed: {0}",
+  "未运行": "Not run",
+  "一致": "Match",
+  "部分可核实": "Partly verified",
+  "有偏差": "Drift",
+  "无法诊断": "Cannot diagnose",
+  "没有契约": "No contract",
+  "通过": "Pass",
+  "不一致": "Mismatch",
+  "未声明": "Undeclared",
+  "无法核实": "Unverified",
+  "不适用": "Not applicable",
+  "通过 {0}": "Pass {0}",
+  "不一致 {0}": "Mismatch {0}",
+  "未声明 {0}": "Undeclared {0}",
+  "无法核实 {0}": "Unverified {0}",
+  "不适用 {0}": "Not applicable {0}",
+  "契约文件": "Contract file",
+  "项目根": "Project root",
+  "检查时间": "Checked at",
+  "错误": "Error",
+  "期望：": "Expected: ",
+  "实际：": "Actual: ",
+  "没有可显示的检查项": "No checks to display",
+  "未知": "Unknown",
 };
 
 let EK_LANG = 'zh';
@@ -18836,6 +18909,132 @@ async function ekSetSaveUpdate(recheck){
 
   window.EKProjectSetup = { open: openWizard, close: closeWizard, seen: seen };
 })();
+/* ---------- v4.0 Phase 2：环境契约 Doctor（只读） ----------
+   Doctor 只把「契约要求 vs 当前实际」摆出来：不启动、不停止、不修复。
+   前端不自动运行：数据库检查最长 12 秒，一进设置就扫会让页面像卡住；
+   用户点「运行诊断」才开始，结果按四态着色，drift 项排在最前。 */
+
+var EK_DOC_STATUS = {
+  ok:          {cls:'ok',          label:'一致'},
+  partial:     {cls:'warn',        label:'部分可核实'},
+  drift:       {cls:'fail',        label:'有偏差'},
+  blocked:     {cls:'fail',        label:'无法诊断'},
+  no_contract: {cls:'idle',        label:'没有契约'}
+};
+var EK_DOC_CHECK = {
+  ok:          {cls:'s-ok',          label:'通过'},
+  drift:       {cls:'s-drift',       label:'不一致'},
+  undeclared:  {cls:'s-undeclared',  label:'未声明'},
+  unknown:     {cls:'s-unknown',     label:'无法核实'},
+  skip:        {cls:'s-ok',          label:'不适用'}
+};
+var ekDoctorBusy = false;
+
+function ekDoctorBind(){
+  var btn = document.getElementById('btn-doctor-run');
+  if(btn && !btn.__ekBound){
+    btn.__ekBound = true;
+    btn.addEventListener('click', function(){ ekDoctorRun(); });
+  }
+}
+
+async function ekDoctorRun(){
+  if(ekDoctorBusy) return;
+  var btn = document.getElementById('btn-doctor-run');
+  var st = document.getElementById('st-doctor');
+  var hint = document.getElementById('h-doctor');
+  var sum = document.getElementById('doctor-sum');
+  var list = document.getElementById('doctor-checks');
+  var meta = document.getElementById('doctor-meta');
+  ekDoctorBusy = true;
+  if(btn){ btn.disabled = true; btn.textContent = t('诊断中…'); }
+  if(st){ st.className = 'status run'; st.textContent = t('诊断中'); }
+  if(hint) hint.textContent = t('只读；不会改动环境');
+  if(sum) sum.innerHTML = '';
+  if(list) list.innerHTML = '<div class="doc-empty">' + esc(t('正在逐项比对契约与实际…')) + '</div>';
+  if(meta) meta.innerHTML = '';
+
+  var ctl = new AbortController();
+  var timer = setTimeout(function(){ ctl.abort(); }, 30000);
+  try{
+    var r = await fetch('/api/contract/doctor', {signal:ctl.signal});
+    var txt = await r.text();
+    var j;
+    try{ j = JSON.parse(txt); }catch(e){ throw new Error(txt || ('HTTP ' + r.status)); }
+    if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    ekDoctorRender(j);
+  }catch(e){
+    if(st){ st.className = 'status fail'; st.textContent = t('诊断失败'); }
+    if(list) list.innerHTML = '<div class="doc-empty">' + esc(e.name === 'AbortError' ? t('诊断超时（30 秒）') : (e.message || String(e))) + '</div>';
+    if(sum) sum.innerHTML = '';
+    toast(t('Doctor 诊断失败：{0}', e.message || String(e)), 'err');
+  }finally{
+    clearTimeout(timer);
+    ekDoctorBusy = false;
+    if(btn){ btn.disabled = false; btn.textContent = t('重新诊断'); }
+  }
+}
+
+function ekDoctorRender(rep){
+  rep = rep || {};
+  var st = document.getElementById('st-doctor');
+  var hint = document.getElementById('h-doctor');
+  var sum = document.getElementById('doctor-sum');
+  var list = document.getElementById('doctor-checks');
+  var meta = document.getElementById('doctor-meta');
+  var s = EK_DOC_STATUS[rep.status] || {cls:'idle', label:rep.status || t('未知')};
+
+  if(st){ st.className = 'status ' + s.cls; st.textContent = t(s.label); }
+  if(hint) hint.textContent = rep.conclusion || '';
+
+  var rows = [];
+  if(rep.contract_path) rows.push({k:t('契约文件'), v:rep.contract_path});
+  if(rep.project_root) rows.push({k:t('项目根'), v:rep.project_root});
+  if(rep.checked_at) rows.push({k:t('检查时间'), v:String(rep.checked_at).replace('T',' ').slice(0,19)});
+  if(rep.error) rows.push({k:t('错误'), v:rep.error, cls:'warn'});
+  ekRo(meta, rows);
+
+  var c = rep.summary || {};
+  var chips = [];
+  if(c.ok) chips.push('<span class="s-ok">' + esc(t('通过 {0}', c.ok)) + '</span>');
+  if(c.drift) chips.push('<span class="s-drift">' + esc(t('不一致 {0}', c.drift)) + '</span>');
+  if(c.undeclared) chips.push('<span class="s-undeclared">' + esc(t('未声明 {0}', c.undeclared)) + '</span>');
+  if(c.unknown) chips.push('<span class="s-unknown">' + esc(t('无法核实 {0}', c.unknown)) + '</span>');
+  if(c.skip) chips.push('<span>' + esc(t('不适用 {0}', c.skip)) + '</span>');
+  if(sum) sum.innerHTML = chips.join('');
+
+  var checks = (rep.checks || []).slice();
+  /* drift 先看；同组内保持后端顺序（契约 → 工具 → 服务 → 数据库 → 密钥）。 */
+  var rank = {drift:0, unknown:1, undeclared:2, ok:3, skip:4};
+  checks.sort(function(a,b){
+    var d = (rank[a.status] == null ? 9 : rank[a.status]) - (rank[b.status] == null ? 9 : rank[b.status]);
+    return d;
+  });
+
+  if(!checks.length){
+    list.innerHTML = '<div class="doc-empty">' + esc(rep.conclusion || t('没有可显示的检查项')) + '</div>';
+    return;
+  }
+  list.innerHTML = checks.map(function(ch){
+    var cs = EK_DOC_CHECK[ch.status] || {cls:'', label:ch.status || t('未知')};
+    var kv = '';
+    if(ch.expected) kv += '<div class="doc-kv">' + esc(t('期望：')) + esc(ekTrData(ch.expected)) + '</div>';
+    if(ch.actual) kv += '<div class="doc-kv">' + esc(t('实际：')) + esc(ekTrData(ch.actual)) + '</div>';
+    var detail = ch.detail ? '<div class="doc-detail">' + esc(ekTrData(ch.detail)) + '</div>' : '';
+    var ev = (ch.evidence && ch.evidence.length)
+      ? '<div class="doc-evidence">' + esc(ch.evidence.join(' · ')) + '</div>' : '';
+    return '<div class="doc-check ' + cs.cls + '">' +
+      '<div class="doc-top"><b>' + esc(ekTrData(ch.title || ch.id || '')) + '</b>' +
+      '<span class="doc-badge ' + cs.cls + '">' + esc(t(cs.label)) + '</span></div>' +
+      kv + detail + ev + '</div>';
+  }).join('');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', ekDoctorBind);
+}else{
+  ekDoctorBind();
+}
 </script>
 </body>
 </html>

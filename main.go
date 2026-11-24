@@ -197,6 +197,7 @@ func main() {
 	http.HandleFunc("/api/contract", handleContractGet)
 	http.HandleFunc("/api/contract/generate", handleContractGenerate)
 	http.HandleFunc("/api/contract/validate", handleContractValidate)
+	http.HandleFunc("/api/contract/doctor", handleContractDoctor)
 	http.HandleFunc("/api/check", handleCheck)
 	http.HandleFunc("/api/pet/weather", handlePetWeather)
 	http.HandleFunc("/api/pet/config", handlePetConfig) // 桌宠开关（天气默认关闭）

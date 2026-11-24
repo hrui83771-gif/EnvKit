@@ -2613,6 +2613,31 @@ body.pws-open{overflow:hidden}
 .pws-dbprivacy::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--brand2);flex:none}
 .pws-contractopt{margin-top:12px;padding:11px 13px;border:1px dashed var(--line);border-radius:12px;background:var(--soft);display:flex;flex-direction:column;gap:4px}
 .pws-contractopt small{font-size:10.5px;line-height:1.55;color:var(--muted);padding-left:22px}
+
+/* 环境契约 Doctor：只读结果卡。四态用左侧色条 + 小徽标，不靠颜色单独传达状态。 */
+.doc-sum{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.doc-sum span{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--off);color:var(--muted)}
+.doc-sum .s-ok{background:var(--okbg);color:var(--ok)}
+.doc-sum .s-drift{background:var(--errbg);color:var(--err)}
+.doc-sum .s-undeclared{background:var(--warnbg);color:var(--warn)}
+.doc-sum .s-unknown{background:var(--infobg);color:var(--info)}
+.doc-checks{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:360px;overflow:auto}
+.doc-check{border-left:3px solid var(--line);padding:6px 0 6px 9px}
+.doc-check.s-ok{border-left-color:var(--ok)}
+.doc-check.s-drift{border-left-color:var(--err)}
+.doc-check.s-undeclared{border-left-color:var(--warn)}
+.doc-check.s-unknown{border-left-color:var(--info)}
+.doc-check .doc-top{display:flex;align-items:center;gap:7px}
+.doc-check .doc-top b{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-badge{flex:none;margin-left:auto;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:var(--off);color:var(--muted)}
+.doc-badge.s-ok{background:var(--okbg);color:var(--ok)}
+.doc-badge.s-drift{background:var(--errbg);color:var(--err)}
+.doc-badge.s-undeclared{background:var(--warnbg);color:var(--warn)}
+.doc-badge.s-unknown{background:var(--infobg);color:var(--info)}
+.doc-kv{font-size:11.5px;line-height:1.55;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.doc-detail{font-size:11.5px;line-height:1.55;color:var(--text);margin-top:2px;overflow-wrap:anywhere}
+.doc-evidence{font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.doc-empty{font-size:11.5px;line-height:1.6;color:var(--muted);padding:6px 0}
 .pws-empty{padding:14px;border:1px dashed var(--line);border-radius:10px;font-size:11.5px;color:var(--muted);line-height:1.65;background:var(--soft)}
 
 @keyframes pws-fade{from{opacity:0}to{opacity:1}}
