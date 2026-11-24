@@ -99,7 +99,8 @@ v3.7.2 按职责拆成同包 7 个文件（**纯搬家，路由一条没变**）
 **保留期 24 小时**，启动扫一次 + 每小时扫一次，`aiAttachStartGC()` 在 `main.go:107` 接线）· `ai_dbquery.go`
 （只读 DB 查询）· `aibackup.go`（AI 备份助手）· `aidebug.go` · `memory.go`/
 `memory_api.go`（AI 记忆 + 本轮注入视图）· `lesson.go` · `plan.go`/`replan.go` · `explore.go`/
-`filesel.go`/`projectbrief.go`（项目画像/文件探索）· `dbbrowse.go` · `webterm.go`
+`projectbrief.go`（项目画像/文件探索）· `projectsetup.go`（项目接入向导：inspect/apply/db-test）·
+`filesel.go`/`dbbrowse.go`/`webterm.go`
 
 ## 行动 / 预案 / 晨报（Agent 闭环）
 

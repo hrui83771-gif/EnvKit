@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -139,14 +140,24 @@ func launchScriptAllowed(name string) bool {
 // 优先用用户配置；否则从 package.json 的 scripts 里筛安全候选。
 // 返回 (推荐脚本, 全部候选, 来源, 被剔除的)。
 func inferWebScript(frontendDir string, configured string) (string, []string, string, []string) {
+	scripts := readPackageScripts(frontendDir)
 	if s := strings.TrimSpace(configured); s != "" {
 		// 用户配置也要过安全规则：配置是"用户填的"，但用户也可能手滑填了 migrate
 		if !launchScriptAllowed(s) {
 			return "", nil, "config", nil
 		}
-		return s, []string{s}, "config", nil
+		// 配置里的脚本必须真的在 package.json 里存在。旧版页面曾把 localStorage
+		// 遗留的 "serve" 当配置带过来，项目只有 dev 时会在启动瞬间报 Missing script。
+		// 读到 package.json 且确认不存在时，不把坏配置当圣旨，回退到正常推断。
+		if len(scripts) > 0 && !slices.Contains(scripts, s) {
+			// fall through：按 package.json 重新推断
+		} else {
+			return s, []string{s}, "config", nil
+		}
 	}
-	scripts := readPackageScripts(frontendDir)
+	if len(scripts) == 0 {
+		return "", nil, "none", nil
+	}
 	if len(scripts) == 0 {
 		return "", nil, "none", nil
 	}
@@ -343,6 +354,15 @@ func launchWebScriptOrDefault(dir, requested string) (script, source string, ok 
 	if s := strings.TrimSpace(requested); s != "" {
 		// 调用方显式指定：仍要过安全规则，防止 AI 或接口传入危险脚本名
 		if !launchScriptAllowed(s) {
+			return "", "", false
+		}
+		// 显式指定的脚本必须在 package.json 里真实存在。启动页旧 localStorage
+		// 遗留的 "serve" 就是从这里溜进去的：没有它，就会在 npm 里直接
+		// "Missing script: serve"。不存在时自动回退到 package.json 推断。
+		if scripts := readPackageScripts(dir); len(scripts) > 0 && !slices.Contains(scripts, s) {
+			if auto, _, _, _ := inferWebScript(dir, cfg.Projects.WebScript); auto != "" {
+				return auto, "package.json（指定脚本 " + s + " 不存在，已自动改用 " + auto + "）", true
+			}
 			return "", "", false
 		}
 		return s, "调用方指定", true

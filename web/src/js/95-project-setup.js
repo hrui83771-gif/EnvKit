@@ -23,7 +23,7 @@
     { id: 'summary',       title: '汇总项目画像',     desc: '端口占用与最终结果' }
   ];
 
-  var modal = null, state = { view: 1, data: null, checking: false, seq: 0, auto: false };
+  var modal = null, state = { view: 1, data: null, checking: false, seq: 0, auto: false, applied: false };
   var lastFocus = null, built = false;
 
   function q(sel){ return modal ? modal.querySelector(sel) : null; }
@@ -118,6 +118,7 @@
     q('[data-view="3"]').innerHTML =
       '<div class="pws-resulthead"><div><div class="pws-kicker">' + esc(t('03 / 检查结果')) + '</div><h2 id="pws-result-title">' + esc(t('可以接入了')) + '</h2><p class="pws-lead" id="pws-sum"></p></div><div class="pws-seal" id="pws-seal"><span>✓</span><small>' + esc(t('只读检查')) + '</small></div></div>' +
       '<div class="pws-cards" id="pws-cards"></div>' +
+      '<div class="pws-warnings" id="pws-warnings"></div>' +
       '<div class="pws-dbwrap" id="pws-dbwrap"></div>' +
       '<div class="pws-err" id="pws-err3"></div>' +
       '<div class="pws-foot"><span class="pws-note">' + esc(t('保存只写入前后端目录；勾选数据库时会一起写入，密码只在本机加密保存。')) + '</span>' +
@@ -138,16 +139,17 @@
         var input = document.getElementById(id);
         openBrowser('dir', input.value || '', '', 'dir', function(p){
           input.value = p;
+          state.applied = false;
           clearErr();
           input.focus();
-        }, true);
+        });
       }
     });
     q('#pws-start').onclick = startInspect;
     q('#pws-back1').onclick = function(){ state.seq++; state.checking = false; showView(1); };
     q('#pws-save').onclick = save;
     modal.querySelectorAll('input').forEach(function(inp){
-      inp.addEventListener('input', clearErr);
+      inp.addEventListener('input', function(){ state.applied = false; clearErr(); });
     });
   }
 
@@ -351,11 +353,74 @@
         '<div class="pws-dbmeta">' + esc(t('用户 {0}', c.user || '—')) + ' · ' + esc(t('密码 {0}', pwd)) + extra + '</div>' +
         '<div class="pws-dbsrc">' + esc(c.source) + ' · ' + esc(t('置信度 {0}%', c.confidence)) + '</div>' + note + '</div></label>';
     }).join('');
+    var files = db.sql_files || [];
+    var opts = files.map(function(f){
+      return '<option value="' + esc(f.path) + '">' + esc(f.rel || f.name) + (f.size ? ' · ' + fmtSize(f.size) : '') + '</option>';
+    }).join('');
+    var sqlBlock = files.length
+      ? '<label class="pws-dbimport"><input type="checkbox" id="pws-db-import">' + esc(t('建库后导入 SQL')) + '</label>' +
+        '<select id="pws-sql-file" class="pws-sqlfile" disabled>' + opts + '</select>'
+      : '<span class="pws-dbnosql">' + esc(t('项目里没发现 .sql 文件；仍然可以只建空库。')) + '</span>';
     var hint = db.candidates.length > 1 ? '<span class="pws-dbhint">' + esc(t('有多组候选，请挑一组再保存。')) + '</span>' : '';
     return '<div class="pws-dbhead"><div><span class="pws-dbicon">DB</span><b>' + esc(t('找到 {0} 组数据库配置', db.candidates.length)) + '</b>' + hint + '</div>' +
-      '<label class="pws-dbuse"><input type="checkbox" id="pws-db-use" checked>' + esc(t('同时写入数据库配置')) + '</label></div>' +
+      '<div class="pws-dbheadact"><label class="pws-dbuse"><input type="checkbox" id="pws-db-use" checked>' + esc(t('同时写入数据库配置')) + '</label>' +
+      '<button type="button" class="pws-dbtest" id="pws-db-test">' + esc(t('测试连接')) + '</button></div></div>' +
       '<div class="pws-dblist" id="pws-dblist">' + rows + '</div>' +
+      '<div class="pws-dbops">' +
+        '<label class="pws-dbcreate"><input type="checkbox" id="pws-db-create" checked>' + esc(t('保存后建库（库不存在时）')) + '</label>' +
+        sqlBlock +
+        '<div class="pws-dbresult" id="pws-db-result"></div>' +
+      '</div>' +
       '<div class="pws-dbprivacy">' + esc(t('密码只在本机加密保存；不会写日志、不会发给 AI。')) + '</div>';
+  }
+
+  function fmtSize(n){
+    if(n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    if(n >= 1024) return Math.round(n / 1024) + ' KB';
+    return n + ' B';
+  }
+
+  function selectedDBID(){
+    var c = q('input[name="pws-db-choice"]:checked');
+    return c ? c.value : '';
+  }
+
+  function showDBResult(msg, cls){
+    var e = q('#pws-db-result');
+    if(!e) return;
+    e.textContent = msg || '';
+    e.className = 'pws-dbresult' + (cls ? ' ' + cls : '');
+  }
+
+  async function testDB(){
+    var id = selectedDBID();
+    if(!id){ showDBResult(t('请先选择一组数据库配置'), 'err'); return; }
+    var btn = q('#pws-db-test');
+    if(btn){ btn.disabled = true; btn.textContent = t('连接中…'); }
+    showDBResult(t('正在连接 MySQL…'), '');
+    try{
+      var r = await fetch('/api/project/db-test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          frontend_dir: (q('#pws-fe').value || '').trim(),
+          backend_dir: (q('#pws-be').value || '').trim(),
+          db_id: id
+        })
+      });
+      var j = {}; try{ j = await r.json(); }catch(e){}
+      if(!r.ok) throw new Error(j.error || (j.message || ('HTTP ' + r.status)));
+      if(!j.connected) throw new Error(j.error || t('连接失败'));
+      var msg = j.exists ? t('连接成功，库已存在') : t('连接成功，库不存在，可以创建');
+      if(j.version) msg += ' · MySQL ' + j.version;
+      showDBResult(msg, j.exists ? 'ok' : 'warn');
+      var create = q('#pws-db-create');
+      if(create && !j.exists) create.checked = true;
+    }catch(e){
+      showDBResult(t('连接失败：{0}', e.message || e), 'err');
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = t('测试连接'); }
+    }
   }
 
   function renderResult(d){
@@ -364,9 +429,29 @@
     q('#pws-cards').innerHTML = cards;
     var dbwrap = q('#pws-dbwrap');
     dbwrap.innerHTML = dbHTML(db);
+    dbwrap.onchange = function(){ state.applied = false; };
     if(dbwrap.querySelector('#pws-db-use')){
       dbwrap.querySelector('#pws-db-use').addEventListener('change', function(e){
         dbwrap.querySelectorAll('input[type="radio"]').forEach(function(x){ x.disabled = !e.target.checked; });
+        ['#pws-db-create','#pws-db-import','#pws-sql-file'].forEach(function(sel){
+          var x = dbwrap.querySelector(sel);
+          if(x) x.disabled = !e.target.checked || (sel === '#pws-sql-file' && !(dbwrap.querySelector('#pws-db-import') || {}).checked);
+        });
+        if(!e.target.checked) showDBResult('', '');
+        state.applied = false;
+      });
+    }
+    var testBtn = dbwrap.querySelector('#pws-db-test');
+    if(testBtn) testBtn.onclick = testDB;
+    var importBox = dbwrap.querySelector('#pws-db-import');
+    var sqlFile = dbwrap.querySelector('#pws-sql-file');
+    if(importBox && sqlFile){
+      importBox.addEventListener('change', function(){
+        sqlFile.disabled = !importBox.checked;
+        if(importBox.checked){
+          var create = q('#pws-db-create');
+          if(create) create.checked = true;
+        }
       });
     }
     var parts = [];
@@ -374,50 +459,124 @@
     if(b.provided && b.valid) parts.push(t('后端 {0}', kindLabel(b.kind, 'backend', b.config_files)));
     if(db.found && db.candidates[0] && db.candidates[0].name) parts.push(t('数据库 {0}', db.candidates[0].name));
     var warn = (d.warnings || []).length;
+    var warns = (d.warnings || []).map(function(w){
+      return '<div class="pws-warnitem"><span>!</span><div>' + esc(w) + '</div></div>';
+    }).join('');
+    q('#pws-warnings').innerHTML = warns;
+    q('#pws-result-title').textContent = warn ? t('可以接入，但有 {0} 项要先处理', warn) : t('可以接入了');
     q('#pws-sum').textContent = parts.join(' · ') + (warn ? '　·　' + t('{0} 项需要留意', warn) : '');
     q('#pws-seal').classList.toggle('warn', warn > 0);
     q('#pws-seal').querySelector('small').textContent = warn ? t('{0} 项留意', warn) : t('只读检查');
+  }
+
+  function candidateByID(id){
+    var d = state.data || {};
+    var db = d.database || {};
+    var list = db.candidates || [];
+    for(var i = 0; i < list.length; i++){
+      if(list[i].id === id) return list[i];
+    }
+    return null;
+  }
+
+  async function progState(){
+    var r = await fetch('/api/program/state');
+    if(!r.ok) throw new Error('无法读取进度');
+    return await r.json();
+  }
+
+  async function waitInitDB(beforeAt, timeoutMs){
+    var started = false;
+    var deadline = Date.now() + (timeoutMs || 180000);
+    while(Date.now() < deadline){
+      var st = await progState();
+      var s = st['init-db'] || {};
+      if(s.running) started = true;
+      if((started || (s.at && s.at !== beforeAt)) && !s.running){
+        if(s.ok) return s;
+        throw new Error(s.msg || t('建库或导入失败'));
+      }
+      await wait(700);
+    }
+    throw new Error(t('数据库操作仍在后台执行，请到「程序配置」查看进度'));
   }
 
   async function save(){
     var f = (q('#pws-fe').value || '').trim();
     var b = (q('#pws-be').value || '').trim();
     if(!f && !b){ showErr('#pws-err3', t('至少选择前端或后端目录')); return; }
-    var use = false, id = '';
+    var use = false, id = '', chosen = null;
     var useBox = q('#pws-db-use');
     if(useBox && useBox.checked){
       use = true;
-      var chosen = q('input[name="pws-db-choice"]:checked');
-      if(!chosen){ showErr('#pws-err3', t('请选择一组数据库配置，或取消勾选写入')); return; }
-      id = chosen.value;
+      id = selectedDBID();
+      if(!id){ showErr('#pws-err3', t('请选择一组数据库配置，或取消勾选写入')); return; }
+      chosen = candidateByID(id);
+      if(!chosen){ showErr('#pws-err3', t('数据库候选已变化，请返回重新检查')); return; }
     }
+    var doCreate = !!(use && q('#pws-db-create') && q('#pws-db-create').checked);
+    var doImport = !!(use && q('#pws-db-import') && q('#pws-db-import').checked);
+    var sqlPath = '';
+    if(doImport){
+      var sqlFile = q('#pws-sql-file');
+      sqlPath = sqlFile ? sqlFile.value : '';
+      if(!sqlPath){ showErr('#pws-err3', t('请选择要导入的 SQL 文件')); return; }
+    }
+    if(doCreate && !chosen.name){ showErr('#pws-err3', t('候选里没有数据库名，无法建库')); return; }
+
     var btn = q('#pws-save');
     btn.disabled = true;
     var old = btn.textContent;
-    btn.textContent = t('保存中…');
+    var beforeAt = '';
     try{
-      var r = await fetch('/api/project/apply', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({frontend_dir: f, backend_dir: b, use_database: use, db_id: id})
-      });
-      if(!r.ok){
-        var msg = await r.text();
-        try{
-          var j = JSON.parse(msg);
-          if(j.problems && j.problems.length) msg = j.problems.map(function(p){ return (p.field || '') + ' → ' + (p.msg || ''); }).join('\n');
-        }catch(e){}
-        throw new Error(msg);
+      if(doCreate || doImport){
+        try{ beforeAt = ((await progState())['init-db'] || {}).at || ''; }catch(e){}
+      }
+      if(!state.applied){
+        btn.textContent = t('保存中…');
+        var r = await fetch('/api/project/apply', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({frontend_dir: f, backend_dir: b, use_database: use, db_id: id})
+        });
+        if(!r.ok){
+          var msg = await r.text();
+          try{
+            var j = JSON.parse(msg);
+            if(j.problems && j.problems.length) msg = j.problems.map(function(p){ return (p.field || '') + ' → ' + (p.msg || ''); }).join('\n');
+          }catch(e){}
+          throw new Error(msg);
+        }
+        state.applied = true;
+      }
+      var dbDone = '';
+      if(doCreate || doImport){
+        btn.textContent = doImport ? t('建库并导入中…') : t('建库中…');
+        showDBResult(doImport ? t('正在创建数据库并导入 SQL…') : t('正在创建数据库…'), '');
+        var ir = await fetch('/api/program/init-db', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({db: chosen.name, sql: doImport ? sqlPath : ''})
+        });
+        if(!ir.ok){
+          var im = await ir.text();
+          throw new Error(im || t('建库请求失败'));
+        }
+        var done = await waitInitDB(beforeAt, 300000);
+        dbDone = doImport ? t('数据库已创建并导入 SQL') : t('数据库已创建');
+        showDBResult(dbDone + (done.msg ? ' · ' + done.msg : ''), 'ok');
       }
       markSeen();
       closeWizard(false);
-      toast(t('项目已接入，配置已保存'), 'ok');
-      try{ await loadConfig(); refreshGuards(); pollHealth(); }catch(e){}
+      toast(dbDone ? t('项目已接入，{0}', dbDone) : t('项目已接入，配置已保存'), 'ok');
+      try{ await loadConfig(); refreshGuards(); pollHealth(); pollProg(); }catch(e){}
     }catch(e){
-      showErr('#pws-err3', t('保存失败：{0}', e.message || e));
+      var prefix = state.applied ? t('配置已保存，但数据库操作失败：') : t('保存失败：');
+      showErr('#pws-err3', prefix + (e.message || e));
+      if(state.applied) btn.textContent = t('重试数据库操作');
     }finally{
       btn.disabled = false;
-      btn.textContent = old;
+      if(btn.textContent !== t('重试数据库操作')) btn.textContent = old;
     }
   }
 
@@ -432,6 +591,7 @@
     state.seq++;
     state.checking = false;
     state.data = null;
+    state.applied = false;
     lastFocus = document.activeElement;
     var f = '', b = '';
     try{ if(typeof cfg !== 'undefined' && cfg && cfg.projects){ f = cfg.projects.frontend_dir || ''; b = cfg.projects.backend_dir || ''; } }catch(e){}

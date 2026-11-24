@@ -166,8 +166,11 @@ func observePortsNow() {
 			}
 			tested++
 			ob, score := classifyOccupant(target, hint, pid, names[pid], expect, svc)
-			if hint.Confidence < 60 && ob.State != "external" {
-				// 低置信兜底端口上的"别人/身份不明"不当作本项目状态，
+			// scan_ports / builtin-default 只是“端口诊断清单”，不是项目服务端口。
+			// 60 分的 8080 常常是后端，不能拿来把前端染成 foreign/端口冲突；
+			// 保留 external（项目目录/框架强指纹），默认端口上的外部实例仍能被发现。
+			if hint.Confidence < 75 && ob.State != "external" {
+				// 低置信兜底端口上的“别人/身份不明”不当作本项目状态，
 				// 否则同一个 Vite 会把后端染成 unknown，8080 上任何应用都会染红。
 				// 只要 external（有项目目录/框架强指纹）仍保留——外部实例可能正好跑在默认端口。
 				continue

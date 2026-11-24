@@ -767,7 +767,10 @@ func svcStartSkip(target string) (OpResult, bool) {
 					fmt.Sprintf("pid=%d port=%d owner=%s source=unknown", o.PID, o.Port, nonEmptyStr(o.OwnerName, "未知")),
 					"hint=到「端口诊断」核对命令行/路径后再决定"), true
 			case "foreign":
-				if o.PortConfidence >= 60 {
+				// 只有项目画像/package.json/config 声明出来的端口（>=75）才允许阻断。
+				// scan_ports=60 是诊断清单，用户可能把后端 8080 放进去排查；拿它拦前端
+				// 会把正在运行的后端误判成“前端端口冲突”。
+				if o.PortConfidence >= 75 {
 					return opFail("start_service", target, errKindPortConflict,
 						fmt.Sprintf("%s启动前置失败：端口 %d 被 %s（PID %d）占着，且不像本项目",
 							svcLabel(target), o.Port, nonEmptyStr(o.OwnerName, "未知进程"), o.PID),
@@ -1073,6 +1076,122 @@ func opStartBackend(dir, actor string) OpResult {
 // probeJavaVer 独立成变量只为测试注入；生产恒为 javaVerOf。
 var probeJavaVer = javaVerOf
 
+// javaForProject 选一个能跑当前 Maven 项目的 JDK。
+//
+// 真实故障（2026-11-23）：JAVA_HOME 指着 JDK8，项目要求 Java 17，PATH 里没有
+// java；检测阶段提示“会失败”，启动阶段仍然拿 JAVA_HOME 去跑，最后 Maven 只报
+// UnsupportedClassVersionError，用户看不出是 JDK 选错。这里在启动前做一次
+// “当前 JDK 不够 → 在常见安装位置找兼容 JDK”的选择，返回实际要用的 java.exe。
+//
+// 只在“已经找到 java、但版本低于项目要求”时扫描安装目录；连 java 都找不到时
+// 仍走原来的 missing_dep，不在用户没装 JDK 的机器上乱翻盘。
+func javaForProject(dir string) (string, string) {
+	cur := currentJavaPath()
+	if cur == "" {
+		return "", ""
+	}
+	curVer := probeJavaVer(cur)
+	req := mavenRequiredJava(dir)
+	if req == "" || curVer == "" || !javaVerLess(curVer, req) {
+		return cur, curVer
+	}
+
+	bestPath, bestVer := cur, curVer
+	for _, p := range javaInstallCandidates() {
+		if p == "" || strings.EqualFold(filepath.Clean(p), filepath.Clean(cur)) {
+			continue
+		}
+		v := probeJavaVer(p)
+		if v == "" || javaVerLess(v, req) {
+			continue
+		}
+		if bestVer == curVer || javaVerLess(bestVer, v) {
+			bestPath, bestVer = p, v
+		}
+	}
+	return bestPath, bestVer
+}
+
+func currentJavaPath() string {
+	if p := findExe("java.exe", "java"); p != "" {
+		return p
+	}
+	if jh := strings.TrimSpace(os.Getenv("JAVA_HOME")); jh != "" {
+		cand := filepath.Join(jh, "bin", "java.exe")
+		if hasFile(cand) {
+			return cand
+		}
+	}
+	return ""
+}
+
+// javaInstallCandidates 只扫描常见 JDK 安装根的一到两层，不递归全盘。
+// 覆盖 Oracle/OpenJDK、Adoptium、Microsoft、Corretto、Zulu、BellSoft，
+// EnvKit 自己装的 tools 目录，以及用户级 .jdks / Adoptium 目录。
+func javaInstallCandidates() []string {
+	roots := []string{}
+	addRoot := func(p string) {
+		if strings.TrimSpace(p) != "" {
+			roots = append(roots, p)
+		}
+	}
+	for _, c := range cfg.Components {
+		if strings.EqualFold(c.Name, "JDK") || strings.EqualFold(c.Name, "Java") || strings.EqualFold(c.Name, "Java Runtime") {
+			addRoot(componentBinDir(c))
+		}
+	}
+	if pf := os.Getenv("ProgramFiles"); pf != "" {
+		addRoot(filepath.Join(pf, "Java"))
+		addRoot(filepath.Join(pf, "Eclipse Adoptium"))
+		addRoot(filepath.Join(pf, "Microsoft"))
+		addRoot(filepath.Join(pf, "Amazon Corretto"))
+		addRoot(filepath.Join(pf, "Zulu"))
+		addRoot(filepath.Join(pf, "BellSoft"))
+	}
+	if pf := os.Getenv("ProgramFiles(x86)"); pf != "" {
+		addRoot(filepath.Join(pf, "Java"))
+	}
+	if la := os.Getenv("LOCALAPPDATA"); la != "" {
+		addRoot(filepath.Join(la, "Programs", "Eclipse Adoptium"))
+	}
+	if up := os.Getenv("USERPROFILE"); up != "" {
+		addRoot(filepath.Join(up, ".jdks"))
+	}
+	addRoot(cfg.InstallDir)
+
+	seen := map[string]bool{}
+	var out []string
+	add := func(p string) {
+		p = filepath.Clean(p)
+		key := strings.ToLower(p)
+		if seen[key] || !hasFile(p) {
+			return
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	for _, root := range roots {
+		patterns := []string{
+			filepath.Join(root, "bin", "java.exe"),
+			filepath.Join(root, "*", "bin", "java.exe"),
+			filepath.Join(root, "*", "*", "bin", "java.exe"),
+		}
+		for _, pat := range patterns {
+			ms, _ := filepath.Glob(pat)
+			for _, m := range ms {
+				add(m)
+			}
+			if len(out) >= 40 {
+				break
+			}
+		}
+		if len(out) >= 40 {
+			break
+		}
+	}
+	return out
+}
+
 // javaVerOf 探测一个 java.exe 的版本。java -version 打在 stderr，
 // runVersionCmd 用 CombinedOutput 拿得到（见 envreq.go 同款判据）。
 func javaVerOf(javaPath string) string {
@@ -1145,16 +1264,9 @@ func mavenStartEnv(dir, javaPath string) map[string]string {
 // run 阶段 background（进程树进 Win Job Object，stop/restart 能整棵杀）。
 // 端口由复验层探（内置候选表含 8080，Spring Boot 默认端口直接命中）。
 func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpResult {
-	// JDK 前置：java 不在 PATH 时再试 JAVA_HOME（Maven 官方就是这么找 JDK 的）
-	javaPath := findExe("java.exe", "java")
-	if javaPath == "" {
-		if jh := strings.TrimSpace(os.Getenv("JAVA_HOME")); jh != "" {
-			cand := filepath.Join(jh, "bin", "java.exe")
-			if hasFile(cand) {
-				javaPath = cand
-			}
-		}
-	}
+	// JDK 前置：优先当前 PATH / JAVA_HOME；版本不够时在常见安装位置找一个
+	// 能满足 pom.xml 要求的 JDK，只作用于本次启动的 JAVA_HOME。
+	javaPath, javaVer := javaForProject(dir)
 	if javaPath == "" {
 		setProg("backend-start", false, false, "未找到 JDK")
 		failS(scStart, "backend", "后端", "未找到 JDK（java）")
@@ -1162,6 +1274,17 @@ func opStartBackendMaven(dir, actor string, fin func(result, detail string)) OpR
 		return opFail("start_service", "backend", errKindMissingDep,
 			"未找到 JDK：Maven 项目需要 JDK 才能编译运行，请安装 JDK 并配置 PATH 或 JAVA_HOME",
 			"dir="+dir, "need=java")
+	}
+	if req := mavenRequiredJava(dir); req != "" && javaVer != "" && javaVerLess(javaVer, req) {
+		setProg("backend-start", false, false, "JDK 版本不足")
+		failS(scStart, "backend", "后端", "项目要求 Java %s，当前只找到 %s", req, javaVer)
+		fin(resFail, "JDK 版本不足")
+		return opFail("start_service", "backend", errKindMissingDep,
+			fmt.Sprintf("项目要求 Java %s，当前只找到 JDK %s；请安装 Java %s 或在 JAVA_HOME 指向兼容 JDK", req, javaVer, req),
+			"dir="+dir, "need=java "+req, "found=java "+javaVer)
+	}
+	if cur := currentJavaPath(); cur != "" && !strings.EqualFold(filepath.Clean(cur), filepath.Clean(javaPath)) {
+		infoS(scStart, "backend", "后端", "项目要求 Java %s，本次使用兼容 JDK：%s", mavenRequiredJava(dir), javaPath)
 	}
 	// Maven：项目自带 mvnw.cmd 优先（不依赖全局安装，CI/换机都不炸），
 	// 其次 PATH/组件 bin，最后 mvnw 发行版缓存——"没装 Maven"的机器上
@@ -1266,6 +1389,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	// 停止权限边界：只停 EnvKit 自己派生的 activeProcs。
 	// 外部实例（source=external）不归我们管，接口也不能假装"已停止"。
 	var external []string
+	var problems []string
 	noteExternal := func(key string) {
 		if managedServiceRunning(key) {
 			return
@@ -1274,47 +1398,65 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 			external = append(external, fmt.Sprintf("%s(PID %d, 端口 %d)", svcLabel(key), o.PID, o.Port))
 		}
 	}
+	stopAndWait := func(key string, managed bool) {
+		stopByKey(scStart, key, key+"-start")
+		if managed {
+			svcReset(key)
+		}
+		// 与 AI 工具同一判据：父进程退出不等于端口释放；npm 的 Vite 子进程
+		// 可能变成孤儿继续占着 5173，必须等端口真空出来再报"已停止"。
+		if why := restartWaitPorts(key); why != "" {
+			problems = append(problems, fmt.Sprintf("%s：%s", svcLabel(key), why))
+		}
+	}
 	switch body.Key {
 	case "web":
 		managed := managedServiceRunning("web")
 		noteExternal("web")
-		stopByKey(scStart, "web", "web-start")
-		if managed {
-			svcReset("web")
+		stopAndWait("web", managed)
+		if len(problems) > 0 {
+			auditNow(actUser, "stop_service", "web", "", resFail, strings.Join(problems, "；"))
+		} else {
+			auditNow(actUser, "stop_service", "web", "", resOK, "")
 		}
-		auditNow(actUser, "stop_service", "web", "", resOK, "")
 	case "backend":
 		managed := managedServiceRunning("backend")
 		noteExternal("backend")
-		stopByKey(scStart, "backend", "backend-start")
-		if managed {
-			svcReset("backend")
+		stopAndWait("backend", managed)
+		if len(problems) > 0 {
+			auditNow(actUser, "stop_service", "backend", "", resFail, strings.Join(problems, "；"))
+		} else {
+			auditNow(actUser, "stop_service", "backend", "", resOK, "")
 		}
-		auditNow(actUser, "stop_service", "backend", "", resOK, "")
 	default:
 		managedWeb := managedServiceRunning("web")
 		managedBackend := managedServiceRunning("backend")
 		noteExternal("web")
 		noteExternal("backend")
-		stopByKey(scStart, "web", "web-start")
-		stopByKey(scStart, "backend", "backend-start")
-		if managedWeb {
-			svcReset("web")
+		stopAndWait("web", managedWeb)
+		stopAndWait("backend", managedBackend)
+		if len(problems) > 0 {
+			auditNow(actUser, "stop_service", "all", "", resFail, strings.Join(problems, "；"))
+		} else {
+			auditNow(actUser, "stop_service", "all", "", resOK, "")
 		}
-		if managedBackend {
-			svcReset("backend")
-		}
-		auditNow(actUser, "stop_service", "all", "", resOK, "")
 	}
 	kickPortObserver()
 	msg := ""
+	if len(problems) > 0 {
+		msg = "未完全停止：" + strings.Join(problems, "；")
+	}
 	if len(external) > 0 {
-		msg = "EnvKit 只停止了由自己启动的服务；以下外部实例未受管，未停止：" + strings.Join(external, "、")
+		if msg != "" {
+			msg += "；"
+		}
+		msg += "EnvKit 只停止了由自己启动的服务；以下外部实例未受管，未停止：" + strings.Join(external, "、")
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":       true,
+		"ok":       len(problems) == 0,
 		"external": external,
+		"problems": problems,
 		"msg":      msg,
 	})
 }

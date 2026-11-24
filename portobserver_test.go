@@ -165,6 +165,20 @@ func TestSvcStartSkipForeignPortConflict(t *testing.T) {
 	}
 }
 
+// scan_ports 是诊断清单（60 分），不是项目服务端口。后端正在 8080 跑、
+// 前端真实端口 5173 还没起来时，不能拿 8080 的 java 阻断“启动前端”。
+func TestSvcStartSkipIgnoresScanPortsForWeb(t *testing.T) {
+	withObservedForTest(t, "web", observedInternal{observedService: observedService{
+		Service: "web", State: "foreign", Port: 8080, PID: 4488,
+		OwnerName: "java.exe", PortConfidence: 60,
+	}})
+	withManagedStateForTest(t, "web", &SvcInfo{})
+
+	if res, hit := svcStartSkip("web"); hit {
+		t.Fatalf("scan_ports 端口不应阻断前端启动，res=%+v", res)
+	}
+}
+
 func withObservedForTest(t *testing.T, service string, v observedInternal) {
 	t.Helper()
 	observedMu.Lock()

@@ -382,25 +382,85 @@ button,input{font:inherit;color:inherit}
       NOTE('验证不过显示「已执行，未验证」；只有客观证据通过，才显示「已完成」。',
            'Failed verification shows “executed, unverified”; only passing objective evidence shows “completed”.', 'warn')
     ]},
-    {id:'quick', group:z('开始使用','Get started'), title:z('四步走完','Four steps'), body:[
-      P('双击 EnvKit.exe 后浏览器自动打开本地控制台，按左侧顺序走一遍即可。顶部状态胶囊会随检测与启动结果实时更新；右下角的鱼是状态出口，不是装饰。',
-        'Double-click EnvKit.exe and the local console opens automatically. Follow the four steps in the sidebar; status chips update live, and the fish at the lower right is a status outlet.'),
-      H3('quick-flow','四步顺序','The four-step order'),
+    {id:'quick', group:z('开始使用','Get started'), title:z('接入项目，再走四步','Set up, then four steps'), body:[
+      P('第一次打开时，如果前后端目录还是空的，EnvKit 会先弹出「项目接入向导」：只需要选目录，剩下的检查交给它。保存以后再按左侧四步走。已经填过目录的用户不会自动弹，随时可以点顶栏「接入项目」重走一遍。',
+        'On first launch, if the front/back-end folders are empty, EnvKit opens the project setup wizard first: choose folders, and it does the checks. After saving, follow the four steps on the left. Users with folders already set do not get it automatically, but can reopen it from “Set up project” in the top bar.'),
+      H3('quick-flow','第一次使用怎么走','First-time flow'),
       STEPS([
-        z('环境安装：检测 Go / Node.js / MySQL 的版本与安装位置，镜像下载带 SHA256 校验与失败重试。',
-          'Environment: detect Go / Node.js / MySQL versions and paths; mirrored downloads with SHA256 checks and retries.'),
-        z('程序配置：填项目目录与数据库连接，建库建表、备份还原都在这一页。',
-          'Configuration: set project paths and database connection; create schema, back up and restore here.'),
+        z('接入项目：选前端 / 后端目录，EnvKit 自动识别项目类型、启动方式、端口和数据库配置。检查是只读的，不会启动服务。',
+          'Set up the project: choose the front/back-end folders and EnvKit works out the project type, start command, ports and database settings. The check is read-only and starts nothing.'),
+        z('环境安装：检测 Go / Node.js / MySQL，Java 后端还会检查 JDK 和 Maven。下载走国内镜像，校验 SHA256，失败会自动换源。',
+          'Environment: check Go / Node.js / MySQL; Java backends also check JDK and Maven. Downloads use domestic mirrors, SHA256 checks and automatic retries.'),
+        z('程序配置：用向导保存后一般不用再填；需要调整目录、数据库或启动方式时再来这一页。',
+          'Configuration: usually nothing to fill after the wizard; come back here only to adjust folders, the database or the start command.'),
         z('链端校验：填 SSH 与链目录，检查节点端口、进程与共识视图。',
-          'Chain: set SSH and chain paths; check node ports, processes and consensus view.'),
-        z('程序启动：先后端再前端；日志按来源分栏，EnvKit 退出时子进程自动回收。',
+          'Chain: set SSH and chain folders; check the node port, processes and consensus view.'),
+        z('程序启动：先后端再前端；日志按来源分栏，EnvKit 退出时子进程会自动回收。',
           'Start: backend first, then frontend. Logs are split by source; child processes are reaped when EnvKit exits.')
       ]),
       H3('quick-console','控制台与后台','Console and background'),
       NOTE('控制台默认 http://127.0.0.1:18765/ ，端口冲突时自动顺延。那个黑色命令行窗口就是服务本体：关掉它网页就打不开。要从托盘菜单选「隐藏窗口到托盘」，不是结束进程。新版本已把控制台换成纸白底的浅色主题。',
            'The console defaults to http://127.0.0.1:18765/ and shifts ports on conflict. The console window IS the service: closing it kills the page. Use the tray menu to hide it, not to end the process. New builds use a light paper-coloured theme.'),
-      P('打开命令面板、跳转页面、重播导览、地址栏深链的方式，见下一节「快捷键与深链」。',
-        'For the command palette, page jumps, tour replay and URL anchors, see the next section, “Shortcuts & deep links”.')
+      P('第一次接入的细节见下一节「项目接入向导」；快捷键、地址栏深链见「快捷键与深链」。',
+        'For first-time setup details see “Project setup wizard”; for shortcuts and URL deep links see “Shortcuts & deep links”.')
+    ]},
+
+    {id:'project', group:z('开始使用','Get started'), title:z('项目接入向导','Project setup wizard'), body:[
+      P('向导只做三件事：选目录、只读检查、保存配置。它不会启动服务、不会安装依赖、不会结束进程。你要做的只是告诉它前后端在哪里。',
+        'The wizard does three things: choose folders, run a read-only check, save the result. It does not start services, install dependencies or end processes. You only tell it where the front and back ends are.'),
+      H3('project-open','什么时候出现','When it appears'),
+      UL([
+        z('第一次打开，且前后端目录都为空：首屏引导结束后自动弹出。','First launch with both folders empty: it opens after the welcome tour.'),
+        z('已经填过目录：不再自动弹，点顶栏「接入项目」可以随时重走。','Folders already set: it does not auto-open; use “Set up project” in the top bar whenever needed.'),
+        z('点「稍后再说」：这次先跳过，之后不会再反复弹；需要时从顶栏进入。','“Later” skips it for now and stops repeated pop-ups; reopen it from the top bar when ready.'),
+        z('再次进入时，已经保存的目录会预先填好，方便只改其中一项。','On reopen, saved folders are pre-filled so you can change just one item.')
+      ]),
+      H3('project-flow','三步操作','Three steps'),
+      STEPS([
+        z('选目录：前端、后端至少填一个，只填后端也可以。点「选择」打开本机目录，不会走 SSH。',
+          'Choose folders: fill at least one; backend-only is fine. “Choose” opens a local folder picker, not SSH.'),
+        z('开始检查：进度条会显示正在看哪一项，检查很快完成时画面会放慢，方便看清步骤。',
+          'Run the check: the progress panel shows which item is being read; fast checks are slowed down briefly so the steps stay readable.'),
+        z('看结果并保存：确认前后端识别结果，需要的话顺便测试数据库、建库或导入 SQL。',
+          'Review and save: confirm the front/back-end results, and optionally test the database, create it or import SQL.')
+      ]),
+      H3('project-check','它检查什么','What it checks'),
+      TABLE([z('项目','Item'),z('会看什么','What it reads'),z('你能得到什么','What you get')],[
+        [z('前端目录','Frontend folder'),z('目录是否存在；package.json、vite.config、next.config 等特征文件','Folder exists; package.json, vite.config, next.config and similar markers'),z('项目类型、启动脚本、端口线索','Project type, start script and port hints')],
+        [z('前端类型','Frontend type'),z('Vite / Next.js / Nuxt / Vue CLI / React CRA / Node 脚本','Vite / Next.js / Nuxt / Vue CLI / React CRA / Node script'),z('用哪套方式启动','Which start method fits')],
+        [z('后端目录','Backend folder'),z('pom.xml、go.mod、main.go、入口文件','pom.xml, go.mod, main.go and entry files'),z('构建系统、启动命令、端口','Build system, start command and port')],
+        [z('后端类型','Backend type'),z('Spring Boot / Maven / Go','Spring Boot / Maven / Go'),z('例如 mvn spring-boot:run 或 go run','For example mvn spring-boot:run or go run')],
+        [z('数据库配置','Database settings'),z('application*.yml、.env、config、docker-compose 等','application*.yml, .env, config, docker-compose and similar files'),z('host、库名、账号、密码来源','Host, database name, user and where the password came from')],
+        [z('工具链','Toolchain'),z('Node、Go、JDK、Maven 是否可用','Whether Node, Go, JDK and Maven are usable'),z('缺什么会提前提示','Missing tools are flagged before you start')]
+      ]),
+      H3('project-result','结果页怎么看','Reading the result'),
+      UL([
+        z('前后端卡片：先看「识别为」对不对，再看启动方式和端口。','Front/back cards: check the detected type first, then the start command and port.'),
+        z('端口后面的来源和百分比表示“有多确定”，不是硬性结论；没识别到端口也不影响保存，启动时会继续探测。','The source and percentage after a port show how confident the guess is, not a final answer. No port hint does not block saving; start-up will keep probing.'),
+        z('黄色「留意」不是失败：例如没找到 package.json、数据库密码没解析、工具没装。能保存，但启动前最好先处理。','A yellow warning is not a failure: for example no package.json, no database password or a missing tool. You can still save, but fix it before starting if possible.'),
+        z('如果目录选错了，返回第一步改；不需要关闭整个向导。','If a folder is wrong, go back to step one; no need to close the whole wizard.')
+      ]),
+      H3('project-db','数据库：先测试，再建库，再导入','Database: test, create, import'),
+      STEPS([
+        z('先勾选一组数据库候选，点「测试连接」。能看到 MySQL 版本、库是否存在，说明账号和网络没问题。',
+          'Select a database candidate and press “Test connection”. Seeing the MySQL version and whether the database exists means the account and network are fine.'),
+        z('库不存在时，可以勾选「保存后建库」，EnvKit 会创建空库。','If the database is missing, tick “Create after saving” and EnvKit creates an empty database.'),
+        z('需要初始化表结构时，再勾选「建库后导入 SQL」。SQL 文件从项目目录里查找，默认优先 schema.sql。',
+          'To create tables too, tick “Import SQL after creating”. SQL files are found inside the project, with schema.sql preferred.'),
+        z('导入成功后会记住这个 SQL 文件，下次在程序配置里还能看到。','After a successful import, the SQL file is remembered and shown later in Configuration.')
+      ]),
+      NOTE('导入 SQL 会直接执行，不会自动备份。已有数据的库上导入，可能重复建表或覆盖数据；只选你确认过的初始化脚本。同一个文件重复执行时会有历史提示，但仍会继续。',
+           'Importing SQL runs it directly and does not create a backup. On a database that already has data it may duplicate tables or overwrite data; only use an init script you trust. Running the same file again shows a history warning but still proceeds.', 'danger'),
+      H3('project-save','保存后发生了什么','After saving'),
+      UL([
+        z('保存只写前后端目录；勾选数据库时才一起写 host、端口、库名、账号和密码。','Saving writes the folders; database host, port, name, user and password are written only when that option is ticked.'),
+        z('密码只在本机加密保存，不出现在检查结果里，也不会写进日志。','Passwords are encrypted on this machine only; they never appear in check results or logs.'),
+        z('保存后项目画像立即刷新，程序启动页可以直接用新的目录、启动命令和端口。','The project profile refreshes immediately, so the Start page can use the new folders, commands and ports.'),
+        z('想改启动脚本、备份目录这类细节，去「程序配置」；想重新识别项目，点顶栏「接入项目」。','To change the start script or backup folder, use Configuration; to re-detect the project, use “Set up project” in the top bar.')
+      ]),
+      NOTE('检查过程是只读的。向导不会启动前后端、不会 npm install、不会 go mod tidy，也不会杀任何进程；这些动作仍然在程序配置和程序启动页发生。',
+           'The check is read-only. The wizard does not start services, run npm install or go mod tidy, or kill any process; those actions stay on the Configuration and Start pages.', 'ok'),
+      XLINK([['config','程序配置','Configuration'],['start','程序启动与日志','Start and logs']])
     ]},
 
     {id:'shortcuts', group:z('开始使用','Get started'), title:z('快捷键与深链','Shortcuts & deep links'), body:[
@@ -430,6 +490,7 @@ button,input{font:inherit;color:inherit}
         [z('操作系统','OS'),z('Windows 10 / 11 x64','Windows 10 / 11 x64')],
         [z('MySQL 绿色版','Portable MySQL'),z('需要 VC++ 2019 Redistributable (x64)','Requires VC++ 2019 Redistributable (x64)')],
         [z('管理员权限','Administrator'),z('注册 / 启动 MySQL 服务时需要；其余功能不需要','Only for registering / starting the MySQL service')],
+        [z('Java 后端','Java backend'),z('JDK（版本按 pom.xml 要求）+ Maven；向导会检查，缺了会提前提示，但检查阶段不会替你安装','JDK (version from pom.xml) + Maven; the wizard checks them and flags missing tools, but does not install them during the check')],
         [z('网络','Network'),z('首次安装组件约 180 MB，可配下载代理','About 180 MB on first component install; proxy configurable')]
       ]),
       NOTE('如果走的是桌面快捷方式，注意它可能指向 %LOCALAPPDATA%\\EnvKit 里的旧副本。更新后请重新运行 安装.bat，或直接打开仓库根的 EnvKit.exe。',
@@ -442,8 +503,8 @@ button,input{font:inherit;color:inherit}
       NOTE('直接改 web/index.html 会在下次构建时被覆盖；web_build.py --check 只校验产物一致性，不会重新嵌入。',
            'Editing web/index.html directly is overwritten on the next build; web_build.py --check only verifies consistency, it does not re-embed.', 'warn'),
       H3('install-cap','环境安装','Environment setup'),
-      P('检测会同时读版本号与安装位置，不只看命令能不能跑。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
-        'Detection reads both version and install path, not just whether a command runs. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
+      P('检测会同时读版本号与安装位置，不只看命令能不能跑。前端需要 Node.js，Go 后端需要 Go，Java 后端还需要符合 pom.xml 要求的 JDK 和 Maven；向导会一并检查。安装走国内镜像，下载后校验 SHA256，失败自动换源重试。',
+        'Detection reads both version and install path, not just whether a command runs. Front ends need Node.js, Go backends need Go, and Java backends also need a JDK matching pom.xml plus Maven; the wizard checks all of them. Installs use domestic mirrors, verify SHA256, and retry from another source on failure.'),
       TABLE([z('能力','Capability'),z('说明','Detail')],[
         [z('演练安装','Dry run'),z('先列出会下载什么、装到哪里，再决定是否真装','See what would be downloaded and installed before committing')],
         [z('SHA256 校验','SHA256 check'),z('下载完比对摘要，不对就换源重试','Compare hashes after download; retry from another source on mismatch')],

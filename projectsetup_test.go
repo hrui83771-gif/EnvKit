@@ -73,3 +73,21 @@ func TestProjectInspectRejectsEmptyDirs(t *testing.T) {
 	}
 }
 
+func TestScanProjectSQLFilesPrefersSchemaAndSkipsDeps(t *testing.T) {
+	root := t.TempDir()
+	back := filepath.Join(root, "server")
+	writeTestFile(t, filepath.Join(back, "sql"), "data.sql", "INSERT INTO t VALUES (1);")
+	writeTestFile(t, filepath.Join(back, "sql"), "schema.sql", "CREATE TABLE t (id INT);")
+	writeTestFile(t, filepath.Join(back, "node_modules", "pkg"), "ignored.sql", "SELECT 1;")
+	files := scanProjectSQLFiles("", back)
+	if len(files) != 2 {
+		t.Fatalf("sql files = %+v, want 2 (node_modules ignored)", files)
+	}
+	if files[0].Name != "schema.sql" {
+		t.Fatalf("schema.sql should sort first: %+v", files)
+	}
+	if !strings.HasSuffix(files[0].Path, filepath.Join("sql", "schema.sql")) {
+		t.Fatalf("sql path = %q", files[0].Path)
+	}
+}
+

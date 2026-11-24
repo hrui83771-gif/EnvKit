@@ -81,10 +81,17 @@ func TestSmoke03_MultipleCandidates(t *testing.T) {
 	fe := smokeFix(t, "frontend-npm-dev")
 	defer smokeCfg(t, fe, "", "serve")()
 
-	// 用户显式指定 serve 时，配置优先于推断
+	// 配置里的 serve 若在 package.json 中根本不存在，不能再"配置优先"——
+	// 照单全收的结果就是启动瞬间 Missing script: serve。
+	// 正确行为：忽略坏配置，回退到 package.json 推断出的 dev。
 	script, _, src, _ := inferWebScript(fe, "serve")
-	if script != "serve" || src != "config" {
-		t.Fatalf("用户配置应优先，实际 %q/%q", script, src)
+	if script != "dev" || src != "package.json" {
+		t.Fatalf("不存在的 serve 配置应回退到 dev，实际 %q/%q", script, src)
+	}
+	// 合法配置仍然优先。
+	script, _, src, _ = inferWebScript(fe, "dev")
+	if script != "dev" || src != "config" {
+		t.Fatalf("合法用户配置应优先，实际 %q/%q", script, src)
 	}
 	// 但候选集里必须仍然只有 dev（build/lint 被剔除）
 	_, all, _, _ := inferWebScript(fe, "")

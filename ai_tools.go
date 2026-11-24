@@ -375,6 +375,7 @@ var aiToolRegistry = map[string]aiTool{
 			fin := auditStart(actAI, "stop_service", svc, "")
 			// 停止权限边界：只停 EnvKit 自己派生的进程。外部实例只报告，不 reset。
 			var external []string
+			var incomplete []string
 			for _, target := range targets {
 				if !managedServiceRunning(target) {
 					if o, ok := observeSnapshot(target); ok && (o.State == "external" || o.State == "unknown") {
@@ -384,12 +385,24 @@ var aiToolRegistry = map[string]aiTool{
 				}
 				stopByKey(scStart, target, target+"-start")
 				svcReset(target)
+				// 杀父进程 ≠ 端口释放：npm 的 Vite 子进程可能变成孤儿继续监听。
+				// 老实现到这里就报"已停止"，下一轮观察器才发现 5173 上还有 node，
+				// 用户看到的就是"说停了其实没停"。这里必须等端口真正空出来。
+				if why := restartWaitPorts(target); why != "" {
+					incomplete = append(incomplete, fmt.Sprintf("%s：%s", svcLabel(target), why))
+				}
+			}
+			if len(incomplete) > 0 || len(external) > 0 {
+				fin(resFail, strings.Join(append(incomplete, external...), "；"))
+				var parts []string
+				parts = append(parts, incomplete...)
+				if len(external) > 0 {
+					parts = append(parts, "外部实例未受管，未停止："+strings.Join(external, "、")+
+						"。请让用户到原终端停止，EnvKit 不会杀第三方进程。")
+				}
+				return "未完全停止：" + strings.Join(parts, "；"), nil
 			}
 			fin(resOK, "")
-			if len(external) > 0 {
-				return "EnvKit 只停止由自己启动的服务；以下外部实例未受管，未停止：" + strings.Join(external, "、") +
-					"。请让用户到原终端停止，EnvKit 不会杀第三方进程。", nil
-			}
 			return "已停止", nil
 		},
 	},

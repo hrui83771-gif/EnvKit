@@ -192,6 +192,7 @@ func main() {
 	http.HandleFunc("/", serveIndex)
 	http.HandleFunc("/api/config", handleConfig)
 	http.HandleFunc("/api/project/inspect", handleProjectInspect)
+	http.HandleFunc("/api/project/db-test", handleProjectDBTest)
 	http.HandleFunc("/api/project/apply", handleProjectApply)
 	http.HandleFunc("/api/check", handleCheck)
 	http.HandleFunc("/api/pet/weather", handlePetWeather)

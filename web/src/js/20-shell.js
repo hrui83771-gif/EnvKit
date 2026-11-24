@@ -310,9 +310,10 @@ async function loadConfig(){
   psRenderChips(); wlRender();
   loadGuardStatus();
   // 启动页的脚本选择器：留空 = 由服务端按 package.json 推断（v2.1）。
-  // 旧版本在这里硬填 'serve'，导致"项目没有 serve 脚本"时必然失败，
-  // 而且这个值只存在 localStorage 里，AI 读不到。
-  try{ $('#web_script').value = localStorage.getItem('ek-web-script') || ''; }catch(_){ $('#web_script').value = ''; }
+  // 只认配置里的 web_script，不再读旧 localStorage：那里可能残留早就
+  // 不存在的 'serve'，会让没有 serve 的项目在启动页必然失败。
+  // AI 的启动路径本来就是空的，两边口径必须一致。
+  $('#web_script').value = (cfg.projects && cfg.projects.web_script) || '';
   const box = $('#comp-urls'); box.innerHTML='';
   (cfg.components||[]).forEach((c,i)=>{
     const h=document.createElement('div'); h.style.margin='6px 0';
@@ -333,6 +334,9 @@ async function loadConfig(){
 
 /* ---------- 内置浏览器 ---------- */
 let bm = { mode:'dir', path:'', ext:'', onPick:null, native:'dir' };
+const LAST_LOCAL_DIR_KEY = 'ek-last-local-dir';
+function lastLocalDir(){ try{ return localStorage.getItem(LAST_LOCAL_DIR_KEY) || ''; }catch(e){ return ''; } }
+function rememberLocalDir(p){ if(!p || bm.remote) return; try{ localStorage.setItem(LAST_LOCAL_DIR_KEY, p); }catch(e){} }
 function winJoin(p,n){ return p.replace(/[\\\/]+$/,'') + '\\' + n; }
 function openBrowser(mode, initial, ext, nativeKind, onPick, remote){
   bm = { mode, path:'', ext:ext||'', onPick, native:nativeKind, remote:!!remote };
@@ -340,7 +344,8 @@ function openBrowser(mode, initial, ext, nativeKind, onPick, remote){
   $('#bm-pick').style.display = mode==='file' ? 'none' : '';
   $('#bm-native').style.display = nativeKind ? '' : 'none';
   $('#browser').classList.add('show');
-  loadLS(initial||'');
+  const start = (initial && initial.trim()) ? initial : (remote ? '' : lastLocalDir());
+  loadLS(start);
 }
 function joinPath(p,n){ return bm.remote ? (p.replace(/\/+$/,'') + '/' + n) : winJoin(p,n); }
 function closeBrowser(){ $('#browser').classList.remove('show'); }
@@ -359,6 +364,13 @@ async function loadLS(path){
     }
   }catch(e){ return; }
   bm.path = d.path||'';
+  if(!bm.remote && path && d.error){
+    /* 本地浏览器不能喂远程路径（旧配置/手输都可能带 /root/...）：
+       退回“此电脑”，不要让用户以为本地目录真的不可用。 */
+    bm.path = '';
+    return loadLS('');
+  }
+  if(!bm.remote && d.path) rememberLocalDir(d.path);
   $('#bm-path').value = d.path || (bm.remote ? '远程主机 · 选择根目录' : '此电脑');
   const list=$('#bm-list'); list.innerHTML='';
   if(!d.path){
@@ -369,7 +381,7 @@ async function loadLS(path){
   const upTarget = (d.parent && d.parent !== d.path) ? d.parent : '';
   list.appendChild(bmRow('↑', t('（上一级）'), ()=>loadLS(upTarget)));
   (d.dirs||[]).forEach(n=>list.appendChild(bmRow('▸', n, ()=>loadLS(joinPath(d.path,n)))));
-  (d.files||[]).forEach(n=>list.appendChild(bmRow('·', n, ()=>{ bm.onPick && bm.onPick(joinPath(d.path,n)); closeBrowser(); })));
+  (d.files||[]).forEach(n=>list.appendChild(bmRow('·', n, ()=>{ if(!bm.remote) rememberLocalDir(d.path); bm.onPick && bm.onPick(joinPath(d.path,n)); closeBrowser(); })));
   if(d.error) list.appendChild(emptyRow(d.error));
   if(!(d.dirs||[]).length && !(d.files||[]).length && !d.error) list.appendChild(emptyRow('空目录'));
 }
@@ -379,12 +391,12 @@ function pickRemoteDir(inputId){
 }
 $('#bm-up').onclick = ()=>loadLS(bm.path ? bm.path : '');
 $('#bm-cancel').onclick = closeBrowser;
-$('#bm-pick').onclick = ()=>{ if(bm.path && bm.onPick) bm.onPick(bm.path); closeBrowser(); };
+$('#bm-pick').onclick = ()=>{ if(bm.path){ rememberLocalDir(bm.path); if(bm.onPick) bm.onPick(bm.path); } closeBrowser(); };
 $('#bm-native').onclick = async ()=>{
   const url = bm.mode==='file' ? '/api/pick-file' : '/api/pick-dir';
   const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initial:bm.path||'', filter:bm.mode==='file'?'SQL 文件 (*.sql)|*.sql|所有文件 (*.*)|*.*':''})});
   const d = await r.json();
-  if(d.path){ bm.onPick && bm.onPick(d.path); closeBrowser(); }
+  if(d.path){ if(bm.mode==='dir') rememberLocalDir(d.path); if(bm.onPick) bm.onPick(d.path); closeBrowser(); }
 };
 /* 捕获阶段记下最近点过的按钮：它先于各 onclick 执行，所以打开弹窗的那一下
  * 一定已经记下来了。ESC 关掉弹窗后把焦点还回去，键盘操作不会掉进背景页面。 */

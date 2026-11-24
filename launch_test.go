@@ -196,6 +196,34 @@ func TestLaunchWebRejectsExplicitDangerous(t *testing.T) {
 	}
 }
 
+// 启动页旧 localStorage 会把 "serve" 当调用方指定带进来；如果 package.json
+// 只有 dev，必须自动回退到 dev，而不是跑一条注定 Missing script 的命令。
+func TestLaunchWebExplicitMissingFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	writePkg(t, dir, `"dev":"vite"`)
+	defer withLaunchCfg(t, dir, "", "")()
+
+	script, src, ok := launchWebScriptOrDefault(dir, "serve")
+	if !ok || script != "dev" {
+		t.Fatalf("不存在的 serve 应回退到 dev，实际 script=%q src=%q ok=%v", script, src, ok)
+	}
+	if !strings.Contains(src, "serve") || !strings.Contains(src, "不存在") {
+		t.Fatalf("来源应说明 serve 不存在并已改用，实际 %q", src)
+	}
+}
+
+// 配置里留着的坏脚本名同样不能压过 package.json。
+func TestInferWebScriptIgnoresMissingConfigured(t *testing.T) {
+	dir := t.TempDir()
+	writePkg(t, dir, `"dev":"vite"`)
+	defer withLaunchCfg(t, dir, "", "serve")()
+
+	script, _, src, _ := inferWebScript(dir, "serve")
+	if script != "dev" || src != "package.json" {
+		t.Fatalf("package.json 只有 dev 时，配置里的 serve 应被忽略，实际 script=%q src=%q", script, src)
+	}
+}
+
 // ---------- 后端入口推断 ----------
 
 func TestInferBackendFile(t *testing.T) {

@@ -84,10 +84,27 @@ type setupPortOcc struct {
 	Service string `json:"service,omitempty"`
 }
 
+type setupSQLFile struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Rel  string `json:"rel,omitempty"`
+	Size int64  `json:"size,omitempty"`
+}
+
 type setupDatabase struct {
-	Found      bool      `json:"found"`
-	Files      []string  `json:"files"`
-	Candidates []setupDB `json:"candidates"`
+	Found      bool           `json:"found"`
+	Files      []string       `json:"files"`
+	Candidates []setupDB      `json:"candidates"`
+	SQLFiles   []setupSQLFile `json:"sql_files,omitempty"`
+}
+
+type setupDBCheckResp struct {
+	OK        bool   `json:"ok"`
+	Connected bool   `json:"connected"`
+	Exists    bool   `json:"exists"`
+	Version   string `json:"version,omitempty"`
+	Error     string `json:"error,omitempty"`
+	CheckedAt string `json:"checked_at"`
 }
 
 type setupInspectResp struct {
@@ -124,6 +141,99 @@ func handleProjectInspect(w http.ResponseWriter, r *http.Request) {
 	}
 	res := inspectProjectSetup(front, back)
 	writeJSON(w, res)
+}
+
+// handleProjectDBTest 只读测试一组候选数据库：不写配置、不建库、不执行 SQL。
+// 向导在用户勾选“建库/导入”之前先给一次真实连接结论，避免保存后才发现密码错。
+func handleProjectDBTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		FrontendDir string `json:"frontend_dir"`
+		BackendDir  string `json:"backend_dir"`
+		DBID        string `json:"db_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "请求解析失败: "+err.Error(), 400)
+		return
+	}
+	front, back := strings.TrimSpace(body.FrontendDir), strings.TrimSpace(body.BackendDir)
+	if front == "" && back == "" {
+		http.Error(w, "请至少选择前端或后端目录", 400)
+		return
+	}
+	_, candidates := scanDBCandidates(front, back)
+	for _, c := range candidates {
+		if c.ID != body.DBID {
+			continue
+		}
+		out := probeSetupDBCandidate(c)
+		out.OK = out.Connected
+		out.CheckedAt = time.Now().Format(time.RFC3339)
+		writeJSON(w, out)
+		return
+	}
+	http.Error(w, "数据库配置已变化，请重新检查后再试", 409)
+}
+
+func probeSetupDBCandidate(c setupDB) setupDBCheckResp {
+	if len(c.Unresolved) > 0 {
+		for _, u := range c.Unresolved {
+			if u == "password" {
+				return setupDBCheckResp{Error: "密码是未解析的占位符，请先补齐数据库密码"}
+			}
+		}
+	}
+	if strings.TrimSpace(c.Name) == "" {
+		return setupDBCheckResp{Error: "候选里没有数据库名"}
+	}
+	host := c.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := c.Port
+	if port <= 0 {
+		port = 3306
+	}
+	user := c.User
+	if user == "" {
+		user = "root"
+	}
+	version, err := runSetupMysql(c, host, port, user, "SELECT VERSION();")
+	if err != nil {
+		return setupDBCheckResp{Error: err.Error()}
+	}
+	out := setupDBCheckResp{Connected: true, Version: firstLine(strings.TrimSpace(version))}
+	q := "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='" + strings.ReplaceAll(c.Name, "'", "''") + "';"
+	n, err := runSetupMysql(c, host, port, user, q)
+	if err != nil {
+		out.Error = "连接成功，但查询库是否存在失败：" + err.Error()
+		return out
+	}
+	out.Exists = strings.TrimSpace(n) == "1"
+	return out
+}
+
+func runSetupMysql(c setupDB, host string, port int, user, sql string) (string, error) {
+	exe := mysqlClient()
+	if exe == "" {
+		return "", fmt.Errorf("未找到 mysql 客户端，请先安装 MySQL")
+	}
+	ctx, cancel := cmdContext(15 * time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "-h", host, "-P", strconv.Itoa(port), "-u", user, "-N", "-B", "-e", sql)
+	cmd.Env = append(toolEnv(nil), "MYSQL_PWD="+c.password)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := firstLines(strings.TrimSpace(string(out)), 300)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return string(out), fmt.Errorf("连接失败：%s", msg)
+	}
+	return string(out), nil
 }
 
 type setupApplyReq struct {
@@ -237,6 +347,7 @@ func inspectProjectSetup(frontDir, backDir string) setupInspectResp {
 
 	dbFiles, candidates := scanDBCandidates(frontDir, backDir)
 	res.Database = setupDatabase{Found: len(candidates) > 0, Files: dbFiles, Candidates: candidates}
+	res.Database.SQLFiles = scanProjectSQLFiles(frontDir, backDir)
 
 	// 端口占用：只查候选端口和常见端口，不扫全表；归属沿用运行时观察结论。
 	portSet := map[int]bool{}
@@ -370,19 +481,19 @@ func checkSetupTools(frontDir, backDir string, front, back setupService) []setup
 				}
 			}
 			out = append(out, t)
-			java := findExe("java.exe", "java")
-			if java == "" {
-				if jh := strings.TrimSpace(os.Getenv("JAVA_HOME")); jh != "" {
-					if hasFile(filepath.Join(jh, "bin", "java.exe")) {
-						java = filepath.Join(jh, "bin", "java.exe")
-					}
-				}
-			}
+			java, javaVer := javaForProject(backDir)
 			jt := setupTool{Name: "JDK", Found: java != "", Hint: "Spring Boot 需要 JDK"}
 			if java != "" {
-				jt.Version = javaVerOf(java)
-				if req := mavenRequiredJava(backDir); req != "" && jt.Version != "" && javaVerLess(jt.Version, req) {
-					jt.Warn = fmt.Sprintf("项目要求 Java %s，当前 PATH 的 JDK 是 %s，启动会失败", req, jt.Version)
+				jt.Version = javaVer
+				if req := mavenRequiredJava(backDir); req != "" && javaVer != "" && javaVerLess(javaVer, req) {
+					jt.Warn = fmt.Sprintf("项目要求 Java %s，当前只找到 JDK %s，启动会失败", req, javaVer)
+				} else if req != "" && javaVer != "" {
+					// 当前 PATH/JAVA_HOME 可能是 JDK8，但启动时会自动切换到兼容 JDK。
+					// 把这件事提前说清楚，避免用户以为检查结果在“假装通过”。
+					cur := currentJavaPath()
+					if cur != "" && !strings.EqualFold(filepath.Clean(cur), filepath.Clean(java)) {
+						jt.Hint = "启动时会使用兼容 JDK：" + java
+					}
 				}
 			}
 			out = append(out, jt)
@@ -458,6 +569,89 @@ func scanDBCandidates(frontDir, backDir string) ([]string, []setupDB) {
 		display = append(display, dbDisplayPath(f, frontDir, backDir))
 	}
 	return display, out
+}
+
+// scanProjectSQLFiles 找项目里可直接导入的 .sql（最多 12 个，深度 3）。
+// 不读内容：向导只负责让用户选文件，执行仍由现有 init-db / apply-sql 流程做。
+func scanProjectSQLFiles(frontDir, backDir string) []setupSQLFile {
+	seen := map[string]bool{}
+	var out []setupSQLFile
+	skip := map[string]bool{
+		"node_modules": true, ".git": true, "target": true, "dist": true,
+		"build": true, ".idea": true, "vendor": true, "__pycache__": true,
+	}
+	roots := []string{frontDir, backDir}
+	// 典型前后端分仓（project/web + project/server）的 SQL 常在项目根，
+	// 不在任何一个子目录里。只在两边同父、且父不是盘符根时向上多扫一层。
+	if strings.TrimSpace(frontDir) != "" && strings.TrimSpace(backDir) != "" {
+		pf, pb := filepath.Dir(filepath.Clean(frontDir)), filepath.Dir(filepath.Clean(backDir))
+		if strings.EqualFold(pf, pb) && pf != filepath.Dir(pf) {
+			roots = append(roots, pf)
+		}
+	}
+	seenRoot := map[string]bool{}
+	for _, root := range roots {
+		root = filepath.Clean(root)
+		if strings.TrimSpace(root) == "" || root == "." || seenRoot[strings.ToLower(root)] {
+			continue
+		}
+		seenRoot[strings.ToLower(root)] = true
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if info.IsDir() {
+				if skip[strings.ToLower(info.Name())] {
+					return filepath.SkipDir
+				}
+				rel, _ := filepath.Rel(root, path)
+				if rel != "." && strings.Count(rel, string(filepath.Separator)) >= 3 {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if len(out) >= 12 || !strings.EqualFold(filepath.Ext(info.Name()), ".sql") {
+				return nil
+			}
+			if info.Size() <= 0 || info.Size() > 64*1024*1024 {
+				return nil
+			}
+			p := filepath.Clean(path)
+			if seen[strings.ToLower(p)] {
+				return nil
+			}
+			seen[strings.ToLower(p)] = true
+			rel, _ := filepath.Rel(root, p)
+			out = append(out, setupSQLFile{
+				Path: p, Name: info.Name(), Rel: filepath.ToSlash(rel), Size: info.Size(),
+			})
+			return nil
+		})
+		if len(out) >= 12 {
+			break
+		}
+	}
+	priority := func(name string) int {
+		switch strings.ToLower(name) {
+		case "schema.sql":
+			return 0
+		case "init.sql", "init_db.sql", "initdb.sql":
+			return 1
+		case "database.sql", "db.sql":
+			return 2
+		case "data.sql":
+			return 3
+		}
+		return 9
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, pj := priority(out[i].Name), priority(out[j].Name)
+		if pi != pj {
+			return pi < pj
+		}
+		return out[i].Rel < out[j].Rel
+	})
+	return out
 }
 
 func collectDBFiles(frontDir, backDir string) []string {

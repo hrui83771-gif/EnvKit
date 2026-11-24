@@ -81,6 +81,8 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 
 **程序配置**：项目目录、MySQL、启动方式（自动推断或手填）、建库建表、备份 / 还原 / 恢复演练、配置导入导出（可脱敏）。
 
+**项目接入向导**：只填前端/后端目录，自动识别 Vite / Next / Vue CLI / CRA / Node、Spring Boot / Maven / Go，推断启动命令与端口；检查过程是只读的，结果页按候选展示数据库 host / 库名 / 用户 / 密码来源。可以当场测试连接，并选择“保存后建库”“建库后导入 SQL”；SQL 文件从项目根、前后端目录里浅层扫描，默认优先 `schema.sql`。密码仍只走本机 DPAPI，不进日志、不回传页面。
+
 **链端运维**：SSH 密码或私钥登录、页面内嵌终端、节点端口 / 进程 / 共识检测、宕机自动恢复、后台守护、Windows 通知。
 
 **程序启动**：前后端启动 / 停止 / 端口诊断；子进程绑定 Job Object，EnvKit 退出时自动回收；实时日志。
@@ -132,6 +134,7 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 | 内容 | 截图 |
 |---|---|
 | 首次打开的 8 屏引导 | [02 屏工程图纸](docs/shot-ob02-zh.png) · [描线动画](docs/ob02-draw.gif) · [07 屏权限联锁图](docs/shot-ob07-428.png) |
+| 项目接入向导 | [选目录](docs/setup-wizard-01.png) · [12 步检查](docs/setup-wizard-02.png) · [结果总览](docs/setup-wizard-03.png) · [建库 / 导入 SQL](docs/setup-wizard-05.png) |
 | 02 屏展开态 / 英文态 | [展开](docs/shot-ob02-open.png) · [English](docs/shot-ob02-en.png) |
 | 02 屏链端判据展开（中 / 英） | [中文](docs/shot-ob02-chain-zh.png) · [English](docs/shot-ob02-chain-en.png) |
 | 03 / 05 / 08 屏（共用图纸底框） | [03 四步走](docs/shot-ob03.png) · [05 日志](docs/shot-ob05.png) · [08 收尾](docs/shot-ob08.png) |
@@ -190,7 +193,7 @@ Go 代码在模块根（`package main`），Windows 平台相关代码在 `inter
 
 改前端只改 `web/src/`，然后 `python tools/web_build.py` 重拼；直接改 `web/index.html` 会在下次构建时被覆盖。
 
-逐文件职责见 [`docs/CODEMAP.md`](docs/CODEMAP.md)，设计取舍见 [`docs/architecture.md`](docs/architecture.md)。
+逐文件职责见 [`docs/CODEMAP.md`](docs/CODEMAP.md)，设计取舍见 [`docs/architecture.md`](docs/architecture.md)。项目接入向导的检查口径、数据库动作和目录选择约束见 [`docs/DESIGN-project-onboarding-2026-11-23.md`](docs/DESIGN-project-onboarding-2026-11-23.md)。
 
 ## 版本
 
