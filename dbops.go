@@ -340,9 +340,9 @@ func mustFileSize(path string) int64 {
 
 // countTables 查询某库的表数量（information_schema，不依赖该库可执行查询权限以外的权限）。
 func countTables(db string) (int, error) {
-	base := []string{"-h", fmt.Sprint(cfg.Projects.MySQLHost), "-P", fmt.Sprint(cfg.Projects.MySQLPort), "-u", cfg.Projects.MySQLUser, "-N", "-B"}
-	q := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%s';", db)
-	out, err := runMysqlOut(append(base, "-e", q)...)
+	q := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%s';",
+		strings.ReplaceAll(db, "'", "''"))
+	out, err := readOnlyOne(q)
 	if err != nil {
 		return 0, err
 	}

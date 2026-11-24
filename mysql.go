@@ -1,4 +1,4 @@
-// mysql.go —— MySQL 客户端封装：查询、建库、SQL 文件执行（哈希防重跑）、连接检测
+// mysql.go —— MySQL 能力封装：驱动做连接、只读查询与建库；CLI 保留给 SQL 导入与备份/恢复。
 package main
 
 import (
@@ -140,18 +140,23 @@ func createDatabase() error {
 }
 
 func createDatabaseNamed(db string) error {
-	exe := mysqlClient()
-	if exe == "" {
-		return fmt.Errorf("未找到 mysql 客户端，请先安装 MySQL")
-	}
 	if db == "" {
 		return fmt.Errorf("数据库名未配置")
 	}
-	p := cfg.Projects
-	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", db)
+	ident, err := quoteIdent(db)
+	if err != nil {
+		return err
+	}
+	p, err := dbConnParams()
+	if err != nil {
+		return err
+	}
+	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", ident)
 	info(scConfig, "建库", "%s", sql)
-	return execStreamed(scConfig, "", "建库", "", mysqlEnv(), exe,
-		"-h", p.MySQLHost, "-P", strconv.Itoa(p.MySQLPort), "-u", p.MySQLUser, "-e", sql)
+	if err := mysqlExec(p, "", sql); err != nil {
+		return fmt.Errorf("建库失败：%s", firstLines(err.Error(), 300))
+	}
+	return nil
 }
 
 // ---------- SQL 执行记录：按内容哈希防误重跑 ----------
@@ -242,25 +247,24 @@ func applySQLFile(path, db string) error {
 
 // ---------- 数据库连接检测 ----------
 func dbTest() (DBHealth, error) {
-	if mysqlClient() == "" {
-		return DBHealth{}, fmt.Errorf("未找到 mysql 客户端，请先安装 MySQL")
+	p := cfgSnapshot().Projects
+	if strings.TrimSpace(p.MySQLHost) == "" || strings.TrimSpace(p.MySQLUser) == "" || p.MySQLPort <= 0 {
+		return DBHealth{}, fmt.Errorf("MySQL 连接未配置（请先填好主机、端口和用户名）")
 	}
-	p := cfg.Projects
-	base := []string{"-h", p.MySQLHost, "-P", strconv.Itoa(p.MySQLPort), "-u", p.MySQLUser, "-N", "-B"}
-	out, err := runMysqlOut(append(append([]string{}, base...), "-e", "SELECT VERSION();")...)
+	version, err := readOnlyOne("SELECT VERSION();")
 	if err != nil {
-		// 不要把 err 吞掉：可能是 spawn 失败（路径/权限），也可能是 mysql 自身报错
-		detail := firstLines(strings.TrimSpace(out), 300)
-		if detail == "" {
-			detail = err.Error()
-		}
-		return DBHealth{}, fmt.Errorf("连接失败：%s", detail)
+		return DBHealth{}, fmt.Errorf("连接失败：%s", firstLines(strings.TrimSpace(err.Error()), 300))
 	}
-	h := DBHealth{Connected: true, Version: firstLine(strings.TrimSpace(out)), Msg: "连接成功"}
+	version = strings.TrimSpace(version)
+	if version == "" || version == "NULL" {
+		return DBHealth{}, fmt.Errorf("连接成功，但没有拿到 MySQL 版本号")
+	}
+	h := DBHealth{Connected: true, Version: firstLine(version), Msg: "连接成功"}
 	if p.DBName != "" {
-		q := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='%s';", p.DBName)
-		o2, e2 := runMysqlOut(append(append([]string{}, base...), "-e", q)...)
-		h.DBExists = e2 == nil && strings.TrimSpace(o2) == "1"
+		q := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='%s';",
+			strings.ReplaceAll(p.DBName, "'", "''"))
+		n, e := readOnlyOne(q)
+		h.DBExists = e == nil && strings.TrimSpace(n) == "1"
 	}
 	return h, nil
 }

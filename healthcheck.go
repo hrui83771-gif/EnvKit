@@ -385,9 +385,7 @@ func hcCheckDB(r *HCReport) {
 	// 在没有可靠解析（USE / 前缀 / 注释）之前不做差集，否则会制造误报。
 	q := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='%s';",
 		strings.ReplaceAll(dbName, "'", "''"))
-	p := cfg.Projects
-	out, e := runMysqlOut("-h", p.MySQLHost, "-P", fmt.Sprint(p.MySQLPort), "-u", p.MySQLUser,
-		"-N", "-B", "-e", q)
+	out, e := readOnlyOne(q)
 	if e != nil {
 		hcAdd(r, hcgDB, "db.tables", "库内已有数据表", hcSkip, "表数量查不到，未核实："+firstLines(e.Error(), 80))
 		return

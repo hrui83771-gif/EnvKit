@@ -216,24 +216,18 @@ func probeSetupDBCandidate(c setupDB) setupDBCheckResp {
 	return out
 }
 
-func runSetupMysql(c setupDB, host string, port int, user, sql string) (string, error) {
-	exe := mysqlClient()
-	if exe == "" {
-		return "", fmt.Errorf("未找到 mysql 客户端，请先安装 MySQL")
-	}
+func runSetupMysql(c setupDB, host string, port int, user, sqlText string) (string, error) {
+	p := mysqlConnParams{Host: host, Port: port, User: user, Pass: c.password}
 	ctx, cancel := cmdContext(15 * time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, "-h", host, "-P", strconv.Itoa(port), "-u", user, "-N", "-B", "-e", sql)
-	cmd.Env = append(toolEnv(nil), "MYSQL_PWD="+c.password)
-	out, err := cmd.CombinedOutput()
+	_, rows, err := mysqlReadOnlyQuery(ctx, p, "", sqlText)
 	if err != nil {
-		msg := firstLines(strings.TrimSpace(string(out)), 300)
-		if msg == "" {
-			msg = err.Error()
-		}
-		return string(out), fmt.Errorf("连接失败：%s", msg)
+		return "", fmt.Errorf("连接失败：%s", firstLines(strings.TrimSpace(err.Error()), 300))
 	}
-	return string(out), nil
+	if len(rows) == 0 || len(rows[0]) == 0 {
+		return "", nil
+	}
+	return rows[0][0], nil
 }
 
 type setupApplyReq struct {
@@ -757,9 +751,129 @@ func dbDisplayPath(path, frontDir, backDir string) string {
 	return filepath.Base(path)
 }
 
+func fillDBFromFlat(c *setupDB, flat map[string]string, base string, notes *[]string) bool {
+	isEnv := strings.HasPrefix(base, ".env")
+	urlKeys := []string{
+		"spring.datasource.url", "spring.datasource.jdbc-url",
+		"datasource.url", "database.url", "mysql.url", "db.url",
+	}
+	if isEnv {
+		urlKeys = append(urlKeys, "DB_URL", "DATABASE_URL", "MYSQL_URL", "JDBC_URL")
+	}
+	if u := flatGet(flat, urlKeys...); u != "" && !strings.Contains(u, "${") {
+		if m := jdbcMySQLRe.FindStringSubmatch(u); m != nil {
+			c.Host = strings.TrimSpace(m[1])
+			if m[2] != "" {
+				c.Port, _ = strconv.Atoi(m[2])
+			}
+			c.Name = strings.TrimSpace(m[3])
+			c.Confidence = 92
+		} else if m := dsnMySQLRe.FindStringSubmatch(u); m != nil {
+			c.User = strings.TrimSpace(m[1])
+			c.password = strings.TrimSpace(m[2])
+			c.Host = strings.TrimSpace(m[3])
+			if m[4] != "" {
+				c.Port, _ = strconv.Atoi(m[4])
+			}
+			c.Name = strings.TrimSpace(m[5])
+			c.Confidence = 88
+		}
+	}
+
+	hostKeys := []string{
+		"spring.datasource.host", "datasource.host", "database.host", "mysql.host", "db.host",
+		"mysql_host", "db_host", "database_host", "host",
+	}
+	userKeys := []string{
+		"spring.datasource.username", "spring.datasource.user", "datasource.username",
+		"database.username", "mysql.user", "db.user", "username", "user",
+		"mysql_user", "db_user", "database_user",
+	}
+	passKeys := []string{
+		"spring.datasource.password", "datasource.password", "database.password",
+		"mysql.password", "db.password", "password", "passwd", "pwd",
+		"mysql_password", "db_password", "database_password",
+	}
+	nameKeys := []string{
+		"spring.datasource.database", "spring.datasource.name", "datasource.database",
+		"database.name", "mysql.database", "db.name", "schema",
+		"mysql_database", "db_name", "database_name", "name",
+	}
+	portKeys := []string{
+		"spring.datasource.port", "datasource.port", "database.port", "mysql.port", "db.port",
+		"mysql_port", "db_port", "database_port", "port",
+	}
+	if isEnv {
+		hostKeys = append(hostKeys, "DB_HOST", "MYSQL_HOST", "DATABASE_HOST", "MYSQL_HOSTNAME")
+		userKeys = append(userKeys, "DB_USER", "DB_USERNAME", "MYSQL_USER", "DATABASE_USER")
+		passKeys = append(passKeys, "DB_PASSWORD", "DB_PASS", "MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD", "DATABASE_PASSWORD")
+		nameKeys = append(nameKeys, "DB_NAME", "DB_DATABASE", "MYSQL_DATABASE", "DATABASE_NAME")
+		portKeys = append(portKeys, "DB_PORT", "MYSQL_PORT", "MYSQL_TCP_PORT", "DATABASE_PORT")
+	}
+
+	if c.Host == "" {
+		c.Host = flatGet(flat, hostKeys...)
+	}
+	if c.User == "" {
+		c.User = flatGet(flat, userKeys...)
+	}
+	if c.password == "" {
+		c.password = flatGet(flat, passKeys...)
+	}
+	if c.Name == "" {
+		c.Name = flatGet(flat, nameKeys...)
+	}
+	if p := flatGet(flat, portKeys...); p != "" {
+		if n, err := strconv.Atoi(strings.Trim(strings.TrimSpace(p), `"'`)); err == nil {
+			c.Port = n
+		}
+	}
+
+	if c.Host == "" && c.Name == "" && c.User == "" {
+		return false
+	}
+	if isEnv {
+		c.Confidence = 85
+		if c.Host == "" && (c.Name != "" || c.User != "") {
+			c.Host = "127.0.0.1"
+		}
+	} else if strings.HasPrefix(base, "application") {
+		c.Confidence = 78
+	} else if c.Confidence < 76 {
+		c.Confidence = 76
+	}
+	return true
+}
+
 func parseDBFile(path, display, text string) (setupDB, bool) {
 	c := setupDB{Source: display, Confidence: 60, Port: 3306}
 	notes := []string{}
+	base := strings.ToLower(filepath.Base(path))
+
+	// 结构化解析优先：application.yml / .env / .properties 先按真实键值读。
+	// 解析失败或没有数据库字段时，继续走下面的文本扫描，保持旧项目兼容。
+	if strings.HasPrefix(base, ".env") {
+		if flat, err := parseDotEnvFlat(text); err == nil && len(flat) > 0 {
+			if fillDBFromFlat(&c, flat, base, &notes) {
+				return finalizeDB(c, path, display, notes)
+			}
+		}
+	}
+	if (strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".yaml")) &&
+		!strings.HasPrefix(base, "docker-compose") {
+		if flat := parseYAMLFlat(text); len(flat) > 0 {
+			if fillDBFromFlat(&c, flat, base, &notes) {
+				return finalizeDB(c, path, display, notes)
+			}
+		}
+	}
+	if strings.HasSuffix(base, ".properties") {
+		if flat := parsePropertiesFlat(text); len(flat) > 0 {
+			if fillDBFromFlat(&c, flat, base, &notes) {
+				return finalizeDB(c, path, display, notes)
+			}
+		}
+	}
 
 	// 1) JDBC URL：字段最全、最可信。
 	if m := jdbcMySQLRe.FindStringSubmatch(text); m != nil {
@@ -827,6 +941,10 @@ func parseDBFile(path, display, text string) (setupDB, bool) {
 	if c.Host == "" && c.Name == "" && c.User == "" {
 		return setupDB{}, false
 	}
+	return finalizeDB(c, path, display, notes)
+}
+
+func finalizeDB(c setupDB, path, display string, notes []string) (setupDB, bool) {
 	if c.Host == "" {
 		c.Host = "127.0.0.1"
 	}
@@ -934,22 +1052,24 @@ func collectSecretValues(files []string) map[string]secretValue {
 			continue
 		}
 		text := string(b)
-		envRe := regexp.MustCompile(`(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(.+)$`)
-		yamlRe := regexp.MustCompile(`(?m)^([A-Z][A-Z0-9_]*)[ \t]*[:=][ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#;]+))`)
-		for _, re := range []*regexp.Regexp{envRe, yamlRe} {
-			for _, m := range re.FindAllStringSubmatch(text, -1) {
-				name := strings.TrimSpace(m[1])
+		var flat map[string]string
+		switch {
+		case strings.HasPrefix(base, ".env"):
+			if m, err := parseDotEnvFlat(text); err == nil {
+				flat = m
+			}
+		case strings.HasSuffix(base, ".properties"):
+			flat = parsePropertiesFlat(text)
+		default:
+			flat = parseYAMLFlat(text)
+		}
+		if len(flat) > 0 {
+			for k, v := range flat {
+				name := lastKeyPart(k)
 				if !secretNameRelevant(name) {
 					continue
 				}
-				val := ""
-				for _, g := range m[2:] {
-					if strings.TrimSpace(g) != "" {
-						val = strings.TrimSpace(g)
-						break
-					}
-				}
-				val = cleanVal(val)
+				val := cleanVal(v)
 				if val == "" || strings.Contains(val, "${") || len(val) > 1024 {
 					continue
 				}
@@ -957,9 +1077,39 @@ func collectSecretValues(files []string) map[string]secretValue {
 					out[name] = secretValue{value: val, source: filepath.Base(f)}
 				}
 			}
+			continue
 		}
+		// 解析器不认的半截/老格式，保留原来的正则兜底，避免少认一个密码来源。
+		collectSecretValuesLegacy(text, f, out)
 	}
 	return out
+}
+
+func collectSecretValuesLegacy(text string, f string, out map[string]secretValue) {
+	envRe := regexp.MustCompile(`(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(.+)$`)
+	yamlRe := regexp.MustCompile(`(?m)^([A-Z][A-Z0-9_]*)[ \t]*[:=][ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#;]+))`)
+	for _, re := range []*regexp.Regexp{envRe, yamlRe} {
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			name := strings.TrimSpace(m[1])
+			if !secretNameRelevant(name) {
+				continue
+			}
+			val := ""
+			for _, g := range m[2:] {
+				if strings.TrimSpace(g) != "" {
+					val = strings.TrimSpace(g)
+					break
+				}
+			}
+			val = cleanVal(val)
+			if val == "" || strings.Contains(val, "${") || len(val) > 1024 {
+				continue
+			}
+			if _, ok := out[name]; !ok {
+				out[name] = secretValue{value: val, source: filepath.Base(f)}
+			}
+		}
+	}
 }
 
 func secretNameRelevant(name string) bool {

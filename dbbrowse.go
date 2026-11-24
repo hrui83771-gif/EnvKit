@@ -1,4 +1,4 @@
-// dbbrowse.go —— 数据浏览（只读）：库/表/行数据/自定义 SQL，走 mysql.exe CLI，零驱动依赖
+// dbbrowse.go —— 数据浏览（只读）：库/表/行数据/自定义 SQL，走 Go MySQL 驱动
 // 安全原则：服务端强制只读（白名单动词 + 单语句扫描 + 会话级 READ ONLY 兜底），不信任前端
 package main
 
@@ -8,22 +8,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ---------- 基础：连接参数与标识符 ----------
-
-func dbBrowseBase() ([]string, error) {
-	p := cfg.Projects
-	if p.MySQLHost == "" || p.MySQLUser == "" || p.MySQLPort == 0 {
-		return nil, fmt.Errorf("MySQL 连接未配置（请在上方填好连接信息）")
-	}
-	return []string{
-		"-h", p.MySQLHost,
-		"-P", strconv.Itoa(p.MySQLPort),
-		"-u", p.MySQLUser,
-		"--default-character-set=utf8mb4",
-	}, nil
-}
 
 // 反引号安全转义；拒绝可能引入注入面的字符
 func quoteIdent(s string) (string, error) {
@@ -38,62 +26,6 @@ func quoteStr(s string) (string, error) {
 		return "", fmt.Errorf("非法字符串")
 	}
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'", nil
-}
-
-// ---------- TSV 解析（--batch 模式：\t \n \r \0 \b \Z \\ 被转义，逐物理行=逐逻辑行） ----------
-
-func splitTSV(line string) []string {
-	cells := []string{}
-	var cur strings.Builder
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		if c == '\\' && i+1 < len(line) {
-			i++
-			switch line[i] {
-			case 't':
-				cur.WriteByte('\t')
-			case 'n':
-				cur.WriteByte('\n')
-			case 'r':
-				cur.WriteByte('\r')
-			case '0':
-				cur.WriteByte(0)
-			case 'b':
-				cur.WriteByte(8)
-			case 'Z':
-				cur.WriteByte(26)
-			case '\\':
-				cur.WriteByte('\\')
-			default:
-				cur.WriteByte('\\')
-				cur.WriteByte(line[i])
-			}
-		} else if c == '\t' {
-			cells = append(cells, cur.String())
-			cur.Reset()
-		} else {
-			cur.WriteByte(c)
-		}
-	}
-	return append(cells, cur.String())
-}
-
-func parseTSV(out string) (cols []string, rows [][]string) {
-	for i, ln := range strings.Split(out, "\n") {
-		ln = strings.TrimSuffix(ln, "\r")
-		if ln == "" && i == strings.Count(out, "\n") {
-			continue
-		}
-		if cols == nil {
-			cols = splitTSV(ln)
-		} else {
-			rows = append(rows, splitTSV(ln))
-		}
-	}
-	if cols == nil {
-		cols = []string{}
-	}
-	return cols, rows
 }
 
 // ---------- 只读 SQL 守卫：引号/注释感知扫描，找出顶层分号与顶层 LIMIT ----------
@@ -212,28 +144,13 @@ func dbReadOnlySQL(q string) (string, error) {
 
 // readOnlyExec 在会话级 READ ONLY 下执行（就算守卫被绕过，写也会被服务端拒绝）
 func readOnlyExec(db, sql string) (cols []string, rows [][]string, err error) {
-	base, err := dbBrowseBase()
+	p, err := dbConnParams()
 	if err != nil {
 		return nil, nil, err
 	}
-	args := append(base, "-B", "-e", "SET SESSION TRANSACTION READ ONLY; "+sql)
-	if db != "" {
-		dq, e := quoteIdent(db)
-		if e != nil {
-			return nil, nil, e
-		}
-		args = append(args, "-D", strings.Trim(dq, "`"))
-	}
-	out, err := runMysqlOut(args...)
-	if err != nil {
-		// runMysqlOut 出错时真实报错文本在 out 里（return msg, lastErr 的约定），拼进错误
-		if s := strings.TrimSpace(out); s != "" {
-			return nil, nil, fmt.Errorf("%s", s)
-		}
-		return nil, nil, err
-	}
-	cols, rows = parseTSV(out)
-	return cols, rows, nil
+	ctx, cancel := cmdContext(60 * time.Second)
+	defer cancel()
+	return mysqlReadOnlyQuery(ctx, p, db, sql)
 }
 
 // ---------- Handlers ----------

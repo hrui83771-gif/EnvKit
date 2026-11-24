@@ -73,6 +73,61 @@ func TestProjectInspectRejectsEmptyDirs(t *testing.T) {
 	}
 }
 
+func TestParseDBFileYAMLQuotedValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "application.yml")
+	text := `spring:
+  datasource:
+    url: "jdbc:mysql://db.example.com:3307/shop?useSSL=false"
+    username: "shop_user"
+    password: "p#ss word"
+`
+	c, ok := parseDBFile(path, "application.yml", text)
+	if !ok {
+		t.Fatal("nested YAML database config not found")
+	}
+	if c.Host != "db.example.com" || c.Port != 3307 || c.Name != "shop" || c.User != "shop_user" {
+		t.Fatalf("candidate = %+v", c)
+	}
+	if c.password != "p#ss word" || !c.HasPassword {
+		t.Fatalf("quoted password was not preserved: %+v", c)
+	}
+}
+
+func TestParseDBFileDotEnvQuotedValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	text := "export DB_HOST=127.0.0.1\nDB_PORT=\"3308\"\nDB_NAME='inventory'\nDB_USER=root\nDB_PASSWORD='p#ss word'\n"
+	c, ok := parseDBFile(path, ".env", text)
+	if !ok {
+		t.Fatal(".env database config not found")
+	}
+	if c.Host != "127.0.0.1" || c.Port != 3308 || c.Name != "inventory" || c.User != "root" {
+		t.Fatalf("candidate = %+v", c)
+	}
+	if c.password != "p#ss word" {
+		t.Fatalf("quoted .env password = %q", c.password)
+	}
+}
+
+func TestCollectSecretValuesUsesStructuredParsers(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "application-local.yml", "DB_PASSWORD: \"p#ss word\"\n")
+	writeTestFile(t, dir, ".env", "MYSQL_PASSWORD='from env'\n")
+	writeTestFile(t, dir, "application.properties", "DB_PASSWORD=from props\n")
+
+	secrets := collectSecretValues([]string{
+		filepath.Join(dir, "application-local.yml"),
+		filepath.Join(dir, ".env"),
+		filepath.Join(dir, "application.properties"),
+	})
+	if secrets["DB_PASSWORD"].value != "p#ss word" {
+		t.Fatalf("yaml secret = %+v", secrets["DB_PASSWORD"])
+	}
+	if secrets["MYSQL_PASSWORD"].value != "from env" {
+		t.Fatalf(".env secret = %+v", secrets["MYSQL_PASSWORD"])
+	}
+}
+
+
 func TestScanProjectSQLFilesPrefersSchemaAndSkipsDeps(t *testing.T) {
 	root := t.TempDir()
 	back := filepath.Join(root, "server")

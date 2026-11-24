@@ -449,6 +449,8 @@ button,input{font:inherit;color:inherit}
           'To create tables too, tick “Import SQL after creating”. SQL files are found inside the project, with schema.sql preferred.'),
         z('导入成功后会记住这个 SQL 文件，下次在程序配置里还能看到。','After a successful import, the SQL file is remembered and shown later in Configuration.')
       ]),
+      NOTE('测试连接、列库表、建库和只读查询用 EnvKit 内置的 MySQL 驱动，不需要单独装 mysql.exe；导入 SQL、备份和恢复仍调用 MySQL 自带的 mysql / mysqldump。',
+           'Connection tests, table listing, database creation and read-only queries use EnvKit’s built-in MySQL driver, so a separate mysql.exe is not required. SQL import, backup and restore still use MySQL’s own mysql / mysqldump.', 'tip'),
       NOTE('导入 SQL 会直接执行，不会自动备份。已有数据的库上导入，可能重复建表或覆盖数据；只选你确认过的初始化脚本。同一个文件重复执行时会有历史提示，但仍会继续。',
            'Importing SQL runs it directly and does not create a backup. On a database that already has data it may duplicate tables or overwrite data; only use an init script you trust. Running the same file again shows a history warning but still proceeds.', 'danger'),
       H3('project-save','保存后发生了什么','After saving'),
