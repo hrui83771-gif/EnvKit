@@ -1,24 +1,27 @@
 # EnvKit 4.0 验收（Phase 6）
 
-> 本文件记录 4.0 契约能力的可复现实测。当前只覆盖 readonly 主干、布局与门禁；`enforce` 的真实写操作、事务回滚和人工界面验收仍待补，4.0 还不能标记为可发布。
+> 本文件记录 4.0 契约能力的可复现实测。readonly 主干、布局和 `enforce` 数据库事务已在隔离环境跑通；`enforce` 的服务启动/失败停止真实场景和人工界面验收仍待补，4.0 还不能标记为可发布。
 
 ## 结论
 
 - **readonly 主干通过**：契约读取、Doctor 诊断、Apply 计划都只读；readonly 下执行 Apply 被 409 拦下，没有生成快照，也没有启动服务。
 - **enforce 入口通过**：切 enforce 未带确认返回 428，模式保持 readonly。
+- **enforce 数据库事务通过**：隔离实例上完成“建库 → 导入 schema → 快照 → 回滚”。回滚前必须再次确认；快照包含数据库；恢复后新增表被真正删除，Doctor 明确显示缺少该表。
+- **发现并修复真实缺陷**：空库快照恢复时，直接导入空 dump 不会删除当前库新增表；修复为恢复前先清空视图/表、始终校验表数，失败时用恢复前备份回填。
 - **按需扩展边界通过**：额外本地服务只显示“未启用扩展”，不进入 Doctor drift，也不进入 Apply。
 - **设置页布局通过**：契约 Doctor、环境事务与快照、MCP 收进默认折叠的「高级」；基础区 13 张卡自动配平，无空洞。
-- **未通过/未执行**：enforce 下的真实启动、执行前快照、失败停止、回滚，以及人工界面验收。发布前必须在隔离项目补跑。
+- **未通过/未执行**：enforce 下的真实服务启动、人为失败后的停止与 `skipped`、服务现场恢复，以及人工界面验收。发布前必须补齐。
 
 ## 基线
 
 - 仓库：`D:\BCGD\FarmTrace\envkit`
 - 分支：`feat/4.0-contract`
-- 提交：`519018a feat(4.0): 设置页高级折叠与紧凑多栏布局`
+- 提交：`b1737be fix(4.0): 恢复空库快照前清空库对象并始终校验表数`
 - 运行：`EnvKit.exe`，`http://127.0.0.1:18765`（API 需 `X-EnvKit-Token`）
 - 真实契约：`D:\BCGD\2027\tcm-inventory\envkit.yaml`
 - 契约模式：`readonly`
-- 实测时间：2026-11-25 00:12（UTC+8）
+- 实测时间：2026-11-25 00:35（UTC+8）
+- 隔离实测：独立实例 `127.0.0.1:18805`、独立项目与 backups/checkpoints，测试库 `envkit_a9_20261125_002`；测试完成后库、实例和临时目录均已清理
 - 环境：Windows，系统 MySQL 8.0.40，JDK 17；Go/Node 由 EnvKit 组件目录提供
 
 ## 验收矩阵
@@ -33,7 +36,8 @@
 | A6 | 非核心本地服务 | 只显示“未启用扩展”，不算 drift | `TestDoctorExtraLocalServiceStaysExtensionDisabled` 通过 | 通过 |
 | A7 | 工具链版本判断 | `>=`/范围满足即通过；显式 `=`/`==` 才精确比较 | `tools.java ok 17.0.11`；`TestExactVersionPinSyntax` 通过 | 通过 |
 | A8 | 设置页高级折叠 | 契约/事务/快照/MCP 默认收起；基础区无洞 | 高级区 3 张卡、默认 closed、折叠高 35px；基础区 13 卡、两栏高差 115px | 通过（自动布局） |
-| A9 | enforce 事务执行 | 执行前快照；失败停止；可回滚 | 未执行 | **待补** |
+| A9 | enforce 数据库事务 | 执行前快照；高风险确认；回滚真正还原数据库 | 隔离库完成建库→导入→快照→回滚；恢复需确认；新增表被删除，Doctor 显示 `database.tables=drift 缺少 a9_probe` | 通过 |
+| A9b | enforce 服务启动与失败停止 | 执行前快照；首个失败后停止；后续 `skipped` | 仅单测 `TestExecuteApplyChosenStopsOnFirstFailure` 覆盖，未在隔离实例真实启动服务 | **待补** |
 | A10 | 人工界面验收 | 真桌面/浏览器确认折叠、按钮和文案 | 仅 headless CDP，未人工确认 | **待补** |
 
 ## 关键实测
@@ -116,22 +120,57 @@ POST `/api/contract/mode`，`{"mode":"enforce","confirm":false}`：
 
 ### 门禁
 
-- `go test ./...`：通过，102.124s
+- `go test ./...`：通过，105.480s
 - `go vet ./...`：通过
 - `python tools/web_build.py --check`：通过
 
-## 发布前必须补做的 A9
+## A9 隔离实测
 
-A9 不能在当前真实项目上直接做，先复制一个隔离项目或使用测试库：
+为不影响真实 `tcm-inventory`，在 `tools\_a9` 复制 EnvKit.exe 与主配置，使用独立端口 18805、独立项目目录、独立 backups/checkpoints，并设置 `ENVKIT_INSTANCE_TAG=a9`。隔离项目只声明 MySQL 数据库和 schema，不声明 web/backend，避免触发真实服务启动。
 
-1. 显式确认切 `enforce`，确认后模式为 enforce。
-2. 选中 `apply.services.web.start` / `apply.services.backend.start`，执行前确认生成快照；记录快照 ID、是否含数据库。
-3. 人为制造一个动作失败，确认后续动作被标记 `skipped`，没有继续执行。
-4. 在隔离库上执行一次“建库/导入 schema”，确认：
-   - 执行前已备份；
-   - 结果里有“回滚不会删除新建库”的提示；
-   - 回滚需要再次确认，不自动覆盖。
-5. 恢复一次快照，确认配置、数据库和服务现场可恢复，且项目里的 `envkit.yaml` 不被静默覆盖。
+### 首轮：暴露快照恢复缺陷
+
+首轮库 `envkit_a9_20261125_001`：
+
+1. 初始 Doctor 判定库不存在，计划只有 `apply.database.create`。
+2. enforce 下建库成功，快照 `cp-20261125-001800-b66463`，`database_included=false`；回滚提示明确写明“建库动作不在快照回滚范围内；回滚不会删除本次新建的库”。
+3. 建库后计划出现 `apply.database.schema`，risk 为 `confirm`；未确认执行返回 428，确认后导入成功，快照 `cp-20261125-001822-a231e0`，`database_included=true`，探针数据存在。
+4. 恢复该快照未确认返回 428；确认后接口返回 `ok=true`，但 Doctor 仍显示 `database.tables=ok`，已导入的 `a9_probe` 表没有被删除。
+
+根因是快照拍在建表前，数据库 dump 是空库 dump，只有头部、没有 `CREATE TABLE`；恢复时直接把空 dump 导入现有库，不会删除当前已有表。另一个放大了问题：恢复校验只在快照表数大于 0 时才比较，空库快照完全跳过校验，于是“恢复成功”与事实不符。
+
+### 修复
+
+`checkpoint.go` 的恢复路径改为：
+
+- 新增 `dropDatabaseObjects`，恢复前查询 `information_schema.TABLES`，先删视图、再删表，标识符经 `quoteIdent` 转义；
+- 新增纯函数 `dropObjectsSQL` 生成 `DROP VIEW/TABLE IF EXISTS`，拒绝非法标识符；
+- 导入快照前先清空当前库对象，使 dump 导入等价于“替换整个库内容”；
+- 表数量始终比较，包括快照表数为 0 的情况；
+- 导入失败或表数不一致时，用恢复前刚生成的备份回填，并在消息中标记“已回滚到恢复前备份”；
+- 新增 `TestDropObjectsSQLQuotesAndRejectsBadName`，覆盖空列表、多表转义和非法名拒绝。
+
+提交：`b1737be`。
+
+### 二轮：修复后通过
+
+二轮库 `envkit_a9_20261125_002`：
+
+1. 初始 Doctor 为 `drift`，计划只有 `apply.database.create`。
+2. enforce 建库成功，快照 `cp-20261125-002233-36972f`，`database_included=false`；回滚提示仍明确不删除新建库。
+3. 建库后计划只有 `apply.database.schema`，risk `confirm`；未确认返回 428。
+4. 确认导入成功，快照 `cp-20261125-002234-2ad622`，`database_included=true`；查询得到 `["1","before-restore"]`。
+5. 恢复快照未确认返回 428；确认后 `restore.database`、`restore.config` 均 OK，配置轮转为 `.bak`。
+6. 恢复后直接查询 `a9_probe` 报 `Table ... doesn't exist`；Doctor 变为 `ok=7 drift=1 undeclared=1`，`database.tables` 显示“缺少 a9_probe”，证明新增表已被真正删除。
+7. 备份现场：快照 dump 1362 字节、恢复前备份 2068 字节，两份 `.sql` 与 `.sha256` 均存在。
+
+测试完成后已删除 `envkit_a9_20261125_001`、`envkit_a9_20261125_002`，停止 18805 隔离实例并移除 `tools\_a9`；主实例仍为 readonly，契约根仍指向 `D:\BCGD\2027\tcm-inventory`。
+
+### 仍需补做
+
+- A9b：在隔离实例真实启动 web/backend，人为制造首个动作失败，确认停止且后续动作标记 `skipped`；
+- 服务现场恢复：确认快照恢复能还原服务运行状态，且项目 `envkit.yaml` 不被静默覆盖；
+- A10：真桌面/浏览器确认高级折叠、按钮和文案。
 
 ## 复跑命令
 
@@ -160,7 +199,8 @@ python tools/web_build.py --check
 4.0 可发布必须同时满足：
 
 - A1–A8 全部通过；
-- A9 在隔离项目通过，并有快照/回滚记录；
+- A9 数据库事务在隔离项目通过，并有快照/回滚记录；
+- A9b 服务启动与失败停止在隔离实例通过；
 - A10 人工界面验收通过；
 - 4.0 设计说明、发布说明、README 与版本号完成；
 - tag 构建产物与版本号一致，本地构建不直接上传发行包。
