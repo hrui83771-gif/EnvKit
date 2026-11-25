@@ -163,10 +163,20 @@ func readOnlyOne(query string) (string, error) {
 }
 
 func mysqlExec(p mysqlConnParams, dbName, statement string) error {
+	_, err := mysqlExecAffected(p, dbName, statement)
+	return err
+}
+
+// mysqlExecAffected 返回受影响行数；用于数据浏览的单行修改与自定义写 SQL。
+func mysqlExecAffected(p mysqlConnParams, dbName, statement string) (int64, error) {
+	return mysqlExecArgs(p, dbName, statement)
+}
+
+func mysqlExecArgs(p mysqlConnParams, dbName, statement string, args ...any) (int64, error) {
 	p.DB = dbName
 	db, err := openMySQL(p)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer db.Close()
 
@@ -174,9 +184,16 @@ func mysqlExec(p mysqlConnParams, dbName, statement string) error {
 	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer conn.Close()
-	_, err = conn.ExecContext(ctx, statement)
-	return err
+	res, err := conn.ExecContext(ctx, statement, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil // 某些语句不提供行数；执行本身已成功
+	}
+	return n, nil
 }

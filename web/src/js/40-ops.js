@@ -1405,9 +1405,9 @@ function wlRemember(silent){
 }
 $('#btn-script-save').onclick = ()=>wlRemember(false);
 
-/* ---------- 数据浏览（只读） ---------- */
+/* ---------- 数据浏览（单格可写；删库/写 SQL 需确认） ---------- */
 const dbv = { open:false, tab:'rows', db:null, table:null, page:1, size:50,
-  dbs:[], tables:[], counts:{}, cols:[], rows:[], mode:'table' };
+  dbs:[], current:'', tables:[], counts:{}, cols:[], rows:[], pk:[], mode:'table' };
 
 async function dbvFetch(url, opts){
   const r = await fetch(url, opts);
@@ -1424,7 +1424,8 @@ function dbvRenderSide(){
   const mk = (label, cls, cnt, onclick) => {
     const d = document.createElement('div');
     d.className = 'dbv-item ' + cls;
-    const span = document.createElement('span'); span.textContent = label;
+    d.title = label;
+    const span = document.createElement('span'); span.className='lbl'; span.textContent = label;
     d.appendChild(span);
     if(cnt !== null && cnt !== undefined){ const c=document.createElement('span'); c.className='cnt'; c.textContent=cnt; d.appendChild(c); }
     if(onclick) d.onclick = onclick;
@@ -1432,9 +1433,12 @@ function dbvRenderSide(){
     return d;
   };
   if(!dbv.dbs.length){ mk(t('未检测到数据库（点「刷新」重试）'), 'db', null, null); return; }
-  for(const d of dbv.dbs){
+  const dbs = dbv.dbs.slice().sort((a,b)=> a===dbv.current ? -1 : b===dbv.current ? 1 : String(a).localeCompare(String(b)));
+  for(const d of dbs){
     const cur = d === dbv.db;
-    mk(d, 'db' + (cur ? ' cur' : ''), null, ()=>{ dbv.db = cur ? null : d; dbv.table = null; dbv.tables = []; dbv.counts = {}; dbv.render(); if(dbv.db) dbvLoadTables(); });
+    const proj = d === dbv.current;
+    mk(d, 'db' + (cur ? ' cur' : '') + (proj ? ' proj' : ''), proj ? t('本项目') : null,
+      ()=>{ dbv.db = cur ? null : d; dbv.table = null; dbv.tables = []; dbv.counts = {}; dbv.pk = []; dbv.render(); dbvUpdateSqldb(); if(dbv.db) dbvLoadTables(); });
     if(cur){
       if(dbv.tables.length === 0 && dbv.tablesLoaded){ mk(t('（无表）'), 'tb', null, null); }
       for(const tb of dbv.tables){
@@ -1445,6 +1449,19 @@ function dbvRenderSide(){
   }
 }
 
+function dbvUpdateCur(){
+  const el = $('#dbv-cur');
+  if(el) el.textContent = dbv.current ? t('本项目库：{0}', dbv.current) : t('本项目库未配置');
+}
+
+function dbvLocateProject(){
+  if(!dbv.current){ toast(t('设置里还没有填写项目数据库名'), 'err'); return; }
+  if(!dbv.dbs.includes(dbv.current)){ toast(t('本项目库 {0} 不在当前 MySQL 实例里', dbv.current), 'err'); return; }
+  if(dbv.db === dbv.current && dbv.tablesLoaded){ dbv.render(); return; }
+  dbv.db = dbv.current; dbv.table = null; dbv.tables = []; dbv.counts = {};
+  dbv.render(); dbvLoadTables();
+}
+
 dbv.render = function(){ dbvRenderSide(); };
 
 async function dbvLoadDbs(){
@@ -1452,7 +1469,13 @@ async function dbvLoadDbs(){
   try{
     const j = await dbvFetch('/api/db/list');
     dbv.dbs = j.databases || [];
+    dbv.current = j.current || '';
+    dbvUpdateCur();
     dbvSetSt(t('已打开'), 'ok');
+    if(!dbv.db && dbv.current && dbv.dbs.includes(dbv.current)){
+      dbv.db = dbv.current;
+      await dbvLoadTables();
+    }
   }catch(e){ dbv.dbs = []; dbvSetSt(t('连接失败'), 'fail'); toast(t('数据库列表读取失败：{0}', e.message), 'err'); }
   dbvRenderSide();
 }
@@ -1468,18 +1491,63 @@ async function dbvLoadTables(){
 
 async function dbvLoadRows(){
   if(!dbv.db || !dbv.table) return;
+  dbv.mode = 'table';
+  dbv.pk = [];
   const grid = $('#dbv-grid'); grid.textContent = '';
+
   const tip = document.createElement('tr'); const td = document.createElement('td');
   td.textContent = t('加载中…'); td.colSpan = 1; tip.appendChild(td); grid.appendChild(tip);
   try{
     const j = await dbvFetch(`/api/db/rows?db=${encodeURIComponent(dbv.db)}&table=${encodeURIComponent(dbv.table)}&page=${dbv.page}&size=${dbv.size}`);
-    dbv.cols = j.cols || []; dbv.rows = j.rows || [];
+    dbv.cols = j.cols || []; dbv.rows = j.rows || []; dbv.pk = j.pk || [];
     dbvRenderGrid();
+    dbvUpdateSqldb();
     const total = parseInt(j.total, 10) || 0;
     const pages = Math.max(1, Math.ceil(total / dbv.size));
     $('#dbv-pageinfo').textContent = t('共 {0} 行 · 第 {1}/{2} 页', total.toLocaleString(), dbv.page, pages);
   }catch(e){ grid.textContent = ''; const tr=document.createElement('tr'), c=document.createElement('td');
     c.textContent = t('查询失败：{0}', e.message); c.style.color='var(--err)'; c.style.padding='10px'; tr.appendChild(c); grid.appendChild(tr); }
+}
+
+function dbvUpdateSqldb(){
+  const el = $('#dbv-sqldb');
+  if(!el) return;
+  const db = dbv.db || dbv.current;
+  el.textContent = db ? t('SQL 将在这个库执行：{0}', db) : t('请先在左侧选择一个数据库，或点「定位本项目库」');
+}
+
+function dbvRowPk(row){
+  if(!dbv.pk.length) return null;
+  const pk = [];
+  for(const c of dbv.pk){
+    const i = dbv.cols.indexOf(c);
+    if(i < 0) return null;
+    const v = row[i];
+    if(v === 'NULL') return null;
+    pk.push({column:c, value:v});
+  }
+  return pk;
+}
+
+async function dbvSaveCell(td, rowIndex, colIndex, value){
+  const old = td.dataset.original;
+  const row = dbv.rows[rowIndex];
+  const pk = dbvRowPk(row);
+  if(!pk){ td.textContent = old; toast(t('这张表没有可用的主键，不能自动保存'), 'err'); return; }
+  const sendValue = value === 'NULL' ? null : value;
+  td.classList.add('saving');
+  try{
+    const j = await dbvFetch('/api/db/update', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({db:dbv.db, table:dbv.table, column:dbv.cols[colIndex], value:sendValue, pk})});
+    row[colIndex] = value;
+    td.dataset.original = value;
+    td.classList.toggle('null', value === 'NULL');
+    toast(t('已保存到 {0}.{1}', dbv.table, dbv.cols[colIndex]));
+    if(j && j.affected === 0) td.classList.add('unchanged');
+  }catch(e){
+    td.textContent = old;
+    toast(t('保存失败：{0}', e.message), 'err');
+  }finally{ td.classList.remove('saving'); }
 }
 
 function dbvRenderGrid(){
@@ -1493,26 +1561,76 @@ function dbvRenderGrid(){
   for(const c of dbv.cols){ const th=document.createElement('th'); th.textContent=c; hr.appendChild(th); }
   thead.appendChild(hr); grid.appendChild(thead);
   const tbody = document.createElement('tbody');
-  for(const rw of dbv.rows){
+  const editableTable = dbv.mode === 'table' && dbv.tab === 'rows' && dbv.pk.length > 0;
+  dbv.rows.forEach((rw, rowIndex)=>{
     const tr = document.createElement('tr');
     for(let i=0;i<dbv.cols.length;i++){
       const td = document.createElement('td');
       const v = rw[i] === undefined ? '' : rw[i];
       if(v === 'NULL'){ td.textContent = 'NULL'; td.classList.add('null'); }
       else { td.textContent = v; if(v === '') td.innerHTML = '&nbsp;'; }
-      td.onclick = ()=>{ const box=$('#dbv-cell'); box.style.display=''; box.textContent = (dbv.cols[i] + ' = ') + (v === 'NULL' ? 'NULL' : v); };
+      td.title = dbv.cols[i] + ' = ' + (v === 'NULL' ? 'NULL' : v);
+      td.onclick = ()=>{ const box=$('#dbv-cell'); box.style.display=''; box.textContent = (dbv.cols[i] + ' = ') + td.textContent; };
+      if(editableTable && !dbv.pk.includes(dbv.cols[i])){
+        td.classList.add('edit');
+        td.dataset.original = v;
+        td.setAttribute('contenteditable','true');
+        td.setAttribute('spellcheck','false');
+        td.onfocus = ()=>{ td.dataset.original = td.textContent === '\u00a0' ? '' : td.textContent; };
+        td.onkeydown = e=>{
+          if(e.key === 'Enter'){ e.preventDefault(); td.blur(); }
+          else if(e.key === 'Escape'){ td.textContent = td.dataset.original; td.blur(); }
+        };
+        td.onblur = ()=>{
+          if(td.classList.contains('saving')) return;
+          const now = td.textContent === '\u00a0' ? '' : td.textContent;
+          if(now === td.dataset.original) return;
+          dbvSaveCell(td, rowIndex, i, now);
+        };
+      }
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
-  }
+  });
   grid.appendChild(tbody);
 }
 
-function dbvRunSQL(){
+function dbvSqlVerb(sql){
+  let s = String(sql || '').trim();
+  s = s.replace(/^(?:\s+|\/\*[\s\S]*?\*\/|--[^\n]*|#[^\n]*)*/, '');
+  const m = s.match(/^([A-Za-z]+)/);
+  return m ? m[1].toLowerCase() : '';
+}
+
+async function dbvRunSQL(){
   const sql = $('#dbv-sql').value.trim(); if(!sql) return;
+  const db = dbv.db || dbv.current;
+  if(!db){ toast(t('请先选择一个数据库'), 'err'); return; }
+  const verb = dbvSqlVerb(sql);
+  const readOnly = ['select','show','desc','describe','explain','with','table'].includes(verb);
+  const allowWrite = $('#dbv-write').checked;
+  if(!readOnly && !allowWrite){ toast(t('写操作需要先勾选「允许写操作」'), 'err'); return; }
+  if(!readOnly){
+    const go = await askConfirm(t('执行写 SQL'), t('将对数据库 {0} 执行写操作：\n\n{1}\n\nEnvKit 不会自动撤销这次修改；建议先备份。', db, sql), t('执行'), true);
+    if(!go) return;
+  }
   $('#h-dbv-sql').textContent = t('运行中…');
-  dbvFetch('/api/db/query', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({db: dbv.db || '', sql})})
-    .then(j=>{ $('#h-dbv-sql').textContent = t('{0} 行', (j.rows||[]).length); dbv.cols = j.cols||[]; dbv.rows = j.rows||[]; dbvRenderGrid(); $('#dbv-pageinfo').textContent = t('自定义查询 · {0} 行', (j.rows||[]).length); })
+  dbvFetch('/api/db/exec', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({db, sql, write:allowWrite, confirm:true})})
+    .then(j=>{
+      dbv.mode = 'query';
+      if(j.kind === 'write'){
+        $('#h-dbv-sql').textContent = t('写操作完成，影响 {0} 行', j.affected||0);
+        dbv.cols = []; dbv.rows = []; dbv.pk = []; dbvRenderGrid();
+        $('#dbv-pageinfo').textContent = t('自定义写 SQL · 影响 {0} 行', j.affected||0);
+        dbvLoadTables().then(()=>{ if(dbv.table) dbvLoadRows(); });
+      } else {
+        $('#h-dbv-sql').textContent = t('{0} 行', (j.rows||[]).length);
+        dbv.cols = j.cols||[]; dbv.rows = j.rows||[]; dbv.pk = []; dbvRenderGrid();
+        $('#dbv-pageinfo').textContent = t('自定义查询 · {0} 行', (j.rows||[]).length);
+      }
+      dbvUpdateSqldb();
+    })
     .catch(e=>{ $('#h-dbv-sql').textContent = ''; toast(t('查询失败：{0}', e.message), 'err'); });
 }
 
@@ -1527,27 +1645,57 @@ function dbvExportCSV(){
   toast(t('已导出 {0}', a.download));
 }
 
+const DBV_SYSTEM = ['mysql','information_schema','performance_schema','sys'];
+
+async function dbvDropDb(){
+  const db = dbv.db;
+  if(!db){ toast(t('请先在左侧选择一个数据库'), 'err'); return; }
+  if(DBV_SYSTEM.includes(String(db).toLowerCase())){ toast(t('系统库不允许在这里删除'), 'err'); return; }
+  const isProject = db === dbv.current;
+  const go = await askConfirm(t('删除数据库 {0}', db),
+    t('将永久删除数据库 {0}{1}。\n\n删除前会自动备份一份 SQL 到备份目录；删除后表和数据都不再可查。\n\n这一步不可撤销。', db, isProject ? t('（这是本项目配置的数据库）') : ''), t('继续'), true);
+  if(!go) return;
+  const pwd = prompt(t('请输入删除口令'));
+  if(pwd === null) return;
+  if(!pwd){ toast(t('口令不能为空'), 'err'); return; }
+  dbvSetSt(t('删除中…'), 'run');
+  try{
+    const j = await dbvFetch('/api/db/drop', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({db, password:pwd, confirm:true})});
+    toast(t('已删除数据库 {0}；备份：{1}', db, j.backup || '—'), 'ok');
+    dbv.dbs = dbv.dbs.filter(x=>x !== db);
+    dbv.db = null; dbv.table = null; dbv.tables = []; dbv.counts = {}; dbv.tablesLoaded = false;
+    dbv.cols = []; dbv.rows = []; dbv.pk = []; dbvRenderGrid();
+    await dbvLoadDbs();
+    dbvSetSt(t('已打开'), 'ok');
+  }catch(e){ dbvSetSt(t('删除失败'), 'fail'); toast(t('删除数据库失败：{0}', e.message), 'err'); }
+}
+
 function dbvTabSwitch(tab){
   dbv.tab = tab;
   $('#dbv-tab-rows').classList.toggle('on', tab === 'rows');
   $('#dbv-tab-sql').classList.toggle('on', tab === 'sql');
   $('#dbv-sqlbox').style.display = tab === 'sql' ? '' : 'none';
-  if(tab === 'sql'){ dbv.cols = []; dbv.rows = []; dbvRenderGrid(); $('#dbv-pageinfo').textContent=''; }
+  $('#dbv-editnote').style.display = tab === 'sql' ? 'none' : '';
+  $('#dbv-pager').style.display = tab === 'sql' ? 'none' : '';
+  if(tab === 'sql'){ dbv.cols = []; dbv.rows = []; dbv.pk = []; dbvRenderGrid(); $('#dbv-pageinfo').textContent=''; dbvUpdateSqldb(); }
   else if(dbv.db && dbv.table){ dbvLoadRows(); }
-  else { dbv.cols = []; dbv.rows = []; dbvRenderGrid(); }
+  else { dbv.cols = []; dbv.rows = []; dbv.pk = []; dbvRenderGrid(); }
 }
 
 $('#btn-dbview').onclick = ()=>{
   dbv.open = !dbv.open;
   $('#dbview').style.display = dbv.open ? '' : 'none';
   $('#btn-dbview').textContent = dbv.open ? t('收起数据浏览') : t('打开数据浏览');
-  if(dbv.open){ dbvLoadDbs(); } else { dbvSetSt(t('未打开'), 'idle'); }
+  if(dbv.open){ dbvUpdateCur(); dbvUpdateSqldb(); dbvLoadDbs(); } else { dbvSetSt(t('未打开'), 'idle'); }
 };
 $('#dbv-tab-rows').onclick = ()=>dbvTabSwitch('rows');
 $('#dbv-tab-sql').onclick = ()=>dbvTabSwitch('sql');
 $('#btn-dbv-run').onclick = dbvRunSQL;
+$('#dbv-locate').onclick = dbvLocateProject;
+$('#dbv-drop').onclick = dbvDropDb;
 $('#dbv-sql').addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key === 'Enter'){ e.preventDefault(); dbvRunSQL(); } });
-$('#dbv-refresh').onclick = ()=>{ dbv.tablesLoaded = false; dbv.table = null; dbvLoadDbs().then(()=>{ if(dbv.db) dbvLoadTables(); }); };
+$('#dbv-refresh').onclick = async ()=>{ dbv.tablesLoaded = false; dbv.table = null; await dbvLoadDbs(); if(dbv.db && !dbv.tablesLoaded) await dbvLoadTables(); };
 $('#dbv-csv').onclick = dbvExportCSV;
 $('#dbv-prev').onclick = ()=>{ if(dbv.page > 1){ dbv.page--; dbvLoadRows(); } };
 $('#dbv-next').onclick = ()=>{ dbv.page++; dbvLoadRows(); };

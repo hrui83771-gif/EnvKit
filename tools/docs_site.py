@@ -8,7 +8,7 @@ GitHub Pages 上没人做这两件事，直接上传会露出占位符、点了�
 保证在线版与 exe 内置版同源，不靠手工维护第二份文档。
 
 跑法：
-    python tools/docs_site.py --version v3.8.1 --out _site
+    python tools/docs_site.py --version v3.9.0 --out _site
     python tools/docs_site.py --check        # 只校验产物，不落盘
 """
 import argparse

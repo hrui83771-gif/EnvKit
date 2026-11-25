@@ -314,14 +314,14 @@
         </div>
       </div>
       <div class="action">
-        <div class="head"><div class="title">数据浏览（只读）</div><span class="status idle" id="st-dbview">未打开</span></div>
+        <div class="head"><div class="title">数据浏览</div><span class="status idle" id="st-dbview">未打开</span></div>
         <div class="row" style="margin-top:8px">
           <button class="ghost" id="btn-dbview">打开数据浏览</button>
-          <span class="hint" id="h-dbview">使用上方 MySQL 连接配置；纯只读，不提供任何写操作</span>
+          <span class="hint" id="h-dbview">使用上方 MySQL 连接配置；单格修改自动保存，写 SQL 与删库需确认，删库还要输入口令</span>
         </div>
         <div id="dbview" style="display:none;margin-top:10px">
           <div style="display:flex;gap:10px;align-items:stretch">
-            <div id="dbv-side" style="width:215px;flex:none;border:1px solid var(--line);border-radius:10px;max-height:460px;overflow:auto;padding:6px"></div>
+            <div id="dbv-side" style="width:245px;flex:none;border:1px solid var(--line);border-radius:10px;max-height:460px;overflow:auto;padding:6px"></div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
               <div class="row" style="margin:0;gap:6px">
                 <button class="mini on" id="dbv-tab-rows">表数据</button>
@@ -330,10 +330,27 @@
                 <button class="mini" id="dbv-refresh">刷新</button>
                 <button class="mini" id="dbv-csv">导出 CSV</button>
               </div>
-              <div id="dbv-sqlbox" style="display:none">
-                <textarea id="dbv-sql" rows="3" style="width:100%;font-size:12px;font-family:Consolas,monospace;resize:vertical" placeholder="SELECT * FROM 表名 LIMIT 10（Ctrl+Enter 运行，仅只读）"></textarea>
-                <div class="row" style="margin-top:4px"><button class="ghost" id="btn-dbv-run">运行</button><span class="hint" id="h-dbv-sql"></span></div>
+              <div class="dbv-toolbar">
+                <button class="mini" id="dbv-locate">定位本项目库</button>
+                <span class="hint dbv-cur" id="dbv-cur">本项目库：—</span>
+                <span class="dbv-spacer"></span>
+                <button class="mini dbv-drop" id="dbv-drop">删除数据库</button>
               </div>
+              <div id="dbv-sqlbox" style="display:none">
+                <textarea id="dbv-sql" class="dbv-sqlarea" rows="4" placeholder="SELECT * FROM 表名 LIMIT 10（Ctrl+Enter 运行；写操作需勾选下方开关）"></textarea>
+                <div class="dbv-sqlbar">
+                  <button id="btn-dbv-run" class="dbv-run">运行</button>
+                  <label class="dbv-writeopt" title="只允许单条 DML / 表级 DDL；删除数据库请用上方按钮">
+                    <input type="checkbox" id="dbv-write"><span>允许写操作</span>
+                  </label>
+                  <span class="hint dbv-sqlstatus" id="h-dbv-sql"></span>
+                </div>
+                <div class="dbv-sqlmeta">
+                  <span class="hint" id="dbv-sqldb"></span>
+                  <span class="hint">单条 DML / 表级 DDL；删库请用上方按钮</span>
+                </div>
+              </div>
+              <div class="hint" id="dbv-editnote">单格修改：失焦即保存；输入 NULL 会写成 SQL NULL；主键列和无主键表只读。</div>
               <div style="border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:380px;min-height:100px">
                 <table id="dbv-grid" style="border-collapse:collapse;font-size:12px;width:100%"></table>
               </div>

@@ -555,6 +555,19 @@ button,input{font:inherit;color:inherit}
     {id:'config', group:z('日常操作','Daily operations'), title:z('程序配置','Configuration'), body:[
       P('config.json 放在 exe 同目录，覆盖内置默认值；config.dist.json 是干净模板。项目接入向导保存的结果也会写到这里。数据库连接检测、建库建表、一键备份 / 还原（失败自动重试）、前端 npm install / 后端 go mod tidy、配置导入导出（可脱敏分享）、环境诊断报告都在这一页。',
         'config.json lives next to the exe and overrides built-in defaults; config.dist.json is a clean template. Results saved by the project setup wizard also land here. Database checks, schema creation, backup / restore with retries, npm install / go mod tidy, redacted config export / import and diagnostic reports all live here.'),
+      H3('config-dbview','数据浏览的写权限','Write permissions in the data browser'),
+      UL([
+        z('默认仍是只读查询。单格修改只在「表数据」页、且表有主键时开放；主键列不可编辑，失去焦点即自动保存。无主键表保持只读。',
+          'Queries stay read-only by default. Cell edits are enabled only on the table data tab and only when the table has a primary key; primary-key columns are not editable and edits save on blur. Tables without a primary key stay read-only.'),
+        z('自定义 SQL 默认只读。要执行写语句，必须勾选「允许写操作」并二次确认；服务端只放行单条 DML / 表级 DDL，DROP DATABASE / DROP SCHEMA 会被拒绝。',
+          'Custom SQL is read-only by default. To run a write statement, tick “Allow writes” and confirm; the server allows one DML / table-level DDL statement and rejects DROP DATABASE / DROP SCHEMA.'),
+        z('删除数据库只能走「删除数据库」入口：二次确认 + 输入口令 123456。删除前自动 mysqldump 备份；备份失败就中止，成功后返回备份路径、大小和 SHA256。',
+          'Dropping a database only goes through “Drop database”: a second confirmation plus passphrase 123456. A mysqldump backup is taken first; if it fails the drop is aborted. On success the backup path, size and SHA256 are returned.'),
+        z('库列表把 projects.db_name 对应的库排在最前并标记「本项目」；打开数据浏览时默认选中它，「定位本项目库」可一键跳回。',
+          'The database matching projects.db_name is listed first and marked “This project”; the browser selects it by default, and “Locate project database” jumps back to it.')
+      ]),
+      NOTE('口令 123456 是弱口令，只用于本机防误触，不是安全边界。不要把控制台端口暴露到公网；真正不可逆的删除仍应先在副本上演练。',
+           'The passphrase 123456 is a weak, local-only guard against misclicks, not a security boundary. Never expose the console port to the internet; rehearse irreversible drops on a copy first.', 'danger'),
       H3('config-keys','config.json 关键字段','Key config fields'),
       TABLE([z('字段','Field'),z('默认 / 示例','Default / example'),z('用途','Purpose')],[
         [z('dev.server_port','dev.server_port'),z('18765','18765'),z('控制台端口，冲突时向后扫描到 18815','Console port; shifts up to 18815 on conflict')],
@@ -1032,7 +1045,9 @@ button,input{font:inherit;color:inherit}
         [z('v3.6 / 3.6.1','v3.6 / 3.6.1'),z('修三个"结论报错"缺陷；修 AI 误报与桌宠天气的三个问题','Fixed three misreported conclusions; AI false errors and three pet-weather bugs')],
         [z('v3.7 / 3.7.1','v3.7 / 3.7.1'),z('手机访问；复验口径统一、日志 WARN 不再判错、设置基础区重排','Mobile access; unified verification, WARN lines no longer flagged, settings rework')],
         [z('v3.7.2','v3.7.2'),z('手机调试台、本机体检逐条给建议、备份保留份数可配','Mobile debug console, per-item health advice, configurable backup retention')],
-        [z('v3.8.0','v3.8.0'),z('8 屏引导与造型重做、AI 直接读拖入的 Office / PDF、修托盘图标随机消失','Eight-screen tour and visual rework, Office / PDF drag-in, tray icon fix')]
+        [z('v3.8.0','v3.8.0'),z('8 屏引导与造型重做、AI 直接读拖入的 Office / PDF、修托盘图标随机消失','Eight-screen tour and visual rework, Office / PDF drag-in, tray icon fix')],
+        [z('v3.8.1','v3.8.1'),z('发布治理补丁；配置并发快照、端口观察器、项目接入向导','Release governance patch; concurrent config snapshots, port observer, project setup wizard')],
+        [z('v3.9.0','v3.9.0'),z('数据浏览受限写权限、本项目库定位、SQL 与删库控件样式重做','Restricted data-browser writes, project database locator, reworked SQL and drop controls')]
       ]),
       P('作者 / 项目地址：https://github.com/hrui83771-gif',
         'Author / project: https://github.com/hrui83771-gif'),

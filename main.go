@@ -26,8 +26,8 @@ var embeddedConfig []byte
 
 // 版本信息（build.bat 用 -ldflags 注入）
 var (
-	appVersion = "3.8.1"
-	buildDate  = "2026-11-22"
+	appVersion = "3.9.0"
+	buildDate  = "2026-11-25"
 )
 
 //go:embed web/index.html
@@ -255,6 +255,9 @@ func main() {
 	http.HandleFunc("/api/db/tables", handleDBTables)
 	http.HandleFunc("/api/db/rows", handleDBRows)
 	http.HandleFunc("/api/db/query", handleDBQuery)
+	http.HandleFunc("/api/db/exec", handleDBExec)
+	http.HandleFunc("/api/db/update", handleDBUpdate)
+	http.HandleFunc("/api/db/drop", handleDBDrop)
 	http.HandleFunc("/api/program/web-install", handleWebInstall)
 	http.HandleFunc("/api/program/backend-tidy", handleBackendTidy)
 	http.HandleFunc("/api/program/web-start", handleWebStart)

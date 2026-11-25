@@ -461,6 +461,18 @@
      }
     },
     {
+     "id": "config-dbview",
+     "anchor": "s-config-dbview",
+     "heading": {
+      "zh": "数据浏览的写权限",
+      "en": "Write permissions in the data browser"
+     },
+     "text": {
+      "zh": "默认仍是只读查询。单格修改只在「表数据」页、且表有主键时开放；主键列不可编辑，失去焦点即自动保存。无主键表保持只读。\n自定义 SQL 默认只读。要执行写语句，必须勾选「允许写操作」并二次确认；服务端只放行单条 DML / 表级 DDL，DROP DATABASE / DROP SCHEMA 会被拒绝。\n删除数据库只能走「删除数据库」入口：二次确认 + 输入口令 123456。删除前自动 mysqldump 备份；备份失败就中止，成功后返回备份路径、大小和 SHA256。\n库列表把 projects.db_name 对应的库排在最前并标记「本项目」；打开数据浏览时默认选中它，「定位本项目库」可一键跳回。\n口令 123456 是弱口令，只用于本机防误触，不是安全边界。不要把控制台端口暴露到公网；真正不可逆的删除仍应先在副本上演练。",
+      "en": "Queries stay read-only by default. Cell edits are enabled only on the table data tab and only when the table has a primary key; primary-key columns are not editable and edits save on blur. Tables without a primary key stay read-only.\nCustom SQL is read-only by default. To run a write statement, tick “Allow writes” and confirm; the server allows one DML / table-level DDL statement and rejects DROP DATABASE / DROP SCHEMA.\nDropping a database only goes through “Drop database”: a second confirmation plus passphrase 123456. A mysqldump backup is taken first; if it fails the drop is aborted. On success the backup path, size and SHA256 are returned.\nThe database matching projects.db_name is listed first and marked “This project”; the browser selects it by default, and “Locate project database” jumps back to it.\nThe passphrase 123456 is a weak, local-only guard against misclicks, not a security boundary. Never expose the console port to the internet; rehearse irreversible drops on a copy first."
+     }
+    },
+    {
      "id": "config-keys",
      "anchor": "s-config-keys",
      "heading": {
@@ -1338,8 +1350,8 @@
       "en": "Version history"
      },
      "text": {
-      "zh": "v3.5 · Agent 闭环：预案库、告警闭环、晨报、行动→经验沉淀、成长报表\nv3.6 / 3.6.1 · 修三个\"结论报错\"缺陷；修 AI 误报与桌宠天气的三个问题\nv3.7 / 3.7.1 · 手机访问；复验口径统一、日志 WARN 不再判错、设置基础区重排\nv3.7.2 · 手机调试台、本机体检逐条给建议、备份保留份数可配\nv3.8.0 · 8 屏引导与造型重做、AI 直接读拖入的 Office / PDF、修托盘图标随机消失\n作者 / 项目地址：https://github.com/hrui83771-gif\nEnvKit 是统一开发环境助手：单文件 Go、零运行时依赖、内置 AI 运维助手。形象与部分台词移植自开源项目 dafeiyu-pet（MIT）。",
-      "en": "v3.5 · Agent loop: playbooks, alert closure, morning report, action-to-experience, growth report\nv3.6 / 3.6.1 · Fixed three misreported conclusions; AI false errors and three pet-weather bugs\nv3.7 / 3.7.1 · Mobile access; unified verification, WARN lines no longer flagged, settings rework\nv3.7.2 · Mobile debug console, per-item health advice, configurable backup retention\nv3.8.0 · Eight-screen tour and visual rework, Office / PDF drag-in, tray icon fix\nAuthor / project: https://github.com/hrui83771-gif\nEnvKit is a unified development-environment assistant: single-file Go, no runtime dependencies, with a built-in AI operations assistant. Pet art and some lines are adapted from dafeiyu-pet (MIT)."
+      "zh": "v3.5 · Agent 闭环：预案库、告警闭环、晨报、行动→经验沉淀、成长报表\nv3.6 / 3.6.1 · 修三个\"结论报错\"缺陷；修 AI 误报与桌宠天气的三个问题\nv3.7 / 3.7.1 · 手机访问；复验口径统一、日志 WARN 不再判错、设置基础区重排\nv3.7.2 · 手机调试台、本机体检逐条给建议、备份保留份数可配\nv3.8.0 · 8 屏引导与造型重做、AI 直接读拖入的 Office / PDF、修托盘图标随机消失\nv3.8.1 · 发布治理补丁；配置并发快照、端口观察器、项目接入向导\nv3.9.0 · 数据浏览受限写权限、本项目库定位、SQL 与删库控件样式重做\n作者 / 项目地址：https://github.com/hrui83771-gif\nEnvKit 是统一开发环境助手：单文件 Go、零运行时依赖、内置 AI 运维助手。形象与部分台词移植自开源项目 dafeiyu-pet（MIT）。",
+      "en": "v3.5 · Agent loop: playbooks, alert closure, morning report, action-to-experience, growth report\nv3.6 / 3.6.1 · Fixed three misreported conclusions; AI false errors and three pet-weather bugs\nv3.7 / 3.7.1 · Mobile access; unified verification, WARN lines no longer flagged, settings rework\nv3.7.2 · Mobile debug console, per-item health advice, configurable backup retention\nv3.8.0 · Eight-screen tour and visual rework, Office / PDF drag-in, tray icon fix\nv3.8.1 · Release governance patch; concurrent config snapshots, port observer, project setup wizard\nv3.9.0 · Restricted data-browser writes, project database locator, reworked SQL and drop controls\nAuthor / project: https://github.com/hrui83771-gif\nEnvKit is a unified development-environment assistant: single-file Go, no runtime dependencies, with a built-in AI operations assistant. Pet art and some lines are adapted from dafeiyu-pet (MIT)."
      }
     },
     {

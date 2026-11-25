@@ -127,12 +127,15 @@ var policyRules = map[string]policyRule{
 	"stop_service":      {PolicyConfirm, false, "停止服务会中断当前连接"},
 	"cleanup_processes": {PolicyConfirm, false, "停止前后端服务会中断正在运行的任务；第三方进程只报告、不自动结束"},
 	"db_backup":         {PolicyConfirm, true, "备份会占用磁盘与数据库资源；仅在用户明确要求时执行"},
+	"db_cell_update":    {PolicyAuto, false, "数据浏览单格修改：主键定位、单行单列、审计留痕"},
 	"apply_whitelist":   {PolicyConfirm, true, "修改系统安全设置会降低防护；仅在用户明确要求时执行"},
 	"manage_memories":   {PolicyConfirm, true, "记忆会长期影响 AI 行为；仅在用户明确要求时执行"},
 	"save_config":       {PolicyConfirm, false, "修改配置会影响后续所有操作"},
 
 	// ---- 高危：需确认 + 红框 + 建议先备份 ----
 	"db_restore":        {PolicyElevated, false, "恢复数据库会覆盖现有数据，不可逆"},
+	"db_exec_write":     {PolicyElevated, false, "自定义写 SQL 可能批量修改或删除表数据"},
+	"db_drop":           {PolicyElevated, false, "删除数据库不可逆；执行前会自动备份并校验口令"},
 	"apply_sql":         {PolicyElevated, false, "执行 SQL 可能修改或删除数据"},
 	"kill_process":      {PolicyElevated, false, "强制结束进程可能导致未保存数据丢失"},
 	"db_create":         {PolicyElevated, false, "建库会改动数据库结构"},
