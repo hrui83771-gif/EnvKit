@@ -133,19 +133,6 @@ Agent 循环四步：**Observe → Reason → Act → Verify**。第四步不是
 
 四步导航、组件检测、版本管理、配置与右侧状态栏在同一页；右下角的桌宠是状态出口（见上文）。
 
-### 更多截图
-
-| 内容 | 截图 |
-|---|---|
-| 首次打开的 8 屏引导 | [02 屏工程图纸](docs/shot-ob02-zh.png) · [描线动画](docs/ob02-draw.gif) · [07 屏权限联锁图](docs/shot-ob07-428.png) |
-| 项目接入向导 | [选目录](docs/setup-wizard-01.png) · [12 步检查](docs/setup-wizard-02.png) · [结果总览](docs/setup-wizard-03.png) · [建库 / 导入 SQL](docs/setup-wizard-05.png) |
-| 02 屏展开态 / 英文态 | [展开](docs/shot-ob02-open.png) · [English](docs/shot-ob02-en.png) |
-| 02 屏链端判据展开（中 / 英） | [中文](docs/shot-ob02-chain-zh.png) · [English](docs/shot-ob02-chain-en.png) |
-| 03 / 05 / 08 屏（共用图纸底框） | [03 四步走](docs/shot-ob03.png) · [05 日志](docs/shot-ob05.png) · [08 收尾](docs/shot-ob08.png) |
-| 主界面 11 步控件导览 | [第 1 步](docs/shot-tour-step1.png) · [第 9 步](docs/shot-tour-step9.png) · [第 11 步](docs/shot-tour-step11.png) |
-
-> 以上截图来自 `main` 分支当前构建。**v3.8.0 的两批同名发行包（2026-11-07 首发 / 11-12 重建）已作废**：同一个版本号下内容与 SHA256 不同，而 tag 只指向首发提交，无法按 tag 复现。请使用 tag `v3.9.0` 对应的发行包。
-
 ## 快速开始
 
 ### 下载
