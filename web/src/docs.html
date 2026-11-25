@@ -625,7 +625,8 @@ button,input{font:inherit;color:inherit}
       ]),
       H3('contract-rollback','回滚到底能还原什么','What rollback actually restores'),
       UL([
-        z('配置与服务/端口现场：恢复到快照时保存的本机配置和现场记录。','Config and service/port site: restored to what was recorded when the snapshot was taken.'),
+        z('配置：恢复到快照时保存的本机配置，当前配置会先轮转为 .bak。','Config: restored to the local config saved in the snapshot; the current config is rotated to .bak first.'),
+        z('服务/端口现场：快照只记录当时哪些服务在运行、端口是否监听，用于对照；恢复不会替你启动或停止服务。','Service/port site: the snapshot records which services were running and whether ports were listening, for comparison only; restore does not start or stop services.'),
         z('已存在的数据库：快照含数据库时，恢复会先清空当前库的表/视图，再导入快照 dump，所以快照之后新增的表也会被删除。','An existing database: when the snapshot includes it, restore clears current tables/views before importing the dump, so tables added after the snapshot are removed too.'),
         z('本次新建的库：建库动作不在快照回滚范围内，回滚不会删除这个新库；提示里会明确写明。','A database created in this transaction: creation is outside snapshot rollback, so rollback does not drop it; the note says so explicitly.'),
         z('项目里的 envkit.yaml：恢复不覆盖它，只把快照副本放到旁边供对照。','The project envkit.yaml: restore never overwrites it; the snapshot copy is placed beside it for comparison.')
